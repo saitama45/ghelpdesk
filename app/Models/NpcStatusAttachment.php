@@ -9,10 +9,25 @@ class NpcStatusAttachment extends Model
 {
     public const TYPE_DPO_SEAL = 'dpo_seal';
     public const TYPE_DPO_REGISTRATION = 'dpo_registration';
+    public const TYPE_CCTV_SEAL = 'cctv_seal';
 
     public const TYPES = [
         self::TYPE_DPO_SEAL,
         self::TYPE_DPO_REGISTRATION,
+        self::TYPE_CCTV_SEAL,
+    ];
+
+    // Seals that assigned stores download & get confirmed on, per year.
+    public const SEAL_TYPES = [
+        self::TYPE_DPO_SEAL,
+        self::TYPE_DPO_REGISTRATION,
+        self::TYPE_CCTV_SEAL,
+    ];
+
+    public const TYPE_LABELS = [
+        self::TYPE_DPO_SEAL => 'DPO Seal',
+        self::TYPE_DPO_REGISTRATION => 'DPO Registration',
+        self::TYPE_CCTV_SEAL => 'CCTV Seal',
     ];
 
     protected $fillable = [

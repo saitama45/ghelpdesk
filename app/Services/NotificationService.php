@@ -2,8 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\NpcStatus;
+use App\Models\NpcStatusAttachment;
 use App\Models\Project;
 use App\Models\ProjectTask;
+use App\Models\Store;
 use App\Models\TaskCard;
 use App\Models\Ticket;
 use App\Models\User;
@@ -153,6 +156,30 @@ class NotificationService
             ->filter()
             ->unique()
             ->values();
+    }
+
+    // ── NPC Status seals ─────────────────────────────────────────────────────
+
+    /**
+     * A store downloaded one of the year's seals — notify the NPC page admins
+     * so they can confirm receipt and mark the store as checked.
+     */
+    public function notifyNpcSealDownload(NpcStatus $npcStatus, Store $store, string $type, ?int $actorId): void
+    {
+        $label = NpcStatusAttachment::TYPE_LABELS[$type] ?? $type;
+        $company = $npcStatus->company()->first();
+
+        $recipients = User::permission(['npc_status.view', 'npc_status.edit'])->pluck('id');
+
+        $this->dispatch($recipients, $actorId, [
+            'domain' => 'npc_status',
+            'event' => 'seal_downloaded',
+            'title' => 'Store downloaded an NPC seal',
+            'message' => "{$store->name} downloaded the {$label} for {$company?->name} ({$npcStatus->year}). Confirm receipt to mark the store as checked.",
+            'severity' => 'info',
+            'subject' => 'npc_status:' . $npcStatus->id,
+            'url' => $this->relativeRoute('npc-statuses.index', []),
+        ]);
     }
 
     /**

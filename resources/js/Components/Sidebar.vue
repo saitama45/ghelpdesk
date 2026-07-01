@@ -134,7 +134,7 @@ const canSeeAdminTask = computed(() => {
 });
 
 const canSeeMonitoring = computed(() => {
-    return hasPermission('npc_status.view') || hasPermission('payments.view') || hasPermission('cctv_monitoring.view') || hasPermission('wigs.view') || hasPermission('mall_hookup.view');
+    return hasPermission('npc_status.view') || hasPermission('npc_status.download') || hasPermission('payments.view') || hasPermission('cctv_monitoring.view') || hasPermission('wigs.view') || hasPermission('mall_hookup.view');
 });
 
 const canSeeServices = computed(() => {
@@ -416,7 +416,7 @@ const canSeeSettings = computed(() => {
                             <p class="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ getSectionLabel('monitoring') }}</p>
                         </div>
                         <div class="p-2 flex flex-col gap-0.5">
-                            <div v-if="hasPermission('npc_status.view')" :style="co('monitoring', 'npc-status')">
+                            <div v-if="hasPermission('npc_status.view') || hasPermission('npc_status.download')" :style="co('monitoring', 'npc-status')">
                                 <Link :href="route('npc-statuses.index')" :class="collapsedFlyoutLinkClass(route().current('npc-statuses.*'))">{{ getChildLabel('monitoring', 'npc-status') }}</Link>
                             </div>
                             <div v-if="hasPermission('cctv_monitoring.view')" :style="co('monitoring', 'cctv-monitoring')">
@@ -435,7 +435,7 @@ const canSeeSettings = computed(() => {
                     </div>
 
                     <div v-if="!isCollapsed && openMenus.monitoring" class="pl-10 flex flex-col gap-0.5 mt-1 transition-all duration-300">
-                        <div v-if="hasPermission('npc_status.view')" :style="co('monitoring', 'npc-status')">
+                        <div v-if="hasPermission('npc_status.view') || hasPermission('npc_status.download')" :style="co('monitoring', 'npc-status')">
                             <Link :href="route('npc-statuses.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('npc-statuses.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'npc-status') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('cctv_monitoring.view')" :style="co('monitoring', 'cctv-monitoring')">

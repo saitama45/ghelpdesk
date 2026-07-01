@@ -1,38 +1,114 @@
 <template>
-    <AppLayout title="NPC Status">
-        <div class="py-8">
-            <div class="mx-auto max-w-7xl space-y-5 px-4 sm:px-6 lg:px-8">
+    <AppLayout title="NPC Status" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
+
+        <!-- ══════════════════ STORE USER VIEW ══════════════════ -->
+        <div v-if="viewMode === 'store'" class="py-8">
+            <AssignedStoreSeals
+                :store-seals="storeSeals"
+                @downloaded="onStoreDownload"
+                @download-error="onStoreDownloadError"
+            />
+        </div>
+
+        <!-- ══════════════════ ADMIN VIEW ══════════════════ -->
+        <div v-else class="py-8">
+            <div class="space-y-5">
 
                 <!-- Page Header -->
                 <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div>
-                            <h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">NPC Renewal Monitoring</h1>
-                            <p class="text-sm text-gray-500 dark:text-gray-300">Track validity, renewal workflow, DPO files, assigned stores, and CCTV Seal Notices.</p>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <label class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Year</label>
-                            <div class="flex items-center rounded-xl border border-gray-200 bg-white shadow-sm dark:bg-gray-800 dark:border-gray-700">
-                                <button
-                                    type="button"
-                                    @click="changeYear(selectedYear - 1)"
-                                    class="rounded-l-xl px-3 py-2 text-lg font-black leading-none text-gray-600 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700"
-                                >‹</button>
-                                <span class="min-w-[70px] select-none px-4 py-2 text-center text-lg font-black text-gray-900 dark:text-gray-100">{{ selectedYear }}</span>
-                                <button
-                                    type="button"
-                                    @click="changeYear(selectedYear + 1)"
-                                    :disabled="selectedYear >= currentYear + 1"
-                                    class="rounded-r-xl px-3 py-2 text-lg font-black leading-none text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-gray-300 dark:hover:bg-gray-700"
-                                >›</button>
-                            </div>
-                        </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-900 dark:text-gray-100">NPC Renewal Monitoring</h1>
+                        <p class="text-sm text-gray-500 dark:text-gray-300">Track validity, renewal workflow, DPO &amp; CCTV seals, and per-store receipt confirmation. Click an entity to view its full per-year history.</p>
                     </div>
                 </div>
 
+                <div
+                    v-if="canDownloadAssignedSeals"
+                    class="rounded-xl border border-gray-200 bg-gray-50 p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900/50"
+                >
+                    <div class="mb-3 flex flex-wrap items-center justify-between gap-1 px-1">
+                        <p class="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-300">Choose a section</p>
+                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Click either tab to switch views</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2" role="tablist" aria-label="NPC sections">
+                        <button
+                            type="button"
+                            role="tab"
+                            :aria-selected="adminSection === 'monitoring'"
+                            class="group relative flex cursor-pointer items-center gap-4 rounded-xl border-2 p-4 text-left transition-all duration-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-200"
+                            :class="adminSection === 'monitoring'
+                                ? 'border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-200/70 dark:shadow-none'
+                                : 'border-gray-200 bg-white text-gray-800 hover:-translate-y-0.5 hover:border-blue-400 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100'"
+                            @click="adminSection = 'monitoring'"
+                        >
+                            <span
+                                class="flex h-11 w-11 flex-none items-center justify-center rounded-lg"
+                                :class="adminSection === 'monitoring' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'"
+                            >
+                                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 13h4v8H3v-8zm7-5h4v13h-4V8zm7-5h4v18h-4V3z" />
+                                </svg>
+                            </span>
+                            <span class="min-w-0">
+                                <span class="block text-sm font-black uppercase tracking-wide">Monitoring</span>
+                                <span
+                                    class="mt-1 block text-xs font-medium"
+                                    :class="adminSection === 'monitoring' ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'"
+                                >
+                                    View assigned entities and renewal progress
+                                </span>
+                            </span>
+                            <span v-if="adminSection === 'monitoring'" class="ml-auto rounded-full bg-white px-2.5 py-1 text-[10px] font-black uppercase text-blue-700">
+                                Active
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            role="tab"
+                            :aria-selected="adminSection === 'downloads'"
+                            class="group relative flex cursor-pointer items-center gap-4 rounded-xl border-2 p-4 text-left transition-all duration-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-emerald-200"
+                            :class="adminSection === 'downloads'
+                                ? 'border-emerald-600 bg-emerald-600 text-white shadow-lg shadow-emerald-200/70 dark:shadow-none'
+                                : 'border-gray-200 bg-white text-gray-800 hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100'"
+                            @click="adminSection = 'downloads'"
+                        >
+                            <span
+                                class="flex h-11 w-11 flex-none items-center justify-center rounded-lg"
+                                :class="adminSection === 'downloads' ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-300'"
+                            >
+                                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14a2 2 0 002-2v-3M3 16v3a2 2 0 002 2" />
+                                </svg>
+                            </span>
+                            <span class="min-w-0">
+                                <span class="block text-sm font-black uppercase tracking-wide">MY NPC</span>
+                                <span
+                                    class="mt-1 block text-xs font-medium"
+                                    :class="adminSection === 'downloads' ? 'text-emerald-100' : 'text-gray-500 dark:text-gray-400'"
+                                >
+                                    Download seals assigned to your stores
+                                </span>
+                            </span>
+                            <span v-if="adminSection === 'downloads'" class="ml-auto rounded-full bg-white px-2.5 py-1 text-[10px] font-black uppercase text-emerald-700">
+                                Active
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                <AssignedStoreSeals
+                    v-if="adminSection === 'downloads'"
+                    :store-seals="storeSeals"
+                    @downloaded="onStoreDownload"
+                    @download-error="onStoreDownloadError"
+                />
+
+                <template v-else>
                 <!-- Status Tabs -->
                 <div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:bg-gray-800 dark:border-gray-700">
-                    <div class="flex gap-2 overflow-x-auto custom-scrollbar">
+                    <div class="flex justify-center gap-2 overflow-x-auto custom-scrollbar">
                         <button
                             v-for="tab in statusTabs"
                             :key="tab.value || 'all'"
@@ -58,19 +134,21 @@
                 <!-- Data Table -->
                 <DataTable
                     title="NPC Status Per Entity"
-                    subtitle="Status is automatic based on today's date versus Validity To."
+                    subtitle="Status is automatic based on today's date versus Validity To. Click a row to open the entity's per-year history."
                     search-placeholder="Search entity, renewal status, or workflow stage..."
                     empty-message="No entities found for this filter."
                     :search="pagination.search.value"
-                    :data="pagination.data.value"
+                    :data="accumulatedNpcStatuses"
                     :current-page="pagination.currentPage.value"
                     :last-page="pagination.lastPage.value"
                     :per-page="pagination.perPage.value"
-                    :showing-text="pagination.showingText.value"
+                    :showing-text="npcStatusesShowingText"
                     :is-loading="pagination.isLoading.value"
+                    infinite-scroll
+                    :has-more="hasMoreNpcStatuses"
+                    :loading-more="loadingMoreNpcStatuses"
                     @update:search="pagination.search.value = $event"
-                    @go-to-page="pagination.goToPage"
-                    @change-per-page="pagination.changePerPage"
+                    @load-more="loadMoreNpcStatuses"
                 >
                     <template #header>
                         <tr>
@@ -78,14 +156,13 @@
                             <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Validity</th>
                             <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Renewal Status</th>
                             <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Workflow</th>
-                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">DPO Files</th>
-                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Stores / CCTV</th>
-                            <th class="px-5 py-3 text-right text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Actions</th>
+                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Seals</th>
+                            <th class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Stores</th>
                         </tr>
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="company in data" :key="company.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <tr v-for="company in data" :key="company.id" @click="openStatusModal(company)" class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
                             <td class="px-5 py-4">
                                 <div class="flex items-center gap-3">
                                     <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-slate-800 text-xs font-black text-white">
@@ -108,7 +185,7 @@
                                     <div class="font-bold text-gray-900 dark:text-gray-100">{{ formatDate(company.npc_status.validity_from) }}</div>
                                     <div class="text-xs text-gray-500 dark:text-gray-300">to {{ formatDate(company.npc_status.validity_to) }}</div>
                                 </div>
-                                <span v-else class="text-xs font-bold text-gray-400 dark:text-gray-400">No yearly record</span>
+                                <span v-else class="text-xs font-bold text-gray-400 dark:text-gray-400">No {{ currentYear }} record</span>
                             </td>
 
                             <td class="whitespace-nowrap px-5 py-4">
@@ -135,69 +212,38 @@
                                 <span v-else class="text-xs font-bold text-gray-400 dark:text-gray-400">No workflow</span>
                             </td>
 
-                            <td class="px-5 py-4">
-                                <div v-if="company.npc_status" class="space-y-1 text-xs">
-                                    <div class="font-bold text-gray-700 dark:text-gray-300">Seal: {{ attachmentCount(company, 'dpo_seal') }}</div>
-                                    <div class="font-bold text-gray-700 dark:text-gray-300">Reg: {{ attachmentCount(company, 'dpo_registration') }}</div>
-                                </div>
-                                <span v-else class="text-xs font-bold text-gray-400 dark:text-gray-400">No files</span>
+                            <td class="whitespace-nowrap px-5 py-4">
+                                <div v-if="company.npc_status" class="text-sm font-black text-gray-800 dark:text-gray-200">{{ sealsUploaded(company) }}/3 seals</div>
+                                <span v-else class="text-xs font-bold text-gray-400 dark:text-gray-400">—</span>
                             </td>
 
                             <td class="whitespace-nowrap px-5 py-4">
                                 <div class="text-sm font-black text-gray-800 dark:text-gray-200">{{ company.store_count }} Stores</div>
-                                <div v-if="company.npc_status" class="mt-0.5 text-[11px] font-semibold text-gray-500 dark:text-gray-300">
-                                    CCTV {{ cctvSummary(company).complete }}/{{ cctvSummary(company).total }}
-                                </div>
-                                <span v-else class="text-xs text-gray-400 dark:text-gray-400">—</span>
-                            </td>
-
-                            <td class="px-5 py-4 text-right">
-                                <div class="flex justify-end gap-1">
-                                    <button
-                                        v-if="canSaveRecord(company)"
-                                        type="button"
-                                        @click="openStatusModal(company)"
-                                        class="rounded-full p-2 text-blue-600 hover:bg-blue-50 hover:text-blue-900"
-                                        :title="company.npc_status ? 'Edit NPC Renewal' : 'Create NPC Renewal'"
-                                    >
-                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                        </svg>
-                                    </button>
-                                    <button
-                                        v-if="company.npc_status && hasPermission('npc_status.delete')"
-                                        type="button"
-                                        @click="deleteRecord(company)"
-                                        class="rounded-full p-2 text-red-600 hover:bg-red-50 hover:text-red-900"
-                                        title="Delete NPC Renewal"
-                                    >
-                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                        </svg>
-                                    </button>
+                                <div v-if="company.npc_status && company.store_count" class="mt-0.5 text-[11px] font-semibold text-gray-500 dark:text-gray-300">
+                                    {{ storesConfirmed(company) }} confirmed
                                 </div>
                             </td>
                         </tr>
                     </template>
                 </DataTable>
+                </template>
             </div>
         </div>
 
-        <!-- 4-Step Stepper Modal -->
+        <!-- ══════════════════ ENTITY HISTORY / EDITOR MODAL ══════════════════ -->
         <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeModal"></div>
                 <div class="relative flex max-h-[90vh] w-full max-w-4xl flex-col rounded-xl border border-gray-100 bg-white shadow-2xl dark:bg-gray-800 dark:border-gray-700">
 
-                    <!-- Modal Header -->
-                    <div class="border-b p-5">
+                    <!-- Header -->
+                    <div class="border-b p-5 dark:border-gray-700">
                         <div class="flex flex-wrap items-start justify-between gap-3">
                             <div>
                                 <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">{{ selectedCompany?.name }}</h3>
-                                <p class="mt-0.5 text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ selectedCompany?.code }} — NPC Renewal</p>
+                                <p class="mt-0.5 text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ selectedCompany?.code }} — NPC Renewal · {{ effectiveModalYear }}</p>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
-                                <!-- Year pills -->
                                 <button
                                     v-for="year in entityAvailableYears"
                                     :key="year"
@@ -214,7 +260,7 @@
                                 >
                                     {{ year }}<span v-if="hasYearRecord(year)" class="ml-1 opacity-60">✓</span>
                                 </button>
-                                <span v-if="isHistoricalYear" class="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black text-amber-700">Read-only</span>
+                                <span v-if="isHistoricalYear || !canEditNpcStatus" class="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black text-amber-700">Read-only</span>
                                 <button type="button" @click="closeModal" class="ml-1 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">
                                     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -224,318 +270,231 @@
                         </div>
                     </div>
 
-                    <!-- Step Indicator -->
-                    <div class="border-b bg-gray-50 px-6 py-4 dark:bg-gray-900/50">
-                        <div class="flex items-center">
-                            <template v-for="(stepDef, idx) in stepDefs" :key="stepDef.key">
-                                <div v-if="idx > 0" class="mx-2 h-0.5 flex-1" :class="stepDef.step <= activeStep ? 'bg-blue-400' : 'bg-gray-200 dark:bg-gray-700'"></div>
-                                <button
-                                    type="button"
-                                    @click="goToStep(stepDef.step)"
-                                    class="flex flex-shrink-0 flex-col items-center gap-1 focus:outline-none"
-                                >
-                                    <div :class="[
-                                        'flex h-8 w-8 items-center justify-center rounded-full text-sm font-black transition-colors',
-                                        activeStep === stepDef.step
-                                            ? 'bg-blue-600 text-white ring-4 ring-blue-100 dark:ring-blue-900/50'
-                                            : stepDef.isComplete
-                                                ? 'bg-green-500 text-white'
-                                                : 'bg-gray-200 text-gray-500 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600'
-                                    ]">
-                                        <svg v-if="stepDef.isComplete && activeStep !== stepDef.step" class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-                                        </svg>
-                                        <span v-else>{{ stepDef.step }}</span>
-                                    </div>
-                                    <div class="text-center">
-                                        <div class="whitespace-nowrap text-xs font-bold text-gray-700 dark:text-gray-300">{{ stepDef.label }}</div>
-                                        <div class="whitespace-nowrap text-[10px] font-semibold text-gray-400 dark:text-gray-400">{{ stepDef.meta }}</div>
-                                    </div>
-                                </button>
-                            </template>
+                    <!-- Body -->
+                    <div class="flex-1 space-y-6 overflow-y-auto p-6">
+
+                        <div v-if="isLoadingCompany" class="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
+                            Loading the latest renewal record...
                         </div>
-                    </div>
+                        <div v-else-if="modalLoadError" class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/40 dark:bg-red-900/20">
+                            <span class="text-sm font-semibold text-red-700 dark:text-red-300">{{ modalLoadError }}</span>
+                            <button type="button" @click="loadSelectedCompany" class="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700">Retry</button>
+                        </div>
 
-                    <!-- Step Content -->
-                    <div class="flex-1 overflow-y-auto p-6">
+                        <!-- ── Validity ── -->
+                        <section>
+                            <h4 class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Validity</h4>
 
-                        <!-- Step 1: Renewal Dates -->
-                        <div v-if="activeStep === 1">
                             <!-- Historical: read-only -->
-                            <div v-if="isHistoricalYear" class="space-y-4">
-                                <div v-if="modalNpcStatus">
-                                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-5 dark:bg-gray-900/50 dark:border-gray-700">
-                                        <div class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Validity Period — {{ effectiveModalYear }}</div>
-                                        <div class="grid grid-cols-2 gap-6">
-                                            <div>
-                                                <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-400">From</div>
-                                                <div class="mt-0.5 text-base font-bold text-gray-900 dark:text-gray-100">{{ formatDate(modalNpcStatus.validity_from) }}</div>
-                                            </div>
-                                            <div>
-                                                <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-400">To</div>
-                                                <div class="mt-0.5 text-base font-bold text-gray-900 dark:text-gray-100">{{ formatDate(modalNpcStatus.validity_to) }}</div>
-                                            </div>
-                                        </div>
+                            <div v-if="isHistoricalYear" class="rounded-lg border border-gray-200 bg-gray-50 p-5 dark:bg-gray-900/50 dark:border-gray-700">
+                                <div v-if="modalNpcStatus" class="grid grid-cols-2 gap-6">
+                                    <div>
+                                        <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400">From</div>
+                                        <div class="mt-0.5 text-base font-bold text-gray-900 dark:text-gray-100">{{ formatDate(modalNpcStatus.validity_from) }}</div>
                                     </div>
-                                    <div class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:bg-gray-900/50 dark:border-gray-700">
-                                        <div class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Renewal Status ({{ effectiveModalYear }})</div>
-                                        <div class="mt-2">
-                                            <span :class="statusBadgeClass(modalNpcStatus.renewal_status || 'No Record')" class="inline-flex rounded-full px-2.5 py-1 text-xs font-black">
-                                                {{ modalNpcStatus.renewal_status || 'No Record' }}
-                                            </span>
-                                        </div>
+                                    <div>
+                                        <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400">To</div>
+                                        <div class="mt-0.5 text-base font-bold text-gray-900 dark:text-gray-100">{{ formatDate(modalNpcStatus.validity_to) }}</div>
                                     </div>
                                 </div>
-                                <div v-else class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-8 text-center dark:bg-gray-900/50 dark:border-gray-700">
-                                    <p class="text-sm font-semibold text-gray-500 dark:text-gray-300">No NPC renewal record found for {{ effectiveModalYear }}.</p>
-                                </div>
+                                <p v-else class="text-sm font-semibold text-gray-500 dark:text-gray-300">No NPC renewal record for {{ effectiveModalYear }}.</p>
                             </div>
 
                             <!-- Current year: editable -->
-                            <div v-else class="space-y-5">
+                            <div v-else class="space-y-4">
                                 <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
                                     <div>
                                         <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Validity From</label>
-                                        <input v-model="statusForm.validity_from" type="date" required class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
+                                        <input v-model="statusForm.validity_from" :disabled="!canEditValidity" type="date" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:cursor-not-allowed disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
                                     </div>
                                     <div>
                                         <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Validity To</label>
-                                        <input v-model="statusForm.validity_to" type="date" required class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
+                                        <input v-model="statusForm.validity_to" :disabled="!canEditValidity" type="date" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:cursor-not-allowed disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
                                     </div>
                                 </div>
-                                <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:bg-gray-900/50 dark:border-gray-700">
-                                    <div class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Automatic Renewal Status Preview</div>
-                                    <div class="mt-2 flex items-center gap-3">
-                                        <span :class="statusBadgeClass(previewRenewalStatus)" class="inline-flex rounded-full px-2.5 py-1 text-xs font-black">
-                                            {{ previewRenewalStatus }}
-                                        </span>
+                                <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:bg-gray-900/50 dark:border-gray-700">
+                                    <div class="flex items-center gap-3">
+                                        <span :class="statusBadgeClass(previewRenewalStatus)" class="inline-flex rounded-full px-2.5 py-1 text-xs font-black">{{ previewRenewalStatus }}</span>
                                         <span class="text-sm font-semibold text-gray-600 dark:text-gray-300">{{ previewRenewalDaysLabel }}</span>
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        </section>
 
-                        <!-- Step 2: DPO Documents -->
-                        <div v-if="activeStep === 2">
-                            <!-- Historical: read-only -->
-                            <div v-if="isHistoricalYear">
-                                <div class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">DPO Documents — {{ effectiveModalYear }}</div>
-                                <AttachmentHistory :groups="modalAttachmentGroups" :can-delete="false" @delete="() => {}" />
-                                <div v-if="!modalAttachmentGroups.length" class="mt-3 rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm font-semibold text-gray-500 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
-                                    No DPO files found for {{ effectiveModalYear }}.
+                        <!-- ── Application Workflow ── -->
+                        <section ref="workflowSection">
+                            <div class="mb-3 flex items-center justify-between">
+                                <h4 class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Application Workflow</h4>
+                                <span v-if="modalNpcStatus" class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">{{ modalNpcStatus.workflow_progress ?? workflowProgress }}%</span>
+                            </div>
+
+                            <!-- Historical read-only -->
+                            <div v-if="isHistoricalYear" class="space-y-2">
+                                <div v-for="step in historicalWorkflowSteps" :key="step.key" class="flex items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                                    <span class="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full" :class="step.is_done ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'">
+                                        <svg v-if="step.is_done" class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                                    </span>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="text-sm font-bold" :class="step.is_done ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500'">{{ step.label }}</div>
+                                        <div v-if="step.completed_at" class="text-xs text-gray-500">Completed: {{ formatDate(step.completed_at) }}</div>
+                                        <div v-if="step.remarks" class="mt-1 text-xs italic text-gray-600 dark:text-gray-300">{{ step.remarks }}</div>
+                                    </div>
                                 </div>
+                                <p v-if="!historicalWorkflowSteps.length" class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm font-semibold text-gray-500 dark:bg-gray-900/50 dark:border-gray-700">No workflow record for {{ effectiveModalYear }}.</p>
                             </div>
 
                             <!-- Current year -->
-                            <div v-else class="space-y-4">
-                                <!-- No record yet -->
-                                <div v-if="!selectedCompany?.npc_status" class="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                                    <div class="flex items-center gap-2">
-                                        <svg class="h-5 w-5 flex-shrink-0 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                                        </svg>
-                                        <p class="text-sm font-bold text-amber-800">Complete Step 1 first to enable document uploads.</p>
-                                    </div>
-                                </div>
-
-                                <!-- Upload form -->
-                                <div v-else class="rounded-lg border border-blue-100 bg-blue-50 p-4">
-                                    <div class="mb-3 text-xs font-black uppercase tracking-widest text-blue-700">Upload New DPO Document</div>
-                                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                        <div>
-                                            <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-blue-700">Type</label>
-                                            <select v-model="attachmentForm.type" class="block w-full rounded-lg border-blue-200 text-sm focus:border-blue-500 focus:ring-blue-500">
-                                                <option value="dpo_seal">DPO Seal</option>
-                                                <option value="dpo_registration">DPO Registration</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-blue-700">File Validity From</label>
-                                            <input v-model="attachmentForm.validity_from" type="date" class="block w-full rounded-lg border-blue-200 text-sm focus:border-blue-500 focus:ring-blue-500">
-                                        </div>
-                                        <div class="md:col-span-2">
-                                            <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-blue-700">File</label>
-                                            <input :key="fileInputKey + '-dpo-upload'" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="block w-full text-sm text-gray-500 file:mr-3 file:rounded-full file:border-0 file:bg-white file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 dark:text-gray-300" @change="setAttachmentFile">
-                                        </div>
-                                        <button type="button" :disabled="isUploadingAttachment" @click="uploadAttachment" class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 md:w-auto">
-                                            {{ isUploadingAttachment ? 'Uploading...' : 'Upload' }}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <AttachmentHistory
-                                    :groups="modalAttachmentGroups"
-                                    :can-delete="hasPermission('npc_status.edit')"
-                                    @delete="deleteAttachment"
-                                />
-                            </div>
-                        </div>
-
-                        <!-- Step 3: Workflow Checklist -->
-                        <div v-if="activeStep === 3">
-                            <!-- Historical: read-only -->
-                            <div v-if="isHistoricalYear">
-                                <div class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Application Workflow — {{ effectiveModalYear }}</div>
-                                <div v-if="historicalWorkflowSteps.length" class="space-y-3">
-                                    <div v-for="step in historicalWorkflowSteps" :key="step.key" class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-                                        <div class="flex items-start gap-3">
-                                            <span class="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full" :class="step.is_done ? 'bg-green-100 text-green-600 dark:bg-green-500/15 dark:text-green-400' : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'">
-                                                <svg v-if="step.is_done" class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
-                                                </svg>
-                                                <span v-else class="h-1.5 w-1.5 rounded-full bg-gray-400"></span>
-                                            </span>
-                                            <div class="min-w-0 flex-1">
-                                                <div class="text-sm font-bold" :class="step.is_done ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400'">{{ step.label }}</div>
-                                                <div v-if="step.completed_at" class="text-xs text-gray-500 dark:text-gray-300">Completed: {{ formatDate(step.completed_at) }}</div>
-                                                <div v-if="step.remarks" class="mt-1 text-xs italic text-gray-600 dark:text-gray-300">{{ step.remarks }}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div v-else class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-8 text-center dark:bg-gray-900/50 dark:border-gray-700">
-                                    <p class="text-sm font-semibold text-gray-500 dark:text-gray-300">No workflow record for {{ effectiveModalYear }}.</p>
-                                </div>
-                            </div>
-
-                            <!-- Current: editable -->
                             <div v-else>
-                                <div v-if="!selectedCompany?.npc_status" class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm font-semibold text-gray-500 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
-                                    Save validity dates first (Step 1) before updating the workflow checklist.
+                                <div v-if="isLoadingCompany" class="rounded-lg border border-dashed border-blue-200 bg-blue-50 p-6 text-center text-sm font-semibold text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
+                                    Checking for an existing application workflow...
                                 </div>
-                                <div v-else class="space-y-3">
-                                    <div class="mb-4 flex items-center justify-between">
-                                        <div class="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Application Workflow Checklist</div>
-                                        <span class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">{{ workflowProgress }}%</span>
-                                    </div>
-                                    <div v-for="step in workflowForm" :key="step.key" class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                                <div v-else-if="!modalNpcStatus" class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm font-semibold text-gray-500 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
+                                    Save the validity dates above first to start the workflow.
+                                </div>
+                                <div v-else class="space-y-2">
+                                    <div v-for="(step, i) in workflowForm" :key="step.key" class="rounded-lg border p-3" :class="stepEnabled(i) ? 'border-gray-200 dark:border-gray-700' : 'border-gray-100 bg-gray-50 opacity-60 dark:border-gray-800 dark:bg-gray-900/40'">
                                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
-                                            <label class="flex min-w-[190px] items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
-                                                <input v-model="step.is_done" type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600" @change="markCompletedDate(step)">
+                                            <label class="flex min-w-[210px] items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
+                                                <input
+                                                    v-model="step.is_done"
+                                                    type="checkbox"
+                                                    :disabled="!canEditNpcStatus || !stepEnabled(i)"
+                                                    class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed dark:border-gray-600"
+                                                    @change="onStepToggle(i)"
+                                                >
+                                                <span class="flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-[10px] font-black text-gray-500 dark:bg-gray-700 dark:text-gray-300">{{ i + 1 }}</span>
                                                 {{ step.label }}
                                             </label>
-                                            <div class="grid flex-1 grid-cols-1 gap-3 md:grid-cols-[170px_minmax(260px,1fr)]">
-                                                <input v-model="step.completed_at" :disabled="!step.is_done" type="date" class="rounded-lg border-gray-300 text-sm disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
-                                                <textarea v-model="step.remarks" rows="2" class="rounded-lg border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100" placeholder="Remarks"></textarea>
+                                            <div class="grid flex-1 grid-cols-1 gap-3 md:grid-cols-[170px_minmax(220px,1fr)]">
+                                                <input v-model="step.completed_at" :disabled="!canEditNpcStatus || !step.is_done" type="date" class="rounded-lg border-gray-300 text-sm disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                <textarea v-model="step.remarks" :disabled="!canEditNpcStatus" rows="1" class="rounded-lg border-gray-300 text-sm disabled:cursor-not-allowed disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800" placeholder="Remarks"></textarea>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
 
-                        <!-- Step 4: Stores & CCTV -->
-                        <div v-if="activeStep === 4">
-                            <!-- Historical: info only -->
-                            <div v-if="isHistoricalYear" class="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center dark:bg-gray-900/50 dark:border-gray-700">
-                                <div class="text-3xl font-black text-gray-900 dark:text-gray-100">{{ cctvSummary(selectedCompany).total }}</div>
-                                <div class="mt-1 text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-300">Stores Currently Assigned</div>
-                                <div class="mt-2 text-sm font-semibold text-gray-600 dark:text-gray-300">CCTV Ready: {{ cctvSummary(selectedCompany).complete }}/{{ cctvSummary(selectedCompany).total }}</div>
-                                <p class="mt-4 text-xs text-gray-400 dark:text-gray-400">Store assignments are managed for the current year only. Historical assignment data is not retained.</p>
-                            </div>
+                                        <!-- Step 6 expansion (server-confirmed) -->
+                                        <div v-if="i === 5 && storeReceivingDone" class="mt-4 space-y-5 rounded-lg border border-blue-100 bg-blue-50/40 p-4 dark:border-blue-900/40 dark:bg-blue-900/10">
 
-                            <!-- Current: editable -->
-                            <div v-else>
-                                <div class="mb-4 space-y-3">
-                                    <input v-model="storeSearch" type="text" placeholder="Search stores by name, code, area, or brand..." class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600">
-                                    <div class="flex overflow-x-auto">
-                                        <div class="inline-flex min-w-max gap-1 rounded-lg bg-white p-1 shadow-sm ring-1 ring-gray-200 dark:bg-gray-800">
-                                            <button
-                                                v-for="tab in storeAssignmentTabs"
-                                                :key="tab.value"
-                                                type="button"
-                                                @click="storeAssignmentTab = tab.value"
-                                                :class="[
-                                                    'rounded-md px-3 py-1.5 text-xs font-black uppercase tracking-wider',
-                                                    storeAssignmentTab === tab.value ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
-                                                ]"
-                                            >
-                                                {{ tab.label }} {{ tab.count }}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
-                                    <div
-                                        v-for="store in filteredStores"
-                                        :key="store.id"
-                                        class="rounded-lg border p-3"
-                                        :class="isStoreDisabled(store) ? 'border-gray-200 bg-gray-50 opacity-60' : 'border-gray-200 bg-white'"
-                                    >
-                                        <div class="flex items-start gap-3">
-                                            <input v-model="selectedStoreIds" :value="store.id" :disabled="isStoreDisabled(store)" type="checkbox" class="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
-                                            <div class="min-w-0 flex-1">
-                                                <div class="flex items-start justify-between gap-2">
-                                                    <div class="min-w-0">
-                                                        <div class="truncate text-sm font-bold text-gray-900 dark:text-gray-100">{{ store.name }}</div>
-                                                        <div class="text-xs text-gray-500 dark:text-gray-300">{{ store.code }} — {{ store.area }} — {{ store.brand }}</div>
+                                            <!-- Seals to release -->
+                                            <div>
+                                                <div class="mb-2 text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Seals to Release (entity-wide)</div>
+                                                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                                    <div v-for="sealType in sealTypes" :key="sealType.type" class="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+                                                        <div class="mb-2 text-xs font-black uppercase tracking-wider text-gray-600 dark:text-gray-300">{{ sealType.label }}</div>
+                                                        <template v-if="currentSeal(sealType.type)">
+                                                            <a v-if="canEditNpcStatus" :href="currentSeal(sealType.type).url" class="block truncate text-xs font-bold text-blue-600 hover:underline">{{ currentSeal(sealType.type).name || 'Download' }}</a>
+                                                            <span v-else class="block truncate text-xs font-semibold text-gray-500">{{ currentSeal(sealType.type).name || 'Uploaded' }}</span>
+                                                            <button v-if="canEditNpcStatus" type="button" @click="deleteSeal(currentSeal(sealType.type))" class="mt-1 text-[11px] font-black text-red-600 hover:text-red-800">Remove</button>
+                                                        </template>
+                                                        <template v-else-if="canEditNpcStatus">
+                                                            <input :key="fileInputKey + '-' + sealType.type" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="w-full text-xs text-gray-500 file:mr-2 file:rounded-full file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-blue-700 dark:text-gray-300" @change="uploadSeal(sealType.type, $event)">
+                                                        </template>
+                                                        <span v-else class="text-xs font-semibold text-gray-400">Not uploaded</span>
                                                     </div>
-                                                    <span :class="store.cctv_seal_notice ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'" class="rounded-full px-2 py-0.5 text-[10px] font-black">
-                                                        {{ store.cctv_seal_notice ? 'CCTV Ready' : 'No CCTV' }}
-                                                    </span>
-                                                </div>
-                                                <div v-if="isStoreDisabled(store)" class="mt-1 text-[11px] font-bold text-amber-700">
-                                                    Assigned to {{ store.assigned_company_name }}
-                                                </div>
-                                                <div v-if="selectedStoreIds.includes(store.id) && !isStoreDisabled(store)" class="mt-3 flex flex-col gap-2 rounded-md bg-gray-50 p-2 sm:flex-row sm:items-center sm:justify-between dark:bg-gray-900/50">
-                                                    <a v-if="store.cctv_seal_notice" :href="store.cctv_seal_notice.url" class="truncate text-xs font-bold text-blue-600 hover:underline">
-                                                        {{ store.cctv_seal_notice.name || 'Download CCTV Seal Notice' }}
-                                                    </a>
-                                                    <span v-else class="text-xs font-bold text-gray-500 dark:text-gray-300">Upload one-time CCTV Seal Notice</span>
-                                                    <input :key="fileInputKey + '-cctv-' + store.id" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="max-w-[220px] text-xs text-gray-500 file:mr-2 file:rounded-full file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-blue-700 dark:text-gray-300" @change="uploadCctvSealNotice(store, $event)">
                                                 </div>
                                             </div>
+
+                                            <!-- Assigned stores -->
+                                            <div>
+                                                <div class="mb-2 text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Assigned Stores</div>
+                                                <input v-model="storeSearch" type="text" placeholder="Search stores by name, code, area, or brand..." class="mb-2 block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
+                                                <div class="mb-2 flex gap-1 overflow-x-auto">
+                                                    <button v-for="tab in storeAssignmentTabs" :key="tab.value" type="button" @click="storeAssignmentTab = tab.value" :class="['whitespace-nowrap rounded-md px-3 py-1 text-[11px] font-black uppercase tracking-wider', storeAssignmentTab === tab.value ? 'bg-blue-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-100 dark:bg-gray-800']">{{ tab.label }} {{ tab.count }}</button>
+                                                </div>
+                                                <div class="grid max-h-56 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+                                                    <label
+                                                        v-for="store in filteredStores"
+                                                        :key="store.id"
+                                                        class="flex items-start gap-2 rounded-lg border p-2 text-xs"
+                                                        :class="isStoreDisabled(store) ? 'border-gray-200 bg-gray-50 opacity-60' : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'"
+                                                    >
+                                                        <input v-model="selectedStoreIds" :value="store.id" :disabled="!canEditNpcStatus || isStoreDisabled(store)" type="checkbox" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed dark:border-gray-600">
+                                                        <span class="min-w-0">
+                                                            <span class="block truncate font-bold text-gray-900 dark:text-gray-100">{{ store.name }}</span>
+                                                            <span class="block truncate text-gray-500 dark:text-gray-300">{{ store.code }} — {{ store.area }} — {{ store.brand }}</span>
+                                                            <span v-if="isStoreDisabled(store)" class="block font-bold text-amber-700">Assigned to {{ store.assigned_company_name }}</span>
+                                                        </span>
+                                                    </label>
+                                                </div>
+                                            </div>
+
+                                            <!-- Download & confirmation grid -->
+                                            <div v-if="receiptGrid.length">
+                                                <div class="mb-2 text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Store Downloads &amp; Confirmation</div>
+                                                <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                                                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                                        <thead class="bg-gray-50 dark:bg-gray-900/50">
+                                                            <tr>
+                                                                <th class="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-gray-500">Store</th>
+                                                                <th v-for="sealType in sealTypes" :key="sealType.type" class="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-gray-500">{{ sealType.label }}</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+                                                            <tr v-for="row in receiptGrid" :key="row.store_id">
+                                                                <td class="px-3 py-2">
+                                                                    <div class="text-xs font-bold text-gray-900 dark:text-gray-100">{{ row.store_name }}</div>
+                                                                    <div class="font-mono text-[10px] text-gray-500">{{ row.store_code }}</div>
+                                                                </td>
+                                                                <td v-for="sealType in sealTypes" :key="sealType.type" class="px-3 py-2">
+                                                                    <div class="text-[10px] font-semibold" :class="row.seals[sealType.type]?.downloaded_at ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400'">
+                                                                        {{ row.seals[sealType.type]?.downloaded_at ? 'Downloaded ' + formatDateTime(row.seals[sealType.type].downloaded_at) : 'Not downloaded' }}
+                                                                    </div>
+                                                                    <button
+                                                                        v-if="canEditNpcStatus"
+                                                                        type="button"
+                                                                        @click="toggleConfirm(row, sealType.type)"
+                                                                        :class="[
+                                                                            'mt-1 rounded-full px-2.5 py-1 text-[10px] font-black',
+                                                                            row.seals[sealType.type]?.confirmed_at
+                                                                                ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                                        ]"
+                                                                    >
+                                                                        {{ row.seals[sealType.type]?.confirmed_at ? 'Checked ✓' : 'Mark checked' }}
+                                                                    </button>
+                                                                    <span
+                                                                        v-else
+                                                                        class="mt-1 inline-flex rounded-full px-2.5 py-1 text-[10px] font-black"
+                                                                        :class="row.seals[sealType.type]?.confirmed_at
+                                                                            ? 'bg-green-100 text-green-800'
+                                                                            : 'bg-gray-100 text-gray-600'"
+                                                                    >
+                                                                        {{ row.seals[sealType.type]?.confirmed_at ? 'Checked ✓' : 'Not checked' }}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                            <p v-else class="text-xs font-semibold text-gray-500 dark:text-gray-300">Assign and save stores above to track their seal downloads.</p>
                                         </div>
                                     </div>
-                                </div>
-                                <div v-if="filteredStores.length === 0" class="mt-4 rounded-xl border border-dashed border-gray-200 bg-gray-50 px-6 py-10 text-center dark:bg-gray-900/50 dark:border-gray-700">
-                                    <p class="text-sm font-bold text-gray-500 dark:text-gray-300">No stores found for this tab.</p>
+
                                 </div>
                             </div>
-                        </div>
-
+                        </section>
                     </div>
 
-                    <!-- Modal Footer -->
-                    <div class="flex items-center justify-between border-t bg-white p-4 dark:bg-gray-800">
+                    <!-- Footer -->
+                    <div class="flex items-center justify-between border-t bg-white p-4 dark:bg-gray-800 dark:border-gray-700">
                         <button
-                            v-if="activeStep > 1"
+                            v-if="!isHistoricalYear && modalNpcStatus && hasPermission('npc_status.delete')"
                             type="button"
-                            @click="activeStep--"
-                            class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
-                        >← Back</button>
+                            @click="deleteRecord(selectedCompany)"
+                            class="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 dark:bg-gray-800 dark:border-red-900/50 dark:hover:bg-red-900/20"
+                        >Delete Renewal</button>
                         <div v-else></div>
-
-                        <div class="flex items-center gap-3">
-                            <button type="button" @click="closeModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Cancel</button>
-
-                            <!-- Step 1 -->
-                            <template v-if="activeStep === 1">
-                                <button v-if="!isHistoricalYear" type="button" :disabled="isSavingStatus" @click="saveRenewal" class="rounded-lg bg-blue-600 px-6 py-2 text-sm font-bold text-white shadow-md hover:bg-blue-700 disabled:opacity-50">
-                                    {{ isSavingStatus ? 'Saving...' : selectedCompany?.npc_status ? 'Save Renewal' : 'Create & Continue →' }}
-                                </button>
-                                <button v-else type="button" @click="activeStep = 2" class="rounded-lg bg-gray-700 px-6 py-2 text-sm font-bold text-white hover:bg-gray-800">Next →</button>
-                            </template>
-
-                            <!-- Step 2 -->
-                            <button v-if="activeStep === 2" type="button" @click="activeStep = 3" class="rounded-lg bg-gray-700 px-6 py-2 text-sm font-bold text-white hover:bg-gray-800">Next →</button>
-
-                            <!-- Step 3 -->
-                            <template v-if="activeStep === 3">
-                                <button v-if="!isHistoricalYear && selectedCompany?.npc_status" type="button" :disabled="isSavingStatus" @click="saveWorkflow" class="rounded-lg bg-blue-600 px-6 py-2 text-sm font-bold text-white shadow-md hover:bg-blue-700 disabled:opacity-50">
-                                    {{ isSavingStatus ? 'Saving...' : 'Save & Next →' }}
-                                </button>
-                                <button v-else type="button" @click="activeStep = 4" class="rounded-lg bg-gray-700 px-6 py-2 text-sm font-bold text-white hover:bg-gray-800">Next →</button>
-                            </template>
-
-                            <!-- Step 4 -->
-                            <template v-if="activeStep === 4">
-                                <button v-if="!isHistoricalYear" type="button" :disabled="isSavingStores || !hasPermission('npc_status.edit')" @click="saveStores" class="rounded-lg bg-blue-600 px-6 py-2 text-sm font-bold text-white shadow-md hover:bg-blue-700 disabled:opacity-50">
-                                    {{ isSavingStores ? 'Saving...' : 'Save Stores' }}
-                                </button>
-                                <button v-else type="button" @click="closeModal" class="rounded-lg bg-gray-700 px-6 py-2 text-sm font-bold text-white hover:bg-gray-800">Done</button>
-                            </template>
+                        <div class="flex items-center gap-2">
+                            <button
+                                v-if="!isHistoricalYear && !isLoadingCompany && !modalLoadError && canSaveRecord(selectedCompany)"
+                                type="button"
+                                :disabled="isSavingStatus"
+                                @click="saveModalChanges"
+                                class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                {{ isSavingStatus ? 'Saving Changes...' : 'Save Changes' }}
+                            </button>
+                            <button type="button" :disabled="isSavingStatus" @click="closeModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-200 disabled:opacity-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600">Close</button>
                         </div>
                     </div>
 
@@ -546,86 +505,136 @@
 </template>
 
 <script setup>
-import { computed, defineComponent, h, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
 import axios from 'axios'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import AssignedStoreSeals from '@/Components/NpcStatus/AssignedStoreSeals.vue'
 import DataTable from '@/Components/DataTable.vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { usePagination } from '@/Composables/usePagination'
 import { usePermission } from '@/Composables/usePermission'
 import { useToast } from '@/Composables/useToast'
 
-const AttachmentHistory = defineComponent({
-    props: {
-        groups: { type: Array, default: () => [] },
-        canDelete: Boolean,
-    },
-    emits: ['delete'],
-    setup(props, { emit }) {
-        const typeLabel = (type) => type === 'dpo_seal' ? 'DPO Seal' : 'DPO Registration'
-        const hasFiles = () => props.groups.some((group) => Object.values(group.attachments || {}).some((items) => items.length))
-
-        return () => h('div', { class: 'rounded-md bg-gray-50 p-3' }, [
-            h('div', { class: 'mb-2 text-[10px] font-black uppercase tracking-widest text-gray-500' }, 'DPO Attachment History'),
-            hasFiles()
-                ? h('div', { class: 'space-y-3' }, props.groups.map((group) => h('div', { key: group.id, class: 'rounded bg-white p-3' }, [
-                    h('div', { class: 'mb-2 flex flex-wrap items-center justify-between gap-2' }, [
-                        h('div', { class: 'text-xs font-black text-gray-800' }, `Validity Year ${group.year}`),
-                        h('div', { class: 'text-[11px] font-semibold text-gray-500' }, `${formatDate(group.validity_from)} to ${formatDate(group.validity_to)}`),
-                    ]),
-                    h('div', { class: 'space-y-2' }, Object.entries(group.attachments || {}).flatMap(([type, items]) => items.map((item) => h('div', { key: item.id, class: 'flex items-center justify-between gap-3 rounded border border-gray-100 px-3 py-2 text-xs' }, [
-                        h('div', { class: 'min-w-0' }, [
-                            h('div', { class: 'font-black text-gray-500' }, typeLabel(type)),
-                            h('a', { href: item.url, class: 'block truncate font-bold text-blue-600 hover:underline' }, item.name || 'Download file'),
-                            h('div', { class: 'font-semibold text-gray-500' }, `File Validity From: ${formatDate(item.validity_from)}`),
-                        ]),
-                        props.canDelete
-                            ? h('button', { type: 'button', class: 'font-black text-red-600 hover:text-red-800', onClick: () => emit('delete', item) }, 'Delete')
-                            : null,
-                    ])))),
-                ])))
-                : h('div', { class: 'text-xs font-semibold text-gray-400' }, 'No DPO files uploaded.'),
-        ])
-    },
-})
-
 const props = defineProps({
+    viewMode: { type: String, default: 'admin' },
     npcStatuses: Object,
     filters: Object,
-    statuses: Array,
+    currentYear: Number,
     statusCounts: Object,
     workflowSteps: Array,
     stores: Array,
+    storeSeals: { type: Array, default: () => [] },
+    canDownloadAssignedSeals: { type: Boolean, default: false },
+    defaultNpcSection: { type: String, default: 'monitoring' },
 })
 
 const { confirm } = useConfirm()
 const { hasPermission } = usePermission()
 const { showSuccess, showError } = useToast()
 
-const currentYear = new Date().getFullYear()
-const selectedYear = ref(props.filters?.year || currentYear)
+const sealTypes = [
+    { type: 'dpo_seal', label: 'DPO Seal' },
+    { type: 'dpo_registration', label: 'DPO Registration' },
+    { type: 'cctv_seal', label: 'CCTV Seal' },
+]
+
+const currentYear = computed(() => props.currentYear || new Date().getFullYear())
+const adminSection = ref(props.defaultNpcSection)
 const selectedStatus = ref(props.filters?.status || '')
-const pagination = usePagination(props.npcStatuses, 'npc-statuses.index', () => {
-    const params = { year: selectedYear.value }
+const pagination = usePagination(props.npcStatuses || {}, 'npc-statuses.index', () => {
+    const params = {}
     if (selectedStatus.value) params.status = selectedStatus.value
     return params
 })
+
+// Infinite scroll accumulation follows the Tickets index pattern: page 1
+// replaces the buffer, while later pages append unique company rows.
+const accumulatedNpcStatuses = ref([...(props.npcStatuses?.data || [])])
+const npcStatusesMeta = ref({
+    current_page: props.npcStatuses?.current_page || 1,
+    last_page: props.npcStatuses?.last_page || 1,
+    total: props.npcStatuses?.total || 0,
+})
+const loadingMoreNpcStatuses = ref(false)
+
+const mergeNpcStatusPage = (payload) => {
+    if (!payload) return
+
+    const incoming = payload.data || []
+    if ((payload.current_page || 1) <= 1) {
+        accumulatedNpcStatuses.value = [...incoming]
+    } else {
+        const incomingById = new Map(incoming.map((company) => [String(company.id), company]))
+        const updated = accumulatedNpcStatuses.value.map(
+            (company) => incomingById.get(String(company.id)) || company
+        )
+        const seen = new Set(updated.map((company) => String(company.id)))
+        accumulatedNpcStatuses.value = [
+            ...updated,
+            ...incoming.filter((company) => !seen.has(String(company.id))),
+        ]
+    }
+
+    npcStatusesMeta.value = {
+        current_page: payload.current_page || 1,
+        last_page: payload.last_page || 1,
+        total: payload.total || 0,
+    }
+}
+
+const hasMoreNpcStatuses = computed(
+    () => npcStatusesMeta.value.current_page < npcStatusesMeta.value.last_page
+)
+
+const npcStatusesShowingText = computed(() => {
+    const total = npcStatusesMeta.value.total || 0
+    if (total === 0) return 'No records found'
+    return `Showing ${accumulatedNpcStatuses.value.length} of ${total} records`
+})
+
+const loadMoreNpcStatuses = () => {
+    if (loadingMoreNpcStatuses.value || !hasMoreNpcStatuses.value) return
+
+    loadingMoreNpcStatuses.value = true
+    router.reload({
+        only: ['npcStatuses'],
+        data: {
+            status: selectedStatus.value || undefined,
+            search: pagination.search.value,
+            per_page: pagination.perPage.value,
+            page: npcStatusesMeta.value.current_page + 1,
+        },
+        preserveScroll: true,
+        preserveState: true,
+        onFinish: () => {
+            loadingMoreNpcStatuses.value = false
+        },
+    })
+}
 
 // Modal state
 const showModal = ref(false)
 const selectedCompany = ref(null)
 const fileInputKey = ref(0)
 const isSavingStatus = ref(false)
-const isSavingStores = ref(false)
-const isUploadingAttachment = ref(false)
-const activeStep = ref(1)
+const isLoadingCompany = ref(false)
+const modalLoadError = ref('')
 const modalYear = ref(null)
+const workflowSection = ref(null)
+let companyLoadRequest = 0
+const canEditNpcStatus = computed(() => hasPermission('npc_status.edit'))
+const canEditValidity = computed(() => (
+    selectedCompany.value?.npc_status
+        ? canEditNpcStatus.value
+        : hasPermission('npc_status.create')
+))
 
 // Form state
 const storeSearch = ref('')
 const storeAssignmentTab = ref('all')
 const selectedStoreIds = ref([])
+const storeOptions = ref([...(props.stores || [])])
 const workflowForm = ref([])
 
 const statusForm = reactive({
@@ -634,34 +643,32 @@ const statusForm = reactive({
     validity_to: '',
 })
 
-const attachmentForm = reactive({
-    type: 'dpo_seal',
-    validity_from: '',
-    file: null,
-})
-
 onMounted(() => {
+    if (props.viewMode !== 'admin') return
     pagination.perPage.value = props.filters?.per_page || props.npcStatuses?.per_page || 10
     pagination.search.value = props.filters?.search || ''
     pagination.updateData(props.npcStatuses)
+    mergeNpcStatusPage(props.npcStatuses)
 })
 
 watch(() => props.npcStatuses, (newData) => {
+    if (props.viewMode !== 'admin') return
     pagination.updateData(newData)
+    mergeNpcStatusPage(newData)
     refreshSelectedCompanyFromData(newData)
 }, { deep: true })
-
-watch(() => props.filters?.year, (year) => {
-    if (year) selectedYear.value = year
-})
 
 watch(() => props.filters?.status, (status) => {
     selectedStatus.value = status || ''
 })
 
-// ---- Modal year context ----
-const effectiveModalYear = computed(() => modalYear.value ?? selectedYear.value)
-const isHistoricalYear = computed(() => effectiveModalYear.value !== selectedYear.value)
+watch(() => props.stores, (stores) => {
+    storeOptions.value = [...(stores || [])]
+}, { deep: true })
+
+// ── Modal year context ──
+const effectiveModalYear = computed(() => modalYear.value ?? currentYear.value)
+const isHistoricalYear = computed(() => effectiveModalYear.value !== currentYear.value)
 
 const modalNpcStatus = computed(() => {
     if (!isHistoricalYear.value) return selectedCompany.value?.npc_status ?? null
@@ -670,14 +677,10 @@ const modalNpcStatus = computed(() => {
 
 const entityAvailableYears = computed(() => {
     if (!selectedCompany.value) return []
-    const years = new Set([selectedYear.value])
+    const years = new Set([currentYear.value])
     ;(selectedCompany.value.workflow_history || []).forEach((r) => years.add(r.year))
     ;(selectedCompany.value.attachment_history || []).forEach((r) => years.add(r.year))
     return [...years].sort((a, b) => b - a)
-})
-
-const modalAttachmentGroups = computed(() => {
-    return (selectedCompany.value?.attachment_history || []).filter((g) => g.year === effectiveModalYear.value)
 })
 
 const historicalWorkflowSteps = computed(() => {
@@ -692,68 +695,25 @@ const workflowProgress = computed(() => {
     return Math.round((done / workflowForm.value.length) * 100)
 })
 
-const stepDefs = computed(() => {
-    const company = selectedCompany.value
-    return [
-        {
-            key: 'renewal', label: 'Renewal', step: 1,
-            meta: modalNpcStatus.value?.validity_from ? formatDate(modalNpcStatus.value.validity_from) : 'Not set',
-            isComplete: !!modalNpcStatus.value?.validity_from,
-        },
-        {
-            key: 'documents', label: 'Documents', step: 2,
-            meta: (() => {
-                if (isHistoricalYear.value) {
-                    const total = modalAttachmentGroups.value.reduce((sum, g) => sum + Object.values(g.attachments || {}).flat().length, 0)
-                    return total ? `${total} file${total !== 1 ? 's' : ''}` : 'No files'
-                }
-                const n = (modalNpcStatus.value?.attachments?.dpo_seal?.length || 0) + (modalNpcStatus.value?.attachments?.dpo_registration?.length || 0)
-                return n ? `${n} file${n !== 1 ? 's' : ''}` : 'No files'
-            })(),
-            isComplete: (() => {
-                if (isHistoricalYear.value) return modalAttachmentGroups.value.some((g) => Object.values(g.attachments || {}).flat().length > 0)
-                return (modalNpcStatus.value?.attachments?.dpo_seal?.length || 0) > 0 || (modalNpcStatus.value?.attachments?.dpo_registration?.length || 0) > 0
-            })(),
-        },
-        {
-            key: 'workflow', label: 'Workflow', step: 3,
-            meta: (() => {
-                if (isHistoricalYear.value) {
-                    const steps = historicalWorkflowSteps.value
-                    return steps.length ? `${steps.filter((s) => s.is_done).length}/${steps.length} done` : '—'
-                }
-                return modalNpcStatus.value ? `${workflowProgress.value}%` : '—'
-            })(),
-            isComplete: isHistoricalYear.value
-                ? historicalWorkflowSteps.value.length > 0 && historicalWorkflowSteps.value.every((s) => s.is_done)
-                : workflowProgress.value === 100,
-        },
-        {
-            key: 'stores', label: 'Stores & CCTV', step: 4,
-            meta: isHistoricalYear.value
-                ? `${company ? cctvSummary(company).total : 0} stores`
-                : `${selectedStoreIds.value.length} selected`,
-            isComplete: isHistoricalYear.value
-                ? (company ? cctvSummary(company).total > 0 : false)
-                : selectedStoreIds.value.length > 0,
-        },
-    ]
+const storeReceivingDone = computed(() => {
+    const step = (modalNpcStatus.value?.workflow_steps || []).find((s) => s.key === 'store_distribution')
+    return !!step?.is_done
 })
 
-// ---- Status tabs ----
+const receiptGrid = computed(() => selectedCompany.value?.npc_status?.store_receipts || [])
+
+// ── Status tabs ──
 const statusTabs = computed(() => {
     const counts = props.statusCounts || {}
-    const allEntities = Object.values(counts).reduce((sum, count) => sum + Number(count?.entities || 0), 0)
-    const allStores = Object.values(counts).reduce((sum, count) => sum + Number(count?.stores || 0), 0)
+    const group = (key) => ({
+        entities: Number(counts[key]?.entities || 0),
+        stores: Number(counts[key]?.stores || 0),
+    })
 
     return [
-        { label: 'All', value: '', entities: allEntities, stores: allStores },
-        ...(props.statuses || []).map((status) => ({
-            label: status,
-            value: status,
-            entities: Number(counts[status]?.entities || 0),
-            stores: Number(counts[status]?.stores || 0),
-        })),
+        { label: 'All', value: '', ...group('all') },
+        { label: 'Active', value: 'active', ...group('active') },
+        { label: 'For Renewal', value: 'for_renewal', ...group('for_renewal') },
     ]
 })
 
@@ -764,25 +724,39 @@ const selectStatus = (status) => {
     pagination.performSearch()
 }
 
-const changeYear = (year) => {
-    selectedYear.value = year
-    pagination.currentPage.value = 1
-    pagination.performSearch()
-}
-
 const refreshSelectedCompanyFromData = (data = props.npcStatuses) => {
     if (!selectedCompany.value?.id) return
-    const updatedCompany = (data?.data || []).find((company) => company.id === selectedCompany.value.id)
+    const updatedCompany = (data?.data || []).find(
+        (company) => String(company.id) === String(selectedCompany.value.id)
+    )
     if (updatedCompany) {
         selectedCompany.value = updatedCompany
         syncWorkflowFormToValidity()
     }
 }
 
+// Apply a fresh serialized company row (returned by the modal's axios saves)
+// directly to the open modal + background row. Deterministic — no reliance on
+// Inertia's props watcher, which router.reload can skip.
+const applyFreshCompany = (company) => {
+    if (!company?.id) return
+    pagination.data.value = pagination.data.value.map((row) => String(row.id) === String(company.id) ? company : row)
+    accumulatedNpcStatuses.value = accumulatedNpcStatuses.value.map((row) => String(row.id) === String(company.id) ? company : row)
+    if (String(selectedCompany.value?.id) === String(company.id)) {
+        selectedCompany.value = company
+        if (!isHistoricalYear.value) {
+            statusForm.validity_from = company.npc_status?.validity_from || statusForm.validity_from
+            statusForm.validity_to = company.npc_status?.validity_to || statusForm.validity_to
+        }
+        syncWorkflowFormToValidity()
+    }
+}
+
 const replaceCompanyInPage = (company) => {
     if (!company?.id) return
-    pagination.data.value = pagination.data.value.map((row) => row.id === company.id ? company : row)
-    if (selectedCompany.value?.id === company.id) {
+    pagination.data.value = pagination.data.value.map((row) => String(row.id) === String(company.id) ? company : row)
+    accumulatedNpcStatuses.value = accumulatedNpcStatuses.value.map((row) => String(row.id) === String(company.id) ? company : row)
+    if (String(selectedCompany.value?.id) === String(company.id)) {
         selectedCompany.value = company
         syncWorkflowFormToValidity()
     }
@@ -803,166 +777,237 @@ const syncWorkflowFormToValidity = () => {
 }
 
 const canSaveRecord = (company) => {
-    return company.npc_status ? hasPermission('npc_status.edit') : hasPermission('npc_status.create')
+    return company?.npc_status ? hasPermission('npc_status.edit') : hasPermission('npc_status.create')
 }
 
 const hasYearRecord = (year) => {
-    if (year === selectedYear.value) return !!selectedCompany.value?.npc_status
+    if (year === currentYear.value) return !!selectedCompany.value?.npc_status
     return (selectedCompany.value?.workflow_history || []).some((r) => r.year === year)
         || (selectedCompany.value?.attachment_history || []).some((r) => r.year === year)
 }
 
+const syncSelectedStores = () => {
+    const currentRecordId = selectedCompany.value?.npc_status?.id
+    if (!currentRecordId) {
+        selectedStoreIds.value = []
+        return
+    }
+
+    selectedStoreIds.value = storeOptions.value
+        .filter((store) => String(store.assigned_npc_status_id) === String(currentRecordId))
+        .map((store) => store.id)
+}
+
+const scrollToWorkflow = async () => {
+    await nextTick()
+    workflowSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+const loadSelectedCompany = async ({ scrollIfFound = false } = {}) => {
+    const companyId = selectedCompany.value?.id
+    if (!companyId) return
+
+    const request = ++companyLoadRequest
+    isLoadingCompany.value = true
+    modalLoadError.value = ''
+
+    try {
+        const { data } = await axios.get(route('npc-statuses.companies.show', companyId), {
+            headers: { Accept: 'application/json' },
+        })
+
+        if (request !== companyLoadRequest || String(selectedCompany.value?.id) !== String(companyId)) return
+
+        applyFreshCompany(data.company)
+        syncSelectedStores()
+
+        if (scrollIfFound && data.company?.npc_status) {
+            await scrollToWorkflow()
+        }
+    } catch (error) {
+        if (request !== companyLoadRequest || String(selectedCompany.value?.id) !== String(companyId)) return
+        modalLoadError.value = axiosErrorText(error)
+    } finally {
+        if (request === companyLoadRequest) {
+            isLoadingCompany.value = false
+        }
+    }
+}
+
 const openStatusModal = (company) => {
+    const shouldScrollIfFound = !company.npc_status
     selectedCompany.value = company
     statusForm.company_id = company.id
-    statusForm.validity_from = company.npc_status?.validity_from || `${selectedYear.value}-01-01`
-    statusForm.validity_to = company.npc_status?.validity_to || `${selectedYear.value}-12-31`
-    attachmentForm.type = 'dpo_seal'
-    attachmentForm.validity_from = statusForm.validity_from
-    attachmentForm.file = null
+    statusForm.validity_from = company.npc_status?.validity_from || `${currentYear.value}-01-01`
+    statusForm.validity_to = company.npc_status?.validity_to || `${currentYear.value}-12-31`
     syncWorkflowFormToValidity()
-    selectedStoreIds.value = (props.stores || [])
-        .filter((s) => s.assigned_npc_status_id === company.npc_status?.id)
-        .map((s) => s.id)
+    syncSelectedStores()
     storeSearch.value = ''
     storeAssignmentTab.value = 'all'
-    activeStep.value = 1
     modalYear.value = null
     fileInputKey.value++
     showModal.value = true
+    loadSelectedCompany({ scrollIfFound: shouldScrollIfFound })
 }
 
 const closeModal = () => {
+    companyLoadRequest++
     showModal.value = false
     selectedCompany.value = null
     statusForm.company_id = null
     statusForm.validity_from = ''
     statusForm.validity_to = ''
-    attachmentForm.type = 'dpo_seal'
-    attachmentForm.validity_from = ''
-    attachmentForm.file = null
     workflowForm.value = []
     selectedStoreIds.value = []
     storeSearch.value = ''
     storeAssignmentTab.value = 'all'
-    activeStep.value = 1
+    isLoadingCompany.value = false
+    modalLoadError.value = ''
     modalYear.value = null
     fileInputKey.value++
 }
 
 const switchModalYear = (year) => {
-    modalYear.value = (year === selectedYear.value) ? null : year
-    activeStep.value = 1
+    modalYear.value = (year === currentYear.value) ? null : year
     if (!isHistoricalYear.value) {
-        statusForm.validity_from = selectedCompany.value?.npc_status?.validity_from || `${selectedYear.value}-01-01`
-        statusForm.validity_to = selectedCompany.value?.npc_status?.validity_to || `${selectedYear.value}-12-31`
-        selectedStoreIds.value = (props.stores || [])
-            .filter((s) => s.assigned_npc_status_id === selectedCompany.value?.npc_status?.id)
-            .map((s) => s.id)
+        statusForm.validity_from = selectedCompany.value?.npc_status?.validity_from || `${currentYear.value}-01-01`
+        statusForm.validity_to = selectedCompany.value?.npc_status?.validity_to || `${currentYear.value}-12-31`
+        syncSelectedStores()
         syncWorkflowFormToValidity()
     }
 }
 
-const goToStep = (step) => {
-    activeStep.value = step
+// ── Workflow step gating ──
+const stepEnabled = (index) => {
+    if (index === 0) return true
+    return workflowForm.value.slice(0, index).every((step) => step.is_done)
 }
 
-const setAttachmentFile = (event) => {
-    attachmentForm.file = event.target.files?.[0] || null
-}
-
-const saveRenewal = () => {
-    if (!selectedCompany.value) return
-    isSavingStatus.value = true
-    const record = selectedCompany.value.npc_status
-    const url = record ? route('npc-statuses.update', record.id) : route('npc-statuses.store')
-    const payload = {
-        company_id: statusForm.company_id,
-        validity_from: statusForm.validity_from,
-        validity_to: statusForm.validity_to,
-        suppress_success_flash: true,
+const onStepToggle = (index) => {
+    if (!canEditNpcStatus.value) return
+    const step = workflowForm.value[index]
+    if (step.is_done) {
+        if (!step.completed_at) step.completed_at = todayString()
+    } else {
+        // Cascade: unchecking a step invalidates all later steps.
+        for (let j = index; j < workflowForm.value.length; j++) {
+            workflowForm.value[j].is_done = false
+            workflowForm.value[j].completed_at = ''
+        }
     }
-    if (record) payload._method = 'put'
+}
 
-    router.post(url, payload, {
-        forceFormData: true,
-        preserveScroll: true,
-        onSuccess: () => {
-            showSuccess(record ? 'NPC renewal dates updated successfully' : 'NPC renewal created successfully')
-            activeStep.value = 2
-        },
-        onError: (errors) => showError(errorText(errors)),
-        onFinish: () => { isSavingStatus.value = false },
+const applySavedStoreAssignments = (company, savedStoreIds) => {
+    const currentRecordId = company?.npc_status?.id
+    const selectedIds = new Set(savedStoreIds.map((storeId) => String(storeId)))
+
+    storeOptions.value = storeOptions.value.map((store) => {
+        if (selectedIds.has(String(store.id))) {
+            return {
+                ...store,
+                assigned_npc_status_id: currentRecordId,
+                assigned_company_id: company.id,
+                assigned_company_name: company.name,
+            }
+        }
+
+        if (String(store.assigned_npc_status_id) === String(currentRecordId)) {
+            return {
+                ...store,
+                assigned_npc_status_id: null,
+                assigned_company_id: null,
+                assigned_company_name: null,
+            }
+        }
+
+        return store
     })
 }
 
-const saveWorkflow = () => {
-    const record = selectedCompany.value?.npc_status
-    if (!record) return
+const saveModalChanges = async () => {
+    if (!selectedCompany.value || !canSaveRecord(selectedCompany.value) || isSavingStatus.value) return
+
     isSavingStatus.value = true
+    const existingRecord = selectedCompany.value.npc_status
+    const workflowSteps = workflowForm.value.map((step) => ({ ...step }))
+    const storeIds = [...selectedStoreIds.value]
 
-    router.put(route('npc-statuses.workflow.update', record.id), {
-        steps: workflowForm.value.map((step) => ({ ...step })),
-        suppress_success_flash: true,
-    }, {
-        preserveScroll: true,
-        onSuccess: () => {
-            showSuccess('Workflow checklist saved successfully')
-            activeStep.value = 4
-        },
-        onError: (errors) => showError(errorText(errors)),
-        onFinish: () => { isSavingStatus.value = false },
-    })
-}
-
-const uploadAttachment = async () => {
-    const record = selectedCompany.value?.npc_status
-    if (!record) {
-        showError('Save the renewal before uploading DPO attachments.')
-        return
-    }
-    if (!attachmentForm.file) {
-        showError('Select a DPO attachment file to upload.')
-        return
-    }
-    isUploadingAttachment.value = true
     try {
-        const formData = new FormData()
-        formData.append('type', attachmentForm.type)
-        formData.append('validity_from', attachmentForm.validity_from)
-        formData.append('file', attachmentForm.file)
-        const { data } = await axios.post(route('npc-statuses.attachments.store', record.id), formData, {
-            headers: { Accept: 'application/json' },
-        })
-        attachmentForm.file = null
-        fileInputKey.value++
-        replaceCompanyInPage(data.company)
-        showSuccess(data.message || 'NPC attachment uploaded successfully')
+        let response = existingRecord
+            ? await axios.put(route('npc-statuses.update', existingRecord.id), {
+                validity_from: statusForm.validity_from,
+                validity_to: statusForm.validity_to,
+            }, { headers: { Accept: 'application/json' } })
+            : await axios.post(route('npc-statuses.store'), {
+                company_id: statusForm.company_id,
+                validity_from: statusForm.validity_from,
+                validity_to: statusForm.validity_to,
+            }, { headers: { Accept: 'application/json' } })
+        let company = response.data.company
+        applyFreshCompany(company)
+
+        // Dependent sections are only submitted when they were loaded for an
+        // existing record. This avoids wiping data if a stale modal discovers
+        // an existing renewal during the validity request.
+        if (existingRecord && hasPermission('npc_status.edit')) {
+            response = await axios.put(route('npc-statuses.workflow.update', company.npc_status.id), {
+                steps: workflowSteps,
+            }, { headers: { Accept: 'application/json' } })
+            company = response.data.company
+            applyFreshCompany(company)
+
+            response = await axios.put(route('npc-statuses.stores.update', company.npc_status.id), {
+                store_ids: storeIds,
+            }, { headers: { Accept: 'application/json' } })
+            company = response.data.company
+            applyFreshCompany(company)
+            applySavedStoreAssignments(company, storeIds)
+        }
+
+        showSuccess('NPC renewal changes saved successfully')
+
+        if (!existingRecord) {
+            await scrollToWorkflow()
+        }
     } catch (error) {
         showError(axiosErrorText(error))
     } finally {
-        isUploadingAttachment.value = false
+        isSavingStatus.value = false
     }
 }
 
-const deleteRecord = async (company) => {
-    if (!company.npc_status) return
-    const ok = await confirm({
-        title: 'Delete NPC Renewal',
-        message: `Delete NPC renewal for ${company.name} in ${selectedYear.value}? Store tags and uploaded DPO files will be removed.`,
-    })
-    if (!ok) return
-    router.delete(route('npc-statuses.destroy', company.npc_status.id), {
-        preserveScroll: true,
-        onSuccess: () => showSuccess('NPC renewal deleted successfully'),
-        onError: (errors) => showError(errorText(errors)),
-    })
+const currentSeal = (type) => selectedCompany.value?.npc_status?.attachments?.[type]?.[0] || null
+
+const uploadSeal = async (type, event) => {
+    if (!canEditNpcStatus.value) return
+    const file = event.target.files?.[0]
+    if (!file) return
+    const record = selectedCompany.value?.npc_status
+    if (!record) {
+        showError('Save the renewal before uploading seals.')
+        return
+    }
+    try {
+        const formData = new FormData()
+        formData.append('type', type)
+        formData.append('validity_from', statusForm.validity_from || `${currentYear.value}-01-01`)
+        formData.append('file', file)
+        const { data } = await axios.post(route('npc-statuses.attachments.store', record.id), formData, {
+            headers: { Accept: 'application/json' },
+        })
+        fileInputKey.value++
+        replaceCompanyInPage(data.company)
+        showSuccess(data.message || 'Seal uploaded successfully')
+    } catch (error) {
+        showError(axiosErrorText(error))
+    }
 }
 
-const deleteAttachment = async (attachment) => {
+const deleteSeal = async (attachment) => {
+    if (!canEditNpcStatus.value || !attachment) return
     const ok = await confirm({
-        title: 'Delete Attachment',
-        message: `Delete ${attachment.name || 'this attachment'}?`,
+        title: 'Remove Seal',
+        message: `Remove ${attachment.name || 'this seal'}? Stores will no longer be able to download it.`,
     })
     if (!ok) return
     try {
@@ -970,48 +1015,67 @@ const deleteAttachment = async (attachment) => {
             headers: { Accept: 'application/json' },
         })
         replaceCompanyInPage(data.company)
-        showSuccess(data.message || 'NPC attachment deleted successfully')
+        showSuccess(data.message || 'Seal removed successfully')
     } catch (error) {
         showError(axiosErrorText(error))
     }
 }
 
-const saveStores = () => {
-    if (!selectedCompany.value?.npc_status) return
-    isSavingStores.value = true
-    router.put(route('npc-statuses.stores.update', selectedCompany.value.npc_status.id), {
-        store_ids: selectedStoreIds.value,
-    }, {
+const toggleConfirm = async (row, type) => {
+    if (!canEditNpcStatus.value) return
+    const record = selectedCompany.value?.npc_status
+    if (!record) return
+    const confirmed = !row.seals[type]?.confirmed_at
+    try {
+        const { data } = await axios.post(route('npc-statuses.stores.seal.confirm', [record.id, row.store_id, type]), {
+            confirmed,
+        }, { headers: { Accept: 'application/json' } })
+        replaceCompanyInPage(data.company)
+        showSuccess(data.message || 'Updated')
+    } catch (error) {
+        showError(axiosErrorText(error))
+    }
+}
+
+const deleteRecord = async (company) => {
+    if (!company?.npc_status) return
+    const ok = await confirm({
+        title: 'Delete NPC Renewal',
+        message: `Delete NPC renewal for ${company.name} in ${currentYear.value}? Store tags, seals, and download records will be removed.`,
+    })
+    if (!ok) return
+    router.delete(route('npc-statuses.destroy', company.npc_status.id), {
         preserveScroll: true,
         onSuccess: () => {
             closeModal()
-            showSuccess('Assigned stores updated successfully')
+            showSuccess('NPC renewal deleted successfully')
         },
         onError: (errors) => showError(errorText(errors)),
-        onFinish: () => { isSavingStores.value = false },
     })
 }
 
-const uploadCctvSealNotice = (store, event) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    router.post(route('stores.cctv-seal-notice.store', store.id), { file }, {
-        forceFormData: true,
-        preserveScroll: true,
-        onSuccess: () => showSuccess('CCTV Seal Notice saved successfully'),
-        onError: (errors) => showError(errorText(errors)),
-        onFinish: () => { fileInputKey.value++ },
-    })
+// ── Store assignment helpers ──
+const isStoreSelected = (store) => {
+    return selectedStoreIds.value.some((storeId) => String(storeId) === String(store.id))
+}
+
+const isStoreAssignedElsewhere = (store) => {
+    const assignedRecordId = store.assigned_npc_status_id
+    const currentRecordId = selectedCompany.value?.npc_status?.id
+    return Boolean(assignedRecordId)
+        && String(assignedRecordId) !== String(currentRecordId)
 }
 
 const filteredStores = computed(() => {
     const search = storeSearch.value.trim().toLowerCase()
-    const stores = props.stores || []
+    const stores = storeOptions.value
     return stores.filter((store) => {
-        const isAssigned = selectedStoreIds.value.includes(store.id)
-        if (storeAssignmentTab.value === 'assigned' && !isAssigned) return false
-        if (storeAssignmentTab.value === 'unassigned' && isAssigned) return false
-        if (storeAssignmentTab.value === 'missing_cctv' && (!isAssigned || store.cctv_seal_notice)) return false
+        const isSelected = isStoreSelected(store)
+        const isAssignedElsewhere = isStoreAssignedElsewhere(store)
+
+        if (storeAssignmentTab.value === 'all' && isAssignedElsewhere) return false
+        if (storeAssignmentTab.value === 'assigned' && !isSelected) return false
+        if (storeAssignmentTab.value === 'assigned_elsewhere' && !isAssignedElsewhere) return false
         if (!search) return true
         return [store.name, store.code, store.area, store.brand, store.assigned_company_name]
             .filter(Boolean)
@@ -1020,44 +1084,39 @@ const filteredStores = computed(() => {
 })
 
 const storeAssignmentTabs = computed(() => {
-    const stores = props.stores || []
-    const assignedCount = stores.filter((store) => selectedStoreIds.value.includes(store.id)).length
-    const missingCctv = stores.filter((store) => selectedStoreIds.value.includes(store.id) && !store.cctv_seal_notice).length
+    const stores = storeOptions.value
+    const assignedCount = stores.filter(isStoreSelected).length
+    const assignedElsewhereCount = stores.filter(isStoreAssignedElsewhere).length
     return [
-        { label: 'All', value: 'all', count: stores.length },
+        { label: 'All', value: 'all', count: stores.length - assignedElsewhereCount },
         { label: 'Checked', value: 'assigned', count: assignedCount },
-        { label: 'Unchecked', value: 'unassigned', count: Math.max(0, stores.length - assignedCount) },
-        { label: 'Missing CCTV', value: 'missing_cctv', count: missingCctv },
+        { label: 'Assigned Elsewhere', value: 'assigned_elsewhere', count: assignedElsewhereCount },
     ]
 })
 
 const isStoreDisabled = (store) => {
-    const currentRecordId = selectedCompany.value?.npc_status?.id
-    return Boolean(store.assigned_npc_status_id && store.assigned_npc_status_id !== currentRecordId)
+    return isStoreAssignedElsewhere(store)
 }
 
-const selectedCompanyStores = (company) => {
-    if (!company?.npc_status) return []
-    return (props.stores || []).filter((store) => store.assigned_npc_status_id === company.npc_status.id)
+// ── Row summary helpers ──
+const sealsUploaded = (company) => Object.values(company.npc_status?.seals || {}).filter((s) => s.available).length
+
+const storesConfirmed = (company) => {
+    const rows = company.npc_status?.store_receipts || []
+    return rows.filter((r) => sealTypes.every((t) => r.seals?.[t.type]?.confirmed_at)).length
 }
 
-const cctvSummary = (company) => {
-    const stores = selectedCompanyStores(company)
-    return {
-        total: stores.length,
-        complete: stores.filter((store) => store.cctv_seal_notice).length,
-    }
+// ── Store-user view ──
+const onStoreDownload = () => {
+    // The download response only completes after the receipt is committed.
+    router.reload({ only: ['storeSeals'] })
 }
 
-const attachmentCount = (company, type) => {
-    return company.npc_status?.attachments?.[type]?.length || 0
+const onStoreDownloadError = (error) => {
+    showError(axiosErrorText(error))
 }
 
-const markCompletedDate = (step) => {
-    if (step.is_done && !step.completed_at) step.completed_at = todayString()
-    if (!step.is_done) step.completed_at = ''
-}
-
+// ── Renewal preview ──
 const previewRenewalStatus = computed(() => {
     const days = previewRenewalDays.value
     if (days === null) return 'No Record'
@@ -1076,12 +1135,25 @@ const previewRenewalDays = computed(() => {
 
 const previewRenewalDaysLabel = computed(() => renewalDaysLabel(previewRenewalDays.value))
 
+// ── Date utils ──
+const dateOnly = (value) => (value ? String(value).slice(0, 10) : null)
+
 const formatDate = (value) => {
     if (!value) return 'Not set'
-    return new Date(`${value}T00:00:00`).toLocaleDateString('en-US', {
+    return new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' })
+}
+
+const formatDateTime = (value) => {
+    if (!value) return 'Not set'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return String(value)
+
+    return date.toLocaleString('en-US', {
         year: 'numeric',
         month: 'short',
         day: '2-digit',
+        hour: 'numeric',
+        minute: '2-digit',
     })
 }
 
@@ -1104,9 +1176,7 @@ const todayString = () => {
     return `${now.getFullYear()}-${month}-${day}`
 }
 
-const dayDifference = (fromDate, toDate) => {
-    return Math.round((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000))
-}
+const dayDifference = (fromDate, toDate) => Math.round((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000))
 
 const renewalDaysLabel = (days) => {
     if (days === null || days === undefined) return 'No validity date'
@@ -1126,9 +1196,7 @@ const statusBadgeClass = (status) => {
     }[status] || 'bg-gray-100 text-gray-700'
 }
 
-const errorText = (errors) => {
-    return Object.values(errors || {}).flat().join(', ') || 'Unable to save changes.'
-}
+const errorText = (errors) => Object.values(errors || {}).flat().join(', ') || 'Unable to save changes.'
 
 const axiosErrorText = (error) => {
     const data = error?.response?.data

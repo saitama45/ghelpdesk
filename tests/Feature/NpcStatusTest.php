@@ -7,6 +7,7 @@ use App\Models\NpcStatus;
 use App\Models\NpcStatusAttachment;
 use App\Models\Store;
 use App\Models\User;
+use App\Support\CompanyContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -25,7 +26,7 @@ class NpcStatusTest extends TestCase
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        foreach (['npc_status.view', 'npc_status.create', 'npc_status.edit', 'npc_status.delete'] as $permission) {
+        foreach (['npc_status.view', 'npc_status.create', 'npc_status.edit', 'npc_status.delete', 'npc_status.download'] as $permission) {
             Permission::findOrCreate($permission);
         }
 
@@ -91,7 +92,9 @@ class NpcStatusTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('NpcStatus/Index')
-                ->where('filters.year', 2026)
+                ->where('viewMode', 'admin')
+                ->where('defaultNpcSection', 'monitoring')
+                ->where('currentYear', 2026)
                 ->has('npcStatuses.data', 2)
                 ->has('stores', 1)
                 ->where('stores.0.assigned_company_id', $companyWithStatus->id)
@@ -313,6 +316,60 @@ class NpcStatusTest extends TestCase
             ->assertSessionHasErrors('validity_from');
     }
 
+    public function test_json_duplicate_company_validity_year_returns_existing_workflow_without_error(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo('npc_status.create');
+        $company = $this->company();
+        $npcStatus = $this->npcStatus(['company_id' => $company->id]);
+
+        $this->actingAs($user)
+            ->postJson(route('npc-statuses.store'), [
+                'company_id' => $company->id,
+                'validity_from' => '2026-02-01',
+                'validity_to' => '2026-12-31',
+            ])
+            ->assertOk()
+            ->assertJsonPath('existing_record', true)
+            ->assertJsonPath('message', null)
+            ->assertJsonPath('company.npc_status.id', $npcStatus->id)
+            ->assertJsonCount(count(NpcStatus::WORKFLOW_STEPS), 'company.npc_status.workflow_steps');
+
+        $this->assertSame(
+            count(NpcStatus::WORKFLOW_STEPS),
+            $npcStatus->workflowSteps()->count()
+        );
+    }
+
+    public function test_company_lookup_returns_fresh_current_year_workflow(): void
+    {
+        $this->travelTo('2026-07-01');
+
+        $activeCompany = $this->company();
+        $user = User::factory()->create(['company_id' => $activeCompany->id]);
+        $user->givePermissionTo('npc_status.view');
+        $company = $this->company();
+        $npcStatus = $this->npcStatus(['company_id' => $company->id]);
+
+        foreach (NpcStatus::WORKFLOW_STEPS as $step) {
+            $npcStatus->workflowSteps()->create([
+                'key' => $step['key'],
+                'label' => $step['label'],
+                'sort_order' => $step['sort_order'],
+            ]);
+        }
+
+        CompanyContext::flushMemo();
+
+        $this->actingAs($user)
+            ->withSession([CompanyContext::SESSION_KEY => $activeCompany->id])
+            ->getJson(route('npc-statuses.companies.show', $company))
+            ->assertOk()
+            ->assertJsonPath('company.id', $company->id)
+            ->assertJsonPath('company.npc_status.id', $npcStatus->id)
+            ->assertJsonCount(count(NpcStatus::WORKFLOW_STEPS), 'company.npc_status.workflow_steps');
+    }
+
     public function test_existing_renewal_cannot_be_moved_to_another_year(): void
     {
         $user = User::factory()->create();
@@ -363,11 +420,9 @@ class NpcStatusTest extends TestCase
             ->get(route('npc-statuses.index', ['year' => 2026, 'per_page' => 100]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->where('statusCounts.Active.entities', 1)
-                ->where('statusCounts.Renewal Window.entities', 1)
-                ->where('statusCounts.Critical Renewal.entities', 1)
-                ->where('statusCounts.Due Today.entities', 1)
-                ->where('statusCounts.Overdue.entities', 1)
+                ->where('statusCounts.all.entities', 5)
+                ->where('statusCounts.active.entities', 1)
+                ->where('statusCounts.for_renewal.entities', 4)
             );
     }
 
@@ -538,6 +593,276 @@ class NpcStatusTest extends TestCase
         $this->assertDatabaseMissing('npc_status_store', ['npc_status_id' => $npcStatus->id]);
         Storage::disk('public')->assertMissing('npc-statuses/test-seal.pdf');
         Storage::disk('public')->assertMissing('npc-statuses/test-registration.pdf');
+    }
+
+    public function test_store_user_download_records_receipt_and_notifies_admins(): void
+    {
+        \Illuminate\Support\Facades\Notification::fake();
+
+        $admin = User::factory()->create();
+        $admin->givePermissionTo(['npc_status.view', 'npc_status.edit']);
+
+        $storeUser = User::factory()->create();
+        $storeUser->givePermissionTo('npc_status.download');
+
+        $npcStatus = $this->npcStatus();
+        $store = $this->store();
+        $store->users()->attach($storeUser->id);
+        $npcStatus->stores()->syncWithPivotValues([$store->id], ['year' => 2026]);
+
+        $this->actingAs($admin)->post(route('npc-statuses.attachments.store', $npcStatus), [
+            'type' => NpcStatusAttachment::TYPE_CCTV_SEAL,
+            'validity_from' => '2026-01-01',
+            'file' => UploadedFile::fake()->create('cctv.pdf', 100, 'application/pdf'),
+        ])->assertSessionHasNoErrors();
+
+        $this->actingAs($storeUser)
+            ->get(route('npc-statuses.stores.seal.download', [$npcStatus, $store, NpcStatusAttachment::TYPE_CCTV_SEAL]))
+            ->assertOk();
+
+        $this->assertDatabaseHas('npc_seal_receipts', [
+            'npc_status_id' => $npcStatus->id,
+            'store_id' => $store->id,
+            'seal_type' => NpcStatusAttachment::TYPE_CCTV_SEAL,
+            'downloaded_by' => $storeUser->id,
+        ]);
+
+        \Illuminate\Support\Facades\Notification::assertSentTo($admin, \App\Notifications\ActivityNotification::class);
+    }
+
+    public function test_download_does_not_mark_store_checked_until_admin_confirms(): void
+    {
+        $storeUser = User::factory()->create();
+        $storeUser->givePermissionTo('npc_status.download');
+        $admin = User::factory()->create();
+        $admin->givePermissionTo('npc_status.edit');
+
+        $npcStatus = $this->npcStatus();
+        $store = $this->store();
+        $store->users()->attach($storeUser->id);
+        $npcStatus->stores()->syncWithPivotValues([$store->id], ['year' => 2026]);
+
+        $this->actingAs($admin)->post(route('npc-statuses.attachments.store', $npcStatus), [
+            'type' => NpcStatusAttachment::TYPE_DPO_SEAL,
+            'validity_from' => '2026-01-01',
+            'file' => UploadedFile::fake()->create('seal.pdf', 100, 'application/pdf'),
+        ])->assertSessionHasNoErrors();
+
+        $this->actingAs($storeUser)
+            ->get(route('npc-statuses.stores.seal.download', [$npcStatus, $store, NpcStatusAttachment::TYPE_DPO_SEAL]))
+            ->assertOk();
+
+        $this->assertNull($npcStatus->sealReceipts()->where('store_id', $store->id)->first()->confirmed_at);
+
+        $this->actingAs($admin)
+            ->post(route('npc-statuses.stores.seal.confirm', [$npcStatus, $store, NpcStatusAttachment::TYPE_DPO_SEAL]), [
+                'confirmed' => true,
+            ])
+            ->assertRedirect();
+
+        $this->assertNotNull($npcStatus->sealReceipts()->where('store_id', $store->id)->first()->confirmed_at);
+    }
+
+    public function test_json_download_request_records_receipt_before_browser_streams_file(): void
+    {
+        $storeUser = User::factory()->create();
+        $storeUser->givePermissionTo('npc_status.download');
+
+        $admin = User::factory()->create();
+        $admin->givePermissionTo('npc_status.edit');
+
+        $npcStatus = $this->npcStatus();
+        $store = $this->store();
+        $store->users()->attach($storeUser->id);
+        $npcStatus->stores()->attach($store->id, ['year' => $npcStatus->year]);
+
+        $this->actingAs($admin)->post(route('npc-statuses.attachments.store', $npcStatus), [
+            'type' => NpcStatusAttachment::TYPE_DPO_SEAL,
+            'validity_from' => '2026-01-01',
+            'file' => UploadedFile::fake()->create('seal.pdf', 100, 'application/pdf'),
+        ])->assertSessionHasNoErrors();
+
+        $response = $this->actingAs($storeUser)
+            ->getJson(route('npc-statuses.stores.seal.download', [
+                $npcStatus,
+                $store,
+                NpcStatusAttachment::TYPE_DPO_SEAL,
+            ]));
+
+        $response->assertOk()
+            ->assertJsonPath('download_url', route('npc-statuses.stores.seal.download', [
+                $npcStatus,
+                $store,
+                NpcStatusAttachment::TYPE_DPO_SEAL,
+            ]))
+            ->assertJsonPath(
+                'downloaded_at',
+                fn ($value) => is_string($value)
+                    && preg_match('/T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/', $value) === 1
+            );
+
+        $this->assertDatabaseHas('npc_seal_receipts', [
+            'npc_status_id' => $npcStatus->id,
+            'store_id' => $store->id,
+            'seal_type' => NpcStatusAttachment::TYPE_DPO_SEAL,
+            'downloaded_by' => $storeUser->id,
+        ]);
+    }
+
+    public function test_store_user_cannot_download_seal_for_unassigned_store(): void
+    {
+        $storeUser = User::factory()->create();
+        $storeUser->givePermissionTo('npc_status.download');
+
+        $npcStatus = $this->npcStatus();
+        $store = $this->store();
+        $store->users()->attach($storeUser->id);
+        // store is NOT assigned to the npc status this year
+
+        $this->actingAs($storeUser)
+            ->get(route('npc-statuses.stores.seal.download', [$npcStatus, $store, NpcStatusAttachment::TYPE_DPO_SEAL]))
+            ->assertNotFound();
+    }
+
+    public function test_store_user_sees_download_view(): void
+    {
+        $storeUser = User::factory()->create();
+        $storeUser->givePermissionTo('npc_status.download');
+
+        $npcStatus = $this->npcStatus();
+        $store = $this->store();
+        $store->users()->attach($storeUser->id);
+        $npcStatus->stores()->syncWithPivotValues([$store->id], ['year' => 2026]);
+
+        $this->actingAs($storeUser)
+            ->get(route('npc-statuses.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('viewMode', 'store')
+                ->where('defaultNpcSection', 'downloads')
+                ->where('storeSeals.0.store_id', $store->id)
+                ->where('storeSeals.0.years.0.year', 2026)
+            );
+    }
+
+    public function test_view_and_download_user_only_receives_seals_for_user_assigned_stores(): void
+    {
+        $this->travelTo('2026-07-01');
+
+        $user = User::factory()->create();
+        $user->givePermissionTo(['npc_status.view', 'npc_status.download']);
+
+        $npcStatus = $this->npcStatus();
+        $allowedStore = $this->store(['name' => 'Allowed Store']);
+        $otherStore = $this->store(['name' => 'Other Store']);
+        $user->stores()->attach($allowedStore->id);
+        $npcStatus->stores()->syncWithPivotValues(
+            [$allowedStore->id, $otherStore->id],
+            ['year' => 2026]
+        );
+        $hiddenStatus = $this->npcStatus();
+        $hiddenStore = $this->store(['name' => 'Hidden Store']);
+        $hiddenStatus->stores()->syncWithPivotValues([$hiddenStore->id], ['year' => 2026]);
+
+        $this->actingAs($user)
+            ->get(route('npc-statuses.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('viewMode', 'admin')
+                ->where('canDownloadAssignedSeals', true)
+                ->where('defaultNpcSection', 'downloads')
+                ->has('npcStatuses.data', 1)
+                ->where('npcStatuses.data.0.id', $npcStatus->company_id)
+                ->where('npcStatuses.data.0.store_count', 1)
+                ->has('npcStatuses.data.0.npc_status.store_receipts', 1)
+                ->where('statusCounts.all.entities', 1)
+                ->where('statusCounts.all.stores', 1)
+                ->has('stores', 1)
+                ->where('stores.0.id', $allowedStore->id)
+                ->has('storeSeals', 1)
+                ->where('storeSeals.0.store_id', $allowedStore->id)
+            );
+
+        $this->actingAs($user)
+            ->get(route('npc-statuses.companies.show', $hiddenStatus->company_id))
+            ->assertNotFound();
+    }
+
+    public function test_view_and_download_user_without_assigned_stores_receives_no_store_seals(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo(['npc_status.view', 'npc_status.download']);
+
+        $npcStatus = $this->npcStatus();
+        $npcStatus->stores()->syncWithPivotValues([$this->store()->id], ['year' => 2026]);
+
+        $this->actingAs($user)
+            ->get(route('npc-statuses.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('viewMode', 'admin')
+                ->where('canDownloadAssignedSeals', true)
+                ->where('defaultNpcSection', 'downloads')
+                ->has('storeSeals', 0)
+            );
+    }
+
+    public function test_view_and_download_user_cannot_use_admin_download_or_mutation_routes(): void
+    {
+        Storage::disk('public')->put('npc-statuses/restricted-seal.pdf', 'seal');
+
+        $user = User::factory()->create();
+        $user->givePermissionTo(['npc_status.view', 'npc_status.download']);
+        $npcStatus = $this->npcStatus();
+        $store = $this->store();
+        $npcStatus->stores()->syncWithPivotValues([$store->id], ['year' => 2026]);
+        $attachment = $npcStatus->attachments()->create([
+            'type' => NpcStatusAttachment::TYPE_DPO_SEAL,
+            'validity_from' => '2026-01-01',
+            'file_path' => 'npc-statuses/restricted-seal.pdf',
+            'file_name' => 'restricted-seal.pdf',
+            'mime_type' => 'application/pdf',
+            'file_size' => 4,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('npc-status-attachments.download', $attachment))
+            ->assertForbidden();
+
+        $this->actingAs($user)
+            ->get(route('npc-statuses.stores.seal.download', [
+                $npcStatus,
+                $store,
+                NpcStatusAttachment::TYPE_DPO_SEAL,
+            ]))
+            ->assertForbidden();
+
+        $this->actingAs($user)
+            ->put(route('npc-statuses.update', $npcStatus), [
+                'validity_from' => '2026-01-01',
+                'validity_to' => '2026-12-31',
+            ])
+            ->assertForbidden();
+
+        $this->actingAs($user)
+            ->put(route('npc-statuses.workflow.update', $npcStatus), ['steps' => []])
+            ->assertForbidden();
+
+        $this->actingAs($user)
+            ->put(route('npc-statuses.stores.update', $npcStatus), ['store_ids' => [$store->id]])
+            ->assertForbidden();
+
+        $this->actingAs($user)
+            ->post(route('npc-statuses.stores.seal.confirm', [
+                $npcStatus,
+                $store,
+                NpcStatusAttachment::TYPE_DPO_SEAL,
+            ]), ['confirmed' => true])
+            ->assertForbidden();
+
+        $this->actingAs($user)
+            ->delete(route('npc-status-attachments.destroy', $attachment))
+            ->assertForbidden();
     }
 
     private function company(array $overrides = []): Company

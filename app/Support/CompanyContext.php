@@ -93,7 +93,6 @@ class CompanyContext
         \App\Models\Ticket::class,
         \App\Models\PosRequest::class,
         \App\Models\SapRequest::class,
-        \App\Models\NpcStatus::class,
         \App\Models\Project::class,
         \App\Models\Asset::class,
         \App\Models\Schedule::class,

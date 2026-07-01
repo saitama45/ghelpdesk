@@ -3,11 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
+use App\Models\NpcSealReceipt;
 use App\Models\NpcStatus;
 use App\Models\NpcStatusAttachment;
 use App\Models\NpcStatusWorkflowStep;
 use App\Models\Store;
+use App\Models\User;
+use App\Services\NotificationService;
 use Carbon\Carbon;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -25,14 +29,22 @@ class NpcStatusController extends Controller implements HasMiddleware
 {
     private const MAX_ATTACHMENT_KILOBYTES = 1024000;
 
+    private const STATUS_GROUPS = [
+        'active' => ['Active'],
+        'for_renewal' => ['Renewal Window', 'Critical Renewal', 'Due Today', 'Overdue'],
+    ];
+
+    public function __construct(private NotificationService $notificationService)
+    {
+    }
+
     public static function middleware(): array
     {
         return [
+            // index is reachable by admins (npc_status.view) and store users
+            // (npc_status.download); the split is authorized inside index().
             new Middleware('can:npc_status.view', only: [
-                'index',
-                'downloadAttachment',
-                'downloadStatusAttachment',
-                'downloadCctvSealNotice',
+                'showCompany',
             ]),
             new Middleware('can:npc_status.create', only: ['store']),
             new Middleware('can:npc_status.edit', only: [
@@ -42,41 +54,81 @@ class NpcStatusController extends Controller implements HasMiddleware
                 'destroyAttachment',
                 'updateWorkflow',
                 'storeCctvSealNotice',
+                'downloadAttachment',
+                'downloadStatusAttachment',
+                'downloadCctvSealNotice',
+                'confirmStoreSeal',
             ]),
             new Middleware('can:npc_status.delete', only: ['destroy']),
+            new Middleware('can:npc_status.download', only: ['downloadStoreSeal']),
         ];
     }
 
     public function index(Request $request)
     {
+        $user = $request->user();
+        $canAdmin = $user->can('npc_status.view');
+        $canDownload = $user->can('npc_status.download');
+        $restrictedStoreIds = $canDownload && !$user->can('npc_status.edit')
+            ? $user->stores()->pluck('stores.id')->all()
+            : null;
+
+        abort_unless($canAdmin || $canDownload, 403);
+
+        // Store users (download-only) see their assigned stores' seals per year.
+        if (!$canAdmin) {
+            return Inertia::render('NpcStatus/Index', [
+                'viewMode' => 'store',
+                'storeSeals' => $this->storeDownloadPayload($user),
+                'canDownloadAssignedSeals' => true,
+                'defaultNpcSection' => 'downloads',
+            ]);
+        }
+
         $validated = $request->validate([
-            'year' => 'nullable|integer|min:2000|max:2100',
-            'status' => ['nullable', Rule::in(NpcStatus::STATUSES)],
+            'status' => ['nullable', Rule::in(array_keys(self::STATUS_GROUPS))],
             'search' => 'nullable|string|max:255',
             'per_page' => 'nullable|integer|min:5|max:100',
             'page' => 'nullable|integer|min:1',
         ]);
 
-        $year = (int) ($validated['year'] ?? now()->year);
+        $year = (int) now()->year;
         $status = $validated['status'] ?? null;
         $search = trim((string) ($validated['search'] ?? ''));
         $perPage = (int) ($validated['per_page'] ?? 10);
         $page = (int) ($validated['page'] ?? 1);
 
         $rows = Company::query()
-            ->with(['npcStatuses' => function ($npcQuery) {
+            ->when($restrictedStoreIds !== null, function ($query) use ($year, $restrictedStoreIds) {
+                $query->whereHas('npcStatuses', function ($npcQuery) use ($year, $restrictedStoreIds) {
+                    $npcQuery->where('year', $year)
+                        ->whereHas('stores', fn ($storeQuery) => $storeQuery->whereIn('stores.id', $restrictedStoreIds));
+                });
+            })
+            ->with(['npcStatuses' => function ($npcQuery) use ($restrictedStoreIds) {
                 $npcQuery->with([
                         'attachments' => fn ($query) => $query->latest('validity_from')->latest('created_at'),
                         'workflowSteps',
+                        'stores' => fn ($query) => $query->when(
+                            $restrictedStoreIds !== null,
+                            fn ($storeQuery) => $storeQuery->whereIn('stores.id', $restrictedStoreIds)
+                        ),
+                        'sealReceipts' => fn ($query) => $query->when(
+                            $restrictedStoreIds !== null,
+                            fn ($receiptQuery) => $receiptQuery->whereIn('store_id', $restrictedStoreIds)
+                        ),
                     ])
-                    ->withCount('stores');
+                    ->withCount(['stores' => fn ($query) => $query->when(
+                        $restrictedStoreIds !== null,
+                        fn ($storeQuery) => $storeQuery->whereIn('stores.id', $restrictedStoreIds)
+                    )]);
             }])
             ->orderBy('name')
             ->get()
             ->map(fn (Company $company) => $this->serializeCompanyRow($company, $year));
 
         $filtered = $rows
-            ->when($status, fn (Collection $items) => $items->filter(fn (array $row) => ($row['npc_status']['renewal_status'] ?? 'No Record') === $status))
+            ->when($status, fn (Collection $items) => $items->filter(fn (array $row) => in_array($row['npc_status']['renewal_status'] ?? 'No Record', self::STATUS_GROUPS[$status] ?? [], true)))
             ->when($search !== '', function (Collection $items) use ($search) {
                 $needle = Str::lower($search);
 
@@ -107,17 +159,52 @@ class NpcStatusController extends Controller implements HasMiddleware
         );
 
         return Inertia::render('NpcStatus/Index', [
+            'viewMode' => 'admin',
             'npcStatuses' => $companies,
             'filters' => [
-                'year' => $year,
                 'status' => $status,
                 'search' => $search,
                 'per_page' => $perPage,
             ],
-            'statuses' => NpcStatus::STATUSES,
-            'statusCounts' => $this->statusCounts($year),
+            'currentYear' => $year,
+            'statusCounts' => $this->statusCounts($year, $restrictedStoreIds),
             'workflowSteps' => NpcStatus::WORKFLOW_STEPS,
-            'stores' => $this->storeOptions($year),
+            'stores' => $this->storeOptions($year, $restrictedStoreIds),
+            'storeSeals' => $canDownload ? $this->storeDownloadPayload($user) : [],
+            'canDownloadAssignedSeals' => $canDownload,
+            'defaultNpcSection' => $restrictedStoreIds !== null ? 'downloads' : 'monitoring',
+        ]);
+    }
+
+    public function showCompany(Request $request, Company $company)
+    {
+        $year = (int) now()->year;
+        $user = $request->user();
+        $restrictedStoreIds = $user->can('npc_status.download') && !$user->can('npc_status.edit')
+            ? $user->stores()->pluck('stores.id')->all()
+            : null;
+
+        if ($restrictedStoreIds !== null) {
+            abort_unless(
+                $company->npcStatuses()
+                    ->where('year', $year)
+                    ->whereHas('stores', fn ($query) => $query->whereIn('stores.id', $restrictedStoreIds))
+                    ->exists(),
+                404
+            );
+        }
+
+        $npcStatus = NpcStatus::query()
+            ->where('company_id', $company->id)
+            ->where('year', $year)
+            ->first();
+
+        if ($npcStatus) {
+            $this->ensureWorkflowSteps($npcStatus);
+        }
+
+        return response()->json([
+            'company' => $this->freshCompanyRow($company->id, $year, $restrictedStoreIds),
         ]);
     }
 
@@ -126,14 +213,18 @@ class NpcStatusController extends Controller implements HasMiddleware
         $validated = $this->validatePayload($request, true);
         $year = Carbon::parse($validated['validity_from'])->year;
 
-        $exists = NpcStatus::where('company_id', $validated['company_id'])
-            ->where('year', $year)
-            ->exists();
+        $duplicateMessage = 'An NPC renewal record already exists for this entity and validity year.';
 
-        if ($exists) {
-            throw ValidationException::withMessages([
-                'validity_from' => 'An NPC renewal record already exists for this entity and validity year.',
-            ]);
+        // Already saved (e.g. a stale/duplicate submit) — surface the existing
+        // record so the client stops showing "Create Record".
+        $existing = NpcStatus::where('company_id', $validated['company_id'])
+            ->where('year', $year)
+            ->first();
+
+        if ($existing) {
+            $this->ensureWorkflowSteps($existing);
+
+            return $this->respondWithCompany($request, $existing, null, $duplicateMessage, true);
         }
 
         $npcStatus = new NpcStatus([
@@ -143,14 +234,23 @@ class NpcStatusController extends Controller implements HasMiddleware
         ]);
 
         $this->fillStatusFields($npcStatus, $validated, $request->user()->id);
-        $npcStatus->save();
-        $this->ensureWorkflowSteps($npcStatus);
 
-        if ($request->boolean('suppress_success_flash')) {
-            return redirect()->back();
+        try {
+            $npcStatus->save();
+        } catch (UniqueConstraintViolationException $e) {
+            // A concurrent/double submit created the same (company, year) first.
+            $existing = NpcStatus::where('company_id', $validated['company_id'])->where('year', $year)->first();
+
+            if ($existing) {
+                $this->ensureWorkflowSteps($existing);
+            }
+
+            return $this->respondWithCompany($request, $existing, null, $duplicateMessage, true);
         }
 
-        return redirect()->back()->with('success', 'NPC Status saved successfully');
+        $this->ensureWorkflowSteps($npcStatus);
+
+        return $this->respondWithCompany($request, $npcStatus, 'NPC renewal created successfully');
     }
 
     public function update(Request $request, NpcStatus $npcStatus)
@@ -168,11 +268,34 @@ class NpcStatusController extends Controller implements HasMiddleware
         $npcStatus->save();
         $this->ensureWorkflowSteps($npcStatus);
 
-        if ($request->boolean('suppress_success_flash')) {
-            return redirect()->back();
+        return $this->respondWithCompany($request, $npcStatus, 'NPC renewal dates updated successfully');
+    }
+
+    /**
+     * Return the fresh serialized company row as JSON (for the modal's axios
+     * flow), or fall back to a redirect for classic form posts.
+     */
+    private function respondWithCompany(
+        Request $request,
+        ?NpcStatus $npcStatus,
+        ?string $message,
+        ?string $nonJsonError = null,
+        bool $existingRecord = false
+    )
+    {
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'company' => $npcStatus ? $this->freshCompanyRow($npcStatus->company_id, $npcStatus->year) : null,
+                'existing_record' => $existingRecord,
+            ]);
         }
 
-        return redirect()->back()->with('success', 'NPC Status updated successfully');
+        if ($nonJsonError) {
+            throw ValidationException::withMessages(['validity_from' => $nonJsonError]);
+        }
+
+        return redirect()->back()->with('success', $message);
     }
 
     public function destroy(NpcStatus $npcStatus)
@@ -215,7 +338,7 @@ class NpcStatusController extends Controller implements HasMiddleware
 
         $npcStatus->stores()->syncWithPivotValues($storeIds, ['year' => $npcStatus->year]);
 
-        return redirect()->back()->with('success', 'Assigned stores updated successfully');
+        return $this->respondWithCompany($request, $npcStatus, 'Assigned stores updated successfully');
     }
 
     public function storeAttachment(Request $request, NpcStatus $npcStatus)
@@ -338,11 +461,7 @@ class NpcStatusController extends Controller implements HasMiddleware
             );
         }
 
-        if ($request->boolean('suppress_success_flash')) {
-            return redirect()->back();
-        }
-
-        return redirect()->back()->with('success', 'NPC workflow updated successfully');
+        return $this->respondWithCompany($request, $npcStatus->fresh(), 'Workflow checklist saved successfully');
     }
 
     public function storeCctvSealNotice(Request $request, Store $store)
@@ -487,15 +606,26 @@ class NpcStatusController extends Controller implements HasMiddleware
         ];
     }
 
-    private function freshCompanyRow(int $companyId, int $year): array
+    private function freshCompanyRow(int $companyId, int $year, ?array $restrictedStoreIds = null): array
     {
         $company = Company::query()
-            ->with(['npcStatuses' => function ($npcQuery) {
+            ->with(['npcStatuses' => function ($npcQuery) use ($restrictedStoreIds) {
                 $npcQuery->with([
                         'attachments' => fn ($query) => $query->latest('validity_from')->latest('created_at'),
                         'workflowSteps',
+                        'stores' => fn ($query) => $query->when(
+                            $restrictedStoreIds !== null,
+                            fn ($storeQuery) => $storeQuery->whereIn('stores.id', $restrictedStoreIds)
+                        ),
+                        'sealReceipts' => fn ($query) => $query->when(
+                            $restrictedStoreIds !== null,
+                            fn ($receiptQuery) => $receiptQuery->whereIn('store_id', $restrictedStoreIds)
+                        ),
                     ])
-                    ->withCount('stores');
+                    ->withCount(['stores' => fn ($query) => $query->when(
+                        $restrictedStoreIds !== null,
+                        fn ($storeQuery) => $storeQuery->whereIn('stores.id', $restrictedStoreIds)
+                    )]);
             }])
             ->findOrFail($companyId);
 
@@ -522,10 +652,71 @@ class NpcStatusController extends Controller implements HasMiddleware
             'attachments' => [
                 NpcStatusAttachment::TYPE_DPO_SEAL => $this->attachmentsPayload($npcStatus, NpcStatusAttachment::TYPE_DPO_SEAL, $npcStatus->year),
                 NpcStatusAttachment::TYPE_DPO_REGISTRATION => $this->attachmentsPayload($npcStatus, NpcStatusAttachment::TYPE_DPO_REGISTRATION, $npcStatus->year),
+                NpcStatusAttachment::TYPE_CCTV_SEAL => $this->attachmentsPayload($npcStatus, NpcStatusAttachment::TYPE_CCTV_SEAL, $npcStatus->year),
             ],
+            'seals' => $this->sealAvailability($npcStatus),
+            'store_receipts' => $this->storeReceiptGrid($npcStatus),
             'dpo_seal' => $this->latestAttachmentPayload($npcStatus, NpcStatusAttachment::TYPE_DPO_SEAL),
             'dpo_registration' => $this->latestAttachmentPayload($npcStatus, NpcStatusAttachment::TYPE_DPO_REGISTRATION),
         ];
+    }
+
+    /**
+     * Availability of each downloadable seal (uploaded at Step 6) for the year.
+     */
+    private function sealAvailability(NpcStatus $npcStatus): array
+    {
+        $out = [];
+
+        foreach (NpcStatusAttachment::SEAL_TYPES as $type) {
+            $attachment = $this->attachmentsPayload($npcStatus, $type, $npcStatus->year)[0] ?? null;
+
+            $out[$type] = [
+                'type' => $type,
+                'label' => NpcStatusAttachment::TYPE_LABELS[$type] ?? $type,
+                'available' => (bool) $attachment,
+                'name' => $attachment['name'] ?? null,
+                'url' => $attachment['url'] ?? null,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Per assigned store, the download + admin-confirmation state of each seal.
+     */
+    private function storeReceiptGrid(NpcStatus $npcStatus): array
+    {
+        if (!$npcStatus->relationLoaded('stores') || !$npcStatus->relationLoaded('sealReceipts')) {
+            $npcStatus->loadMissing(['stores', 'sealReceipts']);
+        }
+
+        $receipts = $npcStatus->sealReceipts->groupBy('store_id');
+
+        return $npcStatus->stores
+            ->sortBy('name')
+            ->map(function (Store $store) use ($receipts) {
+                $storeReceipts = $receipts->get($store->id, collect());
+                $seals = [];
+
+                foreach (NpcStatusAttachment::SEAL_TYPES as $type) {
+                    $receipt = $storeReceipts->firstWhere('seal_type', $type);
+                    $seals[$type] = [
+                        'downloaded_at' => $receipt?->downloaded_at?->toIso8601String(),
+                        'confirmed_at' => $receipt?->confirmed_at?->toIso8601String(),
+                    ];
+                }
+
+                return [
+                    'store_id' => $store->id,
+                    'store_name' => $store->name,
+                    'store_code' => $store->code,
+                    'seals' => $seals,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     private function attachmentsPayload(NpcStatus $npcStatus, string $type, ?int $validityYear = null): array
@@ -609,9 +800,13 @@ class NpcStatusController extends Controller implements HasMiddleware
             ->all();
     }
 
-    private function storeOptions(int $year): array
+    private function storeOptions(int $year, ?array $restrictedStoreIds = null): array
     {
         return Store::query()
+            ->when(
+                $restrictedStoreIds !== null,
+                fn ($query) => $query->whereIn('stores.id', $restrictedStoreIds)
+            )
             ->with(['npcStatuses' => function ($query) use ($year) {
                 $query->wherePivot('year', $year)->with('company:id,name,code');
             }])
@@ -643,21 +838,43 @@ class NpcStatusController extends Controller implements HasMiddleware
             ->all();
     }
 
-    private function statusCounts(int $year): array
+    private function statusCounts(int $year, ?array $restrictedStoreIds = null): array
     {
         $rows = Company::query()
-            ->with(['npcStatuses' => fn ($query) => $query->where('year', $year)->withCount('stores')])
+            ->when($restrictedStoreIds !== null, function ($query) use ($year, $restrictedStoreIds) {
+                $query->whereHas('npcStatuses', function ($npcQuery) use ($year, $restrictedStoreIds) {
+                    $npcQuery->where('year', $year)
+                        ->whereHas('stores', fn ($storeQuery) => $storeQuery->whereIn('stores.id', $restrictedStoreIds));
+                });
+            })
+            ->with(['npcStatuses' => fn ($query) => $query
+                ->where('year', $year)
+                ->withCount(['stores' => fn ($storeQuery) => $storeQuery->when(
+                    $restrictedStoreIds !== null,
+                    fn ($restrictedQuery) => $restrictedQuery->whereIn('stores.id', $restrictedStoreIds)
+                )])])
             ->get()
             ->map(fn (Company $company) => $company->npcStatuses->first());
 
-        $counts = collect(NpcStatus::STATUSES)
-            ->mapWithKeys(fn ($status) => [$status => ['entities' => 0, 'stores' => 0]])
-            ->all();
+        $counts = [
+            'all' => ['entities' => 0, 'stores' => 0],
+            'active' => ['entities' => 0, 'stores' => 0],
+            'for_renewal' => ['entities' => 0, 'stores' => 0],
+        ];
 
         foreach ($rows as $npcStatus) {
             $status = $npcStatus ? $this->renewalStatus($npcStatus->validity_to) : 'No Record';
-            $counts[$status]['entities']++;
-            $counts[$status]['stores'] += $npcStatus ? (int) $npcStatus->stores_count : 0;
+            $stores = $npcStatus ? (int) $npcStatus->stores_count : 0;
+
+            $counts['all']['entities']++;
+            $counts['all']['stores'] += $stores;
+
+            foreach (self::STATUS_GROUPS as $key => $statuses) {
+                if (in_array($status, $statuses, true)) {
+                    $counts[$key]['entities']++;
+                    $counts[$key]['stores'] += $stores;
+                }
+            }
         }
 
         return $counts;
@@ -739,7 +956,7 @@ class NpcStatusController extends Controller implements HasMiddleware
 
         return match (true) {
             $done >= 6 => 'Complete',
-            $done >= 5 => 'For Store Distribution',
+            $done >= 5 => 'For Store Receiving',
             $done >= 4 => 'For Payment',
             $done >= 3 => 'Waiting for NPC Approval',
             default => 'Ongoing Application',
@@ -753,5 +970,162 @@ class NpcStatusController extends Controller implements HasMiddleware
         }
 
         return (int) round((collect($steps)->where('is_done', true)->count() / count($steps)) * 100);
+    }
+
+    // ── Store-side seal downloads ────────────────────────────────────────────
+
+    /**
+     * A store user downloads one of the year's seals. Records the download
+     * (once), notifies page admins, and streams the file. Downloading does NOT
+     * mark the store as checked — an admin confirms that separately.
+     */
+    public function downloadStoreSeal(Request $request, NpcStatus $npcStatus, Store $store, string $type)
+    {
+        abort_unless(in_array($type, NpcStatusAttachment::SEAL_TYPES, true), 404);
+
+        $user = $request->user();
+
+        // The store must belong to the requesting user and be assigned this year.
+        abort_unless($user->stores()->whereKey($store->id)->exists(), 403);
+        abort_unless($npcStatus->stores()->whereKey($store->id)->exists(), 404);
+
+        // A status record is scoped to a single year, so the latest attachment
+        // of this type is the seal for that year.
+        $attachment = $npcStatus->attachments()
+            ->where('type', $type)
+            ->latest('validity_from')
+            ->latest('created_at')
+            ->first();
+
+        abort_if(!$attachment, 404, 'This seal is not available yet.');
+
+        $receipt = NpcSealReceipt::firstOrNew([
+            'npc_status_id' => $npcStatus->id,
+            'store_id' => $store->id,
+            'seal_type' => $type,
+        ]);
+
+        if (!$receipt->downloaded_at) {
+            $receipt->downloaded_at = now();
+            $receipt->downloaded_by = $user->id;
+            $receipt->save();
+
+            $this->notificationService->notifyNpcSealDownload($npcStatus, $store, $type, $user->id);
+        }
+
+        // The store UI first requests JSON so it can update the receipt state,
+        // then opens this URL normally to let the browser stream/save the file.
+        if ($request->expectsJson()) {
+            return response()->json([
+                'download_url' => route('npc-statuses.stores.seal.download', [$npcStatus, $store, $type]),
+                'downloaded_at' => $receipt->downloaded_at?->toIso8601String(),
+            ]);
+        }
+
+        return $this->downloadStoredFile($attachment->file_path, $attachment->file_name);
+    }
+
+    /**
+     * An admin marks (or unmarks) a store's seal as checked after confirming
+     * receipt with the store through their own communication channel.
+     */
+    public function confirmStoreSeal(Request $request, NpcStatus $npcStatus, Store $store, string $type)
+    {
+        abort_unless(in_array($type, NpcStatusAttachment::SEAL_TYPES, true), 404);
+        abort_unless($npcStatus->stores()->whereKey($store->id)->exists(), 404);
+
+        $confirmed = $request->boolean('confirmed');
+
+        $receipt = NpcSealReceipt::firstOrNew([
+            'npc_status_id' => $npcStatus->id,
+            'store_id' => $store->id,
+            'seal_type' => $type,
+        ]);
+
+        $receipt->confirmed_at = $confirmed ? now() : null;
+        $receipt->confirmed_by = $confirmed ? $request->user()->id : null;
+        $receipt->save();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $confirmed ? 'Store marked as checked.' : 'Store check removed.',
+                'company' => $this->freshCompanyRow($npcStatus->company_id, $npcStatus->year),
+            ]);
+        }
+
+        return redirect()->back();
+    }
+
+    /**
+     * Store-user view: their store(s), and per validity year the seals available
+     * to download for the entity that assigned the store.
+     */
+    private function storeDownloadPayload(User $user): array
+    {
+        $stores = $user->stores()->orderBy('name')->get();
+
+        if ($stores->isEmpty()) {
+            return [];
+        }
+
+        $storeIds = $stores->pluck('id')->all();
+
+        $statuses = NpcStatus::query()
+            ->whereHas('stores', fn ($query) => $query->whereIn('stores.id', $storeIds))
+            ->with([
+                'company:id,name,code',
+                'attachments' => fn ($query) => $query->latest('validity_from')->latest('created_at'),
+                'stores' => fn ($query) => $query->whereIn('stores.id', $storeIds),
+            ])
+            ->orderByDesc('year')
+            ->get();
+
+        $receipts = NpcSealReceipt::whereIn('store_id', $storeIds)->get();
+
+        return $stores->map(function (Store $store) use ($statuses, $receipts) {
+            $years = $statuses
+                ->filter(fn (NpcStatus $status) => $status->stores->contains('id', $store->id))
+                ->map(function (NpcStatus $status) use ($store, $receipts) {
+                    $seals = collect(NpcStatusAttachment::SEAL_TYPES)->map(function (string $type) use ($status, $store, $receipts) {
+                        $attachment = $this->attachmentsPayload($status, $type, $status->year)[0] ?? null;
+                        // SQL Server may hydrate BIGINT foreign keys as numeric
+                        // strings while related model keys are integers.
+                        $receipt = $receipts->first(fn (NpcSealReceipt $r) => (string) $r->npc_status_id === (string) $status->id
+                            && (string) $r->store_id === (string) $store->id
+                            && $r->seal_type === $type);
+
+                        return [
+                            'type' => $type,
+                            'label' => NpcStatusAttachment::TYPE_LABELS[$type] ?? $type,
+                            'available' => (bool) $attachment,
+                            'name' => $attachment['name'] ?? null,
+                            'download_url' => $attachment
+                                ? route('npc-statuses.stores.seal.download', [$status->id, $store->id, $type])
+                                : null,
+                            'downloaded_at' => $receipt?->downloaded_at?->toIso8601String(),
+                            'confirmed_at' => $receipt?->confirmed_at?->toIso8601String(),
+                        ];
+                    })->all();
+
+                    return [
+                        'npc_status_id' => $status->id,
+                        'year' => $status->year,
+                        'entity_name' => $status->company?->name,
+                        'entity_code' => $status->company?->code,
+                        'validity_from' => $status->validity_from?->format('Y-m-d'),
+                        'validity_to' => $status->validity_to?->format('Y-m-d'),
+                        'seals' => $seals,
+                    ];
+                })
+                ->values()
+                ->all();
+
+            return [
+                'store_id' => $store->id,
+                'store_name' => $store->name,
+                'store_code' => $store->code,
+                'years' => $years,
+            ];
+        })->values()->all();
     }
 }

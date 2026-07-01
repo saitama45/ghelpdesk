@@ -24,7 +24,7 @@ class NpcStatus extends Model
         ['key' => 'application_signing', 'label' => 'Application Signing', 'sort_order' => 3],
         ['key' => 'npc_approval', 'label' => 'NPC Approval', 'sort_order' => 4],
         ['key' => 'payment_processing', 'label' => 'Payment Processing', 'sort_order' => 5],
-        ['key' => 'store_distribution', 'label' => 'For Store Distribution', 'sort_order' => 6],
+        ['key' => 'store_distribution', 'label' => 'For Store Receiving', 'sort_order' => 6],
     ];
 
     protected $fillable = [
@@ -75,6 +75,11 @@ class NpcStatus extends Model
     public function workflowSteps(): HasMany
     {
         return $this->hasMany(NpcStatusWorkflowStep::class)->orderBy('sort_order');
+    }
+
+    public function sealReceipts(): HasMany
+    {
+        return $this->hasMany(NpcSealReceipt::class);
     }
 
     public function creator(): BelongsTo
