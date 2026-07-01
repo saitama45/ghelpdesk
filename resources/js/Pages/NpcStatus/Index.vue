@@ -244,22 +244,34 @@
                                 <p class="mt-0.5 text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ selectedCompany?.code }} — NPC Renewal · {{ effectiveModalYear }}</p>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
-                                <button
-                                    v-for="year in entityAvailableYears"
-                                    :key="year"
-                                    type="button"
-                                    @click="switchModalYear(year)"
-                                    :class="[
-                                        'rounded-full px-3 py-1 text-xs font-black transition-colors',
-                                        year === effectiveModalYear
-                                            ? 'bg-blue-600 text-white'
-                                            : hasYearRecord(year)
-                                                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                                : 'border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-600'
-                                    ]"
-                                >
-                                    {{ year }}<span v-if="hasYearRecord(year)" class="ml-1 opacity-60">✓</span>
-                                </button>
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-[10px] font-black uppercase tracking-wider text-gray-400">Validity Year</span>
+                                    <div class="flex items-stretch overflow-hidden rounded-lg border border-gray-300 dark:border-gray-600">
+                                        <input
+                                            type="number"
+                                            :value="effectiveModalYear"
+                                            @change="onYearInput"
+                                            @keydown.enter.prevent="onYearInput"
+                                            min="2000"
+                                            max="2100"
+                                            step="1"
+                                            inputmode="numeric"
+                                            aria-label="Validity year"
+                                            class="w-16 border-0 bg-transparent py-1 text-center text-sm font-black text-gray-900 focus:ring-0 dark:text-gray-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                        >
+                                        <div class="flex flex-col border-l border-gray-300 dark:border-gray-600">
+                                            <button type="button" @click="stepModalYear(1)" aria-label="Increase year" class="flex flex-1 items-center px-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                                <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 15l7-7 7 7"/></svg>
+                                            </button>
+                                            <button type="button" @click="stepModalYear(-1)" aria-label="Decrease year" class="flex flex-1 items-center border-t border-gray-300 px-1.5 text-gray-500 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700">
+                                                <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"/></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <span v-if="isLoadingCompany" class="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">Loading…</span>
+                                <span v-else-if="modalNpcStatus" class="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-black text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">Existing {{ effectiveModalYear }} record</span>
+                                <span v-else-if="hasPermission('npc_status.create')" class="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">New {{ effectiveModalYear }} renewal</span>
                                 <span v-if="isModalReadOnly" class="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black text-amber-700">Read-only</span>
                                 <button type="button" @click="closeModal" class="ml-1 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">
                                     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -627,7 +639,7 @@ const canEditNpcStatus = computed(() => hasPermission('npc_status.edit'))
 const canEditValidity = computed(() => (
     modalNpcStatus.value
         ? canEditSelectedRecord.value
-        : !isHistoricalYear.value && hasPermission('npc_status.create')
+        : hasPermission('npc_status.create')
 ))
 
 // Form state
@@ -682,19 +694,11 @@ const canEditSelectedRecord = computed(() => (
 const isModalReadOnly = computed(() => (
     Boolean(modalNpcStatus.value)
         ? !canEditSelectedRecord.value
-        : isHistoricalYear.value || !hasPermission('npc_status.create')
+        : !hasPermission('npc_status.create')
 ))
 const canSaveSelectedRecord = computed(() => (
     modalNpcStatus.value ? canEditSelectedRecord.value : canEditValidity.value
 ))
-
-const entityAvailableYears = computed(() => {
-    if (!selectedCompany.value) return []
-    const years = new Set([currentYear.value])
-    ;(selectedCompany.value.workflow_history || []).forEach((r) => years.add(r.year))
-    ;(selectedCompany.value.attachment_history || []).forEach((r) => years.add(r.year))
-    return [...years].sort((a, b) => b - a)
-})
 
 const historicalWorkflowSteps = computed(() => {
     return modalNpcStatus.value ? workflowStepsFrom(modalNpcStatus.value.workflow_steps || []) : []
@@ -791,12 +795,6 @@ const syncModalForms = () => {
     syncSelectedStores()
 }
 
-const hasYearRecord = (year) => {
-    if (year === currentYear.value) return !!selectedCompany.value?.npc_status
-    return (selectedCompany.value?.workflow_history || []).some((r) => r.year === year)
-        || (selectedCompany.value?.attachment_history || []).some((r) => r.year === year)
-}
-
 const syncSelectedStores = () => {
     const currentRecordId = modalNpcStatus.value?.id
     if (!currentRecordId) {
@@ -884,6 +882,27 @@ const switchModalYear = (year) => {
     modalYear.value = (year === currentYear.value) ? null : year
     syncModalForms()
     loadSelectedCompany()
+}
+
+const clampYear = (year) => Math.min(2100, Math.max(2000, year))
+
+// Numeric year stepper: typing (on change/enter) or the up/down arrows pick the
+// validity year to view. An existing record loads its status; a year with no
+// record opens the create fields.
+const onYearInput = (event) => {
+    const raw = Number.parseInt(event.target.value, 10)
+    if (!Number.isFinite(raw)) {
+        event.target.value = effectiveModalYear.value
+        return
+    }
+    const year = clampYear(raw)
+    event.target.value = year
+    if (year !== effectiveModalYear.value) switchModalYear(year)
+}
+
+const stepModalYear = (delta) => {
+    const year = clampYear(effectiveModalYear.value + delta)
+    if (year !== effectiveModalYear.value) switchModalYear(year)
 }
 
 // ── Workflow step gating ──
