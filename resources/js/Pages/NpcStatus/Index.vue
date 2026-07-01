@@ -260,7 +260,7 @@
                                 >
                                     {{ year }}<span v-if="hasYearRecord(year)" class="ml-1 opacity-60">✓</span>
                                 </button>
-                                <span v-if="isHistoricalYear || !canEditNpcStatus" class="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black text-amber-700">Read-only</span>
+                                <span v-if="isModalReadOnly" class="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-black text-amber-700">Read-only</span>
                                 <button type="button" @click="closeModal" class="ml-1 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-400 dark:hover:bg-gray-700">
                                     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -285,8 +285,8 @@
                         <section>
                             <h4 class="mb-3 text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-300">Validity</h4>
 
-                            <!-- Historical: read-only -->
-                            <div v-if="isHistoricalYear" class="rounded-lg border border-gray-200 bg-gray-50 p-5 dark:bg-gray-900/50 dark:border-gray-700">
+                            <!-- Finalized or permission-restricted record -->
+                            <div v-if="isModalReadOnly" class="rounded-lg border border-gray-200 bg-gray-50 p-5 dark:bg-gray-900/50 dark:border-gray-700">
                                 <div v-if="modalNpcStatus" class="grid grid-cols-2 gap-6">
                                     <div>
                                         <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400">From</div>
@@ -300,7 +300,7 @@
                                 <p v-else class="text-sm font-semibold text-gray-500 dark:text-gray-300">No NPC renewal record for {{ effectiveModalYear }}.</p>
                             </div>
 
-                            <!-- Current year: editable -->
+                            <!-- Editable current or historical record -->
                             <div v-else class="space-y-4">
                                 <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
                                     <div>
@@ -328,8 +328,8 @@
                                 <span v-if="modalNpcStatus" class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">{{ modalNpcStatus.workflow_progress ?? workflowProgress }}%</span>
                             </div>
 
-                            <!-- Historical read-only -->
-                            <div v-if="isHistoricalYear" class="space-y-2">
+                            <!-- Finalized or permission-restricted workflow -->
+                            <div v-if="isModalReadOnly" class="space-y-2">
                                 <div v-for="step in historicalWorkflowSteps" :key="step.key" class="flex items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                                     <span class="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full" :class="step.is_done ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'">
                                         <svg v-if="step.is_done" class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
@@ -343,7 +343,7 @@
                                 <p v-if="!historicalWorkflowSteps.length" class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm font-semibold text-gray-500 dark:bg-gray-900/50 dark:border-gray-700">No workflow record for {{ effectiveModalYear }}.</p>
                             </div>
 
-                            <!-- Current year -->
+                            <!-- Editable current or historical workflow -->
                             <div v-else>
                                 <div v-if="isLoadingCompany" class="rounded-lg border border-dashed border-blue-200 bg-blue-50 p-6 text-center text-sm font-semibold text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
                                     Checking for an existing application workflow...
@@ -358,7 +358,7 @@
                                                 <input
                                                     v-model="step.is_done"
                                                     type="checkbox"
-                                                    :disabled="!canEditNpcStatus || !stepEnabled(i)"
+                                                    :disabled="!canEditSelectedRecord || !stepEnabled(i)"
                                                     class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed dark:border-gray-600"
                                                     @change="onStepToggle(i)"
                                                 >
@@ -366,8 +366,8 @@
                                                 {{ step.label }}
                                             </label>
                                             <div class="grid flex-1 grid-cols-1 gap-3 md:grid-cols-[170px_minmax(220px,1fr)]">
-                                                <input v-model="step.completed_at" :disabled="!canEditNpcStatus || !step.is_done" type="date" class="rounded-lg border-gray-300 text-sm disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
-                                                <textarea v-model="step.remarks" :disabled="!canEditNpcStatus" rows="1" class="rounded-lg border-gray-300 text-sm disabled:cursor-not-allowed disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800" placeholder="Remarks"></textarea>
+                                                <input v-model="step.completed_at" :disabled="!canEditSelectedRecord || !step.is_done" type="date" class="rounded-lg border-gray-300 text-sm disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                <textarea v-model="step.remarks" :disabled="!canEditSelectedRecord" rows="1" class="rounded-lg border-gray-300 text-sm disabled:cursor-not-allowed disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800" placeholder="Remarks"></textarea>
                                             </div>
                                         </div>
 
@@ -383,9 +383,9 @@
                                                         <template v-if="currentSeal(sealType.type)">
                                                             <a v-if="canEditNpcStatus" :href="currentSeal(sealType.type).url" class="block truncate text-xs font-bold text-blue-600 hover:underline">{{ currentSeal(sealType.type).name || 'Download' }}</a>
                                                             <span v-else class="block truncate text-xs font-semibold text-gray-500">{{ currentSeal(sealType.type).name || 'Uploaded' }}</span>
-                                                            <button v-if="canEditNpcStatus" type="button" @click="deleteSeal(currentSeal(sealType.type))" class="mt-1 text-[11px] font-black text-red-600 hover:text-red-800">Remove</button>
+                                                            <button v-if="canEditSelectedRecord" type="button" @click="deleteSeal(currentSeal(sealType.type))" class="mt-1 text-[11px] font-black text-red-600 hover:text-red-800">Remove</button>
                                                         </template>
-                                                        <template v-else-if="canEditNpcStatus">
+                                                        <template v-else-if="canEditSelectedRecord">
                                                             <input :key="fileInputKey + '-' + sealType.type" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="w-full text-xs text-gray-500 file:mr-2 file:rounded-full file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-blue-700 dark:text-gray-300" @change="uploadSeal(sealType.type, $event)">
                                                         </template>
                                                         <span v-else class="text-xs font-semibold text-gray-400">Not uploaded</span>
@@ -407,7 +407,7 @@
                                                         class="flex items-start gap-2 rounded-lg border p-2 text-xs"
                                                         :class="isStoreDisabled(store) ? 'border-gray-200 bg-gray-50 opacity-60' : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'"
                                                     >
-                                                        <input v-model="selectedStoreIds" :value="store.id" :disabled="!canEditNpcStatus || isStoreDisabled(store)" type="checkbox" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed dark:border-gray-600">
+                                                        <input v-model="selectedStoreIds" :value="store.id" :disabled="!canEditSelectedRecord || isStoreDisabled(store)" type="checkbox" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed dark:border-gray-600">
                                                         <span class="min-w-0">
                                                             <span class="block truncate font-bold text-gray-900 dark:text-gray-100">{{ store.name }}</span>
                                                             <span class="block truncate text-gray-500 dark:text-gray-300">{{ store.code }} — {{ store.area }} — {{ store.brand }}</span>
@@ -439,7 +439,7 @@
                                                                         {{ row.seals[sealType.type]?.downloaded_at ? 'Downloaded ' + formatDateTime(row.seals[sealType.type].downloaded_at) : 'Not downloaded' }}
                                                                     </div>
                                                                     <button
-                                                                        v-if="canEditNpcStatus"
+                                                                        v-if="canEditSelectedRecord"
                                                                         type="button"
                                                                         @click="toggleConfirm(row, sealType.type)"
                                                                         :class="[
@@ -478,7 +478,7 @@
                     <!-- Footer -->
                     <div class="flex items-center justify-between border-t bg-white p-4 dark:bg-gray-800 dark:border-gray-700">
                         <button
-                            v-if="!isHistoricalYear && modalNpcStatus && hasPermission('npc_status.delete')"
+                            v-if="canEditSelectedRecord && modalNpcStatus && hasPermission('npc_status.delete')"
                             type="button"
                             @click="deleteRecord(selectedCompany)"
                             class="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 dark:bg-gray-800 dark:border-red-900/50 dark:hover:bg-red-900/20"
@@ -486,7 +486,7 @@
                         <div v-else></div>
                         <div class="flex items-center gap-2">
                             <button
-                                v-if="!isHistoricalYear && !isLoadingCompany && !modalLoadError && canSaveRecord(selectedCompany)"
+                                v-if="!isModalReadOnly && !isLoadingCompany && !modalLoadError && canSaveSelectedRecord"
                                 type="button"
                                 :disabled="isSavingStatus"
                                 @click="saveModalChanges"
@@ -625,9 +625,9 @@ const workflowSection = ref(null)
 let companyLoadRequest = 0
 const canEditNpcStatus = computed(() => hasPermission('npc_status.edit'))
 const canEditValidity = computed(() => (
-    selectedCompany.value?.npc_status
-        ? canEditNpcStatus.value
-        : hasPermission('npc_status.create')
+    modalNpcStatus.value
+        ? canEditSelectedRecord.value
+        : !isHistoricalYear.value && hasPermission('npc_status.create')
 ))
 
 // Form state
@@ -674,6 +674,19 @@ const modalNpcStatus = computed(() => {
     if (!isHistoricalYear.value) return selectedCompany.value?.npc_status ?? null
     return (selectedCompany.value?.workflow_history || []).find((r) => r.year === effectiveModalYear.value) ?? null
 })
+const canEditSelectedRecord = computed(() => (
+    canEditNpcStatus.value
+    && Boolean(modalNpcStatus.value)
+    && !modalNpcStatus.value.is_finalized
+))
+const isModalReadOnly = computed(() => (
+    Boolean(modalNpcStatus.value)
+        ? !canEditSelectedRecord.value
+        : isHistoricalYear.value || !hasPermission('npc_status.create')
+))
+const canSaveSelectedRecord = computed(() => (
+    modalNpcStatus.value ? canEditSelectedRecord.value : canEditValidity.value
+))
 
 const entityAvailableYears = computed(() => {
     if (!selectedCompany.value) return []
@@ -684,9 +697,7 @@ const entityAvailableYears = computed(() => {
 })
 
 const historicalWorkflowSteps = computed(() => {
-    if (!isHistoricalYear.value) return []
-    const record = (selectedCompany.value?.workflow_history || []).find((r) => r.year === effectiveModalYear.value)
-    return record ? workflowStepsFrom(record.workflow_steps || []) : []
+    return modalNpcStatus.value ? workflowStepsFrom(modalNpcStatus.value.workflow_steps || []) : []
 })
 
 const workflowProgress = computed(() => {
@@ -700,7 +711,7 @@ const storeReceivingDone = computed(() => {
     return !!step?.is_done
 })
 
-const receiptGrid = computed(() => selectedCompany.value?.npc_status?.store_receipts || [])
+const receiptGrid = computed(() => modalNpcStatus.value?.store_receipts || [])
 
 // ── Status tabs ──
 const statusTabs = computed(() => {
@@ -744,11 +755,7 @@ const applyFreshCompany = (company) => {
     accumulatedNpcStatuses.value = accumulatedNpcStatuses.value.map((row) => String(row.id) === String(company.id) ? company : row)
     if (String(selectedCompany.value?.id) === String(company.id)) {
         selectedCompany.value = company
-        if (!isHistoricalYear.value) {
-            statusForm.validity_from = company.npc_status?.validity_from || statusForm.validity_from
-            statusForm.validity_to = company.npc_status?.validity_to || statusForm.validity_to
-        }
-        syncWorkflowFormToValidity()
+        syncModalForms()
     }
 }
 
@@ -758,7 +765,7 @@ const replaceCompanyInPage = (company) => {
     accumulatedNpcStatuses.value = accumulatedNpcStatuses.value.map((row) => String(row.id) === String(company.id) ? company : row)
     if (String(selectedCompany.value?.id) === String(company.id)) {
         selectedCompany.value = company
-        syncWorkflowFormToValidity()
+        syncModalForms()
     }
 }
 
@@ -771,13 +778,17 @@ const workflowStepsFrom = (steps = []) => (steps.length ? steps : props.workflow
 }))
 
 const syncWorkflowFormToValidity = () => {
-    workflowForm.value = selectedCompany.value?.npc_status
-        ? workflowStepsFrom(selectedCompany.value.npc_status.workflow_steps || [])
+    workflowForm.value = modalNpcStatus.value
+        ? workflowStepsFrom(modalNpcStatus.value.workflow_steps || [])
         : []
 }
 
-const canSaveRecord = (company) => {
-    return company?.npc_status ? hasPermission('npc_status.edit') : hasPermission('npc_status.create')
+const syncModalForms = () => {
+    const record = modalNpcStatus.value
+    statusForm.validity_from = record?.validity_from || `${effectiveModalYear.value}-01-01`
+    statusForm.validity_to = record?.validity_to || `${effectiveModalYear.value}-12-31`
+    syncWorkflowFormToValidity()
+    syncSelectedStores()
 }
 
 const hasYearRecord = (year) => {
@@ -787,15 +798,18 @@ const hasYearRecord = (year) => {
 }
 
 const syncSelectedStores = () => {
-    const currentRecordId = selectedCompany.value?.npc_status?.id
+    const currentRecordId = modalNpcStatus.value?.id
     if (!currentRecordId) {
         selectedStoreIds.value = []
         return
     }
 
-    selectedStoreIds.value = storeOptions.value
-        .filter((store) => String(store.assigned_npc_status_id) === String(currentRecordId))
-        .map((store) => store.id)
+    const receiptStoreIds = (modalNpcStatus.value?.store_receipts || []).map((row) => row.store_id)
+    selectedStoreIds.value = receiptStoreIds.length
+        ? receiptStoreIds
+        : storeOptions.value
+            .filter((store) => String(store.assigned_npc_status_id) === String(currentRecordId))
+            .map((store) => store.id)
 }
 
 const scrollToWorkflow = async () => {
@@ -813,13 +827,15 @@ const loadSelectedCompany = async ({ scrollIfFound = false } = {}) => {
 
     try {
         const { data } = await axios.get(route('npc-statuses.companies.show', companyId), {
+            params: { year: effectiveModalYear.value },
             headers: { Accept: 'application/json' },
         })
 
         if (request !== companyLoadRequest || String(selectedCompany.value?.id) !== String(companyId)) return
 
+        storeOptions.value = [...(data.stores || [])]
         applyFreshCompany(data.company)
-        syncSelectedStores()
+        syncModalForms()
 
         if (scrollIfFound && data.company?.npc_status) {
             await scrollToWorkflow()
@@ -838,10 +854,7 @@ const openStatusModal = (company) => {
     const shouldScrollIfFound = !company.npc_status
     selectedCompany.value = company
     statusForm.company_id = company.id
-    statusForm.validity_from = company.npc_status?.validity_from || `${currentYear.value}-01-01`
-    statusForm.validity_to = company.npc_status?.validity_to || `${currentYear.value}-12-31`
-    syncWorkflowFormToValidity()
-    syncSelectedStores()
+    syncModalForms()
     storeSearch.value = ''
     storeAssignmentTab.value = 'all'
     modalYear.value = null
@@ -869,12 +882,8 @@ const closeModal = () => {
 
 const switchModalYear = (year) => {
     modalYear.value = (year === currentYear.value) ? null : year
-    if (!isHistoricalYear.value) {
-        statusForm.validity_from = selectedCompany.value?.npc_status?.validity_from || `${currentYear.value}-01-01`
-        statusForm.validity_to = selectedCompany.value?.npc_status?.validity_to || `${currentYear.value}-12-31`
-        syncSelectedStores()
-        syncWorkflowFormToValidity()
-    }
+    syncModalForms()
+    loadSelectedCompany()
 }
 
 // ── Workflow step gating ──
@@ -884,7 +893,7 @@ const stepEnabled = (index) => {
 }
 
 const onStepToggle = (index) => {
-    if (!canEditNpcStatus.value) return
+    if (!canEditSelectedRecord.value) return
     const step = workflowForm.value[index]
     if (step.is_done) {
         if (!step.completed_at) step.completed_at = todayString()
@@ -925,10 +934,10 @@ const applySavedStoreAssignments = (company, savedStoreIds) => {
 }
 
 const saveModalChanges = async () => {
-    if (!selectedCompany.value || !canSaveRecord(selectedCompany.value) || isSavingStatus.value) return
+    if (!selectedCompany.value || !canSaveSelectedRecord.value || isSavingStatus.value) return
 
     isSavingStatus.value = true
-    const existingRecord = selectedCompany.value.npc_status
+    const existingRecord = modalNpcStatus.value
     const workflowSteps = workflowForm.value.map((step) => ({ ...step }))
     const storeIds = [...selectedStoreIds.value]
 
@@ -950,21 +959,21 @@ const saveModalChanges = async () => {
         // existing record. This avoids wiping data if a stale modal discovers
         // an existing renewal during the validity request.
         if (existingRecord && hasPermission('npc_status.edit')) {
-            response = await axios.put(route('npc-statuses.workflow.update', company.npc_status.id), {
-                steps: workflowSteps,
-            }, { headers: { Accept: 'application/json' } })
-            company = response.data.company
-            applyFreshCompany(company)
-
-            response = await axios.put(route('npc-statuses.stores.update', company.npc_status.id), {
+            response = await axios.put(route('npc-statuses.stores.update', existingRecord.id), {
                 store_ids: storeIds,
             }, { headers: { Accept: 'application/json' } })
             company = response.data.company
             applyFreshCompany(company)
-            applySavedStoreAssignments(company, storeIds)
+
+            response = await axios.put(route('npc-statuses.workflow.update', existingRecord.id), {
+                steps: workflowSteps,
+            }, { headers: { Accept: 'application/json' } })
+            company = response.data.company
+            applyFreshCompany(company)
         }
 
         showSuccess('NPC renewal changes saved successfully')
+        await loadSelectedCompany()
 
         if (!existingRecord) {
             await scrollToWorkflow()
@@ -976,13 +985,13 @@ const saveModalChanges = async () => {
     }
 }
 
-const currentSeal = (type) => selectedCompany.value?.npc_status?.attachments?.[type]?.[0] || null
+const currentSeal = (type) => modalNpcStatus.value?.attachments?.[type]?.[0] || null
 
 const uploadSeal = async (type, event) => {
-    if (!canEditNpcStatus.value) return
+    if (!canEditSelectedRecord.value) return
     const file = event.target.files?.[0]
     if (!file) return
-    const record = selectedCompany.value?.npc_status
+    const record = modalNpcStatus.value
     if (!record) {
         showError('Save the renewal before uploading seals.')
         return
@@ -1004,7 +1013,7 @@ const uploadSeal = async (type, event) => {
 }
 
 const deleteSeal = async (attachment) => {
-    if (!canEditNpcStatus.value || !attachment) return
+    if (!canEditSelectedRecord.value || !attachment) return
     const ok = await confirm({
         title: 'Remove Seal',
         message: `Remove ${attachment.name || 'this seal'}? Stores will no longer be able to download it.`,
@@ -1022,8 +1031,8 @@ const deleteSeal = async (attachment) => {
 }
 
 const toggleConfirm = async (row, type) => {
-    if (!canEditNpcStatus.value) return
-    const record = selectedCompany.value?.npc_status
+    if (!canEditSelectedRecord.value) return
+    const record = modalNpcStatus.value
     if (!record) return
     const confirmed = !row.seals[type]?.confirmed_at
     try {
@@ -1061,7 +1070,7 @@ const isStoreSelected = (store) => {
 
 const isStoreAssignedElsewhere = (store) => {
     const assignedRecordId = store.assigned_npc_status_id
-    const currentRecordId = selectedCompany.value?.npc_status?.id
+    const currentRecordId = modalNpcStatus.value?.id
     return Boolean(assignedRecordId)
         && String(assignedRecordId) !== String(currentRecordId)
 }

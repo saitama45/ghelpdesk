@@ -518,6 +518,65 @@ class NpcStatusTest extends TestCase
             );
     }
 
+    public function test_incomplete_historical_renewal_is_editable_until_workflow_and_all_seals_are_confirmed(): void
+    {
+        $this->travelTo('2026-07-01');
+
+        $editor = User::factory()->create();
+        $editor->givePermissionTo('npc_status.edit');
+        $company = $this->company(['code' => 'HISTEDIT']);
+        $historicalStatus = $this->npcStatus([
+            'company_id' => $company->id,
+            'year' => 2025,
+            'validity_from' => '2025-01-01',
+            'validity_to' => '2025-12-31',
+        ]);
+        $store = $this->store();
+        $historicalStatus->stores()->syncWithPivotValues([$store->id], ['year' => 2025]);
+
+        $this->actingAs($editor)
+            ->putJson(route('npc-statuses.update', $historicalStatus), [
+                'validity_from' => '2025-02-01',
+                'validity_to' => '2025-12-31',
+            ])
+            ->assertOk();
+
+        $steps = collect(NpcStatus::WORKFLOW_STEPS)->map(fn (array $step) => [
+            'key' => $step['key'],
+            'is_done' => true,
+            'completed_at' => '2025-12-01',
+            'remarks' => 'Completed',
+        ])->all();
+
+        $this->actingAs($editor)
+            ->putJson(route('npc-statuses.workflow.update', $historicalStatus), ['steps' => $steps])
+            ->assertOk();
+
+        foreach (NpcStatusAttachment::SEAL_TYPES as $type) {
+            $this->actingAs($editor)
+                ->postJson(route('npc-statuses.stores.seal.confirm', [$historicalStatus, $store, $type]), [
+                    'confirmed' => true,
+                ])
+                ->assertOk();
+        }
+
+        $this->actingAs($editor)
+            ->getJson(route('npc-statuses.companies.show', [$company, 'year' => 2025]))
+            ->assertOk()
+            ->assertJsonPath('company.workflow_history.0.id', $historicalStatus->id)
+            ->assertJsonPath('company.workflow_history.0.is_finalized', true)
+            ->assertJsonCount(1, 'company.workflow_history.0.store_receipts')
+            ->assertJsonPath('stores.0.assigned_npc_status_id', $historicalStatus->id);
+
+        $this->actingAs($editor)
+            ->putJson(route('npc-statuses.update', $historicalStatus), [
+                'validity_from' => '2025-03-01',
+                'validity_to' => '2025-12-31',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('npc_status');
+    }
+
     public function test_store_has_one_replaceable_cctv_seal_notice(): void
     {
         $user = User::factory()->create();

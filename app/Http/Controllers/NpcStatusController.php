@@ -179,6 +179,10 @@ class NpcStatusController extends Controller implements HasMiddleware
     public function showCompany(Request $request, Company $company)
     {
         $year = (int) now()->year;
+        $validated = $request->validate([
+            'year' => 'nullable|integer|min:2000|max:2100',
+        ]);
+        $requestedYear = (int) ($validated['year'] ?? $year);
         $user = $request->user();
         $restrictedStoreIds = $user->can('npc_status.download') && !$user->can('npc_status.edit')
             ? $user->stores()->pluck('stores.id')->all()
@@ -205,6 +209,7 @@ class NpcStatusController extends Controller implements HasMiddleware
 
         return response()->json([
             'company' => $this->freshCompanyRow($company->id, $year, $restrictedStoreIds),
+            'stores' => $this->storeOptions($requestedYear, $restrictedStoreIds),
         ]);
     }
 
@@ -255,6 +260,7 @@ class NpcStatusController extends Controller implements HasMiddleware
 
     public function update(Request $request, NpcStatus $npcStatus)
     {
+        $this->ensureNpcStatusIsEditable($npcStatus);
         $validated = $this->validatePayload($request, false);
         $year = Carbon::parse($validated['validity_from'])->year;
 
@@ -286,7 +292,7 @@ class NpcStatusController extends Controller implements HasMiddleware
         if ($request->expectsJson()) {
             return response()->json([
                 'message' => $message,
-                'company' => $npcStatus ? $this->freshCompanyRow($npcStatus->company_id, $npcStatus->year) : null,
+                'company' => $npcStatus ? $this->freshCompanyRow($npcStatus->company_id, (int) now()->year) : null,
                 'existing_record' => $existingRecord,
             ]);
         }
@@ -300,6 +306,8 @@ class NpcStatusController extends Controller implements HasMiddleware
 
     public function destroy(NpcStatus $npcStatus)
     {
+        $this->ensureNpcStatusIsEditable($npcStatus);
+
         foreach ($npcStatus->attachments as $attachment) {
             $this->deleteAttachmentPath($attachment->file_path);
         }
@@ -313,6 +321,8 @@ class NpcStatusController extends Controller implements HasMiddleware
 
     public function syncStores(Request $request, NpcStatus $npcStatus)
     {
+        $this->ensureNpcStatusIsEditable($npcStatus);
+
         $validated = $request->validate([
             'store_ids' => 'nullable|array',
             'store_ids.*' => 'integer|exists:stores,id',
@@ -343,6 +353,8 @@ class NpcStatusController extends Controller implements HasMiddleware
 
     public function storeAttachment(Request $request, NpcStatus $npcStatus)
     {
+        $this->ensureNpcStatusIsEditable($npcStatus);
+
         $validated = $request->validate([
             'type' => ['required', Rule::in(NpcStatusAttachment::TYPES)],
             'validity_from' => 'required|date',
@@ -377,7 +389,7 @@ class NpcStatusController extends Controller implements HasMiddleware
         if ($request->expectsJson()) {
             return response()->json([
                 'message' => 'NPC attachment uploaded successfully',
-                'company' => $this->freshCompanyRow($npcStatus->company_id, $npcStatus->year),
+                'company' => $this->freshCompanyRow($npcStatus->company_id, (int) now()->year),
             ]);
         }
 
@@ -387,6 +399,7 @@ class NpcStatusController extends Controller implements HasMiddleware
     public function destroyAttachment(Request $request, NpcStatusAttachment $attachment)
     {
         $npcStatus = $attachment->npcStatus;
+        $this->ensureNpcStatusIsEditable($npcStatus);
         $type = $attachment->type;
         $companyId = $npcStatus->company_id;
         $year = $npcStatus->year;
@@ -398,7 +411,7 @@ class NpcStatusController extends Controller implements HasMiddleware
         if ($request->expectsJson()) {
             return response()->json([
                 'message' => 'NPC attachment deleted successfully',
-                'company' => $this->freshCompanyRow($companyId, $year),
+                'company' => $this->freshCompanyRow($companyId, (int) now()->year),
             ]);
         }
 
@@ -436,6 +449,8 @@ class NpcStatusController extends Controller implements HasMiddleware
 
     public function updateWorkflow(Request $request, NpcStatus $npcStatus)
     {
+        $this->ensureNpcStatusIsEditable($npcStatus);
+
         $validated = $request->validate([
             'steps' => 'required|array',
             'steps.*.key' => ['required', Rule::in(collect(NpcStatus::WORKFLOW_STEPS)->pluck('key')->all())],
@@ -648,6 +663,7 @@ class NpcStatusController extends Controller implements HasMiddleware
             'workflow_stage' => $this->workflowStage($workflowSteps),
             'workflow_progress' => $this->workflowProgress($workflowSteps),
             'workflow_steps' => $workflowSteps,
+            'is_finalized' => $this->isNpcStatusFinalized($npcStatus),
             'store_count' => (int) ($npcStatus->stores_count ?? 0),
             'attachments' => [
                 NpcStatusAttachment::TYPE_DPO_SEAL => $this->attachmentsPayload($npcStatus, NpcStatusAttachment::TYPE_DPO_SEAL, $npcStatus->year),
@@ -783,19 +799,7 @@ class NpcStatusController extends Controller implements HasMiddleware
     {
         return $company->npcStatuses
             ->sortByDesc('year')
-            ->map(function (NpcStatus $npcStatus) {
-                $steps = $this->workflowPayload($npcStatus);
-
-                return [
-                    'id' => $npcStatus->id,
-                    'year' => $npcStatus->year,
-                    'validity_from' => $npcStatus->validity_from?->format('Y-m-d'),
-                    'validity_to' => $npcStatus->validity_to?->format('Y-m-d'),
-                    'workflow_stage' => $this->workflowStage($steps),
-                    'workflow_progress' => $this->workflowProgress($steps),
-                    'workflow_steps' => $steps,
-                ];
-            })
+            ->map(fn (NpcStatus $npcStatus) => $this->serializeNpcStatus($npcStatus))
             ->values()
             ->all();
     }
@@ -1033,6 +1037,7 @@ class NpcStatusController extends Controller implements HasMiddleware
     {
         abort_unless(in_array($type, NpcStatusAttachment::SEAL_TYPES, true), 404);
         abort_unless($npcStatus->stores()->whereKey($store->id)->exists(), 404);
+        $this->ensureNpcStatusIsEditable($npcStatus);
 
         $confirmed = $request->boolean('confirmed');
 
@@ -1049,11 +1054,44 @@ class NpcStatusController extends Controller implements HasMiddleware
         if ($request->expectsJson()) {
             return response()->json([
                 'message' => $confirmed ? 'Store marked as checked.' : 'Store check removed.',
-                'company' => $this->freshCompanyRow($npcStatus->company_id, $npcStatus->year),
+                'company' => $this->freshCompanyRow($npcStatus->company_id, (int) now()->year),
             ]);
         }
 
         return redirect()->back();
+    }
+
+    private function ensureNpcStatusIsEditable(NpcStatus $npcStatus): void
+    {
+        if ($this->isNpcStatusFinalized($npcStatus)) {
+            throw ValidationException::withMessages([
+                'npc_status' => 'This renewal is read-only because its workflow and all store seal confirmations are complete.',
+            ]);
+        }
+    }
+
+    private function isNpcStatusFinalized(NpcStatus $npcStatus): bool
+    {
+        $npcStatus->loadMissing(['workflowSteps', 'stores', 'sealReceipts']);
+
+        $workflowComplete = collect(NpcStatus::WORKFLOW_STEPS)->every(
+            fn (array $definition) => (bool) $npcStatus->workflowSteps
+                ->firstWhere('key', $definition['key'])?->is_done
+        );
+
+        if (!$workflowComplete || $npcStatus->stores->isEmpty()) {
+            return false;
+        }
+
+        return $npcStatus->stores->every(function (Store $store) use ($npcStatus) {
+            return collect(NpcStatusAttachment::SEAL_TYPES)->every(function (string $type) use ($npcStatus, $store) {
+                return $npcStatus->sealReceipts->contains(
+                    fn (NpcSealReceipt $receipt) => (string) $receipt->store_id === (string) $store->id
+                        && $receipt->seal_type === $type
+                        && $receipt->confirmed_at !== null
+                );
+            });
+        });
     }
 
     /**
