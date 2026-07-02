@@ -154,7 +154,19 @@ class ServiceVehicleTripController extends Controller implements HasMiddleware
         $validated['created_by'] = $request->user()->id;
         $validated['updated_by'] = $request->user()->id;
 
-        ServiceVehicleTrip::create($validated);
+        $trip = ServiceVehicleTrip::create($validated);
+
+        $notifications = app(\App\Services\NotificationService::class);
+        $notifications->notifyApproval(
+            $notifications->usersWithPermission('service_vehicle_trips.approve'),
+            $request->user()->id,
+            'pending',
+            'Trip approval needed',
+            trim(($request->user()->name ?? 'A user') . ' booked a service vehicle trip awaiting your approval.'),
+            route('service-vehicle-trips.index', [], false),
+            'service_vehicle_trip:' . $trip->id,
+            'warning'
+        );
 
         return redirect()->back()->with('success', 'Trip booked. Waiting for approval.');
     }
@@ -184,6 +196,8 @@ class ServiceVehicleTripController extends Controller implements HasMiddleware
             'updated_by'  => $request->user()->id,
         ]);
 
+        $this->notifyTripRequester($serviceVehicleTrip, 'approved', $request->user()->id);
+
         return redirect()->back()->with('success', 'Trip approved.');
     }
 
@@ -203,7 +217,30 @@ class ServiceVehicleTripController extends Controller implements HasMiddleware
             'updated_by'       => $request->user()->id,
         ]);
 
+        $this->notifyTripRequester($serviceVehicleTrip, 'rejected', $request->user()->id);
+
         return redirect()->back()->with('success', 'Trip rejected.');
+    }
+
+    /**
+     * Bell the trip requester (booker) with the final decision.
+     */
+    private function notifyTripRequester(ServiceVehicleTrip $trip, string $decision, int $actorId): void
+    {
+        if (!$trip->created_by) {
+            return;
+        }
+
+        app(\App\Services\NotificationService::class)->notifyApproval(
+            [$trip->created_by],
+            $actorId,
+            $decision,
+            'Trip ' . $decision,
+            "Your service vehicle trip booking has been {$decision}.",
+            route('service-vehicle-trips.index', [], false),
+            'service_vehicle_trip:' . $trip->id,
+            $decision === 'approved' ? 'success' : 'warning'
+        );
     }
 
     public function start(Request $request, ServiceVehicleTrip $serviceVehicleTrip)

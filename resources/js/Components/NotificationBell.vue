@@ -97,6 +97,7 @@ const domainIcon = {
     ticket: 'M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z',
     task_card: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
     project_task: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+    approval: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
 };
 </script>
 
@@ -184,7 +185,7 @@ const domainIcon = {
                         <Link
                             v-for="r in reminders"
                             :key="r.type"
-                            :href="route(r.route)"
+                            :href="route(r.route, r.params || {})"
                             @click="isOpen = false"
                             class="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors dark:hover:bg-gray-700"
                         >
@@ -192,8 +193,11 @@ const domainIcon = {
                                 class="shrink-0 mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center border"
                                 :class="[severityClasses[r.severity]?.bg, severityClasses[r.severity]?.border]"
                             >
-                                <svg v-if="r.type === 'schedule'" class="w-4 h-4" :class="severityClasses[r.severity]?.icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg v-if="r.type === 'schedule' || r.type.startsWith('missing_')" class="w-4 h-4" :class="severityClasses[r.severity]?.icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <svg v-else-if="r.type.startsWith('sla_')" class="w-4 h-4" :class="severityClasses[r.severity]?.icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                                 <svg v-else-if="r.type === 'tickets'" class="w-4 h-4" :class="severityClasses[r.severity]?.icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />

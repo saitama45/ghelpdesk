@@ -143,6 +143,10 @@ class DefaultFormService implements FormServiceContract
 
         $record->refresh();
         $this->notifyCurrentApprovers($formDefinition, $record);
+
+        if ($record->status === 'Approved') {
+            $this->notifyRequesterDecision($formDefinition, $record, 'approved');
+        }
     }
 
     public function reject(Request $request, FormDefinition $formDefinition, FormRecord $record): void
@@ -163,6 +167,29 @@ class DefaultFormService implements FormServiceContract
             'remarks' => $request->remarks,
             'status' => 'Rejected',
         ]);
+
+        $this->notifyRequesterDecision($formDefinition, $record, 'rejected');
+    }
+
+    /**
+     * Bell the requester (form creator) with the final approval decision.
+     */
+    private function notifyRequesterDecision(FormDefinition $formDefinition, FormRecord $record, string $decision): void
+    {
+        if (!$record->created_by) {
+            return;
+        }
+
+        app(\App\Services\NotificationService::class)->notifyApproval(
+            [$record->created_by],
+            Auth::id(),
+            $decision,
+            ($decision === 'approved' ? 'Request approved: ' : 'Request rejected: ') . $formDefinition->name,
+            "Your request #{$record->id} has been {$decision}.",
+            route('dynamic-form.show', ['slug' => $formDefinition->slug, 'id' => $record->id], false),
+            'form_record:' . $record->id,
+            $decision === 'approved' ? 'success' : 'warning'
+        );
     }
 
     private function resolveDynamicChecklistTasks(array $formSchema, array $formData): ?array
@@ -265,11 +292,28 @@ class DefaultFormService implements FormServiceContract
             $approverIds = $approverIds->merge($levelData['user_ids'] ?? []);
         }
 
+        $normalizedApproverIds = $approverIds->map(fn ($id) => (int) $id)->filter()->unique()->values();
+
         $approvers = User::active()
-            ->whereIn('id', $approverIds->map(fn ($id) => (int) $id)->filter()->unique()->values())
+            ->whereIn('id', $normalizedApproverIds)
             ->get(['id', 'name', 'email'])
             ->filter(fn (User $user) => filter_var($user->email, FILTER_VALIDATE_EMAIL))
             ->unique(fn (User $user) => strtolower($user->email));
+
+        // In-app bell for every active approver at this level (regardless of email).
+        $bellRecipientIds = User::active()->whereIn('id', $normalizedApproverIds)->pluck('id')->all();
+        if (!empty($bellRecipientIds)) {
+            app(\App\Services\NotificationService::class)->notifyApproval(
+                $bellRecipientIds,
+                Auth::id(),
+                'pending',
+                'Approval needed: ' . $formDefinition->name,
+                "Request #{$record->id} is awaiting your approval (Level {$targetLevel}).",
+                route('dynamic-form.show', ['slug' => $formDefinition->slug, 'id' => $record->id], false),
+                'form_record:' . $record->id,
+                'warning'
+            );
+        }
 
         foreach ($approvers as $approver) {
             try {

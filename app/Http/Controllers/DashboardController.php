@@ -8,6 +8,7 @@ use App\Models\Scopes\ActiveEntityScope;
 use App\Services\StoreReportService;
 use App\Services\OrganizationReferenceService;
 use App\Support\CompanyContext;
+use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\TicketComment;
 use App\Models\TicketHistory;
@@ -172,7 +173,7 @@ class DashboardController extends Controller
     }
 
     /**
-     * Overall Open vs Closed + Per Brand + Concern Type charts (lazy dashboard tab).
+     * Overall Open vs Closed + Per Store Brand + Per Corporate Office + Concern Type charts (lazy dashboard tab).
      */
     private function buildTicketCharts($filteredQuery, $user, array $effectiveCompanyIds, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter): array
     {
@@ -206,8 +207,18 @@ class DashboardController extends Controller
             )
             ->first();
 
-        // Per Brand: relies solely on the Entity/Company filter; $filteredQuery is
-        // already restricted to the effective entities, so we just group by company.
+        // Office stores (Stores "Class" = "Office") are broken out into their
+        // own "Per Corporate Office" grouping instead of rolling up under a brand.
+        $officeStores = Store::query()
+            ->where('class', 'Office')
+            ->whereIn('company_id', $effectiveCompanyIds)
+            ->orderBy('name')
+            ->get(['id', 'name', 'code']);
+        $officeStoreIds = $officeStores->pluck('id');
+
+        // Per Store Brand: relies solely on the Entity/Company filter; $filteredQuery is
+        // already restricted to the effective entities, so we just group by company,
+        // excluding tickets raised from an Office Store (those go to Per Corporate Office).
         $brandCompanies = CompanyContext::accessibleCompanies($user)
             ->whereIn('id', $effectiveCompanyIds)
             ->values();
@@ -220,6 +231,7 @@ class DashboardController extends Controller
                 "SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed_count"
             )
             ->whereNotNull('company_id')
+            ->when($officeStoreIds->isNotEmpty(), fn ($q) => $q->whereNotIn('store_id', $officeStoreIds))
             ->groupBy('company_id')
             ->get()
             ->keyBy('company_id');
@@ -237,6 +249,35 @@ class DashboardController extends Controller
                 ];
             })
             ->sortBy('name')
+            ->values();
+
+        // Per Corporate Office: one card per individual Office Store, counting only
+        // tickets raised from that store.
+        $officeChartQuery = $applyDashboardChartFilters(clone $filteredQuery);
+
+        $officeCounts = (clone $officeChartQuery)
+            ->whereIn('store_id', $officeStoreIds)
+            ->selectRaw(
+                "store_id, " .
+                "SUM(CASE WHEN status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as open_count, " .
+                "SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed_count"
+            )
+            ->groupBy('store_id')
+            ->get()
+            ->keyBy('store_id');
+
+        $officeChartRows = $officeStores
+            ->map(function ($store) use ($officeCounts) {
+                $row = $officeCounts->get($store->id);
+
+                return [
+                    'id' => (int) $store->id,
+                    'name' => $store->name,
+                    'code' => $store->code,
+                    'open' => (int) ($row->open_count ?? 0),
+                    'closed' => (int) ($row->closed_count ?? 0),
+                ];
+            })
             ->values();
 
         $ticketCountsByItem = (clone $chartQuery)
@@ -272,7 +313,8 @@ class DashboardController extends Controller
                 'open' => (int) ($overallChartRow->open_count ?? 0),
                 'closed' => (int) ($overallChartRow->closed_count ?? 0),
             ],
-            'perBrand' => $brandChartRows,
+            'perStoreBrand' => $brandChartRows,
+            'perCorporateOffice' => $officeChartRows,
             'concernTypes' => collect(['Incident', 'Service Request', 'Problem'])
                 ->map(fn ($type) => [
                     'key' => $type,

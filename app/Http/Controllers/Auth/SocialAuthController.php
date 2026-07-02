@@ -125,6 +125,20 @@ class SocialAuthController extends Controller
             ->get()
             ->unique('email');
 
+        $adminIds = $admins->pluck('id')->all();
+        if (!empty($adminIds)) {
+            app(\App\Services\NotificationService::class)->notifyApproval(
+                $adminIds,
+                $user->id,
+                'pending',
+                'New registration awaiting approval',
+                trim(($user->name ?? 'A new user') . ' registered via Google and needs account approval.'),
+                route('users.index', [], false) . '?status=pending_approval',
+                'user_registration:' . $user->id,
+                'warning'
+            );
+        }
+
         try {
             foreach ($admins as $admin) {
                 Mail::to($admin->email)->send(new GoogleRegistrationPending($user));

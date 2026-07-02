@@ -1923,10 +1923,17 @@ const handleKeydown = (e) => {
 }
 
 onMounted(() => {
+    // Deep-link from the notification bell (e.g. ?tab=pending-requests).
+    const requestedTab = new URLSearchParams(window.location.search).get('tab')
+    const deepLinkableTabs = ['calendar', 'report', 'missing-schedules', 'complete-schedules', 'pending-requests']
+    if (requestedTab && deepLinkableTabs.includes(requestedTab)) {
+        switchView(requestedTab)
+    }
+
     if (currentView.value === 'report') fetchPivotData()
     if (currentView.value === 'missing-schedules') fetchMissingSchedulesData()
     if (currentView.value === 'complete-schedules') fetchCompleteSchedulesData()
-    
+
     document.addEventListener('keydown', handleKeydown)
 })
 

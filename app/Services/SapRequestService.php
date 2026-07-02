@@ -147,6 +147,21 @@ class SapRequestService
             $level
         );
 
+        // In-app bell for every active approver at this level.
+        $bellRecipientIds = User::active()->whereIn('id', $approverIds)->pluck('id')->all();
+        if (!empty($bellRecipientIds)) {
+            app(\App\Services\NotificationService::class)->notifyApproval(
+                $bellRecipientIds,
+                auth()->id(),
+                'pending',
+                'Approval needed: ' . ($sapRequest->requestType->name ?? 'SAP Request'),
+                "SAP Request #{$sapRequest->id} is awaiting your approval (Stage {$level}).",
+                route('sap-requests.show', $sapRequest->id, false),
+                'sap_request:' . $sapRequest->id,
+                'warning'
+            );
+        }
+
         $emails = User::active()
             ->whereIn('id', $approverIds)
             ->pluck('email')

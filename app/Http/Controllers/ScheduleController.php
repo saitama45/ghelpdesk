@@ -2689,7 +2689,27 @@ class ScheduleController extends Controller implements HasMiddleware
 
     private function notifyScheduleChangeApprovers(ScheduleChangeRequest $changeRequest): void
     {
-        $approvers = User::whereIn('id', $changeRequest->assigned_approver_ids ?? [])
+        $approverIds = collect($changeRequest->assigned_approver_ids ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        // In-app bell for the assigned approvers.
+        if ($approverIds->isNotEmpty()) {
+            app(\App\Services\NotificationService::class)->notifyApproval(
+                $approverIds->all(),
+                auth()->id(),
+                'pending',
+                'Schedule request needs approval',
+                trim(($changeRequest->requester?->name ?? 'A user') . ' requested a schedule change awaiting your approval.'),
+                route('schedules.index', [], false) . '?tab=pending-requests',
+                'schedule_change_request:' . $changeRequest->id,
+                'warning'
+            );
+        }
+
+        $approvers = User::whereIn('id', $approverIds->all())
             ->whereNotNull('email')
             ->get();
 
@@ -2718,6 +2738,20 @@ class ScheduleController extends Controller implements HasMiddleware
 
     private function notifyScheduleChangeRequester(ScheduleChangeRequest $changeRequest, string $action): void
     {
+        // In-app bell for the requester with the final decision.
+        if ($changeRequest->requester_id) {
+            app(\App\Services\NotificationService::class)->notifyApproval(
+                [$changeRequest->requester_id],
+                auth()->id(),
+                $action,
+                'Schedule request ' . $action,
+                "Your schedule change request has been {$action}.",
+                route('schedules.index', [], false) . '?tab=pending-requests',
+                'schedule_change_request:' . $changeRequest->id,
+                $action === 'approved' ? 'success' : 'warning'
+            );
+        }
+
         if (!$changeRequest->requester?->email) {
             return;
         }

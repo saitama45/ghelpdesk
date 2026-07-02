@@ -340,6 +340,10 @@ class PosRequestController extends Controller implements HasMiddleware
         $posRequest->load(['approvals.user', 'requestType', 'company', 'user', 'details']);
         $this->posRequestService->notifyCurrentApprovers($posRequest);
 
+        if ($posRequest->status === 'Approved') {
+            $this->notifyPosRequester($posRequest, 'approved');
+        }
+
         return redirect()->back()->with('success', 'Request approved successfully');
     }
 
@@ -372,7 +376,30 @@ class PosRequestController extends Controller implements HasMiddleware
             ]);
         });
 
+        $this->notifyPosRequester($posRequest, 'rejected');
+
         return redirect()->back()->with('success', 'Request rejected successfully');
+    }
+
+    /**
+     * Bell the POS requester (registered user) with the final decision.
+     */
+    private function notifyPosRequester(PosRequest $posRequest, string $decision): void
+    {
+        if (!$posRequest->user_id) {
+            return;
+        }
+
+        app(\App\Services\NotificationService::class)->notifyApproval(
+            [$posRequest->user_id],
+            auth()->id(),
+            $decision,
+            ($decision === 'approved' ? 'POS Request approved: ' : 'POS Request rejected: ') . ($posRequest->requestType->name ?? ''),
+            "Your POS Request #{$posRequest->id} has been {$decision}.",
+            route('pos-requests.show', $posRequest->id, false),
+            'pos_request:' . $posRequest->id,
+            $decision === 'approved' ? 'success' : 'warning'
+        );
     }
 
     public function remind(PosRequest $posRequest)

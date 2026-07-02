@@ -182,11 +182,64 @@ class NotificationService
         ]);
     }
 
+    // ── Approvals ─────────────────────────────────────────────────────────────
+
+    /**
+     * Generic approval bell notification, shared by every approval workflow
+     * (dynamic forms, POS/SAP requests, payment records, schedule change
+     * requests, service vehicle trips, Google registrations).
+     *
+     * Approvers are pinged when a transaction reaches their step; the requester
+     * is pinged with the final decision. The specific workflow is conveyed
+     * through the title/message/url — the bell renders them all under the
+     * "approval" domain.
+     *
+     * @param  iterable<int>  $recipientIds
+     */
+    public function notifyApproval(
+        iterable $recipientIds,
+        ?int $actorId,
+        string $event,
+        string $title,
+        string $message,
+        string $url,
+        string $subject,
+        string $severity = 'info'
+    ): void {
+        $this->dispatch($recipientIds, $actorId, [
+            'domain' => 'approval',
+            'event' => $event,
+            'title' => $title,
+            'message' => $message,
+            'severity' => $severity,
+            'subject' => $subject,
+            'url' => $url,
+        ]);
+    }
+
+    /**
+     * Active user ids holding any of the given permission(s) — used to resolve
+     * approvers for permission-gated workflows that have no explicit approver
+     * matrix (e.g. service vehicle trips).
+     *
+     * @return array<int>
+     */
+    public function usersWithPermission(array|string $permissions): array
+    {
+        return User::permission($permissions)
+            ->where('is_active', true)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     /**
      * Build a relative URL (path + query) for a named route so the bell can
      * navigate client-side without needing Ziggy params for every route.
      */
-    protected function relativeRoute(string $name, mixed $params): string
+    public function relativeRoute(string $name, mixed $params): string
     {
         try {
             return route($name, $params, false);

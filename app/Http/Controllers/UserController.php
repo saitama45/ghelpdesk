@@ -337,6 +337,17 @@ class UserController extends Controller
 
     private function notifyGoogleRegistrationApproved(User $user): void
     {
+        app(\App\Services\NotificationService::class)->notifyApproval(
+            [$user->id],
+            auth()->id(),
+            'approved',
+            'Account approved',
+            'Your account registration has been approved. Welcome aboard!',
+            route('dashboard', [], false),
+            'user_registration:' . $user->id,
+            'success'
+        );
+
         try {
             Mail::to($user->email)->send(new GoogleRegistrationApproved($user));
         } catch (Throwable $exception) {

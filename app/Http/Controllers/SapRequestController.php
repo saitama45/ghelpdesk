@@ -288,6 +288,10 @@ class SapRequestController extends Controller implements HasMiddleware
         $sapRequest->load(['company', 'requestType', 'items', 'user']);
         $this->sapRequestService->notifyCurrentApprovers($sapRequest);
 
+        if ($sapRequest->status === 'Approved') {
+            $this->notifySapRequester($sapRequest, 'approved');
+        }
+
         return redirect()->back()->with('success', 'Request approved successfully.');
     }
 
@@ -320,7 +324,30 @@ class SapRequestController extends Controller implements HasMiddleware
             ]);
         });
 
+        $this->notifySapRequester($sapRequest, 'rejected');
+
         return redirect()->back()->with('success', 'Request rejected successfully');
+    }
+
+    /**
+     * Bell the SAP requester (registered user) with the final decision.
+     */
+    private function notifySapRequester(SapRequest $sapRequest, string $decision): void
+    {
+        if (!$sapRequest->user_id) {
+            return;
+        }
+
+        app(\App\Services\NotificationService::class)->notifyApproval(
+            [$sapRequest->user_id],
+            auth()->id(),
+            $decision,
+            ($decision === 'approved' ? 'SAP Request approved: ' : 'SAP Request rejected: ') . ($sapRequest->requestType->name ?? ''),
+            "Your SAP Request #{$sapRequest->id} has been {$decision}.",
+            route('sap-requests.show', $sapRequest->id, false),
+            'sap_request:' . $sapRequest->id,
+            $decision === 'approved' ? 'success' : 'warning'
+        );
     }
 
     public function remind(SapRequest $sapRequest)

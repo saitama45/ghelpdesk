@@ -145,7 +145,7 @@ const TAB_PROPS = {
 };
 const TABS = [
     { key: 'flow', label: 'Ticket Flow Board' },
-    { key: 'charts', label: 'Open vs Closed / Per Brand' },
+    { key: 'charts', label: 'Open vs Closed' },
     { key: 'health', label: 'Live Store Health' },
     { key: 'leaders', label: 'Top Techs / Trophies' },
     { key: 'overview', label: 'Overview Performance' },
@@ -287,7 +287,8 @@ const overallChartData = computed(() => ({
     closed: chartNumber(props.ticketCharts?.overall?.closed),
 }));
 
-const brandChartRows = computed(() => props.ticketCharts?.perBrand || []);
+const brandChartRows = computed(() => props.ticketCharts?.perStoreBrand || []);
+const officeChartRows = computed(() => props.ticketCharts?.perCorporateOffice || []);
 
 const brandPieData = (brand) => ({
     open: chartNumber(brand?.open),
@@ -371,6 +372,18 @@ const activeTicketFilterParams = computed(() => {
 
     return params;
 });
+
+// Mirrors the Management Filters scope used to build the "Overall Open vs Closed"
+// chart, so clicking through to the ticket list shows the same tickets it counted.
+const overallChartFilterParams = computed(() => ({
+    status: ['all'],
+    ...deptFilterParams.value,
+    ...(filterForm.user_id && filterForm.user_id !== 'all' ? { assignee_id: filterForm.user_id } : {}),
+    ...(filterForm.store_id && filterForm.store_id !== 'all' ? { store_id: filterForm.store_id } : {}),
+    ...(filterForm.year ? { year: filterForm.year } : {}),
+    ...(filterForm.month ? { month: filterForm.month } : {}),
+    ...(entityFilterEnabled.value ? { entity_ids: resolvedEntityIds() } : {}),
+}));
 
 const kanbanColumns = computed(() => props.kanbanReport?.columns || []);
 const kanbanGroups = computed(() => props.kanbanReport?.groups?.[kanbanView.value] || []);
@@ -894,19 +907,22 @@ const exportToExcel = (type) => {
 
         </div><!-- /flow tab -->
 
-        <!-- ============ Open vs Closed / Per Brand tab ============ -->
+        <!-- ============ Open vs Closed tab ============ -->
         <div v-show="activeTab === 'charts'">
         <div v-if="!loaded.charts" class="flex items-center justify-center py-24 text-sm font-semibold text-gray-400">
             <span class="w-5 h-5 mr-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span> Loading…
         </div>
         <template v-else>
         <!-- Ticket Charts -->
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
+        <div class="grid grid-cols-1 gap-6 mb-8">
+            <Link
+                :href="route('tickets.index', overallChartFilterParams)"
+                class="block bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6 hover:shadow-md hover:border-blue-200 transition-all cursor-pointer dark:bg-gray-800 dark:border-gray-700"
+            >
                 <div class="flex items-start justify-between gap-4 mb-6">
                     <div>
                         <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Overall Open vs Closed</h3>
-                        <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Filtered by the current dashboard controls.</p>
+                        <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Filtered by the current dashboard controls. Click to view tickets.</p>
                     </div>
                     <span class="px-2.5 py-1 rounded-full bg-gray-100 text-xs font-black text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                         {{ totalChartCount(overallChartData) }}
@@ -988,56 +1004,109 @@ const exportToExcel = (type) => {
                         </div>
                     </div>
                 </div>
-            </div>
+            </Link>
 
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
-                <div class="mb-6">
-                    <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Per Brand</h3>
-                    <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Open vs Closed across the selected entities.</p>
-                </div>
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
+                    <div class="mb-6">
+                        <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Per Store Brand</h3>
+                        <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Open vs Closed across the selected entities.</p>
+                    </div>
 
-                <div v-if="brandChartRows.length" class="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4">
-                    <div
-                        v-for="brand in brandChartRows"
-                        :key="brand.id"
-                        class="rounded-lg border border-gray-100 bg-gray-50/60 p-4 dark:border-gray-700"
-                    >
-                        <div class="flex items-start justify-between gap-3 mb-4">
-                            <div class="min-w-0">
-                                <p class="text-sm font-black text-gray-900 truncate dark:text-gray-100">{{ brand.name }}</p>
-                                <p v-if="brand.code" class="text-[10px] font-black uppercase tracking-widest text-gray-400 truncate dark:text-gray-400">{{ brand.code }}</p>
-                            </div>
-                            <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-gray-500 border border-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
-                                {{ totalChartCount(brandPieData(brand)) }}
-                            </span>
-                        </div>
-
-                        <div class="grid grid-cols-[88px,1fr] gap-4 items-center">
-                            <div class="relative h-20 w-20 rounded-full" :style="pieChartStyle(brandPieData(brand))">
-                                <div class="absolute inset-5 rounded-full bg-white shadow-inner dark:bg-gray-800"></div>
-                            </div>
-                            <div class="space-y-2 min-w-0">
-                                <div class="flex items-center justify-between gap-2">
-                                    <div class="flex items-center gap-1.5 min-w-0">
-                                        <span class="h-2.5 w-2.5 rounded-full bg-blue-600 shrink-0"></span>
-                                        <span class="text-xs font-bold text-gray-600 truncate dark:text-gray-300">Open</span>
-                                    </div>
-                                    <span class="text-xs font-black text-gray-900 dark:text-gray-100">{{ brand.open }}</span>
+                    <div v-if="brandChartRows.length" class="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4">
+                        <div
+                            v-for="brand in brandChartRows"
+                            :key="brand.id"
+                            class="rounded-lg border border-gray-100 bg-gray-50/60 p-4 dark:border-gray-700"
+                        >
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <div class="min-w-0">
+                                    <p class="text-sm font-black text-gray-900 truncate dark:text-gray-100">{{ brand.name }}</p>
+                                    <p v-if="brand.code" class="text-[10px] font-black uppercase tracking-widest text-gray-400 truncate dark:text-gray-400">{{ brand.code }}</p>
                                 </div>
-                                <div class="flex items-center justify-between gap-2">
-                                    <div class="flex items-center gap-1.5 min-w-0">
-                                        <span class="h-2.5 w-2.5 rounded-full bg-green-600 shrink-0"></span>
-                                        <span class="text-xs font-bold text-gray-600 truncate dark:text-gray-300">Closed</span>
+                                <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-gray-500 border border-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
+                                    {{ totalChartCount(brandPieData(brand)) }}
+                                </span>
+                            </div>
+
+                            <div class="grid grid-cols-[88px,1fr] gap-4 items-center">
+                                <div class="relative h-20 w-20 rounded-full" :style="pieChartStyle(brandPieData(brand))">
+                                    <div class="absolute inset-5 rounded-full bg-white shadow-inner dark:bg-gray-800"></div>
+                                </div>
+                                <div class="space-y-2 min-w-0">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span class="h-2.5 w-2.5 rounded-full bg-blue-600 shrink-0"></span>
+                                            <span class="text-xs font-bold text-gray-600 truncate dark:text-gray-300">Open</span>
+                                        </div>
+                                        <span class="text-xs font-black text-gray-900 dark:text-gray-100">{{ brand.open }}</span>
                                     </div>
-                                    <span class="text-xs font-black text-gray-900 dark:text-gray-100">{{ brand.closed }}</span>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span class="h-2.5 w-2.5 rounded-full bg-green-600 shrink-0"></span>
+                                            <span class="text-xs font-bold text-gray-600 truncate dark:text-gray-300">Closed</span>
+                                        </div>
+                                        <span class="text-xs font-black text-gray-900 dark:text-gray-100">{{ brand.closed }}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
+
+                    <div v-else class="h-72 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-sm font-semibold text-gray-400 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
+                        No brand data available.
+                    </div>
                 </div>
 
-                <div v-else class="h-72 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-sm font-semibold text-gray-400 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
-                    No brand data available.
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
+                    <div class="mb-6">
+                        <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Per Corporate Office</h3>
+                        <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Open vs Closed for stores classified as Office.</p>
+                    </div>
+
+                    <div v-if="officeChartRows.length" class="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4">
+                        <div
+                            v-for="office in officeChartRows"
+                            :key="office.id"
+                            class="rounded-lg border border-gray-100 bg-gray-50/60 p-4 dark:border-gray-700"
+                        >
+                            <div class="flex items-start justify-between gap-3 mb-4">
+                                <div class="min-w-0">
+                                    <p class="text-sm font-black text-gray-900 truncate dark:text-gray-100">{{ office.name }}</p>
+                                    <p v-if="office.code" class="text-[10px] font-black uppercase tracking-widest text-gray-400 truncate dark:text-gray-400">{{ office.code }}</p>
+                                </div>
+                                <span class="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-gray-500 border border-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
+                                    {{ totalChartCount(brandPieData(office)) }}
+                                </span>
+                            </div>
+
+                            <div class="grid grid-cols-[88px,1fr] gap-4 items-center">
+                                <div class="relative h-20 w-20 rounded-full" :style="pieChartStyle(brandPieData(office))">
+                                    <div class="absolute inset-5 rounded-full bg-white shadow-inner dark:bg-gray-800"></div>
+                                </div>
+                                <div class="space-y-2 min-w-0">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span class="h-2.5 w-2.5 rounded-full bg-blue-600 shrink-0"></span>
+                                            <span class="text-xs font-bold text-gray-600 truncate dark:text-gray-300">Open</span>
+                                        </div>
+                                        <span class="text-xs font-black text-gray-900 dark:text-gray-100">{{ office.open }}</span>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span class="h-2.5 w-2.5 rounded-full bg-green-600 shrink-0"></span>
+                                            <span class="text-xs font-bold text-gray-600 truncate dark:text-gray-300">Closed</span>
+                                        </div>
+                                        <span class="text-xs font-black text-gray-900 dark:text-gray-100">{{ office.closed }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-else class="h-72 flex items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-sm font-semibold text-gray-400 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
+                        No corporate office data available.
+                    </div>
                 </div>
             </div>
         </div>

@@ -177,8 +177,25 @@ class PosRequestService
             ->firstWhere('level', $level);
         $approverIds = $matrixEntry['user_ids'] ?? [];
 
+        $normalizedApproverIds = collect($approverIds)->map(fn ($id) => (int) $id)->filter()->unique()->values();
+
+        // In-app bell for every active approver at this level.
+        $bellRecipientIds = User::active()->whereIn('id', $normalizedApproverIds)->pluck('id')->all();
+        if (!empty($bellRecipientIds)) {
+            app(\App\Services\NotificationService::class)->notifyApproval(
+                $bellRecipientIds,
+                auth()->id(),
+                'pending',
+                'Approval needed: ' . ($posRequest->requestType->name ?? 'POS Request'),
+                "POS Request #{$posRequest->id} is awaiting your approval (Stage {$level}).",
+                route('pos-requests.show', $posRequest->id, false),
+                'pos_request:' . $posRequest->id,
+                'warning'
+            );
+        }
+
         $emails = User::active()
-            ->whereIn('id', collect($approverIds)->map(fn ($id) => (int) $id)->filter()->unique()->values())
+            ->whereIn('id', $normalizedApproverIds)
             ->pluck('email')
             ->filter(fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL))
             ->unique(fn ($email) => strtolower($email))

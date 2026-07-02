@@ -2264,6 +2264,8 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             'updated_by' => $request->user()->id,
         ]);
 
+        $this->notifyPaymentApprovers($record, $request->user()->id);
+
         return redirect()->back()->with('success', "Payment record #{$record->id} submitted for approval");
     }
 
@@ -2291,6 +2293,14 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             $record->save();
         });
 
+        $record->refresh();
+        if ($record->status === 'approved') {
+            $this->notifyPaymentRequester($record, 'approved', $user->id);
+        } else {
+            // Still pending — ping the (shared) approver pool that it advanced.
+            $this->notifyPaymentApprovers($record, $user->id);
+        }
+
         return redirect()->back()->with('success', 'Payment record approved');
     }
 
@@ -2312,7 +2322,54 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             $record->save();
         });
 
+        $this->notifyPaymentRequester($record, 'rejected', $user->id);
+
         return redirect()->back()->with('success', 'Payment record rejected');
+    }
+
+    /**
+     * Bell the payment approver pool that a record awaits their approval.
+     */
+    private function notifyPaymentApprovers(PaymentRecord $record, int $actorId): void
+    {
+        $approverIds = collect($record->approver_data['approvers'] ?? [])
+            ->map(fn ($id) => (int) $id)->filter()->unique()->values()->all();
+
+        if (empty($approverIds)) {
+            return;
+        }
+
+        app(\App\Services\NotificationService::class)->notifyApproval(
+            $approverIds,
+            $actorId,
+            'pending',
+            'Payment approval needed',
+            "Payment record #{$record->id} (₱" . number_format((float) $record->amount, 2) . ") is awaiting your approval.",
+            route('payments.index', [], false),
+            'payment_record:' . $record->id,
+            'warning'
+        );
+    }
+
+    /**
+     * Bell the payment requester (submitter) with the final decision.
+     */
+    private function notifyPaymentRequester(PaymentRecord $record, string $decision, int $actorId): void
+    {
+        if (!$record->created_by) {
+            return;
+        }
+
+        app(\App\Services\NotificationService::class)->notifyApproval(
+            [$record->created_by],
+            $actorId,
+            $decision,
+            'Payment record ' . $decision,
+            "Your payment record #{$record->id} has been {$decision}.",
+            route('payments.index', [], false),
+            'payment_record:' . $record->id,
+            $decision === 'approved' ? 'success' : 'warning'
+        );
     }
 
     public function markPaid(Request $request, PaymentRecord $record)
