@@ -142,7 +142,7 @@ class DashboardController extends Controller
             // Lazy tabs — excluded from the initial load, fetched on first tab click.
             'storeHealth' => Inertia::optional(fn () => $this->buildStoreHealth($selectedSubUnitLabel, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter, $effectiveCompanyIds)),
             'ticketCharts' => Inertia::optional(fn () => $this->buildTicketCharts($filteredQuery, $user, $effectiveCompanyIds, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter)),
-            'leaderboard' => Inertia::optional(fn () => $this->buildLeaderboard($year ? (int) $year : null, $month ? (int) $month : null, $departmentIdFilter, $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null, $userIdFilter, $storeIdFilter, $effectiveCompanyIds)),
+            'leaderboard' => Inertia::optional(fn () => $this->buildLeaderboard($filteredQuery, $year ? (int) $year : null, $month ? (int) $month : null, $departmentIdFilter, $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null, $userIdFilter, $storeIdFilter, $effectiveCompanyIds)),
             'stats' => Inertia::optional(fn () => $overviewData()['stats']),
             'recentTickets' => Inertia::optional(fn () => $overviewData()['recentTickets']),
             'myTickets' => Inertia::optional(fn () => $overviewData()['myTickets']),
@@ -175,28 +175,38 @@ class DashboardController extends Controller
     /**
      * Overall Open vs Closed + Per Store Brand + Per Corporate Office + Concern Type charts (lazy dashboard tab).
      */
+    /**
+     * Applies the shared Management Filters scope (department/user/store) to a
+     * ticket query. Used by every widget that ranks/counts tickets directly
+     * (Ticket Flow Board, Open vs Closed charts, Top Brands, Top Teams).
+     */
+    private function applyAssigneeScopeFilters($query, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter)
+    {
+        if ($departmentIdFilter) {
+            $query->whereHas('assignee', fn ($q) => $q->where('department_id', $departmentIdFilter));
+        }
+
+        if ($departmentNodeIdFilter) {
+            $nodeIds = array_merge([(int) $departmentNodeIdFilter], DepartmentNode::getAllDescendantIds((int) $departmentNodeIdFilter));
+            $query->whereHas('assignee', fn ($q) => $q->whereIn('department_node_id', $nodeIds));
+        }
+
+        if ($userIdFilter === 'unassigned') {
+            $query->whereNull('assignee_id');
+        } elseif ($userIdFilter && $userIdFilter !== 'all') {
+            $query->where('assignee_id', $userIdFilter);
+        }
+
+        if ($storeIdFilter && $storeIdFilter !== 'all') {
+            $query->where('store_id', $storeIdFilter);
+        }
+
+        return $query;
+    }
+
     private function buildTicketCharts($filteredQuery, $user, array $effectiveCompanyIds, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter): array
     {
-        $applyDashboardChartFilters = function ($chartQuery) use ($departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter) {
-            if ($departmentIdFilter) {
-                $chartQuery->whereHas('assignee', fn ($q) => $q->where('department_id', $departmentIdFilter));
-            }
-
-            if ($departmentNodeIdFilter) {
-                $nodeIds = array_merge([(int) $departmentNodeIdFilter], DepartmentNode::getAllDescendantIds((int) $departmentNodeIdFilter));
-                $chartQuery->whereHas('assignee', fn ($q) => $q->whereIn('department_node_id', $nodeIds));
-            }
-
-            if ($userIdFilter && $userIdFilter !== 'all') {
-                $chartQuery->where('assignee_id', $userIdFilter);
-            }
-
-            if ($storeIdFilter && $storeIdFilter !== 'all') {
-                $chartQuery->where('store_id', $storeIdFilter);
-            }
-
-            return $chartQuery;
-        };
+        $applyDashboardChartFilters = fn ($chartQuery) => $this->applyAssigneeScopeFilters($chartQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter);
 
         $chartQuery = $applyDashboardChartFilters(clone $filteredQuery);
 
@@ -382,26 +392,7 @@ class DashboardController extends Controller
             ];
         }
 
-        $applyAssigneeKanbanFilters = function ($query) use ($departmentIdFilter, $selectedDepartmentNodeId, $userIdFilter, $storeIdFilter) {
-            if ($departmentIdFilter) {
-                $query->whereHas('assignee', fn ($q) => $q->where('department_id', $departmentIdFilter));
-            }
-
-            if ($selectedDepartmentNodeId) {
-                $nodeIds = array_merge([$selectedDepartmentNodeId], DepartmentNode::getAllDescendantIds($selectedDepartmentNodeId));
-                $query->whereHas('assignee', fn ($q) => $q->whereIn('department_node_id', $nodeIds));
-            }
-
-            if ($userIdFilter && $userIdFilter !== 'all') {
-                $query->where('assignee_id', $userIdFilter);
-            }
-
-            if ($storeIdFilter && $storeIdFilter !== 'all') {
-                $query->where('store_id', $storeIdFilter);
-            }
-
-            return $query;
-        };
+        $applyAssigneeKanbanFilters = fn ($query) => $this->applyAssigneeScopeFilters($query, $departmentIdFilter, $selectedDepartmentNodeId, $userIdFilter, $storeIdFilter);
 
         $departmentKanbanQuery = clone $kanbanBaseQuery;
 
@@ -947,6 +938,7 @@ class DashboardController extends Controller
     }
 
     private function buildLeaderboard(
+        $filteredQuery,
         ?int $year = null,
         ?int $month = null,
         ?string $departmentIdFilter = null,
@@ -972,11 +964,17 @@ class DashboardController extends Controller
             $userQuery->whereIn('department_node_id', $nodeIds);
         }
 
-        if ($userIdFilter && $userIdFilter !== 'all') {
-            $userQuery->where('id', $userIdFilter);
+        if ($userIdFilter === 'unassigned') {
+            // No individual agent represents "unassigned" — nothing to rank.
+            $techs = collect();
+        } else {
+            if ($userIdFilter && $userIdFilter !== 'all') {
+                $userQuery->where('id', $userIdFilter);
+            }
+
+            $techs = $userQuery->get(['id', 'name', 'profile_photo']);
         }
 
-        $techs = $userQuery->get(['id', 'name', 'profile_photo']);
         $eligibleAgentIds = $techs->pluck('id')->all();
 
         $pointBaseQuery = \App\Models\AgentPointTransaction::query()
@@ -1075,7 +1073,132 @@ class DashboardController extends Controller
             'top3' => $rankings->take(3)->values()->toArray(),
             'rankings' => $rankings->values()->toArray(),
             'trophies' => $trophies,
+            'topBrands' => $this->buildTopBrands($filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter),
+            'topTeams' => $this->buildTopTeams($filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter),
         ];
+    }
+
+    /**
+     * Top Brands: every entity in scope ranked by total ticket volume
+     * (open + closed concerns), same Management Filters scope as the rest of
+     * the dashboard.
+     */
+    private function buildTopBrands($filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter): array
+    {
+        $brandScopeQuery = $this->applyAssigneeScopeFilters(clone $filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter);
+
+        $brandCounts = (clone $brandScopeQuery)
+            ->selectRaw(
+                "company_id, " .
+                "SUM(CASE WHEN status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as open_count, " .
+                "SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed_count"
+            )
+            ->whereNotNull('company_id')
+            ->groupBy('company_id')
+            ->get()
+            ->keyBy('company_id');
+
+        $companies = \App\Models\Company::whereIn('id', $brandCounts->keys())->get(['id', 'name', 'code'])->keyBy('id');
+
+        return $brandCounts
+            ->map(function ($row, $companyId) use ($companies) {
+                $company = $companies->get($companyId);
+                $open = (int) $row->open_count;
+                $closed = (int) $row->closed_count;
+
+                return [
+                    'id' => (int) $companyId,
+                    'name' => $company->name ?? 'Unknown',
+                    'code' => $company->code ?? null,
+                    'open' => $open,
+                    'closed' => $closed,
+                    'total' => $open + $closed,
+                ];
+            })
+            ->filter(fn ($row) => $row['total'] > 0)
+            ->sortByDesc('total')
+            ->values()
+            ->map(fn ($row, $index) => [...$row, 'rank' => $index + 1])
+            ->all();
+    }
+
+    /**
+     * Top Teams: tickets grouped by the assignee's org-chart "team" branch —
+     * the node one level below whichever root tree the assignee sits in (e.g.
+     * under "Technology" that's Service Delivery / Service Operations /
+     * Corporate Technology; under "Solutions" that's Business Solutions /
+     * Digital Solutions). Flat single-node trees are their own team. This is
+     * intentionally derived from whatever the org chart looks like rather
+     * than any hardcoded department pair, so it adapts as the tree changes.
+     */
+    private function buildTopTeams($filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter): array
+    {
+        $teamScopeQuery = $this->applyAssigneeScopeFilters(clone $filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter);
+
+        $assigneeCounts = (clone $teamScopeQuery)
+            ->selectRaw(
+                "assignee_id, " .
+                "SUM(CASE WHEN status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as open_count, " .
+                "SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed_count"
+            )
+            ->groupBy('assignee_id')
+            ->get();
+
+        $assigneeIds = $assigneeCounts->pluck('assignee_id')->filter()->values();
+        $assigneeNodeIds = \App\Models\User::whereIn('id', $assigneeIds)->pluck('department_node_id', 'id');
+        $allNodes = DepartmentNode::all(['id', 'parent_id', 'name'])->keyBy('id');
+
+        $teamTotals = [];
+
+        foreach ($assigneeCounts as $row) {
+            $nodeId = $row->assignee_id ? $assigneeNodeIds->get($row->assignee_id) : null;
+            $teamNode = $nodeId ? $this->resolveTeamNode((int) $nodeId, $allNodes) : null;
+
+            $key = $teamNode ? $teamNode->id : 'unassigned';
+            $label = $teamNode ? $teamNode->name : 'Unassigned';
+
+            $teamTotals[$key] ??= ['id' => $key, 'name' => $label, 'open' => 0, 'closed' => 0];
+            $teamTotals[$key]['open'] += (int) $row->open_count;
+            $teamTotals[$key]['closed'] += (int) $row->closed_count;
+        }
+
+        return collect($teamTotals)
+            ->map(fn ($row) => [...$row, 'total' => $row['open'] + $row['closed']])
+            ->filter(fn ($row) => $row['total'] > 0)
+            ->sortByDesc('total')
+            ->values()
+            ->map(fn ($row, $index) => [...$row, 'rank' => $index + 1])
+            ->all();
+    }
+
+    /**
+     * Walks up a department node's ancestry to find its "team" — the node one
+     * level below the root of whichever tree it belongs to, or the node
+     * itself if it has no parent (it is a root/flat branch).
+     */
+    private function resolveTeamNode(int $nodeId, \Illuminate\Support\Collection $nodesById): ?DepartmentNode
+    {
+        $current = $nodesById->get($nodeId);
+
+        if (!$current) {
+            return null;
+        }
+
+        while ($current->parent_id) {
+            $parent = $nodesById->get($current->parent_id);
+
+            if (!$parent) {
+                break;
+            }
+
+            if ($parent->parent_id === null) {
+                return $current;
+            }
+
+            $current = $parent;
+        }
+
+        return $current;
     }
 
     private function buildTrophies(
@@ -1089,7 +1212,10 @@ class DashboardController extends Controller
     {
         $allowedAgentIds = null;
 
-        if ($departmentIdFilter || $departmentNodeIdFilter || ($userIdFilter && $userIdFilter !== 'all')) {
+        if ($userIdFilter === 'unassigned') {
+            // No individual agent represents "unassigned" — no trophies to award.
+            $allowedAgentIds = [];
+        } elseif ($departmentIdFilter || $departmentNodeIdFilter || ($userIdFilter && $userIdFilter !== 'all')) {
             $userQuery = \App\Models\User::active()
                 ->whereHas('roles', fn ($q) => $q->where('is_assignable', true));
 

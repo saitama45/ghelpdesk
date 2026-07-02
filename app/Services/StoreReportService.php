@@ -362,6 +362,10 @@ class StoreReportService
             return true;
         }
 
+        if ($userId === 'unassigned') {
+            return $ticket->assignee_id === null;
+        }
+
         $ownedSectors = $sectorAssignments['by_user_id'][(int) $userId] ?? [];
 
         if (!empty($ownedSectors)) {

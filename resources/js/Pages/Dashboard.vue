@@ -251,7 +251,11 @@ const usersWithLabel = computed(() => {
         ...u,
         display_name: `${u.name}${u.sub_unit ? ' - ' + u.sub_unit : ''}`
     }));
-    return [{ id: 'all', display_name: 'All Users' }, ...list];
+    return [
+        { id: 'all', display_name: 'All Users' },
+        { id: 'unassigned', display_name: 'Unassigned' },
+        ...list,
+    ];
 });
 
 const storesWithLabel = computed(() => {
@@ -338,6 +342,8 @@ const topTechCards = computed(() => {
 });
 
 const leaderboardRankings = computed(() => props.leaderboard?.rankings || props.leaderboard?.top3 || []);
+const topBrandRows = computed(() => props.leaderboard?.topBrands || []);
+const topTeamRows = computed(() => props.leaderboard?.topTeams || []);
 
 const formatMinutes = (minutes) => {
     if (minutes === null || minutes === undefined) {
@@ -375,10 +381,12 @@ const activeTicketFilterParams = computed(() => {
 
 // Mirrors the Management Filters scope used to build the "Overall Open vs Closed"
 // chart, so clicking through to the ticket list shows the same tickets it counted.
+// Note: Tickets Index has no "assignee_id=unassigned" concept — it expresses
+// "no assignee" as an 'unassigned' entry inside the status filter instead.
 const overallChartFilterParams = computed(() => ({
-    status: ['all'],
+    status: filterForm.user_id === 'unassigned' ? ['unassigned'] : ['all'],
     ...deptFilterParams.value,
-    ...(filterForm.user_id && filterForm.user_id !== 'all' ? { assignee_id: filterForm.user_id } : {}),
+    ...(filterForm.user_id && !['all', 'unassigned'].includes(filterForm.user_id) ? { assignee_id: filterForm.user_id } : {}),
     ...(filterForm.store_id && filterForm.store_id !== 'all' ? { store_id: filterForm.store_id } : {}),
     ...(filterForm.year ? { year: filterForm.year } : {}),
     ...(filterForm.month ? { month: filterForm.month } : {}),
@@ -1202,7 +1210,7 @@ const exportToExcel = (type) => {
         <div v-if="!loaded.leaders" class="flex items-center justify-center py-24 text-sm font-semibold text-gray-400">
             <span class="w-5 h-5 mr-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span> Loading…
         </div>
-        <template v-else-if="leaderboard && (leaderboard.top3?.length || leaderboard.trophies?.length)">
+        <template v-else-if="leaderboard && (leaderboard.top3?.length || leaderboard.trophies?.length || topBrandRows.length || topTeamRows.length)">
         <!-- Leadership Leaderboard -->
         <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-8">
             <!-- Top 3 Agents -->
@@ -1333,6 +1341,79 @@ const exportToExcel = (type) => {
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Top Brands / Top Teams -->
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-8">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 dark:bg-gray-800 dark:border-gray-700">
+                <div class="flex items-center gap-2 mb-4 [&>span.text-xl]:hidden">
+                    <span class="text-xs font-black uppercase tracking-widest text-blue-600">Ranked</span>
+                    <span class="text-xl">🏢</span>
+                    <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Top Brands <span class="text-blue-600">{{ leaderboardPeriodLabel }}</span></h3>
+                </div>
+                <p class="text-xs font-medium text-gray-500 -mt-2 mb-4 dark:text-gray-300">Ranked by total open + closed concerns.</p>
+                <div v-if="topBrandRows.length" class="space-y-2">
+                    <div v-for="brand in topBrandRows" :key="brand.id"
+                        class="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-900/50">
+                        <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black"
+                            :class="{
+                                'bg-blue-600 text-white': brand.rank === 1,
+                                'bg-gray-200 text-gray-700': brand.rank === 2,
+                                'bg-amber-100 text-amber-800': brand.rank === 3,
+                                'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400': brand.rank > 3,
+                            }">
+                            #{{ brand.rank }}
+                        </span>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-black text-gray-900 truncate dark:text-gray-100">{{ brand.name }}</div>
+                            <div class="flex gap-3 text-xs mt-0.5">
+                                <span class="text-blue-600 font-semibold">{{ brand.open }} open</span>
+                                <span class="text-green-600 font-semibold">{{ brand.closed }} closed</span>
+                            </div>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <div class="text-sm font-black text-gray-900 dark:text-gray-100">{{ brand.total }}</div>
+                            <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">tickets</div>
+                        </div>
+                    </div>
+                </div>
+                <div v-else class="text-sm text-gray-400 text-center py-4 dark:text-gray-400">No ticket activity yet for this period.</div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 dark:bg-gray-800 dark:border-gray-700">
+                <div class="flex items-center gap-2 mb-4 [&>span.text-xl]:hidden">
+                    <span class="text-xs font-black uppercase tracking-widest text-violet-600">Ranked</span>
+                    <span class="text-xl">🧭</span>
+                    <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Top Teams <span class="text-blue-600">{{ leaderboardPeriodLabel }}</span></h3>
+                </div>
+                <p class="text-xs font-medium text-gray-500 -mt-2 mb-4 dark:text-gray-300">Grouped by org-chart branch (e.g. Service Delivery, Service Operations), ranked by total concerns.</p>
+                <div v-if="topTeamRows.length" class="space-y-2">
+                    <div v-for="team in topTeamRows" :key="team.id"
+                        class="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-900/50">
+                        <span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black"
+                            :class="{
+                                'bg-blue-600 text-white': team.rank === 1,
+                                'bg-gray-200 text-gray-700': team.rank === 2,
+                                'bg-amber-100 text-amber-800': team.rank === 3,
+                                'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400': team.rank > 3,
+                            }">
+                            #{{ team.rank }}
+                        </span>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-black text-gray-900 truncate dark:text-gray-100">{{ team.name }}</div>
+                            <div class="flex gap-3 text-xs mt-0.5">
+                                <span class="text-blue-600 font-semibold">{{ team.open }} open</span>
+                                <span class="text-green-600 font-semibold">{{ team.closed }} closed</span>
+                            </div>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <div class="text-sm font-black text-gray-900 dark:text-gray-100">{{ team.total }}</div>
+                            <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">tickets</div>
+                        </div>
+                    </div>
+                </div>
+                <div v-else class="text-sm text-gray-400 text-center py-4 dark:text-gray-400">No ticket activity yet for this period.</div>
             </div>
         </div>
 
