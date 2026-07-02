@@ -592,9 +592,11 @@ class DashboardController extends Controller
 
         // Projects Board Data
         $projectStatuses = ['Pending', 'In Progress', 'Delayed', 'Completed'];
-        $allProjects = \App\Models\Project::with(['store', 'tasks'])
+        $projectModels = \App\Models\Project::with(['store', 'tasks'])
             ->orderBy('target_go_live', 'asc')
-            ->get()
+            ->get();
+
+        $allProjects = $projectModels
             ->map(function ($project) {
                 $totalTasks = $project->tasks->count();
                 $completionPct = $totalTasks > 0
@@ -612,6 +614,39 @@ class DashboardController extends Controller
                 ];
             });
 
+        // Deployment Summary: projects bucketed into Store Deployment
+        // ('Store Opening') vs Project Deployment (every other project type),
+        // each broken down across the four project statuses.
+        $deploymentDefs = [
+            'store'   => 'Store Deployment',
+            'project' => 'Project Deployment',
+        ];
+        $deploymentBucketFor = fn ($type) => $type === 'Store Opening' ? 'store' : 'project';
+
+        // Full canonical status set (includes 'Planning', which the board columns
+        // omit) so the summary accounts for every project in each segment.
+        $deploymentStatuses = ['Planning', 'Pending', 'In Progress', 'Delayed', 'Completed'];
+
+        $deploymentSummary = collect($deploymentDefs)
+            ->map(function ($label, $key) use ($projectModels, $deploymentStatuses, $deploymentBucketFor) {
+                $segment = $projectModels->filter(fn ($p) => $deploymentBucketFor($p->project_type) === $key);
+
+                $statusCounts = collect($deploymentStatuses)->map(fn ($status) => [
+                    'key'   => $status,
+                    'label' => $status,
+                    'count' => $segment->filter(fn ($p) => ($p->status ?: 'Pending') === $status)->count(),
+                ])->values();
+
+                return [
+                    'key'      => $key,
+                    'label'    => $label,
+                    'total'    => (int) $statusCounts->sum('count'),
+                    'statuses' => $statusCounts->all(),
+                ];
+            })
+            ->values()
+            ->all();
+
         $projectColumns = collect($projectStatuses)->map(fn ($s) => ['key' => $s, 'label' => $s])->all();
         $projectGroups  = collect($projectStatuses)->mapWithKeys(fn ($s) => [
             $s => $allProjects->where('status', $s)->values()->all(),
@@ -626,6 +661,7 @@ class DashboardController extends Controller
                 'columns' => $projectColumns,
                 'groups'  => $projectGroups,
                 'totals'  => $projectTotals,
+                'deploymentSummary' => $deploymentSummary,
             ],
         ];
     }

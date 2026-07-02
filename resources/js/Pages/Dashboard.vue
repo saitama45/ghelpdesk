@@ -400,12 +400,14 @@ const kanbanDepartmentHeader = computed(() => props.kanbanReport?.department_vie
 const projectColumns = computed(() => props.kanbanProjects?.columns || []);
 const projectGroups  = computed(() => props.kanbanProjects?.groups  || {});
 const projectTotals  = computed(() => props.kanbanProjects?.totals  || {});
+const deploymentSummary = computed(() => props.kanbanProjects?.deploymentSummary || []);
 
 const projectStatusTheme = (status) => {
     switch (status) {
         case 'Completed': return { header: 'bg-emerald-50 dark:bg-emerald-900/20', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-800/50 dark:text-emerald-200', bar: 'bg-emerald-500' };
         case 'In Progress': return { header: 'bg-blue-50 dark:bg-blue-900/20', badge: 'bg-blue-100 text-blue-700 dark:bg-blue-800/50 dark:text-blue-200', bar: 'bg-blue-500' };
         case 'Delayed': return { header: 'bg-red-50 dark:bg-red-900/20', badge: 'bg-red-100 text-red-700 dark:bg-red-800/50 dark:text-red-200', bar: 'bg-red-500' };
+        case 'Planning': return { header: 'bg-violet-50 dark:bg-violet-900/20', badge: 'bg-violet-100 text-violet-700 dark:bg-violet-800/50 dark:text-violet-200', bar: 'bg-violet-500' };
         default: return { header: 'bg-gray-50 dark:bg-gray-900/20', badge: 'bg-gray-100 text-gray-600 dark:bg-gray-800/50 dark:text-gray-200', bar: 'bg-gray-400' };
     }
 };
@@ -843,7 +845,58 @@ const exportToExcel = (type) => {
             </div>
 
             <!-- Projects Board (Project View) -->
-            <div v-else-if="kanbanView === 'project'" class="bg-white rounded-xl shadow-sm border border-gray-200 max-h-[75vh] overflow-auto custom-scrollbar dark:bg-gray-800 dark:border-gray-700">
+            <template v-else-if="kanbanView === 'project'">
+
+            <!-- Deployment Summary: Store vs Project deployment, by project status -->
+            <div v-if="deploymentSummary.length" class="mb-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div
+                    v-for="seg in deploymentSummary"
+                    :key="seg.key"
+                    class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 dark:bg-gray-800 dark:border-gray-700"
+                >
+                    <div class="flex items-start justify-between gap-3 mb-4">
+                        <div>
+                            <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">{{ seg.label }}</h3>
+                            <p class="text-xs font-medium text-gray-500 mt-1 dark:text-gray-300">Projects by status.</p>
+                        </div>
+                        <span class="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-black text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                            {{ seg.total }}
+                        </span>
+                    </div>
+
+                    <div class="flex h-4 rounded-full bg-gray-100 overflow-hidden dark:bg-gray-800">
+                        <div
+                            v-for="s in seg.statuses"
+                            :key="s.key"
+                            v-show="s.count > 0"
+                            class="h-full transition-all"
+                            :class="projectStatusTheme(s.key).bar"
+                            :style="{ width: `${chartPercent(s.count, seg.total)}%` }"
+                        ></div>
+                    </div>
+
+                    <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                        <div
+                            v-for="s in seg.statuses"
+                            :key="`tile-${s.key}`"
+                            class="rounded-lg px-3 py-2"
+                            :class="projectStatusTheme(s.key).badge"
+                        >
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-[11px] font-bold truncate">{{ s.label }}</span>
+                                <span class="text-xs font-black">{{ s.count }}</span>
+                            </div>
+                            <p class="mt-0.5 text-[10px] font-bold opacity-80">{{ chartPercent(s.count, seg.total) }}%</p>
+                        </div>
+                    </div>
+
+                    <div v-if="seg.total === 0" class="mt-3 text-center text-[11px] font-bold text-gray-300 uppercase tracking-widest">
+                        No projects
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 max-h-[75vh] overflow-auto custom-scrollbar dark:bg-gray-800 dark:border-gray-700">
                 <div class="grid min-w-[900px]" :style="{ gridTemplateColumns: `repeat(${projectColumns.length}, minmax(220px, 1fr))` }">
                     <div
                         v-for="col in projectColumns"
@@ -903,6 +956,8 @@ const exportToExcel = (type) => {
                     </div>
                 </div>
             </div>
+
+            </template>
         </div>
 
         </div><!-- /flow tab -->
