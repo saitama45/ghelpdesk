@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\DepartmentNode;
 use App\Models\Scopes\ActiveEntityScope;
 use App\Models\Setting;
+use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\User;
 use Carbon\Carbon;
@@ -130,6 +131,10 @@ class StoreReportService
         $allThresholds = Setting::where('group', 'thresholds')->pluck('value', 'key');
         $thresholds = $this->getThresholdsForScope($subUnit, $allThresholds, $departmentId, $departmentNodeId);
 
+        // Entity health heatmap — every active store in scope bucketed by open-ticket
+        // count (0 open = Healthy). Entity-wide, independent of assignee/dept/sector.
+        $entityHealth = $this->buildEntityHealthHeatmap($companyIds, $storeId, $asOfDate, $thresholds);
+
         // Summary logic
         $summary = [
             'north' => [],
@@ -153,6 +158,7 @@ class StoreReportService
                 'reportData' => $reportData,
                 'summary' => $summary,
                 'thresholds' => $thresholds,
+                'entityHealth' => $entityHealth,
             ];
         }
 
@@ -210,7 +216,91 @@ class StoreReportService
             'reportData' => $reportData,
             'summary' => $summary,
             'thresholds' => $thresholds,
+            'entityHealth' => $entityHealth,
         ];
+    }
+
+    /**
+     * Build the per-entity (Company) health heatmap. Counts EVERY active store in
+     * scope, bucketing it by its open-ticket count so stores with no open tickets
+     * fold into the "Healthy" (green) column. Rows are entities; the four columns
+     * are the legend buckets green/yellow/orange/red.
+     *
+     * Scope is intentionally entity-wide: it respects the entity/company filter,
+     * the store filter and the as-of date, but NOT the assignee dept/user/sector
+     * (an entity's health spans every sector).
+     */
+    private function buildEntityHealthHeatmap($companyIds, $storeId, $asOfDate, array $thresholds): array
+    {
+        $storesQuery = Store::query()
+            ->where('is_active', true)
+            ->with('company:id,name,code');
+
+        if (is_array($companyIds)) {
+            $storesQuery->whereIn('company_id', $companyIds);
+        }
+        if ($storeId && $storeId !== 'all') {
+            $storesQuery->where('id', $storeId);
+        }
+
+        $stores = $storesQuery->get(['id', 'company_id']);
+
+        if ($stores->isEmpty()) {
+            return [];
+        }
+
+        // Open-ticket counts per store, same open/as-of scope as the tab. We bypass
+        // the active-entity global scope so counts match the stores we listed above.
+        $ticketQuery = Ticket::query()
+            ->withoutGlobalScope(ActiveEntityScope::class)
+            ->whereNotIn('tickets.status', ['resolved', 'closed'])
+            ->whereNotNull('tickets.store_id');
+
+        if (is_array($companyIds)) {
+            $ticketQuery->whereIn('tickets.company_id', $companyIds);
+        }
+        if ($asOfDate) {
+            $ticketQuery->whereDate('tickets.created_at', '<=', $asOfDate);
+        }
+        if ($storeId && $storeId !== 'all') {
+            $ticketQuery->where('tickets.store_id', $storeId);
+        }
+
+        $openCountsByStore = $ticketQuery
+            ->selectRaw('store_id, COUNT(*) as c')
+            ->groupBy('store_id')
+            ->pluck('c', 'store_id');
+
+        return $stores
+            ->groupBy('company_id')
+            ->map(function ($companyStores) use ($openCountsByStore, $thresholds) {
+                $company = $companyStores->first()->company;
+                $counts = ['green' => 0, 'yellow' => 0, 'orange' => 0, 'red' => 0];
+                $openTickets = 0;
+                $affected = 0;
+
+                foreach ($companyStores as $store) {
+                    $count = (int) ($openCountsByStore->get($store->id) ?? 0);
+                    $openTickets += $count;
+                    if ($count > 0) {
+                        $affected++;
+                    }
+                    $counts[$this->healthBucket($count, $thresholds)]++;
+                }
+
+                return [
+                    'id' => $company?->id,
+                    'name' => $company?->name ?? 'Unassigned Entity',
+                    'code' => $company?->code,
+                    'total_stores' => $companyStores->count(),
+                    'affected_stores' => $affected,
+                    'open_tickets' => $openTickets,
+                    'counts' => $counts,
+                ];
+            })
+            ->sortByDesc('total_stores')
+            ->values()
+            ->all();
     }
 
     private function getThresholdsForScope($subUnit, $allThresholds, $departmentId = null, $departmentNodeId = null)

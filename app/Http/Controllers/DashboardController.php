@@ -156,7 +156,12 @@ class DashboardController extends Controller
             'openTicketsList' => Inertia::optional(fn () => $overviewData()['openTicketsList']),
             'newTicketsList' => Inertia::optional(fn () => $overviewData()['newTicketsList']),
             'closedTicketsList' => Inertia::optional(fn () => $overviewData()['closedTicketsList']),
-            'storePipeline' => Inertia::optional(fn () => $this->buildStorePipeline($pipelineYear)),
+            // CASA Pipeline is the default landing tab, so its data must be present
+            // on the initial paint. Guarded by permission so project data is never
+            // sent to users who can't view projects (the tab is hidden for them).
+            'storePipeline' => fn () => $user->can('projects.view')
+                ? $this->buildStorePipeline($pipelineYear)
+                : null,
         ]);
     }
 

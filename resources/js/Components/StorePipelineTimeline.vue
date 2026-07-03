@@ -50,7 +50,7 @@ const onYearChange = (e) => emit('change-year', parseInt(e.target.value, 10));
                     <CalendarDaysIcon class="w-6 h-6" />
                 </div>
                 <div>
-                    <h3 class="text-lg font-black text-gray-900 dark:text-gray-100 leading-tight">Store Pipeline</h3>
+                    <h3 class="text-lg font-black text-gray-900 dark:text-gray-100 leading-tight">CASA Pipeline</h3>
                     <p class="text-xs text-gray-500 dark:text-gray-400">Projects placed by target go-live date &middot; {{ year }}</p>
                 </div>
             </div>

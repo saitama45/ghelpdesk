@@ -146,17 +146,19 @@ const TAB_PROPS = {
     overview: ['stats', 'recentTickets', 'myTickets', 'recentActivity', 'alarmedWaitingTickets', 'urgentTickets', 'totalTicketsList', 'openTicketsList', 'newTicketsList', 'closedTicketsList'],
     pipeline: ['storePipeline'],
 };
+const canViewPipeline = hasPermission('projects.view');
 const TABS = computed(() => [
+    ...(canViewPipeline ? [{ key: 'pipeline', label: 'CASA Pipeline' }] : []),
     { key: 'flow', label: 'Ticket Flow Board' },
     { key: 'charts', label: 'Open vs Closed' },
     { key: 'health', label: 'Live Store Health' },
     { key: 'leaders', label: 'Top Techs / Trophies' },
     { key: 'overview', label: 'Overview Performance' },
-    ...(hasPermission('projects.view') ? [{ key: 'pipeline', label: 'Store Pipeline' }] : []),
 ]);
-const activeTab = ref('flow');
-// Ticket Flow Board data is present on the initial full load.
-const loaded = reactive({ flow: true, charts: false, health: false, leaders: false, overview: false, pipeline: false });
+// CASA Pipeline is the default landing tab when permitted; otherwise Ticket Flow Board.
+const activeTab = ref(canViewPipeline ? 'pipeline' : 'flow');
+// Both the default landing tab and Ticket Flow Board data are present on first paint.
+const loaded = reactive({ flow: true, charts: false, health: false, leaders: false, overview: false, pipeline: !!props.storePipeline });
 const tabLoading = ref(false);
 
 // Store Pipeline tab owns its own year selector, independent of the ticket filters.
@@ -1213,10 +1215,11 @@ const exportToExcel = (type) => {
                 <Link :href="route('reports.store-health')" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider">Full Report &rarr;</Link>
             </div>
 
-            <StoreHealthReport 
+            <StoreHealthReport
                 :report-data="storeHealth.reportData"
                 :summary="storeHealth.summary"
                 :thresholds="storeHealth.thresholds"
+                :entity-health="storeHealth.entityHealth"
                 :show-filters="false"
                 :filters="filters"
             />

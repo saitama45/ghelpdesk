@@ -78,6 +78,7 @@ class StoreReportController extends Controller implements HasMiddleware
             'subUnits' => $subUnits,
             'hierarchicalDepartments' => $hierarchicalDepartments,
             'thresholds' => $data['thresholds'],
+            'entityHealth' => $data['entityHealth'],
             'filters' => [
                 'user_id' => $filters['user_id'] ?? 'all',
                 'store_id' => $filters['store_id'] ?? 'all',

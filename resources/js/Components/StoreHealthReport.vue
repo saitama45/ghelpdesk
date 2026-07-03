@@ -11,6 +11,10 @@ const props = defineProps({
     reportData: Array,
     summary: Object,
     thresholds: Object,
+    entityHealth: {
+        type: Array,
+        default: () => []
+    },
     showFilters: {
         type: Boolean,
         default: true
@@ -202,6 +206,46 @@ const healthSummaryItems = computed(() => [
 const healthCount = (item, key) => item.health_counts?.[key] ?? 0;
 const isCtMode = computed(() => Boolean(props.summary?.is_ct_mode));
 
+// ── Entity health heatmap ─────────────────────────────────────────────
+const BUCKET_KEYS = ['green', 'yellow', 'orange', 'red'];
+const CELL_RGB = { green: '34,197,94', yellow: '234,179,8', orange: '249,115,22', red: '239,68,68' };
+
+// Shade each column independently so low-count severities (e.g. Critical) stay
+// visible next to the much larger Healthy counts.
+const entityColumnMax = computed(() => {
+    const max = { green: 0, yellow: 0, orange: 0, red: 0 };
+    (props.entityHealth || []).forEach((row) => {
+        BUCKET_KEYS.forEach((k) => { max[k] = Math.max(max[k], row.counts?.[k] ?? 0); });
+    });
+    return max;
+});
+
+const entityCellAlpha = (count, key) => {
+    if (!count) return 0;
+    const max = entityColumnMax.value[key] || 1;
+    return 0.18 + 0.82 * (count / max);
+};
+
+const entityCellStyle = (count, key) => {
+    const alpha = entityCellAlpha(count, key);
+    return alpha ? { backgroundColor: `rgba(${CELL_RGB[key]}, ${alpha})` } : {};
+};
+
+const entityCellTextClass = (count, key) => {
+    if (!count) return 'text-gray-300 dark:text-gray-600';
+    return entityCellAlpha(count, key) > 0.5 ? 'text-white' : 'text-gray-900 dark:text-gray-100';
+};
+
+const entityTotals = computed(() => {
+    const totals = { total_stores: 0, open_tickets: 0, counts: { green: 0, yellow: 0, orange: 0, red: 0 } };
+    (props.entityHealth || []).forEach((row) => {
+        totals.total_stores += row.total_stores || 0;
+        totals.open_tickets += row.open_tickets || 0;
+        BUCKET_KEYS.forEach((k) => { totals.counts[k] += row.counts?.[k] ?? 0; });
+    });
+    return totals;
+});
+
 const shouldCenterBoxes = computed(() => {
     if (!filterNodeId.value) return true;
     
@@ -353,6 +397,59 @@ const getAreaItemClass = (count, maxCols) => {
                         </span>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Store Health by Entity (heatmap) -->
+        <div v-if="entityHealth && entityHealth.length" class="bg-white p-4 sm:p-5 rounded-lg shadow-sm border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-4">
+                <h3 class="text-sm font-black text-gray-800 uppercase tracking-widest dark:text-gray-100">Store Health by Entity</h3>
+                <p class="text-[11px] text-gray-500 dark:text-gray-400">All active stores bucketed by open tickets &middot; darker = more stores (shaded per column)</p>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm border-separate border-spacing-0">
+                    <thead>
+                        <tr class="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-400">
+                            <th class="text-left font-black px-3 py-2 sticky left-0 bg-white dark:bg-gray-800">Entity</th>
+                            <th class="text-right font-black px-3 py-2">Stores</th>
+                            <th class="text-right font-black px-3 py-2">Open</th>
+                            <th v-for="col in healthSummaryItems" :key="col.key" class="px-2 py-2 text-center font-black">
+                                <div class="flex items-center justify-center gap-1.5">
+                                    <span class="w-2.5 h-2.5 rounded-full" :class="col.class"></span>
+                                    <span>{{ col.label }}</span>
+                                </div>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="row in entityHealth" :key="row.id ?? row.name" class="hover:bg-gray-50/60 dark:hover:bg-gray-700/30">
+                            <td class="px-3 py-1.5 sticky left-0 bg-white dark:bg-gray-800">
+                                <div class="font-bold text-gray-900 dark:text-gray-100 whitespace-nowrap">{{ row.name }}</div>
+                                <div v-if="row.code" class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{{ row.code }}</div>
+                            </td>
+                            <td class="px-3 py-1.5 text-right font-black text-gray-700 dark:text-gray-200 tabular-nums">{{ row.total_stores }}</td>
+                            <td class="px-3 py-1.5 text-right font-bold text-blue-600 tabular-nums">{{ row.open_tickets }}</td>
+                            <td v-for="col in healthSummaryItems" :key="col.key" class="px-1.5 py-1.5">
+                                <div
+                                    class="mx-auto min-w-[48px] rounded-md text-center py-2 font-black tabular-nums border border-gray-100 transition-colors dark:border-gray-700/60"
+                                    :style="entityCellStyle(row.counts?.[col.key] || 0, col.key)"
+                                    :class="entityCellTextClass(row.counts?.[col.key] || 0, col.key)"
+                                    :title="`${row.counts?.[col.key] || 0} ${col.label} store(s) in ${row.name}`"
+                                >
+                                    {{ row.counts?.[col.key] || 0 }}
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                    <tfoot>
+                        <tr class="text-gray-900 dark:text-gray-100">
+                            <td class="px-3 pt-3 font-black uppercase text-[11px] tracking-wider text-gray-500 border-t-2 border-gray-200 sticky left-0 bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400">All Entities</td>
+                            <td class="px-3 pt-3 text-right font-black tabular-nums border-t-2 border-gray-200 dark:border-gray-600">{{ entityTotals.total_stores }}</td>
+                            <td class="px-3 pt-3 text-right font-black text-blue-600 tabular-nums border-t-2 border-gray-200 dark:border-gray-600">{{ entityTotals.open_tickets }}</td>
+                            <td v-for="col in healthSummaryItems" :key="col.key" class="px-2 pt-3 text-center font-black tabular-nums border-t-2 border-gray-200 dark:border-gray-600">{{ entityTotals.counts[col.key] }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
             </div>
         </div>
 
