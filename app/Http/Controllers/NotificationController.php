@@ -79,9 +79,16 @@ class NotificationController extends Controller
         $today = Carbon::today();
         $reminders = [];
 
-        // Reminders that cover the user plus their direct reports (self first).
-        $scopeUserIds = collect([(int) $user->id])
-            ->merge($user->subordinates()->pluck('id'))
+        // Team-wide reminders (missing schedule / time logs, SLA) cover the user
+        // plus their direct reports, but only managers see the team view — a plain
+        // user only ever sees their own reminders.
+        $scopeUserIds = collect([(int) $user->id]);
+
+        if ($user->is_manager) {
+            $scopeUserIds = $scopeUserIds->merge($user->subordinates()->pluck('id'));
+        }
+
+        $scopeUserIds = $scopeUserIds
             ->map(fn ($id) => (int) $id)
             ->unique()
             ->values();

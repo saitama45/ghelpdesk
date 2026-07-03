@@ -171,7 +171,9 @@ const domainIcon = {
                         <div class="min-w-0 flex-1">
                             <p class="text-sm font-semibold text-gray-800 truncate dark:text-gray-200">{{ n.title }}</p>
                             <p class="text-xs text-gray-500 mt-0.5 line-clamp-2 dark:text-gray-300">{{ n.message }}</p>
-                            <p class="text-[10px] text-gray-400 mt-1 font-medium dark:text-gray-400">{{ relativeTime(n.created_at) }}</p>
+                            <p class="text-[10px] text-gray-400 mt-1 font-medium dark:text-gray-400">
+                                <span v-if="n.actor_name" class="font-bold text-gray-500 dark:text-gray-300">by {{ n.actor_name }}</span><span v-if="n.actor_name"> &middot; </span>{{ relativeTime(n.created_at) }}
+                            </p>
                         </div>
 
                         <span v-if="!n.read" class="shrink-0 mt-1.5 h-2 w-2 rounded-full bg-blue-500"></span>
