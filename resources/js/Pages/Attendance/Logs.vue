@@ -7,7 +7,7 @@ import Modal from '@/Components/Modal.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
-import { MapPinIcon, ClockIcon, ArrowTopRightOnSquareIcon, MagnifyingGlassPlusIcon, MagnifyingGlassMinusIcon, ArrowsPointingOutIcon, XMarkIcon, FunnelIcon } from '@heroicons/vue/24/outline';
+import { MapPinIcon, ClockIcon, ArrowTopRightOnSquareIcon, MagnifyingGlassPlusIcon, MagnifyingGlassMinusIcon, ArrowsPointingOutIcon, XMarkIcon, FunnelIcon, UserCircleIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     logs: Object,
@@ -169,6 +169,7 @@ const startPos = reactive({ x: 0, y: 0 });
 
 // Preview Functions
 const openPreview = (photoPath) => {
+    if (!photoPath) return;
     previewImage.value = '/serve-storage/' + photoPath;
     zoom.value = 1;
     position.x = 0;
@@ -373,13 +374,25 @@ const stopDrag = () => {
                 <template #body="{ data }">
                     <tr v-for="log in data" :key="log.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="flex-shrink-0 h-12 w-12 cursor-pointer group relative" @click="openPreview(log.photo_path)">
-                                <img 
-                                    :src="'/serve-storage/' + log.photo_path" 
+                            <div
+                                class="flex-shrink-0 h-12 w-12 group relative"
+                                :class="log.photo_path ? 'cursor-pointer' : 'cursor-default'"
+                                @click="openPreview(log.photo_path)"
+                            >
+                                <img
+                                    v-if="log.photo_path"
+                                    :src="'/serve-storage/' + log.photo_path"
                                     class="h-12 w-12 rounded-lg object-cover border border-gray-200 shadow-sm transition-transform group-hover:scale-105 dark:border-gray-700"
                                     alt="Selfie"
                                 />
-                                <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition-opacity">
+                                <div
+                                    v-else
+                                    class="h-12 w-12 rounded-lg border border-gray-200 bg-gray-100 flex items-center justify-center dark:border-gray-700 dark:bg-gray-900/50"
+                                    title="No selfie captured for this log"
+                                >
+                                    <UserCircleIcon class="w-8 h-8 text-gray-300 dark:text-gray-600" />
+                                </div>
+                                <div v-if="log.photo_path" class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition-opacity">
                                     <MagnifyingGlassPlusIcon class="w-5 h-5 text-white" />
                                 </div>
                             </div>

@@ -8,6 +8,7 @@ use App\Models\Scopes\ActiveEntityScope;
 use App\Services\StoreReportService;
 use App\Services\OrganizationReferenceService;
 use App\Support\CompanyContext;
+use App\Models\Project;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\TicketComment;
@@ -40,6 +41,7 @@ class DashboardController extends Controller
         $departmentNodeIdFilter = $request->input('department_node_id');
         $userIdFilter = $request->input('user_id', 'all');
         $storeIdFilter = $request->input('store_id', 'all');
+        $pipelineYear = (int) $request->input('pipeline_year', (int) date('Y'));
         $selectedSubUnitLabel = 'all';
 
         if (
@@ -126,6 +128,7 @@ class DashboardController extends Controller
                 'department_node_id' => $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null,
                 'user_id' => $userIdFilter,
                 'store_id' => $storeIdFilter,
+                'pipeline_year' => $pipelineYear,
             ],
             'entityFilter' => fn () => [
                 'enabled' => $canEntityFilter,
@@ -153,7 +156,107 @@ class DashboardController extends Controller
             'openTicketsList' => Inertia::optional(fn () => $overviewData()['openTicketsList']),
             'newTicketsList' => Inertia::optional(fn () => $overviewData()['newTicketsList']),
             'closedTicketsList' => Inertia::optional(fn () => $overviewData()['closedTicketsList']),
+            'storePipeline' => Inertia::optional(fn () => $this->buildStorePipeline($pipelineYear)),
         ]);
+    }
+
+    /**
+     * Store / Project Pipeline timeline for a given year (lazy dashboard tab).
+     *
+     * Derived live from the Projects table: every project whose target_go_live
+     * falls in the selected year is placed on that month; projects with no
+     * target date become "Standby" backlog cards. Cards are colored by status.
+     */
+    private function buildStorePipeline(int $year): array
+    {
+        $projects = Project::query()
+            ->with('store:id,name,code,brand')
+            ->where(function ($query) use ($year) {
+                $query->whereYear('target_go_live', $year)
+                    ->orWhereNull('target_go_live');
+            })
+            ->orderByRaw('CASE WHEN target_go_live IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('target_go_live')
+            ->orderBy('name')
+            ->get();
+
+        $mapCard = function (Project $project) {
+            $store = $project->store;
+            $goLive = $project->target_go_live;
+
+            return [
+                'id'             => $project->id,
+                'name'           => $project->name,
+                'label'          => $store?->code ?: $project->name,
+                'store_name'     => $store?->name,
+                'store_code'     => $store?->code,
+                'store_brand'    => $store?->brand,
+                'type'           => $project->project_type,
+                'status'         => $project->status ?: 'Planning',
+                'target_go_live' => $goLive?->format('Y-m-d'),
+                'go_live_label'  => $goLive?->format('M j'),
+                'day'            => $goLive ? (int) $goLive->format('j') : null,
+                'url'            => route('projects.show', $project->id),
+            ];
+        };
+
+        $dated = $projects->filter(fn (Project $p) => $p->target_go_live !== null);
+
+        $months = collect(range(1, 12))->map(function (int $month) use ($dated, $mapCard) {
+            $cards = $dated
+                ->filter(fn (Project $p) => (int) $p->target_go_live->format('n') === $month)
+                ->sortBy(fn (Project $p) => $p->target_go_live->timestamp)
+                ->map($mapCard)
+                ->values();
+
+            return [
+                'month' => $month,
+                'label' => Carbon::create(2000, $month, 1)->format('M'),
+                'cards' => $cards,
+            ];
+        })->values();
+
+        // Standby = undated projects that are still active (not finished/cancelled).
+        $standby = $projects
+            ->filter(fn (Project $p) => $p->target_go_live === null
+                && !in_array($p->status, ['Completed', 'Cancelled'], true))
+            ->map($mapCard)
+            ->values();
+
+        // Status legend + counts across this year's dated cards.
+        $statusLegend = $dated
+            ->groupBy(fn (Project $p) => $p->status ?: 'Planning')
+            ->map(fn ($group, $status) => ['status' => (string) $status, 'count' => $group->count()])
+            ->sortByDesc('count')
+            ->values();
+
+        // Years that actually have dated projects, plus current & selected year.
+        $availableYears = Project::query()
+            ->whereNotNull('target_go_live')
+            ->selectRaw('YEAR(target_go_live) as y')
+            ->distinct()
+            ->pluck('y')
+            ->map(fn ($y) => (int) $y);
+
+        $availableYears = $availableYears
+            ->push($year)
+            ->push((int) date('Y'))
+            ->unique()
+            ->sortDesc()
+            ->values();
+
+        return [
+            'year'           => $year,
+            'availableYears' => $availableYears,
+            'months'         => $months,
+            'standby'        => $standby,
+            'statusLegend'   => $statusLegend,
+            'totals'         => [
+                'total'   => $dated->count() + $standby->count(),
+                'dated'   => $dated->count(),
+                'standby' => $standby->count(),
+            ],
+        ];
     }
 
     /**

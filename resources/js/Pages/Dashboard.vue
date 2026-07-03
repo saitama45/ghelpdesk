@@ -4,6 +4,7 @@ import { ref, computed, reactive, watch, onMounted } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import StoreHealthReport from '@/Components/StoreHealthReport.vue';
+import StorePipelineTimeline from '@/Components/StorePipelineTimeline.vue';
 import HierarchySelector from '@/Components/HierarchySelector.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
@@ -33,6 +34,7 @@ const props = defineProps({
     subUnits: Array,
     hierarchicalDepartments: Array,
     leaderboard: Object,
+    storePipeline: Object,
     entityFilter: { type: Object, default: () => ({ enabled: false, options: [], selected: [] }) },
 });
 
@@ -142,25 +144,42 @@ const TAB_PROPS = {
     health: ['storeHealth'],
     leaders: ['leaderboard'],
     overview: ['stats', 'recentTickets', 'myTickets', 'recentActivity', 'alarmedWaitingTickets', 'urgentTickets', 'totalTicketsList', 'openTicketsList', 'newTicketsList', 'closedTicketsList'],
+    pipeline: ['storePipeline'],
 };
-const TABS = [
+const TABS = computed(() => [
     { key: 'flow', label: 'Ticket Flow Board' },
     { key: 'charts', label: 'Open vs Closed' },
     { key: 'health', label: 'Live Store Health' },
     { key: 'leaders', label: 'Top Techs / Trophies' },
     { key: 'overview', label: 'Overview Performance' },
-];
+    ...(hasPermission('projects.view') ? [{ key: 'pipeline', label: 'Store Pipeline' }] : []),
+]);
 const activeTab = ref('flow');
 // Ticket Flow Board data is present on the initial full load.
-const loaded = reactive({ flow: true, charts: false, health: false, leaders: false, overview: false });
+const loaded = reactive({ flow: true, charts: false, health: false, leaders: false, overview: false, pipeline: false });
 const tabLoading = ref(false);
+
+// Store Pipeline tab owns its own year selector, independent of the ticket filters.
+const pipelineYear = ref(props.filters?.pipeline_year || new Date().getFullYear());
 
 const fetchTab = (tab) => {
     if (loaded[tab]) return;
     tabLoading.value = true;
     router.reload({
         only: TAB_PROPS[tab],
+        data: tab === 'pipeline' ? { pipeline_year: pipelineYear.value } : {},
         onSuccess: () => { loaded[tab] = true; },
+        onFinish: () => { tabLoading.value = false; },
+    });
+};
+
+const changePipelineYear = (nextYear) => {
+    pipelineYear.value = nextYear;
+    tabLoading.value = true;
+    router.reload({
+        only: ['storePipeline'],
+        data: { pipeline_year: nextYear },
+        onSuccess: () => { loaded.pipeline = true; },
         onFinish: () => { tabLoading.value = false; },
     });
 };
@@ -176,6 +195,7 @@ const applyFilters = () => {
         month: filterForm.month,
         user_id: filterForm.user_id,
         store_id: filterForm.store_id,
+        pipeline_year: pipelineYear.value,
         ...deptFilterParams.value,
         ...(entityFilterEnabled.value ? { entity_ids: resolvedEntityIds() } : {}),
         ...(skipDefaultDepartment.value ? { skip_default_department: 1 } : {}),
@@ -2294,6 +2314,20 @@ const exportToExcel = (type) => {
         </Modal>
         </template>
         </div><!-- /overview tab -->
+
+        <!-- ============ Store Pipeline tab ============ -->
+        <div v-show="activeTab === 'pipeline'">
+            <div v-if="!loaded.pipeline && !storePipeline" class="flex items-center justify-center py-24 text-sm font-semibold text-gray-400">
+                <span class="w-5 h-5 mr-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span> Loading…
+            </div>
+            <div v-else class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
+                <StorePipelineTimeline
+                    :pipeline="storePipeline"
+                    :loading="tabLoading && activeTab === 'pipeline'"
+                    @change-year="changePipelineYear"
+                />
+            </div>
+        </div><!-- /pipeline tab -->
     </AppLayout>
 
     <!-- Survey Modal -->

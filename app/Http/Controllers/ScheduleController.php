@@ -674,14 +674,26 @@ class ScheduleController extends Controller implements HasMiddleware
 
         DB::transaction(function () use ($payload, $schedule, $updaterId) {
             foreach ([
-                'time_in' => ['value' => 'actual_time_in', 'clear' => 'clear_time_in'],
-                'time_out' => ['value' => 'actual_time_out', 'clear' => 'clear_time_out'],
+                'time_in' => ['value' => 'actual_time_in', 'clear' => 'clear_time_in', 'order' => 'asc'],
+                'time_out' => ['value' => 'actual_time_out', 'clear' => 'clear_time_out', 'order' => 'desc'],
             ] as $type => $fields) {
                 $hasNewValue = !empty($payload[$fields['value']]);
                 $shouldClear = (bool) ($payload[$fields['clear']] ?? false);
 
                 if (!$hasNewValue && !$shouldClear) {
                     continue;
+                }
+
+                if ($hasNewValue) {
+                    $existingLog = $this->actualTimeLogsForPayload($schedule, $payload)
+                        ->where('type', $type)
+                        ->orderBy('log_time', $fields['order'])
+                        ->first();
+
+                    if ($existingLog && $existingLog->log_time->equalTo(Carbon::parse($payload[$fields['value']]))) {
+                        // Value is unchanged: keep the existing log (and its photo) untouched.
+                        continue;
+                    }
                 }
 
                 $this->actualTimeLogsForPayload($schedule, $payload)
