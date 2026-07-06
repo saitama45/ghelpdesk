@@ -220,6 +220,68 @@ class TicketIndexSummaryTest extends TestCase
             );
     }
 
+    public function test_ticket_key_filter_shows_only_linked_sla_notification_tickets(): void
+    {
+        $company = Company::create([
+            'name' => 'Test Company',
+            'code' => 'TC',
+            'is_active' => true,
+        ]);
+
+        $viewerDepartment = Department::create([
+            'name' => 'Viewer Department',
+            'is_active' => true,
+        ]);
+        $otherDepartment = Department::create([
+            'name' => 'Other Department',
+            'is_active' => true,
+        ]);
+
+        $viewer = User::factory()->create([
+            'company_id' => $company->id,
+            'department_id' => $viewerDepartment->id,
+        ]);
+        $assignee = User::factory()->create([
+            'company_id' => $company->id,
+            'department_id' => $otherDepartment->id,
+        ]);
+
+        $parent = $this->ticket($company, [
+            'ticket_key' => 'SLA-1001',
+            'status' => 'in_progress',
+            'assignee_id' => $assignee->id,
+        ]);
+        $this->ticket($company, [
+            'ticket_key' => 'SLA-1002',
+            'status' => 'waiting_client_feedback',
+            'assignee_id' => $assignee->id,
+            'parent_id' => $parent->id,
+        ]);
+        $this->ticket($company, [
+            'ticket_key' => 'OTHER-1003',
+            'assignee_id' => $assignee->id,
+        ]);
+
+        $this->actingAs($viewer)
+            ->get(route('tickets.index', [
+                'ticket_keys' => 'SLA-1001,SLA-1002',
+                'status' => ['all'],
+                'ticket_scope' => 'all',
+                'skip_default_department' => true,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Tickets/Index')
+                ->where('filters.ticket_keys', 'SLA-1001,SLA-1002')
+                ->has('tickets.data', 2)
+                ->where('tickets.data', fn ($tickets) => collect($tickets)
+                    ->pluck('ticket_key')
+                    ->sort()
+                    ->values()
+                    ->all() === ['SLA-1001', 'SLA-1002'])
+            );
+    }
+
     private function ticket(Company $company, array $overrides = []): Ticket
     {
         return Ticket::create(array_merge([

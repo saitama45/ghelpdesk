@@ -118,6 +118,15 @@ class TicketController extends Controller
                 ->values();
         };
 
+        $rawTicketKeys = $request->input('ticket_keys', []);
+        $ticketKeys = $normalizeFilterValues(
+            is_string($rawTicketKeys) ? explode(',', $rawTicketKeys) : $rawTicketKeys
+        )->map(fn ($key) => (string) $key);
+
+        if ($ticketKeys->isNotEmpty()) {
+            $query->whereIn('ticket_key', $ticketKeys->all());
+        }
+
         $defaultStatus = $user->hasRole('User') ? 'all' : 'open';
         $statusFilters = $normalizeFilterValues($request->input('status', [$defaultStatus]));
 
@@ -150,7 +159,8 @@ class TicketController extends Controller
 
         $filterDeptId  = $request->filled('department_id')      ? (int) $request->department_id      : null;
         $filterNodeId  = $request->filled('department_node_id') ? (int) $request->department_node_id : null;
-        $skipDefaultDepartmentScope = $request->boolean('skip_default_department');
+        $skipDefaultDepartmentScope = $request->boolean('skip_default_department')
+            || $ticketKeys->isNotEmpty();
         $assignedDepartmentOnly = $request->boolean('assigned_department_only');
 
         if (!$skipDefaultDepartmentScope && !$filterDeptId && !$filterNodeId) {
@@ -412,6 +422,7 @@ class TicketController extends Controller
                 'month' => $request->month,
                 'dashboard_filter' => $request->input('dashboard_filter', 'all'),
                 'ticket_scope' => $ticketScope,
+                'ticket_keys' => $ticketKeys->implode(','),
                 'entity_ids' => array_map('intval', $effectiveCompanyIds),
             ],
             'entityFilter' => [

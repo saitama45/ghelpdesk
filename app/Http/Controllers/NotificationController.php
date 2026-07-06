@@ -6,6 +6,7 @@ use App\Models\AgentPointTransaction;
 use App\Models\AttendanceLog;
 use App\Models\Schedule;
 use App\Models\Ticket;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -93,7 +94,7 @@ class NotificationController extends Controller
             ->unique()
             ->values();
 
-        $this->scheduleReminders($reminders, $user, $scopeUserIds);
+        $this->scheduleReminders($reminders, $scopeUserIds);
 
         $openTickets = Ticket::where('assignee_id', $user->id)
             ->whereNotIn('status', ['resolved', 'closed'])
@@ -138,7 +139,7 @@ class NotificationController extends Controller
      *
      * @param  array<int,array>  $reminders  built up by reference
      */
-    private function scheduleReminders(array &$reminders, $user, $scopeUserIds): void
+    private function scheduleReminders(array &$reminders, $scopeUserIds): void
     {
         $tz = 'Asia/Manila';
         $today = Carbon::today($tz);
@@ -201,17 +202,20 @@ class NotificationController extends Controller
         }
 
         $missingScheduleUserIds = $scopeUserIds->diff(array_keys($scheduledTodayUserIds))->values();
+        $namesByUserId = User::whereIn('id', $scopeUserIds)
+            ->pluck('name', 'id');
+        $userName = fn ($userId) => $namesByUserId->get((int) $userId, "User {$userId}");
 
         if ($missingScheduleUserIds->isNotEmpty()) {
-            $selfOnly = $missingScheduleUserIds->count() === 1
-                && (int) $missingScheduleUserIds->first() === (int) $user->id;
+            $missingScheduleNames = $missingScheduleUserIds
+                ->map($userName)
+                ->sortBy(fn ($name) => mb_strtolower($name))
+                ->values();
 
             $reminders[] = [
                 'type'     => 'missing_schedule',
                 'title'    => 'Missing Schedule',
-                'message'  => $selfOnly
-                    ? 'You have no schedule plotted for today.'
-                    : $missingScheduleUserIds->count() . ' staff missing a schedule today.',
+                'message'  => 'No schedule today: ' . $missingScheduleNames->implode(', ') . '.',
                 'severity' => 'warning',
                 'route'    => 'schedules.index',
                 'params'   => ['tab' => 'missing-schedules'],
@@ -220,10 +224,24 @@ class NotificationController extends Controller
         }
 
         if (!empty($missingTimeIn)) {
+            $missingTimeInDetails = collect(array_keys($missingTimeIn))
+                ->map(function ($key) use ($userName, $todayStr) {
+                    [$userId, $date] = explode('|', $key, 2);
+
+                    return [
+                        'name' => $userName($userId),
+                        'date' => $date,
+                        'label' => $date === $todayStr ? 'Today' : 'Yesterday',
+                    ];
+                })
+                ->sortBy(fn ($entry) => $entry['date'] . '|' . mb_strtolower($entry['name']))
+                ->map(fn ($entry) => "{$entry['name']} ({$entry['label']})")
+                ->values();
+
             $reminders[] = [
                 'type'     => 'missing_time_in',
                 'title'    => 'Missing Time-In',
-                'message'  => count($missingTimeIn) . ' unlogged time-in (yesterday/today).',
+                'message'  => 'No time-in: ' . $missingTimeInDetails->implode(', ') . '.',
                 'severity' => 'warning',
                 'route'    => 'schedules.index',
                 'params'   => ['tab' => 'missing-schedules'],
@@ -232,10 +250,15 @@ class NotificationController extends Controller
         }
 
         if (!empty($missingTimeOut)) {
+            $missingTimeOutNames = collect(array_keys($missingTimeOut))
+                ->map(fn ($key) => $userName(explode('|', $key, 2)[0]))
+                ->sortBy(fn ($name) => mb_strtolower($name))
+                ->values();
+
             $reminders[] = [
                 'type'     => 'missing_time_out',
                 'title'    => 'Missing Time-Out',
-                'message'  => count($missingTimeOut) . ' unlogged time-out (yesterday).',
+                'message'  => 'No time-out yesterday: ' . $missingTimeOutNames->implode(', ') . '.',
                 'severity' => 'warning',
                 'route'    => 'schedules.index',
                 'params'   => ['tab' => 'missing-schedules'],
@@ -266,50 +289,66 @@ class NotificationController extends Controller
                 $q->where('sm.is_resolution_breached', true)
                     ->orWhere('sm.resolution_target_at', '<', $now);
             })
-            ->count();
+            ->orderBy('tickets.ticket_key')
+            ->pluck('tickets.ticket_key');
 
         $dueIn1Day = $base()
             ->where('sm.is_resolution_breached', false)
             ->whereBetween('sm.resolution_target_at', [$now, $in1Day])
-            ->count();
+            ->orderBy('tickets.ticket_key')
+            ->pluck('tickets.ticket_key');
 
         $dueIn2Days = $base()
             ->where('sm.is_resolution_breached', false)
             ->where('sm.resolution_target_at', '>', $in1Day)
             ->where('sm.resolution_target_at', '<=', $in2Days)
-            ->count();
+            ->orderBy('tickets.ticket_key')
+            ->pluck('tickets.ticket_key');
 
-        if ($breached > 0) {
+        if ($breached->isNotEmpty()) {
             $reminders[] = [
                 'type'     => 'sla_breached',
                 'title'    => 'SLA Breached',
-                'message'  => "{$breached} ticket(s) past due SLA.",
+                'message'  => 'Past due SLA: ' . $breached->implode(', ') . '.',
                 'severity' => 'warning',
                 'route'    => 'tickets.index',
-                'count'    => $breached,
+                'params'   => $this->slaTicketParams($breached),
+                'count'    => $breached->count(),
             ];
         }
 
-        if ($dueIn1Day > 0) {
+        if ($dueIn1Day->isNotEmpty()) {
             $reminders[] = [
                 'type'     => 'sla_due_1d',
                 'title'    => 'SLA Due in 1 Day',
-                'message'  => "{$dueIn1Day} ticket(s) breaching within 24 hours.",
+                'message'  => 'Due within 24 hours: ' . $dueIn1Day->implode(', ') . '.',
                 'severity' => 'warning',
                 'route'    => 'tickets.index',
-                'count'    => $dueIn1Day,
+                'params'   => $this->slaTicketParams($dueIn1Day),
+                'count'    => $dueIn1Day->count(),
             ];
         }
 
-        if ($dueIn2Days > 0) {
+        if ($dueIn2Days->isNotEmpty()) {
             $reminders[] = [
                 'type'     => 'sla_due_2d',
                 'title'    => 'SLA Due in 2 Days',
-                'message'  => "{$dueIn2Days} ticket(s) breaching within 2 days.",
+                'message'  => 'Due within 2 days: ' . $dueIn2Days->implode(', ') . '.',
                 'severity' => 'info',
                 'route'    => 'tickets.index',
-                'count'    => $dueIn2Days,
+                'params'   => $this->slaTicketParams($dueIn2Days),
+                'count'    => $dueIn2Days->count(),
             ];
         }
+    }
+
+    private function slaTicketParams($ticketKeys): array
+    {
+        return [
+            'ticket_keys' => $ticketKeys->implode(','),
+            'status' => ['all'],
+            'ticket_scope' => 'all',
+            'skip_default_department' => 1,
+        ];
     }
 }

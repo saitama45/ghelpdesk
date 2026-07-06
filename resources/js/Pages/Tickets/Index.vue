@@ -156,8 +156,10 @@ onMounted(() => {
             ...ticketFilterParams(),
             search: pagination.search.value
         };
-        const { entity_ids, ...persistedParams } = params;
-        localStorage.setItem('ghelpdesk_ticket_filters', JSON.stringify(persistedParams));
+        if (!filterTicketKeys.value) {
+            const { entity_ids, ticket_keys, ...persistedParams } = params;
+            localStorage.setItem('ghelpdesk_ticket_filters', JSON.stringify(persistedParams));
+        }
     }
 
     const savedCols = localStorage.getItem('ghelpdesk_ticket_columns');
@@ -292,6 +294,7 @@ const filterStartDate = ref(props.filters?.start_date || '');
 const filterEndDate = ref(props.filters?.end_date || '');
 const assignedDepartmentOnly = ref(Boolean(props.filters?.assigned_department_only));
 const filterTicketScope = ref(normalizeTicketScope(props.filters?.ticket_scope || defaultTicketScope));
+const filterTicketKeys = ref(props.filters?.ticket_keys || '');
 // Entity/Company filter — defaults to the active sidebar entity (server-seeded).
 const entityFilterEnabled = computed(() => !!props.entityFilter?.enabled);
 const entityFilterOptions = computed(() => props.entityFilter?.options || []);
@@ -400,6 +403,7 @@ const ticketFilterParams = () => ({
     dashboard_filter: activeDashboardFilter.value,
     assigned_department_only: assignedDepartmentOnly.value ? 1 : undefined,
     ticket_scope: filterTicketScope.value,
+    ticket_keys: filterTicketKeys.value || undefined,
     entity_ids: entityFilterEnabled.value ? resolvedEntityIds() : undefined,
 });
 
@@ -488,8 +492,10 @@ const applyFilter = () => {
 
     // Entity/Company selection is intentionally NOT persisted — each visit
     // resets to the active sidebar entity (server-seeded default).
-    const { entity_ids, ...persistedParams } = params;
-    localStorage.setItem('ghelpdesk_ticket_filters', JSON.stringify(persistedParams));
+    if (!filterTicketKeys.value) {
+        const { entity_ids, ticket_keys, ...persistedParams } = params;
+        localStorage.setItem('ghelpdesk_ticket_filters', JSON.stringify(persistedParams));
+    }
 
     router.get(route('tickets.index'), params, {
         preserveState: true,
@@ -597,6 +603,7 @@ const clearFilters = () => {
     activeDashboardFilter.value = 'all';
     assignedDepartmentOnly.value = false;
     filterTicketScope.value = defaultTicketScope;
+    filterTicketKeys.value = '';
     pagination.search.value = '';
     applyFilter();
 };
@@ -1650,6 +1657,10 @@ const activeFilterBadges = computed(() => {
     }
     if (activeDashboardFilter.value !== 'all') {
         badges.push(getDashboardFilterLabel(activeDashboardFilter.value));
+    }
+    if (filterTicketKeys.value) {
+        const ticketCount = filterTicketKeys.value.split(',').filter(Boolean).length;
+        badges.push(`SLA notification: ${ticketCount} ticket${ticketCount === 1 ? '' : 's'}`);
     }
 
     return badges;
