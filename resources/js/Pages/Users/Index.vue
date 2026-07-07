@@ -1,6 +1,7 @@
 <script setup>
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm, router } from '@inertiajs/vue3';
 import { ref, reactive, computed, onMounted, watch } from 'vue';
+import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
@@ -30,6 +31,7 @@ const showCreateModal = ref(false);
 const showEditModal = ref(false);
 const showPasswordModal = ref(false);
 const showStoresModal = ref(false);
+const showImportModal = ref(false);
 const editingUser = ref(null);
 const resetPasswordUser = ref(null);
 const selectedUserStores = ref([]);
@@ -37,8 +39,48 @@ const filterStatus = ref(props.filters?.status || '');
 const filterRole = ref(props.filters?.role || '');
 const { confirm } = useConfirm();
 const { post, put, destroy } = useErrorHandler();
-const { showError } = useToast();
+const { showError, showSuccess } = useToast();
 const { hasPermission } = usePermission();
+
+// ── User import ──────────────────────────────────────────────────────────
+const importing = ref(false);
+const selectedImportFile = ref(null);
+const importResults = ref(null);
+
+const openImportModal = () => {
+    selectedImportFile.value = null;
+    importResults.value = null;
+    showImportModal.value = true;
+};
+
+const handleImportFileChange = (e) => {
+    selectedImportFile.value = e.target.files[0] || null;
+};
+
+const submitImport = async () => {
+    if (!selectedImportFile.value) return;
+
+    importing.value = true;
+    importResults.value = null;
+
+    const formData = new FormData();
+    formData.append('file', selectedImportFile.value);
+
+    try {
+        const { data } = await axios.post(route('users.import'), formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        importResults.value = data;
+        if (data.imported > 0) {
+            showSuccess(`Imported ${data.imported} user(s) successfully.`);
+            router.reload({ only: ['users'] });
+        }
+    } catch (err) {
+        showError(err.response?.data?.message || 'Import failed.');
+    } finally {
+        importing.value = false;
+    }
+};
 
 const allStoreIds = computed(() => props.stores.map(s => s.id));
 const departmentOptions = computed(() => props.departmentTree || []);
@@ -502,6 +544,16 @@ const sortRolePermissions = (permissions) => {
                     </div>
                     <button
                         v-if="hasPermission('users.create')"
+                        @click="openImportModal"
+                        class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors flex items-center space-x-2 text-sm font-medium shadow-sm whitespace-nowrap"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span>Import</span>
+                    </button>
+                    <button
+                        v-if="hasPermission('users.create')"
                         @click="showCreateModal = true"
                         class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 text-sm font-medium shadow-sm whitespace-nowrap"
                     >
@@ -955,7 +1007,7 @@ const sortRolePermissions = (permissions) => {
                     </div>
 
                     <div class="mt-8 flex justify-end">
-                        <button @click="showStoresModal = false" 
+                        <button @click="showStoresModal = false"
                                 class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-bold shadow-sm dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                             Close
                         </button>
@@ -963,6 +1015,77 @@ const sortRolePermissions = (permissions) => {
                 </div>
             </div>
         </div>
+
+        <!-- Import Users Modal -->
+        <div v-if="showImportModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 py-6">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showImportModal = false"></div>
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Import Users</h3>
+                        <button @click="showImportModal = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="p-4 bg-blue-50 rounded-lg border border-blue-100 dark:bg-blue-900/20 dark:border-blue-900/40">
+                            <h4 class="text-xs font-bold text-blue-700 uppercase tracking-wider mb-2 dark:text-blue-300">Instructions</h4>
+                            <ul class="text-xs text-blue-600 space-y-1 list-disc pl-4 dark:text-blue-300">
+                                <li>Download the template — the <strong>role</strong>, <strong>department</strong>, <strong>assigned_stores</strong> and <strong>reports_to</strong> columns have dropdowns.</li>
+                                <li>For <strong>assigned_stores</strong> and <strong>reports_to</strong>, pick from the dropdown and separate multiple values with a semicolon (<code>;</code>). See the header cell comments.</li>
+                                <li>New users are created with the default password <code class="font-mono font-bold">Password@123</code> — ask them to change it on first login.</li>
+                                <li>Rows whose email already exists are skipped and listed below.</li>
+                            </ul>
+                            <div class="mt-4">
+                                <a :href="route('users.template')"
+                                   class="text-xs font-black text-blue-700 underline hover:text-blue-800 dark:text-blue-300">
+                                    Download Excel Template
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <label class="block">
+                                <span class="sr-only">Choose file</span>
+                                <input type="file" @change="handleImportFileChange" accept=".xlsx,.csv"
+                                       class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all cursor-pointer dark:text-gray-300">
+                            </label>
+
+                            <div v-if="importResults" class="p-4 rounded-lg" :class="importResults.errors.length > 0 ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-green-50 dark:bg-green-900/20'">
+                                <p class="text-sm font-bold" :class="importResults.errors.length > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-green-800 dark:text-green-300'">
+                                    Imported {{ importResults.imported }} user(s).
+                                </p>
+                                <div v-if="importResults.errors.length > 0" class="mt-2">
+                                    <p class="text-xs font-black text-amber-700 uppercase mb-1 dark:text-amber-400">Issues encountered:</p>
+                                    <ul class="text-[10px] text-amber-600 max-h-32 overflow-y-auto custom-scrollbar list-disc pl-4 dark:text-amber-300">
+                                        <li v-for="(err, i) in importResults.errors" :key="i">{{ err }}</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end space-x-3 pt-6 border-t dark:border-gray-700">
+                            <button type="button" @click="showImportModal = false"
+                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
+                                Close
+                            </button>
+                            <button @click="submitImport" :disabled="!selectedImportFile || importing"
+                                    class="px-6 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 shadow-md transition-all disabled:opacity-50 flex items-center space-x-2">
+                                <svg v-if="importing" class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span>{{ importing ? 'Importing...' : 'Start Import' }}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <RoleFormModal
             :show="showRoleModal"
             :title="`Edit Role: ${editingRole?.name || ''}`"

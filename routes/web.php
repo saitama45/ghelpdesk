@@ -106,6 +106,8 @@ Route::middleware('auth')->group(function () {
         Route::put('locations/{mallHookup}', [\App\Http\Controllers\MallHookupController::class, 'updateHookup'])->name('locations.update');
     });
 
+    Route::get('users/template', [UserController::class, 'template'])->name('users.template')->middleware('can:users.create');
+    Route::post('users/import', [UserController::class, 'import'])->name('users.import')->middleware('can:users.create');
     Route::resource('users', UserController::class);
     Route::put('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
     
