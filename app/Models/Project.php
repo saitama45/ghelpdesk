@@ -14,6 +14,11 @@ class Project extends Model
 {
     use HasFactory, SoftDeletes;
 
+    /**
+     * Fallback project types. The live list is now stored in the shared
+     * reference_options table (type = project_type) — use projectTypes().
+     * This constant is only used to seed / recover when that table is empty.
+     */
     const PROJECT_TYPES = [
         'Store Opening',
         'IT Deployment',
@@ -21,6 +26,18 @@ class Project extends Model
         'Vendor Project',
         'General',
     ];
+
+    /**
+     * The single source of truth for project type options, shared with Project
+     * Templates. Returns ordered value strings; falls back to the constant if the
+     * reference table has not been seeded yet.
+     */
+    public static function projectTypes(): array
+    {
+        $types = ReferenceOption::ofType('project_type')->pluck('value')->all();
+
+        return ! empty($types) ? $types : self::PROJECT_TYPES;
+    }
 
     protected $fillable = [
         'store_id',

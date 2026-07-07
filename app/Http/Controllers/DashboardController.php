@@ -42,6 +42,8 @@ class DashboardController extends Controller
         $userIdFilter = $request->input('user_id', 'all');
         $storeIdFilter = $request->input('store_id', 'all');
         $pipelineYear = (int) $request->input('pipeline_year', (int) date('Y'));
+        $pipelineStatus = trim((string) $request->input('pipeline_status', ''));
+        $pipelineType = trim((string) $request->input('pipeline_type', ''));
         $selectedSubUnitLabel = 'all';
 
         if (
@@ -129,6 +131,8 @@ class DashboardController extends Controller
                 'user_id' => $userIdFilter,
                 'store_id' => $storeIdFilter,
                 'pipeline_year' => $pipelineYear,
+                'pipeline_status' => $pipelineStatus ?: null,
+                'pipeline_type' => $pipelineType ?: null,
             ],
             'entityFilter' => fn () => [
                 'enabled' => $canEntityFilter,
@@ -160,7 +164,7 @@ class DashboardController extends Controller
             // on the initial paint. Guarded by permission so project data is never
             // sent to users who can't view projects (the tab is hidden for them).
             'storePipeline' => fn () => $user->can('projects.view')
-                ? $this->buildStorePipeline($pipelineYear)
+                ? $this->buildStorePipeline($pipelineYear, $effectiveCompanyIds, $pipelineStatus, $pipelineType)
                 : null,
         ]);
     }
@@ -172,14 +176,24 @@ class DashboardController extends Controller
      * falls in the selected year is placed on that month; projects with no
      * target date become "Standby" backlog cards. Cards are colored by status.
      */
-    private function buildStorePipeline(int $year): array
+    private function buildStorePipeline(int $year, array $effectiveCompanyIds = [], string $statusFilter = '', string $typeFilter = ''): array
     {
         $projects = Project::query()
-            ->with('store:id,name,code,brand')
+            ->with('store:id,name,code,brand,company_id')
             ->where(function ($query) use ($year) {
                 $query->whereYear('target_go_live', $year)
                     ->orWhereNull('target_go_live');
             })
+            // Entity scope: store-based projects are limited to the selected
+            // entities; org-wide projects with no store stay visible.
+            ->when(!empty($effectiveCompanyIds), function ($query) use ($effectiveCompanyIds) {
+                $query->where(function ($sub) use ($effectiveCompanyIds) {
+                    $sub->whereNull('store_id')
+                        ->orWhereHas('store', fn ($s) => $s->whereIn('company_id', $effectiveCompanyIds));
+                });
+            })
+            ->when($statusFilter !== '', fn ($query) => $query->where('status', $statusFilter))
+            ->when($typeFilter !== '', fn ($query) => $query->where('project_type', $typeFilter))
             ->orderByRaw('CASE WHEN target_go_live IS NULL THEN 1 ELSE 0 END')
             ->orderBy('target_go_live')
             ->orderBy('name')
@@ -261,6 +275,11 @@ class DashboardController extends Controller
                 'dated'   => $dated->count(),
                 'standby' => $standby->count(),
             ],
+            // Active filter selections + the option lists that drive the dropdowns.
+            'statusFilter'   => $statusFilter,
+            'typeFilter'     => $typeFilter,
+            'statusOptions'  => ['Planning', 'Pending', 'In Progress', 'Delayed', 'Completed', 'Cancelled'],
+            'typeOptions'    => Project::projectTypes(),
         ];
     }
 

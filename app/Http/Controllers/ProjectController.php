@@ -80,7 +80,7 @@ class ProjectController extends Controller
             'projects'    => $projects,
             'stats'       => $stats,
             'typeCounts'  => $typeCounts,
-            'projectTypes' => Project::PROJECT_TYPES,
+            'projectTypes' => Project::projectTypes(),
             'filters' => [
                 'search'   => $search,
                 'status'   => $status,
@@ -102,15 +102,16 @@ class ProjectController extends Controller
             ->map(fn ($b) => ['id' => $b->id, 'title' => $b->title])
             ->values();
 
-        $defaultType = in_array($request->query('type'), Project::PROJECT_TYPES, true)
+        $projectTypes = Project::projectTypes();
+        $defaultType = in_array($request->query('type'), $projectTypes, true)
             ? $request->query('type')
-            : Project::PROJECT_TYPES[0];
+            : ($projectTypes[0] ?? 'Store Opening');
 
         return Inertia::render('Projects/Create', [
             'stores'          => Store::orderBy('name')->get(['id', 'name']),
             'vendors'         => Vendor::active()->orderBy('name')->get(['id', 'name']),
             'departments'     => Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'projectTypes'    => Project::PROJECT_TYPES,
+            'projectTypes'    => $projectTypes,
             'defaultType'     => $defaultType,
             'boardYears'      => $this->boardYears(),
             'availableBoards' => $availableBoards,
@@ -122,7 +123,7 @@ class ProjectController extends Controller
         $isStoreOpening = $request->input('project_type') === 'Store Opening';
 
         $validated = $request->validate([
-            'project_type'  => 'required|string|in:' . implode(',', Project::PROJECT_TYPES),
+            'project_type'  => 'required|string|in:' . implode(',', Project::projectTypes()),
             'store_id'      => $isStoreOpening ? 'required|exists:stores,id' : 'nullable|exists:stores,id',
             'subject_type'  => 'nullable|string',
             'subject_id'    => 'nullable|integer',
@@ -185,7 +186,7 @@ class ProjectController extends Controller
 
         return Inertia::render('Projects/Show', [
             'project'        => $project,
-            'projectTypes'   => Project::PROJECT_TYPES,
+            'projectTypes'   => Project::projectTypes(),
             'users'          => User::active()->orderBy('name')->get(['id', 'name', 'department', 'org_path']),
             'stores'         => Store::orderBy('name')->get(['id', 'name']),
             'vendors'        => Vendor::active()->orderBy('name')->get(['id', 'name']),
@@ -206,7 +207,7 @@ class ProjectController extends Controller
         $isStoreOpening = $request->input('project_type', $project->project_type) === 'Store Opening';
 
         $validated = $request->validate([
-            'project_type'  => 'required|string|in:' . implode(',', Project::PROJECT_TYPES),
+            'project_type'  => 'required|string|in:' . implode(',', Project::projectTypes()),
             'store_id'      => $isStoreOpening ? 'required|exists:stores,id' : 'nullable|exists:stores,id',
             'subject_type'  => 'nullable|string',
             'subject_id'    => 'nullable|integer',

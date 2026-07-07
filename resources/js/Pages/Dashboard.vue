@@ -161,29 +161,54 @@ const activeTab = ref(canViewPipeline ? 'pipeline' : 'flow');
 const loaded = reactive({ flow: true, charts: false, health: false, leaders: false, overview: false, pipeline: !!props.storePipeline });
 const tabLoading = ref(false);
 
-// Store Pipeline tab owns its own year selector, independent of the ticket filters.
+// Store Pipeline (CASA) tab owns its own year / status / type selectors,
+// independent of the ticket filters. Entity scope is shared with the filter bar.
 const pipelineYear = ref(props.filters?.pipeline_year || new Date().getFullYear());
+const pipelineStatus = ref(props.filters?.pipeline_status || '');
+const pipelineType = ref(props.filters?.pipeline_type || '');
+
+// The query params a pipeline-only reload sends. entity_ids already live in the
+// URL (set by the filter bar's Apply), so router.reload preserves them.
+const pipelineData = () => ({
+    pipeline_year: pipelineYear.value,
+    pipeline_status: pipelineStatus.value || undefined,
+    pipeline_type: pipelineType.value || undefined,
+});
 
 const fetchTab = (tab) => {
     if (loaded[tab]) return;
     tabLoading.value = true;
     router.reload({
         only: TAB_PROPS[tab],
-        data: tab === 'pipeline' ? { pipeline_year: pipelineYear.value } : {},
+        data: tab === 'pipeline' ? pipelineData() : {},
         onSuccess: () => { loaded[tab] = true; },
+        onFinish: () => { tabLoading.value = false; },
+    });
+};
+
+const reloadPipeline = () => {
+    tabLoading.value = true;
+    router.reload({
+        only: ['storePipeline'],
+        data: pipelineData(),
+        onSuccess: () => { loaded.pipeline = true; },
         onFinish: () => { tabLoading.value = false; },
     });
 };
 
 const changePipelineYear = (nextYear) => {
     pipelineYear.value = nextYear;
-    tabLoading.value = true;
-    router.reload({
-        only: ['storePipeline'],
-        data: { pipeline_year: nextYear },
-        onSuccess: () => { loaded.pipeline = true; },
-        onFinish: () => { tabLoading.value = false; },
-    });
+    reloadPipeline();
+};
+
+const changePipelineStatus = (nextStatus) => {
+    pipelineStatus.value = nextStatus || '';
+    reloadPipeline();
+};
+
+const changePipelineType = (nextType) => {
+    pipelineType.value = nextType || '';
+    reloadPipeline();
 };
 
 const switchTab = (tab) => {
@@ -198,6 +223,8 @@ const applyFilters = () => {
         user_id: filterForm.user_id,
         store_id: filterForm.store_id,
         pipeline_year: pipelineYear.value,
+        pipeline_status: pipelineStatus.value || undefined,
+        pipeline_type: pipelineType.value || undefined,
         ...deptFilterParams.value,
         ...(entityFilterEnabled.value ? { entity_ids: resolvedEntityIds() } : {}),
         ...(skipDefaultDepartment.value ? { skip_default_department: 1 } : {}),
@@ -2328,6 +2355,8 @@ const exportToExcel = (type) => {
                     :pipeline="storePipeline"
                     :loading="tabLoading && activeTab === 'pipeline'"
                     @change-year="changePipelineYear"
+                    @change-status="changePipelineStatus"
+                    @change-type="changePipelineType"
                 />
             </div>
         </div><!-- /pipeline tab -->

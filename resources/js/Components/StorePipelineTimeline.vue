@@ -8,7 +8,7 @@ const props = defineProps({
     loading: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['change-year']);
+const emit = defineEmits(['change-year', 'change-status', 'change-type']);
 
 const months = computed(() => props.pipeline?.months || []);
 const standby = computed(() => props.pipeline?.standby || []);
@@ -16,6 +16,11 @@ const statusLegend = computed(() => props.pipeline?.statusLegend || []);
 const totals = computed(() => props.pipeline?.totals || { total: 0, dated: 0, standby: 0 });
 const availableYears = computed(() => props.pipeline?.availableYears || []);
 const year = computed(() => props.pipeline?.year);
+
+const statusOptions = computed(() => props.pipeline?.statusOptions || []);
+const typeOptions = computed(() => props.pipeline?.typeOptions || []);
+const statusFilter = computed(() => props.pipeline?.statusFilter || '');
+const typeFilter = computed(() => props.pipeline?.typeFilter || '');
 
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth() + 1;
@@ -34,6 +39,8 @@ const FALLBACK_STYLE = { dot: 'bg-indigo-500', bar: 'border-indigo-500', chip: '
 const styleFor = (status) => STATUS_STYLES[status] || FALLBACK_STYLE;
 
 const onYearChange = (e) => emit('change-year', parseInt(e.target.value, 10));
+const onStatusChange = (e) => emit('change-status', e.target.value);
+const onTypeChange = (e) => emit('change-type', e.target.value);
 </script>
 
 <template>
@@ -66,6 +73,32 @@ const onYearChange = (e) => emit('change-year', parseInt(e.target.value, 10));
                         <div class="text-base font-black text-gray-900 dark:text-gray-100 leading-none">{{ totals.standby }}</div>
                         <div class="text-[9px] font-bold uppercase tracking-widest text-gray-400 mt-0.5">Standby</div>
                     </div>
+                </div>
+
+                <!-- Project Type filter -->
+                <div class="relative">
+                    <select
+                        :value="typeFilter"
+                        @change="onTypeChange"
+                        class="appearance-none rounded-xl border-gray-200 bg-white pl-3 pr-9 py-2.5 text-sm font-bold text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100"
+                    >
+                        <option value="">All Types</option>
+                        <option v-for="t in typeOptions" :key="t" :value="t">{{ t }}</option>
+                    </select>
+                    <svg class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                </div>
+
+                <!-- Status filter -->
+                <div class="relative">
+                    <select
+                        :value="statusFilter"
+                        @change="onStatusChange"
+                        class="appearance-none rounded-xl border-gray-200 bg-white pl-3 pr-9 py-2.5 text-sm font-bold text-gray-700 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100"
+                    >
+                        <option value="">All Statuses</option>
+                        <option v-for="s in statusOptions" :key="s" :value="s">{{ s }}</option>
+                    </select>
+                    <svg class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
                 </div>
 
                 <!-- Year selector -->
@@ -121,14 +154,14 @@ const onYearChange = (e) => emit('change-year', parseInt(e.target.value, 10));
 
             <!-- Month timeline (horizontally scrollable) -->
             <div class="flex-1 min-w-0 overflow-x-auto pb-2">
-                <div class="flex items-stretch gap-3 min-w-[900px]">
-                    <div
-                        v-for="m in months"
-                        :key="m.month"
-                        class="flex-1 min-w-[130px] flex flex-col"
-                    >
-                        <!-- Cards stack (grow upward toward the axis) -->
-                        <div class="flex-1 flex flex-col justify-end gap-2 pb-3">
+                <div class="min-w-[900px]">
+                    <!-- Cards row: each month's cards, bottom-aligned just above the axis -->
+                    <div class="flex items-end gap-3">
+                        <div
+                            v-for="m in months"
+                            :key="`cards-${m.month}`"
+                            class="flex-1 min-w-[130px] flex flex-col justify-end gap-2 pb-3"
+                        >
                             <Link
                                 v-for="card in m.cards"
                                 :key="card.id"
@@ -146,10 +179,18 @@ const onYearChange = (e) => emit('change-year', parseInt(e.target.value, 10));
                                 </div>
                             </Link>
                         </div>
+                    </div>
 
-                        <!-- Axis node + month label -->
-                        <div class="relative flex flex-col items-center">
-                            <div class="absolute top-[7px] left-0 right-0 h-0.5 bg-gradient-to-r from-gray-200 via-gray-200 to-gray-200 dark:from-gray-700 dark:via-gray-700 dark:to-gray-700"></div>
+                    <!-- Axis row: one continuous baseline with a node + label per month.
+                         Kept separate from the cards so every node sits on the same line
+                         regardless of how many cards a month holds. -->
+                    <div class="relative flex gap-3">
+                        <div class="absolute top-[7px] left-0 right-0 h-0.5 bg-gray-200 dark:bg-gray-700"></div>
+                        <div
+                            v-for="m in months"
+                            :key="`axis-${m.month}`"
+                            class="relative flex-1 min-w-[130px] flex flex-col items-center"
+                        >
                             <span
                                 :class="[
                                     'relative z-[1] w-3.5 h-3.5 rounded-full border-2 border-white shadow dark:border-gray-900',
