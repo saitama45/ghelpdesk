@@ -108,37 +108,69 @@ watch([filterSubUnit, filterStore, filterDateFrom, filterDateTo], () => {
     applyFilters();
 });
 
-const goToPage = (page) => {
-    isLoading.value = true;
-    router.get(route('attendance.logs'), { 
-        page, 
-        search: search.value,
-        sub_unit: filterSubUnit.value,
-        store_id: filterStore.value,
-        date_from: filterDateFrom.value,
-        date_to: filterDateTo.value,
-    }, {
-        preserveState: true,
+// --- Infinite scroll accumulation (mirrors Tickets/Index) ---
+// Log rows are accumulated client-side across pages. The watcher on props.logs
+// replaces the buffer on any filter/search change (page <= 1) and appends,
+// deduped, when a "load more" page arrives (page > 1).
+const accumulatedLogs = ref([...(props.logs?.data || [])]);
+const logsMeta = ref({
+    current_page: props.logs?.current_page || 1,
+    last_page: props.logs?.last_page || 1,
+    total: props.logs?.total || 0,
+});
+const loadingMoreLogs = ref(false);
+
+const mergeLogsPage = (payload) => {
+    if (!payload) return;
+    const incoming = payload.data || [];
+    if ((payload.current_page || 1) <= 1) {
+        accumulatedLogs.value = [...incoming];
+    } else {
+        const seen = new Set(accumulatedLogs.value.map(l => l.id));
+        accumulatedLogs.value = [
+            ...accumulatedLogs.value,
+            ...incoming.filter(l => !seen.has(l.id)),
+        ];
+    }
+    logsMeta.value = {
+        current_page: payload.current_page || 1,
+        last_page: payload.last_page || 1,
+        total: payload.total || 0,
+    };
+};
+
+const hasMoreLogs = computed(() => logsMeta.value.current_page < logsMeta.value.last_page);
+
+const logsShowingText = computed(() => {
+    const total = logsMeta.value.total || 0;
+    if (total === 0) return 'No records found';
+    return `Showing ${accumulatedLogs.value.length} of ${total} results`;
+});
+
+const loadMoreLogs = () => {
+    if (loadingMoreLogs.value || !hasMoreLogs.value) return;
+    loadingMoreLogs.value = true;
+    router.reload({
+        only: ['logs'],
+        data: {
+            search: search.value,
+            sub_unit: filterSubUnit.value,
+            store_id: filterStore.value,
+            date_from: filterDateFrom.value,
+            date_to: filterDateTo.value,
+            perPage: props.logs?.per_page,
+            page: logsMeta.value.current_page + 1,
+        },
         preserveScroll: true,
-        onFinish: () => isLoading.value = false
+        preserveState: true,
+        onFinish: () => { loadingMoreLogs.value = false; },
     });
 };
 
-const changePerPage = (perPage) => {
-    isLoading.value = true;
-    router.get(route('attendance.logs'), { 
-        perPage, 
-        search: search.value,
-        sub_unit: filterSubUnit.value,
-        store_id: filterStore.value,
-        date_from: filterDateFrom.value,
-        date_to: filterDateTo.value,
-    }, {
-        preserveState: true,
-        preserveScroll: true,
-        onFinish: () => isLoading.value = false
-    });
-};
+// Merge every fresh `logs` payload (filter reload → replace, load-more → append).
+watch(() => props.logs, (newLogs) => {
+    mergeLogsPage(newLogs);
+}, { deep: true });
 
 watch(search, (value) => {
     isLoading.value = true;
@@ -340,15 +372,17 @@ const stopDrag = () => {
                 title="Logs"
                 subtitle="View your time-in and time-out history"
                 v-model:search="search"
-                :data="logs.data"
-                :currentPage="logs.current_page"
-                :lastPage="logs.last_page"
+                :data="accumulatedLogs"
+                :currentPage="logsMeta.current_page"
+                :lastPage="logsMeta.last_page"
                 :perPage="logs.per_page"
-                :showingText="`Showing ${logs.from} to ${logs.to} of ${logs.total} results`"
+                :showingText="logsShowingText"
                 :isLoading="isLoading"
                 :showSearch="false"
-                @goToPage="goToPage"
-                @changePerPage="changePerPage"
+                infinite-scroll
+                :has-more="hasMoreLogs"
+                :loading-more="loadingMoreLogs"
+                @load-more="loadMoreLogs"
             >
                 <template #actions>
                     <Link

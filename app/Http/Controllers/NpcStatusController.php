@@ -99,6 +99,8 @@ class NpcStatusController extends Controller implements HasMiddleware
         $page = (int) ($validated['page'] ?? 1);
 
         $rows = Company::query()
+            // Only Entity-type companies are tracked for NPC statuses.
+            ->where('type', 'Entity')
             ->when($restrictedStoreIds !== null, function ($query) use ($year, $restrictedStoreIds) {
                 $query->whereHas('npcStatuses', function ($npcQuery) use ($year, $restrictedStoreIds) {
                     $npcQuery->where('year', $year)
@@ -845,6 +847,8 @@ class NpcStatusController extends Controller implements HasMiddleware
     private function statusCounts(int $year, ?array $restrictedStoreIds = null): array
     {
         $rows = Company::query()
+            // Only Entity-type companies are tracked for NPC statuses.
+            ->where('type', 'Entity')
             ->when($restrictedStoreIds !== null, function ($query) use ($year, $restrictedStoreIds) {
                 $query->whereHas('npcStatuses', function ($npcQuery) use ($year, $restrictedStoreIds) {
                     $npcQuery->where('year', $year)

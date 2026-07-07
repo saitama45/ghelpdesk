@@ -35,6 +35,7 @@
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Company</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Code</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Type</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Status</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Actions</th>
                         </tr>
@@ -61,6 +62,11 @@
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200">
                                     {{ company.code }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-200">
+                                    {{ company.type || 'Entity' }}
                                 </span>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
@@ -155,6 +161,19 @@
                                    class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                         </div>
                         <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Type</label>
+                            <ManageableAutocomplete
+                                v-model="form.type"
+                                :options="companyTypeOptionsLocal"
+                                option-type="company_type"
+                                placeholder="Select type..."
+                                :can-create="canCreateOption"
+                                :can-edit="canEditOption"
+                                :can-delete="canDeleteOption"
+                                @options-changed="companyTypeOptionsLocal = $event"
+                            />
+                        </div>
+                        <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Description</label>
                             <textarea v-model="form.description" rows="3"
                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"></textarea>
@@ -181,10 +200,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
+import ManageableAutocomplete from '@/Components/ManageableAutocomplete.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
@@ -192,7 +212,8 @@ import { usePagination } from '@/Composables/usePagination'
 import { usePermission } from '@/Composables/usePermission'
 
 const props = defineProps({
-    companies: Object
+    companies: Object,
+    companyTypeOptions: { type: Array, default: () => [] },
 })
 
 const { showSuccess, showError } = useToast()
@@ -200,6 +221,12 @@ const { confirm } = useConfirm()
 const { post, put, destroy } = useErrorHandler()
 const pagination = usePagination(props.companies, 'companies.index')
 const { hasPermission } = usePermission()
+
+// Manageable "type" dropdown (Entity / Brand / …), backed by reference_options.
+const companyTypeOptionsLocal = ref([...props.companyTypeOptions])
+const canCreateOption = computed(() => hasPermission('reference_options.create'))
+const canEditOption = computed(() => hasPermission('reference_options.edit'))
+const canDeleteOption = computed(() => hasPermission('reference_options.delete'))
 
 const showModal = ref(false)
 const isEditing = ref(false)
@@ -212,6 +239,7 @@ const removeLogoFlag = ref(false)
 const form = reactive({
     name: '',
     code: '',
+    type: 'Entity',
     description: '',
     is_active: true
 })
@@ -253,6 +281,7 @@ const openCreateModal = () => {
     currentCompany.value = null
     form.name = ''
     form.code = ''
+    form.type = 'Entity'
     form.description = ''
     form.is_active = true
     resetLogoState()
@@ -264,6 +293,7 @@ const editCompany = (company) => {
     currentCompany.value = company
     form.name = company.name
     form.code = company.code
+    form.type = company.type || 'Entity'
     form.description = company.description || ''
     form.is_active = company.is_active
     resetLogoState()
@@ -275,6 +305,7 @@ const closeModal = () => {
     showModal.value = false
     form.name = ''
     form.code = ''
+    form.type = 'Entity'
     form.description = ''
     form.is_active = true
     resetLogoState()
@@ -287,6 +318,7 @@ const submitForm = () => {
     const data = new FormData()
     data.append('name', form.name)
     data.append('code', form.code)
+    data.append('type', form.type || 'Entity')
     data.append('description', form.description || '')
     if (isEditing.value) {
         data.append('is_active', form.is_active ? '1' : '0')

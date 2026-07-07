@@ -159,6 +159,7 @@ Route::middleware('auth')->group(function () {
     Route::post('pos-requests/{pos_request}/approve', [\App\Http\Controllers\PosRequestController::class, 'approve'])->name('pos-requests.approve');
     Route::post('pos-requests/{pos_request}/reject', [\App\Http\Controllers\PosRequestController::class, 'reject'])->name('pos-requests.reject');
     Route::post('pos-requests/{pos_request}/remind', [\App\Http\Controllers\PosRequestController::class, 'remind'])->name('pos-requests.remind');
+    Route::post('pos-requests/{pos_request}/generate-ticket', [\App\Http\Controllers\PosRequestController::class, 'generateTicket'])->name('pos-requests.generate-ticket');
     Route::resource('sap-requests', \App\Http\Controllers\SapRequestController::class);
     Route::post('sap-requests/{sap_request}/approve', [\App\Http\Controllers\SapRequestController::class, 'approve'])->name('sap-requests.approve');
     Route::post('sap-requests/{sap_request}/reject', [\App\Http\Controllers\SapRequestController::class, 'reject'])->name('sap-requests.reject');

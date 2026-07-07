@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
-import { Link } from '@inertiajs/vue3'
+import { Link, router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import { usePagination } from '@/Composables/usePagination'
@@ -60,6 +60,30 @@ const deleteRequest = async (request) => {
             onError: () => showError('Cannot delete this request')
         })
     }
+}
+
+// A fully-approved request (0-approver auto-approval OR all levels signed off)
+// that never got its ticket — the rare "blue moon" miss that needs recovery.
+const needsTicket = (request) => request.status === 'Approved' && !request.ticket
+
+const generatingId = ref(null)
+
+const generateTicket = async (request) => {
+    const confirmed = await confirm({
+        title: 'Generate Ticket',
+        message: `Request #${request.id} is approved but has no ticket yet. Generate its ticket now?`,
+        confirmText: 'Generate',
+    })
+
+    if (!confirmed) return
+
+    generatingId.value = request.id
+    router.post(route('pos-requests.generate-ticket', request.id), {}, {
+        preserveScroll: true,
+        onSuccess: () => showSuccess('Ticket generated successfully'),
+        onError: () => showError('Failed to generate ticket'),
+        onFinish: () => { generatingId.value = null },
+    })
 }
 
 const getStatusLabel = (request) => {
@@ -270,6 +294,22 @@ const getStageDisplay = (request) => {
                                         </svg>
                                     </button>
                                     
+                                    <button
+                                        v-if="needsTicket(request) && hasPermission('pos_requests.approve')"
+                                        @click="generateTicket(request)"
+                                        :disabled="generatingId === request.id"
+                                        class="p-2 text-emerald-600 hover:text-white hover:bg-emerald-600 rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center disabled:opacity-50"
+                                        title="Generate missing ticket"
+                                    >
+                                        <svg v-if="generatingId === request.id" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4z"/>
+                                        </svg>
+                                        <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                        </svg>
+                                    </button>
+
                                     <Link
                                         v-if="hasPermission('pos_requests.edit') && request.status === 'Open'"
                                         :href="route('pos-requests.edit', request.id)"

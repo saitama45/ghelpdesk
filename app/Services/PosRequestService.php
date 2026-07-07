@@ -58,12 +58,21 @@ class PosRequestService
                 }
             }
 
-            if ($posRequest->status === 'Approved') {
-                $this->processApprovedRequest($posRequest);
-            }
-
             return $posRequest;
         });
+
+        // Auto-generate the ticket for zero-approver (auto-approved) requests AFTER
+        // the request itself is committed. Keeping it outside the transaction means a
+        // rare ticketing failure leaves a recoverable approved request (generate it
+        // later via the manual "Generate Ticket" action) instead of a hard error or,
+        // worse, a silent rollback.
+        if ($posRequest->status === 'Approved') {
+            try {
+                $this->processApprovedRequest($posRequest);
+            } catch (\Throwable $e) {
+                Log::error("POS Request #{$posRequest->id}: automatic ticket generation failed — {$e->getMessage()}");
+            }
+        }
 
         // Refresh relationships to ensure mailable has access to company and requestType
         $posRequest->load(['company', 'requestType', 'user']);
@@ -221,29 +230,25 @@ class PosRequestService
 
     /**
      * Process an approved POS Request (e.g., create tickets).
+     *
+     * Idempotent: if the request already has a live ticket, that ticket is
+     * returned and no second one is created. This lets the flow be retried
+     * (e.g. via the manual "Generate Ticket" recovery action) safely.
      */
-    public function processApprovedRequest(PosRequest $posRequest)
+    public function processApprovedRequest(PosRequest $posRequest): ?Ticket
     {
-        // 1. Generate Ticket Key (Format: COMPANYCODE-NUMBER)
-        $company = $posRequest->company;
-        $companyCode = $company->code;
+        // Idempotency guard — never create a duplicate ticket for the same request.
+        if ($posRequest->ticket_id) {
+            $existing = Ticket::withTrashed()
+                ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+                ->find($posRequest->ticket_id);
+            if ($existing) {
+                return $existing;
+            }
+            // Dangling ticket_id (ticket hard-deleted) — fall through and regenerate.
+        }
 
-        $maxNumber = Ticket::withTrashed()
-            ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
-            ->where('ticket_key', 'LIKE', "{$companyCode}-%")
-            ->get(['ticket_key'])
-            ->map(function ($t) {
-                if (preg_match('/-(\d+)$/', $t->ticket_key, $matches)) {
-                    return (int) $matches[1];
-                }
-                return 0;
-            })
-            ->max();
-
-        $nextNumber = ($maxNumber ?? 0) + 1;
-        $ticketKey = "{$companyCode}-{$nextNumber}";
-
-        // 2. Build Detailed Description from Line Items
+        // Build Detailed Description from Line Items
         $storeCodes = in_array('all', $posRequest->stores_covered) 
             ? 'All Stores' 
             : implode(', ', $posRequest->stores_covered);
@@ -316,9 +321,10 @@ class PosRequestService
 
         $fullDescription .= $detailsContent;
 
-        // 3. Create Ticket with Key and Full Details
-        $ticket = Ticket::create([
-            'ticket_key' => $ticketKey,
+        // Create the ticket. The ticket_key is assigned by TicketObserver (single
+        // source of truth) and the insert is retried on a unique-key collision so
+        // concurrent ticket creation can never leave the request without a ticket.
+        $ticket = $this->createTicketWithRetry([
             'title' => $subject,
             'description' => $fullDescription,
             'status' => 'open',
@@ -334,14 +340,31 @@ class PosRequestService
 
         $posRequest->update(['ticket_id' => $ticket->id]);
 
-        // 4. Notify CC Emails
-        $ccEmails = $posRequest->requestType->cc_emails;
-        if ($ccEmails) {
-            $emails = array_map('trim', explode("\n", $ccEmails));
-            $emails = array_filter($emails, fn($e) => filter_var($e, FILTER_VALIDATE_EMAIL));
-            
-            if (!empty($emails)) {
-                // Logic to send email notifications would go here
+        return $ticket;
+    }
+
+    /**
+     * Create a Ticket, retrying when the auto-generated ticket_key collides with a
+     * concurrently-created ticket (UNIQUE violation on tickets.ticket_key). Each
+     * retry re-runs TicketObserver::creating, which recomputes the next key.
+     */
+    private function createTicketWithRetry(array $attributes, int $attempts = 5): Ticket
+    {
+        for ($attempt = 1; ; $attempt++) {
+            try {
+                return Ticket::create($attributes);
+            } catch (\Illuminate\Database\QueryException $e) {
+                $isUniqueViolation = ($e->getCode() === '23000')
+                    || stripos($e->getMessage(), 'ticket_key') !== false
+                    || stripos($e->getMessage(), 'duplicate') !== false
+                    || stripos($e->getMessage(), 'unique') !== false;
+
+                if (!$isUniqueViolation || $attempt >= $attempts) {
+                    throw $e;
+                }
+
+                // Brief jittered backoff before recomputing the key and retrying.
+                usleep(random_int(10_000, 60_000));
             }
         }
     }

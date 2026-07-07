@@ -22,6 +22,27 @@ const { confirm } = useConfirm()
 
 const reminderLoading = ref(false)
 
+// Approved request whose ticket never got generated — the recovery affordance.
+const needsTicket = computed(() => props.posRequest.status === 'Approved' && !props.posRequest.ticket)
+const isGenerating = ref(false)
+
+async function generateTicket() {
+    const confirmed = await confirm({
+        title: 'Generate Ticket',
+        message: `This request is approved but has no ticket. Generate its ticket now?`,
+        confirmLabel: 'Generate',
+        variant: 'warning'
+    })
+    if (!confirmed) return
+    isGenerating.value = true
+    router.post(route('pos-requests.generate-ticket', props.posRequest.id), {}, {
+        preserveScroll: true,
+        onSuccess: () => showSuccess('Ticket generated successfully'),
+        onError: () => showError('Failed to generate ticket'),
+        onFinish: () => { isGenerating.value = false },
+    })
+}
+
 async function sendReminder() {
     const confirmed = await confirm({
         title: 'Send Approval Reminder',
@@ -581,6 +602,35 @@ const formatDateTime = (dateStr) => {
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Missing-ticket recovery: approved but no ticket was generated -->
+                            <div v-if="needsTicket" class="mb-8 bg-amber-50 rounded-2xl border border-amber-200 p-5 dark:bg-amber-500/10 dark:border-amber-500/30">
+                                <div class="flex items-start gap-3">
+                                    <svg class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 3a9 9 0 100 18 9 9 0 000-18z" />
+                                    </svg>
+                                    <div>
+                                        <h4 class="text-[11px] font-black text-amber-700 uppercase tracking-widest dark:text-amber-300">No Ticket Generated</h4>
+                                        <p class="text-xs text-amber-700/80 mt-1 dark:text-amber-200/80">This request is approved but its ticket was not created. You can generate it now.</p>
+                                    </div>
+                                </div>
+                                <button
+                                    v-if="hasPermission('pos_requests.approve')"
+                                    @click="generateTicket"
+                                    :disabled="isGenerating"
+                                    class="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-black hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50"
+                                >
+                                    <svg v-if="isGenerating" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4z"/>
+                                    </svg>
+                                    <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                    </svg>
+                                    {{ isGenerating ? 'Generating…' : 'Generate Ticket' }}
+                                </button>
+                            </div>
+
                             <div class="relative px-2">
                                 <!-- Vertical Line -->
                                 <div class="absolute left-[27px] top-2 bottom-2 w-1 bg-gradient-to-b from-indigo-500 via-gray-100 to-gray-50 rounded-full"></div>

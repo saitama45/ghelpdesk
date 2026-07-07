@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
+use App\Models\ReferenceOption;
 use App\Support\CompanyContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -35,6 +36,7 @@ class CompanyController extends Controller implements HasMiddleware
 
         return Inertia::render('Companies/Index', [
             'companies' => $companies,
+            'companyTypeOptions' => ReferenceOption::ofType('company_type'),
         ]);
     }
 
@@ -43,11 +45,13 @@ class CompanyController extends Controller implements HasMiddleware
         $request->validate([
             'name'        => 'required|string|max:255',
             'code'        => 'required|string|max:50|unique:companies',
+            'type'        => 'nullable|string|max:100',
             'description' => 'nullable|string',
             'logo'        => 'nullable|image|max:2048',
         ]);
 
         $data = $request->only(['name', 'code', 'description']);
+        $data['type'] = $request->input('type') ?: 'Entity';
 
         if ($request->hasFile('logo')) {
             $data['logo'] = str_replace('\\', '/', $request->file('logo')->store('company-logos', 'public'));
@@ -63,6 +67,7 @@ class CompanyController extends Controller implements HasMiddleware
         $request->validate([
             'name'        => 'required|string|max:255',
             'code'        => 'required|string|max:50|unique:companies,code,' . $company->id,
+            'type'        => 'nullable|string|max:100',
             'description' => 'nullable|string',
             'is_active'   => 'boolean',
             'logo'        => 'nullable|image|max:2048',
@@ -71,6 +76,7 @@ class CompanyController extends Controller implements HasMiddleware
 
         $company->name        = $request->name;
         $company->code        = $request->code;
+        $company->type        = $request->input('type') ?: 'Entity';
         $company->description = $request->description;
         $company->is_active   = $request->boolean('is_active');
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Company;
 use App\Models\ProjectTemplate;
 use App\Models\ReferenceOption;
 use App\Models\Store;
@@ -15,6 +16,7 @@ class ReferenceOptionController extends Controller implements HasMiddleware
 {
     private const ALLOWED_TYPES = [
         'project_type',
+        'company_type',
         'store_class',
         'store_hookup',
         'store_system',
@@ -107,6 +109,10 @@ class ReferenceOptionController extends Controller implements HasMiddleware
 
         if ($type === 'project_type') {
             return [ProjectTemplate::where('project_type', $value)->exists(), 'project templates'];
+        }
+
+        if ($type === 'company_type') {
+            return [Company::where('type', $value)->exists(), 'companies'];
         }
 
         if ($type === 'store_class') {

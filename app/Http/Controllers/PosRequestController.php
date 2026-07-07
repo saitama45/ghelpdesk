@@ -34,7 +34,7 @@ class PosRequestController extends Controller implements HasMiddleware
             new Middleware('can:pos_requests.create', only: ['create', 'store']),
             new Middleware('can:pos_requests.edit', only: ['edit', 'update']),
             new Middleware('can:pos_requests.delete', only: ['destroy']),
-            new Middleware('can:pos_requests.approve', only: ['approve', 'reject']),
+            new Middleware('can:pos_requests.approve', only: ['approve', 'reject', 'generateTicket']),
             new Middleware('can:pos_requests.view', only: ['remind']),
         ];
     }
@@ -304,7 +304,9 @@ class PosRequestController extends Controller implements HasMiddleware
             return redirect()->back()->with('error', 'You already approved this level.');
         }
 
-        DB::transaction(function () use ($request, $posRequest) {
+        $fullyApproved = false;
+
+        DB::transaction(function () use ($request, $posRequest, &$fullyApproved) {
             $requestType = $posRequest->requestType;
 
             PosRequestApproval::create([
@@ -326,7 +328,7 @@ class PosRequestController extends Controller implements HasMiddleware
                     'status' => 'Approved',
                     'current_approval_level' => 0,
                 ]);
-                $this->posRequestService->processApprovedRequest($posRequest->fresh());
+                $fullyApproved = true;
             } else {
                 $posRequest->update([
                     'status' => 'Approved Level ' . $posRequest->current_approval_level,
@@ -334,6 +336,17 @@ class PosRequestController extends Controller implements HasMiddleware
                 $posRequest->increment('current_approval_level');
             }
         });
+
+        // Generate the ticket AFTER the approval commits, so a rare ticketing failure
+        // leaves an approved-but-ticketless request that can be recovered manually
+        // (see generateTicket) rather than rolling back the approval itself.
+        if ($fullyApproved) {
+            try {
+                $this->posRequestService->processApprovedRequest($posRequest->fresh());
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error("POS Request #{$posRequest->id}: ticket generation after final approval failed — {$e->getMessage()}");
+            }
+        }
 
         // Ensure the model and its relationships are fresh for Inertia
         $posRequest->refresh();
@@ -379,6 +392,42 @@ class PosRequestController extends Controller implements HasMiddleware
         $this->notifyPosRequester($posRequest, 'rejected');
 
         return redirect()->back()->with('success', 'Request rejected successfully');
+    }
+
+    /**
+     * Manually (re)generate the ticket for a request that is fully approved but has
+     * no ticket — the rare recovery path for when automatic generation failed.
+     */
+    public function generateTicket(PosRequest $posRequest)
+    {
+        // Eligible only when the request is done with approvals and still ticketless.
+        if ($posRequest->status !== 'Approved' || $posRequest->ticket_id) {
+            return redirect()->back()->with('error', 'This request already has a ticket or is not fully approved yet.');
+        }
+
+        try {
+            DB::transaction(function () use ($posRequest) {
+                // Lock the row so two concurrent clicks can't create two tickets.
+                $locked = PosRequest::whereKey($posRequest->id)->lockForUpdate()->first();
+
+                if (!$locked || $locked->status !== 'Approved' || $locked->ticket_id) {
+                    return;
+                }
+
+                $this->posRequestService->processApprovedRequest($locked);
+            });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("Manual POS ticket generation failed for #{$posRequest->id}: {$e->getMessage()}");
+            return redirect()->back()->with('error', 'Ticket generation failed. Please try again.');
+        }
+
+        $fresh = $posRequest->fresh('ticket');
+
+        if (!$fresh || !$fresh->ticket_id) {
+            return redirect()->back()->with('error', 'Ticket could not be generated. Please try again.');
+        }
+
+        return redirect()->back()->with('success', 'Ticket ' . ($fresh->ticket->ticket_key ?? '') . ' generated successfully.');
     }
 
     /**
