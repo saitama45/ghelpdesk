@@ -963,7 +963,18 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                                     <p class="text-xs text-gray-500 font-medium dark:text-gray-300">
                                         {{ event.status || 'Unknown' }}<span v-if="event.ticket" class="ml-1 text-gray-400 dark:text-gray-400">[{{ event.ticket.ticket_key }}]</span>
                                     </p>
-                                    <p v-if="event.store" class="text-[10px] text-blue-600 mt-1 italic">@ {{ event.store.name }}</p>
+                                    <!-- Multiple deployment locations for this day: show each store with its own time window. -->
+                                    <div v-if="event.day_segments && event.day_segments.length > 1" class="mt-1 space-y-0.5">
+                                        <div
+                                            v-for="(seg, i) in event.day_segments"
+                                            :key="i"
+                                            class="flex items-center justify-between gap-2"
+                                        >
+                                            <span class="text-[10px] text-blue-600 italic truncate">@ {{ seg.store_name || 'No location' }}</span>
+                                            <span v-if="shouldShowTime(event.status)" class="text-[10px] font-medium text-gray-400 shrink-0 dark:text-gray-400">{{ formatTime(seg.start_time) }} - {{ formatTime(seg.end_time) }}</span>
+                                        </div>
+                                    </div>
+                                    <p v-else-if="event.store" class="text-[10px] text-blue-600 mt-1 italic">@ {{ event.store.name }}</p>
                                     <div v-if="shouldShowTime(event.status) && (getActualTimesForDate(event, selectedDayDate).actual_time_in || getActualTimesForDate(event, selectedDayDate).actual_time_out)"
                                          class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] font-bold">
                                         <span v-if="getActualTimesForDate(event, selectedDayDate).actual_time_in" class="text-emerald-600">

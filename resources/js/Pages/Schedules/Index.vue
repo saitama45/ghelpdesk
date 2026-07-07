@@ -1775,6 +1775,17 @@ const calendarSchedules = computed(() => {
                     ...(schedule.actual_times_by_date ?? {}),
                     [dateKey]: actualTimes,
                 },
+                // Per-location deployment breakdown for this date, so the day modal
+                // can show each store + its own time window instead of collapsing
+                // everything into the first location and the overall span.
+                day_segments: sortedSegments.map(segment => ({
+                    store_id: segment.store_id ?? segment.store?.id ?? null,
+                    store_name: segment.store?.name ?? null,
+                    start_time: segment.start_time,
+                    end_time: segment.end_time,
+                    actual_time_in: segment.actual_time_in ?? null,
+                    actual_time_out: segment.actual_time_out ?? null,
+                })),
                 calendar_date_key: dateKey,
             }
         })
