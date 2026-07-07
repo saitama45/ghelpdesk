@@ -341,7 +341,11 @@ class StoreReportService
         $storesQuery = Store::query()
             ->where('is_active', true)
             ->where('class', 'Office')
-            ->with(['company:id,name,code', 'users:id,name']);
+            ->with([
+                'company:id,name,code',
+                // Only active assigned team members appear on the card label.
+                'users' => fn ($q) => $q->where('users.is_active', true)->select('users.id', 'users.name'),
+            ]);
 
         if (is_array($companyIds)) {
             $storesQuery->whereIn('company_id', $companyIds);

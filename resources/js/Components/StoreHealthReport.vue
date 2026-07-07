@@ -257,6 +257,14 @@ const entityTotals = computed(() => {
     return totals;
 });
 
+// Share of all stores in each health bucket (buckets are mutually exclusive, so
+// the four percentages sum to 100%). Shown under the totals row.
+const entityBucketPct = (key) => {
+    const total = entityTotals.value.total_stores || 0;
+    if (!total) return '0%';
+    return Math.round((entityTotals.value.counts[key] / total) * 100) + '%';
+};
+
 const shouldCenterBoxes = computed(() => {
     if (!filterNodeId.value) return true;
     
@@ -457,7 +465,10 @@ const getAreaItemClass = (count, maxCols) => {
                             <td class="px-3 pt-3 font-black uppercase text-[11px] tracking-wider text-gray-500 border-t-2 border-gray-200 sticky left-0 bg-white dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400">All Entities</td>
                             <td class="px-3 pt-3 text-right font-black tabular-nums border-t-2 border-gray-200 dark:border-gray-600">{{ entityTotals.total_stores }}</td>
                             <td class="px-3 pt-3 text-right font-black text-blue-600 tabular-nums border-t-2 border-gray-200 dark:border-gray-600">{{ entityTotals.open_tickets }}</td>
-                            <td v-for="col in healthSummaryItems" :key="col.key" class="px-2 pt-3 text-center font-black tabular-nums border-t-2 border-gray-200 dark:border-gray-600">{{ entityTotals.counts[col.key] }}</td>
+                            <td v-for="col in healthSummaryItems" :key="col.key" class="px-2 pt-3 text-center border-t-2 border-gray-200 dark:border-gray-600">
+                                <div class="font-black tabular-nums">{{ entityTotals.counts[col.key] }}</div>
+                                <div class="text-[10px] font-bold text-gray-400 tabular-nums dark:text-gray-500">{{ entityBucketPct(col.key) }}</div>
+                            </td>
                         </tr>
                     </tfoot>
                 </table>
