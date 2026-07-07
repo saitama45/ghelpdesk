@@ -36,6 +36,7 @@ const props = defineProps({
     departmentReferences: Array,
     assignableStaff: Array,
     companies: Array,
+    stores: Array,
 });
 
 const requestedTab = new URLSearchParams(window.location.search).get('tab');
@@ -157,6 +158,7 @@ const autoRules = ref(
         email: r.email ?? '',
         assignee_ids: Array.isArray(r.assignee_ids) ? r.assignee_ids.map(Number) : [],
         company_id: r.company_id ? Number(r.company_id) : null,
+        store_id: r.store_id ? Number(r.store_id) : null,
     }))
 );
 const autoDefaults = ref(parseJsonSetting('auto_assignee_defaults', []).map(Number));
@@ -187,6 +189,19 @@ const companyOptions = computed(() => [
     })),
 ]);
 
+const storeOptions = computed(() => [
+    { id: null, label: '— Any location —' },
+    ...(props.stores ?? []).map(s => ({
+        id: s.id,
+        label: s.code ? `${s.name} (${s.code})` : s.name,
+    })),
+]);
+
+const storeLabelFor = (storeId) => {
+    const store = props.stores?.find(s => s.id === storeId);
+    return store ? (store.code ?? store.name) : '—';
+};
+
 const getAgent = (id) => props.assignableStaff?.find(a => a.id === id) ?? null;
 const getAgentInitials = (id) => {
     const name = getAgent(id)?.name ?? '';
@@ -213,7 +228,7 @@ const openDropdown = (key) => { activeDropdown.value = key; };
 const closeDropdown = () => { setTimeout(() => { activeDropdown.value = null; }, 150); };
 
 const addAutoRule = () => {
-    autoRules.value.unshift({ email: '', assignee_ids: [], company_id: null });
+    autoRules.value.unshift({ email: '', assignee_ids: [], company_id: null, store_id: null });
     ruleSearchQueries.value.unshift('');
     editingRuleIndex.value = 0;
     rulesListSearch.value = '';
@@ -1260,10 +1275,11 @@ const syncEmails = () => {
                                     <!-- Rules table -->
                                     <div class="border border-gray-200 rounded-xl overflow-hidden dark:border-gray-700">
                                         <!-- Column headers -->
-                                        <div class="grid grid-cols-[1fr_140px_130px_72px] bg-gray-50 border-b border-gray-200 px-4 py-2 dark:bg-gray-800/80 dark:border-gray-700">
+                                        <div class="grid grid-cols-[1fr_130px_120px_120px_72px] bg-gray-50 border-b border-gray-200 px-4 py-2 dark:bg-gray-800/80 dark:border-gray-700">
                                             <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-300">Requester Email</span>
                                             <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-300">Assignees</span>
                                             <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-300">Entity</span>
+                                            <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-300">Location</span>
                                             <span class="text-[10px] font-black text-gray-500 uppercase tracking-wider text-right dark:text-gray-300">Actions</span>
                                         </div>
 
@@ -1284,7 +1300,7 @@ const syncEmails = () => {
                                                 <!-- Collapsed row -->
                                                 <div
                                                     :class="[
-                                                        'grid grid-cols-[1fr_140px_130px_72px] items-center px-4 py-3 gap-3 cursor-pointer transition-colors select-none',
+                                                        'grid grid-cols-[1fr_130px_120px_120px_72px] items-center px-4 py-3 gap-3 cursor-pointer transition-colors select-none',
                                                         editingRuleIndex === i ? 'bg-blue-50 dark:bg-blue-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
                                                     ]"
                                                     @click="toggleEditRule(i)"
@@ -1319,6 +1335,14 @@ const syncEmails = () => {
                                                     <div class="min-w-0">
                                                         <span v-if="autoRules[i].company_id" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 truncate max-w-full">
                                                             {{ props.companies?.find(c => c.id === autoRules[i].company_id)?.code ?? props.companies?.find(c => c.id === autoRules[i].company_id)?.name ?? '—' }}
+                                                        </span>
+                                                        <span v-else class="text-[10px] text-gray-400 italic dark:text-gray-500">Any</span>
+                                                    </div>
+
+                                                    <!-- Location -->
+                                                    <div class="min-w-0">
+                                                        <span v-if="autoRules[i].store_id" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 truncate max-w-full">
+                                                            {{ storeLabelFor(autoRules[i].store_id) }}
                                                         </span>
                                                         <span v-else class="text-[10px] text-gray-400 italic dark:text-gray-500">Any</span>
                                                     </div>
@@ -1372,12 +1396,35 @@ const syncEmails = () => {
                                                             />
                                                             <p class="mt-1 text-[10px] text-gray-400 dark:text-gray-500">Ticket will be assigned to this entity on match.</p>
                                                         </div>
+                                                        <div class="min-w-[180px] flex-1 max-w-xs">
+                                                            <InputLabel value="Assign to Location" class="!text-[10px] uppercase text-gray-500 dark:text-gray-300" />
+                                                            <Autocomplete
+                                                                class="mt-1"
+                                                                :model-value="autoRules[i].store_id"
+                                                                @update:model-value="v => autoRules[i].store_id = v === null || v === '' ? null : Number(v)"
+                                                                :options="storeOptions"
+                                                                value-key="id"
+                                                                label-key="label"
+                                                                placeholder="— Any location —"
+                                                                size="sm"
+                                                            />
+                                                            <p class="mt-1 text-[10px] text-gray-400 dark:text-gray-500">Ticket will be tagged to this store/location on match.</p>
+                                                        </div>
                                                     </div>
 
                                                     <!-- Assignee picker with drag-to-reorder -->
                                                     <div>
                                                         <InputLabel value="Round-Robin Assignees" class="!text-[10px] uppercase text-gray-500 dark:text-gray-300" />
                                                         <p class="text-[10px] text-gray-400 mt-0.5 mb-2 dark:text-gray-400">Add agents below, then drag <svg class="inline w-3 h-3 mb-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M3 15h18v-2H3v2zm0 4h18v-2H3v2zm0-8h18V9H3v2zm0-6v2h18V5H3z"/></svg> to set the rotation order.</p>
+
+                                                        <!-- How round-robin works -->
+                                                        <div class="mb-3 flex items-start gap-2 rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-2 dark:bg-indigo-900/15 dark:border-indigo-800">
+                                                            <svg class="w-3.5 h-3.5 text-indigo-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                            <div class="text-[10px] leading-relaxed text-indigo-700 dark:text-indigo-300">
+                                                                <span class="font-black">How round-robin works:</span>
+                                                                when this rule matches, incoming tickets are handed to the agents below <span class="font-bold">one at a time, in the order shown</span> — agent #1 takes the 1st ticket, #2 the next, and so on, then it loops back to #1. The rotation is <span class="font-bold">remembered across tickets per rule</span>, so workload is spread evenly rather than piling on one person. Drag to change who comes first. If a rule has no agents it is skipped and the global default agents are used instead.
+                                                            </div>
+                                                        </div>
 
                                                         <!-- Search to add -->
                                                         <div class="relative max-w-lg">

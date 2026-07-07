@@ -271,6 +271,9 @@ class EmailTicketService
             if ($resolved['company_id']) {
                 $autoUpdateData['company_id'] = $resolved['company_id'];
             }
+            if ($resolved['store_id'] ?? null) {
+                $autoUpdateData['store_id'] = $resolved['store_id'];
+            }
             if (!empty($autoUpdateData)) {
                 $ticket->update($autoUpdateData);
             }

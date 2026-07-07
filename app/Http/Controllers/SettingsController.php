@@ -38,12 +38,15 @@ class SettingsController extends Controller implements HasMiddleware
 
         $companies = Company::where('is_active', true)->select('id', 'name', 'code')->orderBy('name')->get();
 
+        $stores = \App\Models\Store::where('is_active', true)->select('id', 'name', 'code')->orderBy('name')->get();
+
         return Inertia::render('Settings/Index', [
             'settings' => $settings,
             'subUnits' => $subUnits,
             'departmentReferences' => $this->organizationReferences->tree(activeOnly: true),
             'assignableStaff' => $assignableStaff,
             'companies' => $companies,
+            'stores' => $stores,
         ]);
     }
 

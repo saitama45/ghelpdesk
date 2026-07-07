@@ -679,6 +679,9 @@ class TicketController extends Controller
                     if ($resolved['company_id']) {
                         $data['company_id'] = $resolved['company_id'];
                     }
+                    if (($resolved['store_id'] ?? null) && \App\Models\Store::where('id', $resolved['store_id'])->exists()) {
+                        $data['store_id'] = $resolved['store_id'];
+                    }
                 }
             }
 
