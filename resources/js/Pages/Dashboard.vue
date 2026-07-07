@@ -157,6 +157,8 @@ const TABS = computed(() => [
 ]);
 // CASA Pipeline is the default landing tab when permitted; otherwise Ticket Flow Board.
 const activeTab = ref(canViewPipeline ? 'pipeline' : 'flow');
+// Live Store Health sub-tabs: sector view (default) vs corporate-office view.
+const healthSubTab = ref('sectors');
 // Both the default landing tab and Ticket Flow Board data are present on first paint.
 const loaded = reactive({ flow: true, charts: false, health: false, leaders: false, overview: false, pipeline: !!props.storePipeline });
 const tabLoading = ref(false);
@@ -1242,11 +1244,49 @@ const exportToExcel = (type) => {
                 <Link :href="route('reports.store-health')" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider">Full Report &rarr;</Link>
             </div>
 
+            <!-- Sub-tabs: Store Sectors vs Corporate Office Sector -->
+            <div class="mb-5 inline-flex items-center gap-1 rounded-xl bg-gray-100 p-1 shadow-inner border border-gray-200 dark:bg-gray-900/60 dark:border-gray-700">
+                <button
+                    type="button"
+                    @click="healthSubTab = 'sectors'"
+                    class="flex items-center gap-1.5 px-4 py-2 text-xs font-black uppercase tracking-wide rounded-lg transition-all"
+                    :class="healthSubTab === 'sectors'
+                        ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-200 dark:bg-gray-700 dark:text-blue-300 dark:ring-blue-500/40'
+                        : 'text-gray-500 hover:text-gray-800 hover:bg-white/60 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-800/60'"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                    Store Sectors
+                </button>
+                <button
+                    type="button"
+                    @click="healthSubTab = 'office'"
+                    class="flex items-center gap-1.5 px-4 py-2 text-xs font-black uppercase tracking-wide rounded-lg transition-all"
+                    :class="healthSubTab === 'office'
+                        ? 'bg-white text-blue-700 shadow-sm ring-1 ring-blue-200 dark:bg-gray-700 dark:text-blue-300 dark:ring-blue-500/40'
+                        : 'text-gray-500 hover:text-gray-800 hover:bg-white/60 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:bg-gray-800/60'"
+                >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V7a2 2 0 00-2-2h-1V3H8v2H7a2 2 0 00-2 2v14m14 0H5m4-4h.01M9 13h.01M9 9h.01M15 17h.01M15 13h.01M15 9h.01" /></svg>
+                    Corporate Office Sector
+                </button>
+            </div>
+
             <StoreHealthReport
+                v-show="healthSubTab === 'sectors'"
                 :report-data="storeHealth.reportData"
                 :summary="storeHealth.summary"
                 :thresholds="storeHealth.thresholds"
                 :entity-health="storeHealth.entityHealth"
+                :show-filters="false"
+                :filters="filters"
+            />
+
+            <StoreHealthReport
+                v-if="storeHealth.office"
+                v-show="healthSubTab === 'office'"
+                :report-data="storeHealth.office.reportData"
+                :summary="storeHealth.office.summary"
+                :thresholds="storeHealth.thresholds"
+                :entity-health="storeHealth.office.entityHealth"
                 :show-filters="false"
                 :filters="filters"
             />

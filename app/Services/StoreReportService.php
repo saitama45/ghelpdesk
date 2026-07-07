@@ -24,6 +24,10 @@ class StoreReportService
         // bypass the active-entity global scope and use exactly these companies.
         $companyIds = $filters['company_ids'] ?? null;
         $isCtMode = $this->isCorporateTechnologyFilter($departmentNodeId, $subUnit);
+        // When set, corporate-office stores (class = "Office") are carved out of the
+        // sector view (reportData / summary / entity heatmap) and returned as their
+        // own "office" block. Opt-in so the full report page / PDF stay unchanged.
+        $splitOffice = (bool) ($filters['split_office'] ?? false);
 
         // Query active tickets. Sector summaries intentionally stay based on
         // the ticket's configured store sector, not the assignee hierarchy.
@@ -67,6 +71,7 @@ class StoreReportService
             ->get()
             ->filter(fn ($ticket) => !$isCtMode || (int) $ticket->store?->sector === 0)
             ->filter(fn ($ticket) => $this->ticketHasReportableStoreSector($ticket))
+            ->filter(fn ($ticket) => !$splitOffice || $ticket->store?->class !== 'Office')
             ->filter(fn ($ticket) => $this->ticketMatchesDisplayUser($ticket, $userId, $sectorAssignments));
 
         $reportData = $activeTickets->groupBy(function ($ticket) use ($sectorAssignments, $isCtMode) {
@@ -133,7 +138,19 @@ class StoreReportService
 
         // Entity health heatmap — every active store in scope bucketed by open-ticket
         // count (0 open = Healthy). Entity-wide, independent of assignee/dept/sector.
-        $entityHealth = $this->buildEntityHealthHeatmap($companyIds, $storeId, $asOfDate, $thresholds);
+        // When splitting out offices, the sector heatmap excludes them.
+        $entityHealth = $this->buildEntityHealthHeatmap(
+            $companyIds,
+            $storeId,
+            $asOfDate,
+            $thresholds,
+            $splitOffice ? 'exclude_office' : null
+        );
+
+        // Corporate-office block (per-office cards + detail table + office-only heatmap).
+        $office = $splitOffice
+            ? $this->buildOfficeHealth($companyIds, $storeId, $asOfDate, $thresholds)
+            : null;
 
         // Summary logic
         $summary = [
@@ -149,17 +166,19 @@ class StoreReportService
             ->get()
             ->filter(fn ($ticket) => !$isCtMode || (int) $ticket->store?->sector === 0)
             ->filter(fn ($ticket) => $this->ticketHasReportableStoreSector($ticket))
+            ->filter(fn ($ticket) => !$splitOffice || $ticket->store?->class !== 'Office')
             ->filter(fn ($ticket) => $this->ticketMatchesDisplayUser($ticket, $userId, $sectorAssignments));
 
         if ($isCtMode) {
             $summary['ct'] = $this->buildCtSummary($summaryTickets, $thresholds);
 
-            return [
+            return array_filter([
                 'reportData' => $reportData,
                 'summary' => $summary,
                 'thresholds' => $thresholds,
                 'entityHealth' => $entityHealth,
-            ];
+                'office' => $office,
+            ], fn ($value) => $value !== null);
         }
 
         $ticketCountsBySectorStore = $summaryTickets
@@ -212,12 +231,13 @@ class StoreReportService
             }
         }
 
-        return [
+        return array_filter([
             'reportData' => $reportData,
             'summary' => $summary,
             'thresholds' => $thresholds,
             'entityHealth' => $entityHealth,
-        ];
+            'office' => $office,
+        ], fn ($value) => $value !== null);
     }
 
     /**
@@ -230,11 +250,17 @@ class StoreReportService
      * the store filter and the as-of date, but NOT the assignee dept/user/sector
      * (an entity's health spans every sector).
      */
-    private function buildEntityHealthHeatmap($companyIds, $storeId, $asOfDate, array $thresholds): array
+    private function buildEntityHealthHeatmap($companyIds, $storeId, $asOfDate, array $thresholds, ?string $classScope = null): array
     {
         $storesQuery = Store::query()
             ->where('is_active', true)
             ->with('company:id,name,code');
+
+        if ($classScope === 'only_office') {
+            $storesQuery->where('class', 'Office');
+        } elseif ($classScope === 'exclude_office') {
+            $storesQuery->where('class', '!=', 'Office');
+        }
 
         if (is_array($companyIds)) {
             $storesQuery->whereIn('company_id', $companyIds);
@@ -301,6 +327,104 @@ class StoreReportService
             ->sortByDesc('total_stores')
             ->values()
             ->all();
+    }
+
+    /**
+     * Build the Corporate Office block for the Live Store Health tab. Corporate
+     * offices are stores classified as "Office"; they carry out-of-range sector
+     * numbers and so never fit the North/South sector cards. Every active office
+     * store is shown as its own health card (0 open tickets = Healthy), plus a
+     * per-entity detail table and an office-only entity heatmap.
+     */
+    private function buildOfficeHealth($companyIds, $storeId, $asOfDate, array $thresholds): array
+    {
+        $storesQuery = Store::query()
+            ->where('is_active', true)
+            ->where('class', 'Office')
+            ->with(['company:id,name,code', 'users:id,name']);
+
+        if (is_array($companyIds)) {
+            $storesQuery->whereIn('company_id', $companyIds);
+        }
+        if ($storeId && $storeId !== 'all') {
+            $storesQuery->where('id', $storeId);
+        }
+
+        $stores = $storesQuery->get();
+
+        if ($stores->isEmpty()) {
+            return [
+                'summary' => ['office' => [], 'is_office_mode' => true],
+                'reportData' => [],
+                'entityHealth' => [],
+            ];
+        }
+
+        // Open-ticket counts per office store, same open/as-of scope as the tab.
+        $ticketQuery = Ticket::query()
+            ->withoutGlobalScope(ActiveEntityScope::class)
+            ->whereNotIn('tickets.status', ['resolved', 'closed'])
+            ->whereIn('tickets.store_id', $stores->pluck('id'));
+
+        if ($asOfDate) {
+            $ticketQuery->whereDate('tickets.created_at', '<=', $asOfDate);
+        }
+
+        $openCountsByStore = $ticketQuery
+            ->selectRaw('store_id, COUNT(*) as c')
+            ->groupBy('store_id')
+            ->pluck('c', 'store_id');
+
+        // One health card per office store — the store's own open count is bucketed,
+        // so a store with zero open tickets folds into "Healthy".
+        $cards = $stores->map(function ($store) use ($openCountsByStore, $thresholds) {
+            $count = (int) ($openCountsByStore->get($store->id) ?? 0);
+            $healthCounts = ['green' => 0, 'yellow' => 0, 'orange' => 0, 'red' => 0];
+            $healthCounts[$this->healthBucket($count, $thresholds)] = 1;
+            $team = $store->users->pluck('name')->implode(', ');
+
+            return [
+                'store_id' => $store->id,
+                'store_code' => $store->code,
+                'store_name' => $store->name,
+                'area' => $store->area,
+                'team' => $team !== '' ? $team : 'Unassigned',
+                'total_tickets' => $count,
+                'health_counts' => $healthCounts,
+            ];
+        })->sortBy('store_code')->values()->all();
+
+        // Detail table, grouped by entity, reusing the sector reportData shape.
+        $reportData = $stores
+            ->groupBy('company_id')
+            ->map(function ($companyStores) use ($openCountsByStore) {
+                $company = $companyStores->first()->company;
+
+                $storeRows = $companyStores->map(fn ($store) => [
+                    'id' => $store->id,
+                    'code' => $store->code,
+                    'name' => $store->name,
+                    'sector' => $store->sector,
+                    'area' => $store->area,
+                    'ticket_count' => (int) ($openCountsByStore->get($store->id) ?? 0),
+                ])->sortBy([['code', 'asc'], ['name', 'asc']])->values();
+
+                return [
+                    'id' => 'office-company-'.($company?->id ?? 'none'),
+                    'name' => $company?->name ?? 'Unassigned Entity',
+                    'sub_unit' => null,
+                    'stores' => $storeRows,
+                ];
+            })
+            ->sortBy('name')
+            ->values()
+            ->all();
+
+        return [
+            'summary' => ['office' => $cards, 'is_office_mode' => true],
+            'reportData' => $reportData,
+            'entityHealth' => $this->buildEntityHealthHeatmap($companyIds, $storeId, $asOfDate, $thresholds, 'only_office'),
+        ];
     }
 
     private function getThresholdsForScope($subUnit, $allThresholds, $departmentId = null, $departmentNodeId = null)

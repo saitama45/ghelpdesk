@@ -296,6 +296,9 @@ class DashboardController extends Controller
             'user_id' => $userIdFilter,
             'store_id' => $storeIdFilter,
             'company_ids' => $effectiveCompanyIds,
+            // Carve corporate-office stores (class = "Office") into their own block so
+            // the dashboard can show Store Sectors vs Corporate Office Sector sub-tabs.
+            'split_office' => true,
         ]);
     }
 

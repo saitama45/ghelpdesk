@@ -205,6 +205,17 @@ const healthSummaryItems = computed(() => [
 
 const healthCount = (item, key) => item.health_counts?.[key] ?? 0;
 const isCtMode = computed(() => Boolean(props.summary?.is_ct_mode));
+const isOfficeMode = computed(() => Boolean(props.summary?.is_office_mode));
+
+// The single health bucket an office store falls into (its own open-ticket count).
+// Cards carry exactly one non-zero bucket; default to Healthy when none.
+const officeBucket = (item) => {
+    const counts = item.health_counts || {};
+    for (const bucket of healthSummaryItems.value) {
+        if ((counts[bucket.key] || 0) > 0) return bucket;
+    }
+    return healthSummaryItems.value[0];
+};
 
 // ── Entity health heatmap ─────────────────────────────────────────────
 const BUCKET_KEYS = ['green', 'yellow', 'orange', 'red'];
@@ -505,8 +516,41 @@ const getAreaItemClass = (count, maxCols) => {
                 </div>
             </div>
 
+            <!-- Corporate Office -->
+            <div v-if="isOfficeMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+                <div class="bg-gray-800 py-2.5 text-center">
+                    <span class="text-xs sm:text-sm font-black text-white tracking-[0.3em] sm:tracking-[0.5em] uppercase">C O R P O R A T E &nbsp;&nbsp; O F F I C E</span>
+                </div>
+                <div v-if="summary.office?.length" :class="getAreaGridClass(summary.office.length, 6)">
+                    <div v-for="item in summary.office" :key="item.store_id" :class="getAreaItemClass(summary.office.length, 6)">
+                        <div class="bg-gray-50 py-1.5 px-2 text-center border-b border-gray-200 dark:bg-gray-900/50 dark:border-gray-700">
+                            <span class="text-[9px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-300">{{ item.store_code }}</span>
+                        </div>
+                        <div class="px-2 pt-2 text-center">
+                            <span class="block text-[11px] font-bold text-blue-600 truncate" :title="item.store_name">{{ item.store_name }}</span>
+                            <span class="block text-[9px] font-semibold text-gray-400 truncate dark:text-gray-500" :title="item.team">{{ item.team }}</span>
+                        </div>
+                        <button
+                            @click="item.total_tickets > 0 ? fetchTickets(item.store_id) : null"
+                            class="py-4 px-3 mt-1 w-full flex flex-col items-center justify-center transition-all shadow-inner text-center bg-white border-gray-200 text-gray-900 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700"
+                            :class="item.total_tickets > 0 ? 'hover:bg-blue-50 cursor-pointer' : 'cursor-default'"
+                        >
+                            <span class="block text-[9px] font-black uppercase tracking-wider text-blue-500">Tickets</span>
+                            <span class="block text-3xl font-black text-blue-700 leading-tight">{{ item.total_tickets ?? 0 }}</span>
+                            <span class="mt-2 inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 dark:bg-gray-900/50 dark:border-gray-700">
+                                <span class="w-2 h-2 rounded-full shrink-0" :class="officeBucket(item).class"></span>
+                                <span class="text-[9px] font-black uppercase tracking-wider text-gray-600 dark:text-gray-300">{{ officeBucket(item).label }}</span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+                <div v-else class="border-t border-gray-200 py-8 text-center text-sm italic text-gray-500 dark:text-gray-300 dark:border-gray-700">
+                    No active corporate office stores found for this scope.
+                </div>
+            </div>
+
             <!-- North Area -->
-            <div v-if="!isCtMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+            <div v-if="!isCtMode && !isOfficeMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                 <div class="bg-gray-800 py-2.5 text-center">
                     <span class="text-xs sm:text-sm font-black text-white tracking-[0.3em] sm:tracking-[0.5em] uppercase">N O R T H &nbsp;&nbsp; A R E A</span>
                 </div>
@@ -553,7 +597,7 @@ const getAreaItemClass = (count, maxCols) => {
             </div>
 
             <!-- South Area -->
-            <div v-if="!isCtMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+            <div v-if="!isCtMode && !isOfficeMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                 <div class="bg-gray-800 py-2.5 text-center">
                     <span class="text-xs sm:text-sm font-black text-white tracking-[0.3em] sm:tracking-[0.5em] uppercase">S O U T H &nbsp;&nbsp; A R E A</span>
                 </div>
