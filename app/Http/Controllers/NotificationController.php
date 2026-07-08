@@ -89,9 +89,14 @@ class NotificationController extends Controller
             $scopeUserIds = $scopeUserIds->merge($user->subordinates()->pluck('id'));
         }
 
-        $scopeUserIds = $scopeUserIds
+        // Exclude inactive users and vacant-position placeholders (created only to
+        // fill the org chart) from every reminder — they never log in and should
+        // never surface in "missing schedule / time" or any other notification.
+        $scopeUserIds = User::whereIn('id', $scopeUserIds->map(fn ($id) => (int) $id)->unique()->all())
+            ->where('is_active', true)
+            ->where('is_vacant', false)
+            ->pluck('id')
             ->map(fn ($id) => (int) $id)
-            ->unique()
             ->values();
 
         $this->scheduleReminders($reminders, $scopeUserIds);

@@ -67,6 +67,34 @@ class NotificationSummaryTest extends TestCase
         $this->assertStringNotContainsString($outsider->name, $response->getContent());
     }
 
+    public function test_inactive_and_vacant_subordinates_are_excluded_from_reminders(): void
+    {
+        $manager = User::factory()->create([
+            'name' => 'Morgan Manager',
+            'is_manager' => true,
+        ]);
+        $active = User::factory()->create(['name' => 'Active Aide', 'is_active' => true, 'is_vacant' => false]);
+        $inactive = User::factory()->create(['name' => 'Inactive Ivan', 'is_active' => false, 'is_vacant' => false]);
+        $vacant = User::factory()->create(['name' => 'System Developer', 'is_active' => true, 'is_vacant' => true]);
+
+        foreach ([$active, $inactive, $vacant] as $staff) {
+            $staff->managers()->attach($manager->id);
+        }
+
+        // Everyone (incl. the manager) lacks a schedule today.
+        $response = $this->actingAs($manager)
+            ->getJson(route('notifications.summary'))
+            ->assertOk();
+
+        $reminder = collect($response->json('reminders'))->firstWhere('type', 'missing_schedule');
+
+        // Manager + only the active, non-vacant subordinate — never the inactive or vacant users.
+        $this->assertSame('No schedule today: Active Aide, Morgan Manager.', $reminder['message']);
+        $this->assertSame(2, $reminder['count']);
+        $this->assertStringNotContainsString('Inactive Ivan', $response->getContent());
+        $this->assertStringNotContainsString('System Developer', $response->getContent());
+    }
+
     public function test_non_manager_schedule_reminder_identifies_only_the_authenticated_user(): void
     {
         $user = User::factory()->create(['name' => 'Solo Staff']);
