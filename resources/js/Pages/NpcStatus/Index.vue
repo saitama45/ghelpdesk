@@ -7,6 +7,8 @@
                 :store-seals="storeSeals"
                 @downloaded="onStoreDownload"
                 @download-error="onStoreDownloadError"
+                @uploaded="onStoreDownload"
+                @upload-error="onStoreDownloadError"
             />
         </div>
 
@@ -103,6 +105,8 @@
                     :store-seals="storeSeals"
                     @downloaded="onStoreDownload"
                     @download-error="onStoreDownloadError"
+                    @uploaded="onStoreDownload"
+                    @upload-error="onStoreDownloadError"
                 />
 
                 <template v-else>
@@ -231,10 +235,10 @@
         </div>
 
         <!-- ══════════════════ ENTITY HISTORY / EDITOR MODAL ══════════════════ -->
-        <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto">
+        <div v-if="showModal" class="fixed inset-0 z-[90] overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeModal"></div>
-                <div class="relative flex max-h-[90vh] w-full max-w-4xl flex-col rounded-xl border border-gray-100 bg-white shadow-2xl dark:bg-gray-800 dark:border-gray-700">
+                <div class="relative flex max-h-[90vh] w-full max-w-none flex-col rounded-xl border border-gray-100 bg-white shadow-2xl dark:bg-gray-800 dark:border-gray-700">
 
                     <!-- Header -->
                     <div class="border-b p-5 dark:border-gray-700">
@@ -300,6 +304,10 @@
                             <!-- Finalized or permission-restricted record -->
                             <div v-if="isModalReadOnly" class="rounded-lg border border-gray-200 bg-gray-50 p-5 dark:bg-gray-900/50 dark:border-gray-700">
                                 <div v-if="modalNpcStatus" class="grid grid-cols-2 gap-6">
+                                    <div class="col-span-2">
+                                        <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400">Application Type</div>
+                                        <span class="mt-0.5 inline-flex rounded-full px-2.5 py-1 text-xs font-black uppercase tracking-wide" :class="computedEntryType === 'Renewal' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'">{{ computedEntryType }}</span>
+                                    </div>
                                     <div>
                                         <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400">From</div>
                                         <div class="mt-0.5 text-base font-bold text-gray-900 dark:text-gray-100">{{ formatDate(modalNpcStatus.validity_from) }}</div>
@@ -314,6 +322,14 @@
 
                             <!-- Editable current or historical record -->
                             <div v-else class="space-y-4">
+                                <div>
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Application Type</label>
+                                    <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-black uppercase tracking-wide" :class="computedEntryType === 'Renewal' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'">{{ computedEntryType }}</span>
+                                    <p class="mt-1 text-[11px] font-medium text-gray-400">Set automatically — <strong>Renewal</strong> when the entity has an earlier record, otherwise <strong>New</strong>.</p>
+                                    <p v-if="computedEntryType === 'Renewal' && !modalNpcStatus && priorRecord" class="mt-1 text-xs font-medium text-blue-600 dark:text-blue-300">
+                                        Recent details from {{ priorRecord.year }} will be pre-filled after you save.
+                                    </p>
+                                </div>
                                 <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
                                     <div>
                                         <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Validity From</label>
@@ -342,12 +358,12 @@
 
                             <!-- Finalized or permission-restricted workflow -->
                             <div v-if="isModalReadOnly" class="space-y-2">
-                                <div v-for="step in historicalWorkflowSteps" :key="step.key" class="flex items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                                <div v-for="(step, i) in historicalWorkflowSteps" :key="step.key" class="flex items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                                     <span class="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full" :class="step.is_done ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'">
                                         <svg v-if="step.is_done" class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
                                     </span>
                                     <div class="min-w-0 flex-1">
-                                        <div class="text-sm font-bold" :class="step.is_done ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500'">{{ step.label }}</div>
+                                        <div class="text-sm font-bold" :class="step.is_done ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500'">Step {{ i + 1 }}: {{ step.label }}</div>
                                         <div v-if="step.completed_at" class="text-xs text-gray-500">Completed: {{ formatDate(step.completed_at) }}</div>
                                         <div v-if="step.remarks" class="mt-1 text-xs italic text-gray-600 dark:text-gray-300">{{ step.remarks }}</div>
                                     </div>
@@ -363,8 +379,35 @@
                                 <div v-else-if="!modalNpcStatus" class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm font-semibold text-gray-500 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                                     Save the validity dates above first to start the workflow.
                                 </div>
-                                <div v-else class="space-y-2">
-                                    <div v-for="(step, i) in workflowForm" :key="step.key" class="rounded-lg border p-3" :class="stepEnabled(i) ? 'border-gray-200 dark:border-gray-700' : 'border-gray-100 bg-gray-50 opacity-60 dark:border-gray-800 dark:bg-gray-900/40'">
+                                <div v-else class="space-y-3">
+                                    <!-- Step tabs (a later tab stays disabled until the prior step is done) -->
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <button
+                                            v-for="(step, i) in workflowForm"
+                                            :key="'tab-' + step.key"
+                                            type="button"
+                                            :disabled="!stepEnabled(i)"
+                                            @click="goToStep(i)"
+                                            :class="[
+                                                'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-black transition-colors',
+                                                i === activeStep
+                                                    ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                                                    : stepEnabled(i)
+                                                        ? 'border-gray-200 bg-white text-gray-600 hover:border-blue-400 hover:text-blue-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                                                        : 'cursor-not-allowed border-gray-100 bg-gray-50 text-gray-300 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-600'
+                                            ]"
+                                        >
+                                            <span class="flex h-5 w-5 items-center justify-center rounded-full text-[10px]" :class="step.is_done ? 'bg-green-500 text-white' : i === activeStep ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-300'">
+                                                <svg v-if="step.is_done" class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                                                <template v-else>{{ i + 1 }}</template>
+                                            </span>
+                                            <span class="hidden md:inline">{{ step.label }}</span>
+                                            <span class="md:hidden">Step {{ i + 1 }}</span>
+                                        </button>
+                                    </div>
+
+                                    <!-- Active step card -->
+                                    <div v-for="(step, i) in workflowForm" v-show="i === activeStep" :key="step.key" class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
                                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
                                             <label class="flex min-w-[210px] items-center gap-2 text-sm font-bold text-gray-800 dark:text-gray-200">
                                                 <input
@@ -375,7 +418,7 @@
                                                     @change="onStepToggle(i)"
                                                 >
                                                 <span class="flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-[10px] font-black text-gray-500 dark:bg-gray-700 dark:text-gray-300">{{ i + 1 }}</span>
-                                                {{ step.label }}
+                                                Step {{ i + 1 }}: {{ step.label }}
                                             </label>
                                             <div class="grid flex-1 grid-cols-1 gap-3 md:grid-cols-[170px_minmax(220px,1fr)]">
                                                 <input v-model="step.completed_at" :disabled="!canEditSelectedRecord || !step.is_done" type="date" class="rounded-lg border-gray-300 text-sm disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
@@ -383,14 +426,199 @@
                                             </div>
                                         </div>
 
-                                        <!-- Step 6 expansion (server-confirmed) -->
-                                        <div v-if="i === 5 && storeReceivingDone" class="mt-4 space-y-5 rounded-lg border border-blue-100 bg-blue-50/40 p-4 dark:border-blue-900/40 dark:bg-blue-900/10">
+                                        <!-- Step 1 expansion — Account Registration -->
+                                        <div v-if="i === 0 && stepEnabled(0)" class="mt-4 space-y-4 rounded-lg border border-blue-100 bg-blue-50/40 p-4 dark:border-blue-900/40 dark:bg-blue-900/10">
+                                            <div>
+                                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Email to Register <span class="text-red-500">*</span></label>
+                                                <input v-model="accountForm.register_email" :disabled="!canEditSelectedRecord" type="email" autocomplete="off" placeholder="name@example.com" :data-invalid="isFieldInvalid('account.register_email') || null" :class="emailClass('account.register_email', accountForm.register_email)" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:cursor-not-allowed disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                <p v-if="emailMalformed(accountForm.register_email)" class="mt-1 text-[11px] font-semibold text-red-600">Enter a valid email address.</p>
+                                            </div>
+                                            <div>
+                                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Email Password <span class="text-red-500">*</span></label>
+                                                <div class="relative">
+                                                    <input
+                                                        v-model="accountForm.register_password"
+                                                        :type="showPassword ? 'text' : 'password'"
+                                                        :disabled="!canEditSelectedRecord || clearPasswordFlag"
+                                                        autocomplete="new-password"
+                                                        :placeholder="accountForm.has_password ? '•••••••• saved — leave blank to keep' : 'Enter password'"
+                                                        :data-invalid="isFieldInvalid('account.register_password') || null"
+                                                        :class="invalidClass('account.register_password')"
+                                                        class="block w-full rounded-lg border-gray-300 pr-10 text-sm shadow-sm disabled:cursor-not-allowed disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800"
+                                                    >
+                                                    <button
+                                                        v-if="hasPermission('npc_status.reveal_password')"
+                                                        type="button"
+                                                        @click="togglePassword"
+                                                        :title="showPassword ? 'Hide password' : 'Reveal password'"
+                                                        class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                                                    >
+                                                        <svg v-if="!showPassword" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                                        <svg v-else class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+                                                    </button>
+                                                </div>
+                                                <p v-if="!hasPermission('npc_status.reveal_password')" class="mt-1 text-[11px] font-medium text-gray-400">Password is stored encrypted. You do not have permission to reveal it.</p>
+                                                <button v-if="accountForm.has_password && canEditSelectedRecord && !clearPasswordFlag" type="button" @click="clearSavedPassword" class="mt-1 text-[11px] font-black text-red-600 hover:text-red-800">Remove saved password</button>
+                                                <p v-if="clearPasswordFlag" class="mt-1 text-[11px] font-bold text-red-600">Saved password will be removed on save. <button type="button" @click="clearPasswordFlag = false" class="underline">Undo</button></p>
+                                            </div>
+                                            <p v-if="canEditSelectedRecord && !step1Valid" class="rounded-md bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Fill in the email and password before you can mark Step 1 as done.</p>
+                                        </div>
+
+                                        <!-- Step 2 expansion — DPO Profile Information -->
+                                        <div v-if="i === 1 && stepEnabled(1)" class="mt-4 space-y-4 rounded-lg border border-blue-100 bg-blue-50/40 p-4 dark:border-blue-900/40 dark:bg-blue-900/10">
+                                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                                <div>
+                                                    <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">First Name <span class="text-red-500">*</span></label>
+                                                    <input v-model="dpoProfileForm.first_name" :disabled="!canEditSelectedRecord" type="text" :data-invalid="isFieldInvalid('dpo.first_name') || null" :class="invalidClass('dpo.first_name')" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Middle Initial <span class="font-normal normal-case text-gray-400">(Optional)</span></label>
+                                                    <input v-model="dpoProfileForm.middle_initial" :disabled="!canEditSelectedRecord" type="text" maxlength="20" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Last Name <span class="text-red-500">*</span></label>
+                                                    <input v-model="dpoProfileForm.last_name" :disabled="!canEditSelectedRecord" type="text" :data-invalid="isFieldInvalid('dpo.last_name') || null" :class="invalidClass('dpo.last_name')" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Sex <span class="text-red-500">*</span></label>
+                                                    <select v-model="dpoProfileForm.sex" :disabled="!canEditSelectedRecord" :data-invalid="isFieldInvalid('dpo.sex') || null" :class="invalidClass('dpo.sex')" class="block w-full rounded-lg border-gray-300 pl-2 pr-7 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                        <option value="">—</option>
+                                                        <option value="Male">Male</option>
+                                                        <option value="Female">Female</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Designation <span class="text-red-500">*</span></label>
+                                                    <input v-model="dpoProfileForm.designation" :disabled="!canEditSelectedRecord" type="text" :data-invalid="isFieldInvalid('dpo.designation') || null" :class="invalidClass('dpo.designation')" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Date of Designation as DPO <span class="text-red-500">*</span></label>
+                                                    <input v-model="dpoProfileForm.date_designated_dpo" :disabled="!canEditSelectedRecord" type="date" :data-invalid="isFieldInvalid('dpo.date_designated_dpo') || null" :class="invalidClass('dpo.date_designated_dpo')" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Official DPO Email <span class="text-red-500">*</span></label>
+                                                    <input v-model="dpoProfileForm.official_dpo_email" :disabled="!canEditSelectedRecord" type="email" :data-invalid="isFieldInvalid('dpo.official_dpo_email') || null" :class="emailClass('dpo.official_dpo_email', dpoProfileForm.official_dpo_email)" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                    <p v-if="emailMalformed(dpoProfileForm.official_dpo_email)" class="mt-1 text-[11px] font-semibold text-red-600">Enter a valid email address.</p>
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Mobile No. <span class="text-red-500">*</span></label>
+                                                    <input v-model="dpoProfileForm.mobile_no" :disabled="!canEditSelectedRecord" type="text" :data-invalid="isFieldInvalid('dpo.mobile_no') || null" :class="invalidClass('dpo.mobile_no')" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Telephone Number <span class="font-normal normal-case text-gray-400">(Optional)</span></label>
+                                                    <input v-model="dpoProfileForm.telephone_no" :disabled="!canEditSelectedRecord" type="text" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Role <span class="text-red-500">*</span></label>
+                                                    <input v-model="dpoProfileForm.role" :disabled="!canEditSelectedRecord" type="text" placeholder="PIC/PIP" :data-invalid="isFieldInvalid('dpo.role') || null" :class="invalidClass('dpo.role')" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <div class="mb-2 text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Generated Backup Codes <span class="text-red-500">*</span></div>
+                                                <div :data-invalid="isFieldInvalid('dpo.backup_codes') || null" class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 rounded-lg" :class="isFieldInvalid('dpo.backup_codes') ? 'p-1 ring-1 ring-red-500' : ''">
+                                                    <input
+                                                        v-for="(code, idx) in backupCodes"
+                                                        :key="idx"
+                                                        v-model="backupCodes[idx]"
+                                                        :disabled="!canEditSelectedRecord"
+                                                        type="text"
+                                                        inputmode="numeric"
+                                                        :placeholder="`Code ${idx + 1}`"
+                                                        class="block w-full rounded-lg border-gray-300 font-mono text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800"
+                                                    >
+                                                </div>
+                                                <p class="mt-1 text-[11px] font-medium text-gray-400">Enter at least {{ BACKUP_CODE_COUNT }} backup codes.</p>
+                                            </div>
+                                            <p v-if="canEditSelectedRecord && !step2Valid" class="rounded-md bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Complete all required (*) fields and backup codes before you can mark Step 2 as done.</p>
+                                        </div>
+
+                                        <!-- Step 3 expansion — DPO Registration -->
+                                        <div v-if="i === 2 && stepEnabled(2)" class="mt-4 space-y-2">
+                                            <NpcRegistrationStep
+                                                :model="registrationForm"
+                                                :dpo-profile="dpoProfileForm"
+                                                :documents="modalNpcStatus?.documents || {}"
+                                                :document-types="documentTypes"
+                                                :can-edit="canEditSelectedRecord"
+                                                :invalid-keys="invalidFieldKeysArray"
+                                                @upload="uploadDocument"
+                                                @delete="deleteDocument"
+                                                @add-dps="addDps"
+                                                @remove-dps="removeDps"
+                                            />
+                                            <p v-if="canEditSelectedRecord && !step3Valid" class="rounded-md bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Complete all required (*) registration fields and upload the supporting documents before you can mark Step 3 as done.</p>
+                                        </div>
+
+                                        <!-- Step 4 expansion — Status of DPO Registration / NPC Approval -->
+                                        <div v-if="i === 3 && stepEnabled(3)" class="mt-4 space-y-4 rounded-lg border border-blue-100 bg-blue-50/40 p-4 dark:border-blue-900/40 dark:bg-blue-900/10">
+                                            <div class="sm:max-w-xs">
+                                                <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Status of DPO Registration <span class="text-red-500">*</span></label>
+                                                <select v-model="approvalForm.approval_status" :disabled="!canEditSelectedRecord" :data-invalid="isFieldInvalid('approval.status') || null" :class="invalidClass('approval.status')" class="block w-full rounded-lg border-gray-300 pl-2 pr-7 text-sm shadow-sm disabled:cursor-not-allowed disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                    <option value="For Submission">For Submission</option>
+                                                    <option value="Submitted">Submitted</option>
+                                                    <option value="Approved">Approved</option>
+                                                </select>
+                                            </div>
+
+                                            <!-- Payment details only when Approved -->
+                                            <div v-if="approvalForm.approval_status === 'Approved'" class="space-y-4 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+                                                <div class="text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Payment Details</div>
+                                                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                                    <div>
+                                                        <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Year <span class="text-red-500">*</span></label>
+                                                        <input v-model="approvalForm.year" :disabled="!canEditSelectedRecord" type="number" min="2000" max="2100" :data-invalid="isFieldInvalid('payment.year') || null" :class="invalidClass('payment.year')" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                    </div>
+                                                    <div>
+                                                        <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Reference No <span class="text-red-500">*</span></label>
+                                                        <input v-model="approvalForm.reference_no" :disabled="!canEditSelectedRecord" type="text" :data-invalid="isFieldInvalid('payment.reference_no') || null" :class="invalidClass('payment.reference_no')" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                    </div>
+                                                    <div>
+                                                        <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Transaction No <span class="text-red-500">*</span></label>
+                                                        <input v-model="approvalForm.transaction_no" :disabled="!canEditSelectedRecord" type="text" :data-invalid="isFieldInvalid('payment.transaction_no') || null" :class="invalidClass('payment.transaction_no')" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                    </div>
+                                                    <div>
+                                                        <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Date of Payment <span class="text-red-500">*</span></label>
+                                                        <input v-model="approvalForm.date_of_payment" :disabled="!canEditSelectedRecord" type="date" :data-invalid="isFieldInvalid('payment.date_of_payment') || null" :class="invalidClass('payment.date_of_payment')" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                    </div>
+                                                    <div>
+                                                        <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Transaction Type <span class="text-red-500">*</span></label>
+                                                        <select v-model="approvalForm.transaction_type" :disabled="!canEditSelectedRecord" :data-invalid="isFieldInvalid('payment.transaction_type') || null" :class="invalidClass('payment.transaction_type')" class="block w-full rounded-lg border-gray-300 pl-2 pr-7 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                            <option value="">—</option>
+                                                            <option value="Registration Fees">Registration Fees</option>
+                                                            <option value="Renewal">Renewal</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="mb-1 block text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Amount <span class="text-red-500">*</span></label>
+                                                        <input v-model="approvalForm.amount" :disabled="!canEditSelectedRecord" type="number" step="0.01" min="0" :data-invalid="isFieldInvalid('payment.amount') || null" :class="invalidClass('payment.amount')" class="block w-full rounded-lg border-gray-300 text-sm shadow-sm disabled:bg-gray-100 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800">
+                                                    </div>
+                                                </div>
+
+                                                <div :data-invalid="isFieldInvalid('payment.receipt') || null" class="rounded-lg border p-3" :class="isFieldInvalid('payment.receipt') ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-200 dark:border-gray-700'">
+                                                    <div class="text-[11px] font-bold text-gray-700 dark:text-gray-200">Upload Receipt <span class="text-red-500">*</span></div>
+                                                    <div class="mt-1.5 flex flex-wrap items-center gap-2">
+                                                        <template v-if="modalNpcStatus?.documents?.payment_receipt">
+                                                            <a :href="modalNpcStatus.documents.payment_receipt.url" class="truncate text-xs font-bold text-blue-600 hover:underline">{{ modalNpcStatus.documents.payment_receipt.name || 'Download' }}</a>
+                                                            <button v-if="canEditSelectedRecord" type="button" @click="deleteDocument({ id: modalNpcStatus.documents.payment_receipt.id })" class="text-[11px] font-black text-red-600 hover:text-red-800">Remove</button>
+                                                        </template>
+                                                        <input v-else-if="canEditSelectedRecord" :key="receiptInputKey" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.bmp,.heic,.heif" class="w-full text-xs text-gray-500 file:mr-2 file:rounded-full file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-blue-700 dark:text-gray-300" @change="onReceiptFile($event)">
+                                                        <span v-else class="text-xs font-semibold text-gray-400">Not uploaded</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <p v-if="canEditSelectedRecord && !step4Valid" class="rounded-md bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Set status to <strong>Approved</strong> and complete the payment details (including receipt) — Step 5 stays locked until then.</p>
+                                        </div>
+
+                                        <!-- Step 5 expansion — Store/Office Receiving -->
+                                        <div v-if="i === 4 && stepEnabled(4)" class="mt-4 space-y-5 rounded-lg border border-blue-100 bg-blue-50/40 p-4 dark:border-blue-900/40 dark:bg-blue-900/10">
 
                                             <!-- Seals to release -->
                                             <div>
-                                                <div class="mb-2 text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Seals to Release (entity-wide)</div>
+                                                <div class="mb-2 text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Seals to Release (entity-wide) <span class="text-red-500">*</span></div>
                                                 <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                                    <div v-for="sealType in sealTypes" :key="sealType.type" class="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+                                                    <div v-for="sealType in sealTypes" :key="sealType.type" :data-invalid="isFieldInvalid('seal.' + sealType.type) || null" class="rounded-lg border bg-white p-3 dark:bg-gray-800" :class="isFieldInvalid('seal.' + sealType.type) ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-200 dark:border-gray-700'">
                                                         <div class="mb-2 text-xs font-black uppercase tracking-wider text-gray-600 dark:text-gray-300">{{ sealType.label }}</div>
                                                         <template v-if="currentSeal(sealType.type)">
                                                             <a v-if="canEditNpcStatus" :href="currentSeal(sealType.type).url" class="block truncate text-xs font-bold text-blue-600 hover:underline">{{ currentSeal(sealType.type).name || 'Download' }}</a>
@@ -398,7 +626,7 @@
                                                             <button v-if="canEditSelectedRecord" type="button" @click="deleteSeal(currentSeal(sealType.type))" class="mt-1 text-[11px] font-black text-red-600 hover:text-red-800">Remove</button>
                                                         </template>
                                                         <template v-else-if="canEditSelectedRecord">
-                                                            <input :key="fileInputKey + '-' + sealType.type" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="w-full text-xs text-gray-500 file:mr-2 file:rounded-full file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-blue-700 dark:text-gray-300" @change="uploadSeal(sealType.type, $event)">
+                                                            <input :key="fileInputKey + '-' + sealType.type" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.bmp,.heic,.heif" class="w-full text-xs text-gray-500 file:mr-2 file:rounded-full file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-blue-700 dark:text-gray-300" @change="uploadSeal(sealType.type, $event)">
                                                         </template>
                                                         <span v-else class="text-xs font-semibold text-gray-400">Not uploaded</span>
                                                     </div>
@@ -406,8 +634,8 @@
                                             </div>
 
                                             <!-- Assigned stores -->
-                                            <div>
-                                                <div class="mb-2 text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Assigned Stores</div>
+                                            <div :data-invalid="isFieldInvalid('stores') || null" class="rounded-lg" :class="isFieldInvalid('stores') ? 'p-1 ring-1 ring-red-500' : ''">
+                                                <div class="mb-2 text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Assigned Stores <span class="text-red-500">*</span></div>
                                                 <input v-model="storeSearch" type="text" placeholder="Search stores by name, code, area, or brand..." class="mb-2 block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100">
                                                 <div class="mb-2 flex gap-1 overflow-x-auto">
                                                     <button v-for="tab in storeAssignmentTabs" :key="tab.value" type="button" @click="storeAssignmentTab = tab.value" :class="['whitespace-nowrap rounded-md px-3 py-1 text-[11px] font-black uppercase tracking-wider', storeAssignmentTab === tab.value ? 'bg-blue-600 text-white' : 'bg-white text-gray-500 hover:bg-gray-100 dark:bg-gray-800']">{{ tab.label }} {{ tab.count }}</button>
@@ -429,19 +657,25 @@
                                                 </div>
                                             </div>
 
-                                            <!-- Download & confirmation grid -->
+                                            <p v-if="canEditSelectedRecord && !step5Valid" class="rounded-md bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Upload all 3 seals and assign at least one store, then Save, before you can mark Step 5 as done.</p>
+                                        </div>
+
+                                        <!-- Step 6 expansion — Store/Office Downloads & Confirmation -->
+                                        <div v-if="i === 5 && stepEnabled(5)" class="mt-4 space-y-5 rounded-lg border border-blue-100 bg-blue-50/40 p-4 dark:border-blue-900/40 dark:bg-blue-900/10">
                                             <div v-if="receiptGrid.length">
                                                 <div class="mb-2 text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Store Downloads &amp; Confirmation</div>
+                                                <p class="mb-2 text-[11px] font-semibold text-gray-500 dark:text-gray-400">A store must upload proof of use before you can confirm its seals.</p>
                                                 <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
                                                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                                         <thead class="bg-gray-50 dark:bg-gray-900/50">
                                                             <tr>
                                                                 <th class="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-gray-500">Store</th>
                                                                 <th v-for="sealType in sealTypes" :key="sealType.type" class="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-gray-500">{{ sealType.label }}</th>
+                                                                <th class="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-gray-500">Proof of Use</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
-                                                            <tr v-for="row in receiptGrid" :key="row.store_id">
+                                                            <tr v-for="row in receiptGrid" :key="row.store_id" :data-invalid="isFieldInvalid('step6.store.' + row.store_id) || null" :class="isFieldInvalid('step6.store.' + row.store_id) ? 'bg-red-50 dark:bg-red-900/10' : ''">
                                                                 <td class="px-3 py-2">
                                                                     <div class="text-xs font-bold text-gray-900 dark:text-gray-100">{{ row.store_name }}</div>
                                                                     <div class="font-mono text-[10px] text-gray-500">{{ row.store_code }}</div>
@@ -453,12 +687,15 @@
                                                                     <button
                                                                         v-if="canEditSelectedRecord"
                                                                         type="button"
+                                                                        :disabled="!row.proof"
+                                                                        :title="row.proof ? '' : 'Store must upload proof of use first'"
                                                                         @click="toggleConfirm(row, sealType.type)"
                                                                         :class="[
                                                                             'mt-1 rounded-full px-2.5 py-1 text-[10px] font-black',
-                                                                            row.seals[sealType.type]?.confirmed_at
-                                                                                ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                                                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                                            !row.proof ? 'cursor-not-allowed bg-gray-100 text-gray-400'
+                                                                                : row.seals[sealType.type]?.confirmed_at
+                                                                                    ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                                                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                                                         ]"
                                                                     >
                                                                         {{ row.seals[sealType.type]?.confirmed_at ? 'Checked ✓' : 'Mark checked' }}
@@ -473,15 +710,38 @@
                                                                         {{ row.seals[sealType.type]?.confirmed_at ? 'Checked ✓' : 'Not checked' }}
                                                                     </span>
                                                                 </td>
+                                                                <td class="px-3 py-2">
+                                                                    <a v-if="row.proof" :href="row.proof.url" class="block truncate text-[11px] font-bold text-blue-600 hover:underline">{{ row.proof.name || 'View proof' }}</a>
+                                                                    <div v-if="row.proof" class="text-[10px] text-gray-500">{{ formatDateTime(row.proof.uploaded_at) }}</div>
+                                                                    <span v-else class="text-[10px] font-bold text-amber-600">Awaiting proof</span>
+                                                                </td>
                                                             </tr>
                                                         </tbody>
                                                     </table>
                                                 </div>
                                             </div>
-                                            <p v-else class="text-xs font-semibold text-gray-500 dark:text-gray-300">Assign and save stores above to track their seal downloads.</p>
+                                            <p v-else class="text-xs font-semibold text-gray-500 dark:text-gray-300">Assign and save stores in Step 5 to track their seal downloads.</p>
+                                            <p v-if="canEditSelectedRecord && receiptGrid.length && !step6Valid" class="mt-3 rounded-md bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Every assigned store (highlighted) must download all 3 seals, upload proof of use, and have all 3 seals marked checked before you can mark Step 6 as done.</p>
                                         </div>
                                     </div>
 
+                                    <!-- Wizard navigation -->
+                                    <div class="flex items-center justify-between pt-1">
+                                        <button
+                                            type="button"
+                                            :disabled="activeStep === 0"
+                                            @click="goToStep(activeStep - 1)"
+                                            class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                                        >← Previous</button>
+                                        <span class="text-[11px] font-bold text-gray-400">Step {{ activeStep + 1 }} of {{ workflowForm.length }}</span>
+                                        <button
+                                            type="button"
+                                            :disabled="activeStep >= workflowForm.length - 1 || !stepEnabled(activeStep + 1)"
+                                            :title="activeStep < workflowForm.length - 1 && !stepEnabled(activeStep + 1) ? 'Complete this step first' : ''"
+                                            @click="goToStep(activeStep + 1)"
+                                            class="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                        >Next →</button>
+                                    </div>
                                 </div>
                             </div>
                         </section>
@@ -522,6 +782,7 @@ import { router } from '@inertiajs/vue3'
 import axios from 'axios'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import AssignedStoreSeals from '@/Components/NpcStatus/AssignedStoreSeals.vue'
+import NpcRegistrationStep from '@/Components/NpcStatus/NpcRegistrationStep.vue'
 import DataTable from '@/Components/DataTable.vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { usePagination } from '@/Composables/usePagination'
@@ -648,12 +909,303 @@ const storeAssignmentTab = ref('all')
 const selectedStoreIds = ref([])
 const storeOptions = ref([...(props.stores || [])])
 const workflowForm = ref([])
+// Wizard: which step tab is currently shown. Tabs are gated by stepEnabled().
+const activeStep = ref(0)
+
+const firstIncompleteStep = () => {
+    const idx = workflowForm.value.findIndex((step) => !step.is_done)
+    return idx === -1 ? Math.max(0, workflowForm.value.length - 1) : idx
+}
+
+const goToStep = (index) => {
+    if (index < 0 || index >= workflowForm.value.length) return
+    if (!stepEnabled(index)) return
+    activeStep.value = index
+}
+
+const BACKUP_CODE_COUNT = 10
 
 const statusForm = reactive({
     company_id: null,
     validity_from: '',
     validity_to: '',
 })
+
+// Step 1 — Account Registration
+const accountForm = reactive({
+    register_email: '',
+    register_password: '',
+    has_password: false,
+})
+const showPassword = ref(false)
+const clearPasswordFlag = ref(false)
+
+// Step 2 — DPO Profile Information
+const dpoProfileForm = reactive({
+    first_name: '',
+    middle_initial: '',
+    last_name: '',
+    sex: '',
+    designation: '',
+    date_designated_dpo: '',
+    official_dpo_email: '',
+    mobile_no: '',
+    telephone_no: '',
+    role: 'PIC/PIP',
+})
+const backupCodes = ref(Array.from({ length: BACKUP_CODE_COUNT }, () => ''))
+
+// Step 4 — NPC Approval + payment
+const approvalForm = reactive({
+    approval_status: 'For Submission',
+    year: '',
+    reference_no: '',
+    transaction_no: '',
+    date_of_payment: '',
+    transaction_type: '',
+    amount: '',
+})
+
+// Step 3 — DPO Registration (stored as one JSON document).
+const documentTypes = [
+    { type: 'secretary_certificate', label: "Duly notarized Secretary's Certificate authorizing the appointment or designation of the DPO" },
+    { type: 'other_appointment_document', label: 'Other document that demonstrates the validity of the appointment with an accompanying valid document conferring authority to appoint persons to positions within the organization' },
+    { type: 'sec_certificate', label: 'SEC Certificate of Registration' },
+    { type: 'gis', label: 'Certified true copy of current General Information Sheet' },
+    { type: 'business_permit', label: 'Valid business permit' },
+]
+
+const emptyDps = () => ({
+    is_manual_or_automated: '',
+    system_name: '',
+    basis_of_processing_info: '',
+    basis_of_processing_sensitive: '',
+    purpose: '',
+    data_subjects_categories: '',
+    data_categories: '',
+    recipients: '',
+    pic_or_pip: '',
+    outsourced_or_subcontracted: '',
+    life_cycle: { when_collected: '', retention_period: '', disposal_procedure: '' },
+    security_measures: {
+        organizational: '', physical: '', technical: '',
+        transferred_outside_ph: '', data_sharing_agreements: '', publicly_facing: '',
+        external_internal_facing: '', automated_decision_notification: '', lawful_basis: '',
+        other_lawful_basis_info: '', consent_used: '', consent_form: '', other_consent_proof: '',
+        processed_retention_period: '', automated_methods_logic: '', possible_decisions: '',
+    },
+})
+
+const emptyRegistration = () => ({
+    organization: { name: '', website: '', country: '', address: '', region: '', province: '', city: '', zip: '', area_of_coverage: '', email: '', contact_no: '' },
+    sector: { sector: '', sub_sector: '' },
+    head_of_org: { first_name: '', middle_initial: '', last_name: '', official_designation: '', email: '', contact_no: '' },
+    compliance_officer: '',
+    classification: '',
+    sub_classification: '',
+    data_processing_systems: [emptyDps()],
+})
+
+const registrationForm = ref(emptyRegistration())
+
+// Overlay a serialized registration payload onto a fresh, fully-keyed base so
+// missing keys never break v-model bindings.
+const mergeRegistration = (src) => {
+    const base = emptyRegistration()
+    if (!src || typeof src !== 'object') return base
+
+    Object.assign(base.organization, src.organization || {})
+    Object.assign(base.sector, src.sector || {})
+    Object.assign(base.head_of_org, src.head_of_org || {})
+    base.compliance_officer = src.compliance_officer || ''
+    base.classification = src.classification || ''
+    base.sub_classification = src.sub_classification || ''
+
+    const systems = Array.isArray(src.data_processing_systems) ? src.data_processing_systems : []
+    if (systems.length) {
+        base.data_processing_systems = systems.map((system) => {
+            const dps = emptyDps()
+            Object.keys(dps).forEach((key) => {
+                if (key === 'life_cycle' || key === 'security_measures') {
+                    Object.assign(dps[key], system?.[key] || {})
+                } else {
+                    dps[key] = system?.[key] ?? ''
+                }
+            })
+            return dps
+        })
+    }
+
+    return base
+}
+
+const applyStep3 = (source) => {
+    registrationForm.value = mergeRegistration(source?.registration)
+}
+
+const addDps = () => {
+    registrationForm.value.data_processing_systems.push(emptyDps())
+}
+
+const removeDps = (index) => {
+    registrationForm.value.data_processing_systems.splice(index, 1)
+    if (!registrationForm.value.data_processing_systems.length) {
+        registrationForm.value.data_processing_systems.push(emptyDps())
+    }
+}
+
+const applyStep4 = (source) => {
+    approvalForm.approval_status = source?.approval_status || 'For Submission'
+    const p = source?.payment || {}
+    approvalForm.year = p.year ?? ''
+    approvalForm.reference_no = p.reference_no || ''
+    approvalForm.transaction_no = p.transaction_no || ''
+    approvalForm.date_of_payment = p.date_of_payment || ''
+    approvalForm.transaction_type = p.transaction_type || ''
+    approvalForm.amount = p.amount ?? ''
+}
+
+// ── Per-step required-field validation ──────────────────────────────────────
+// Each function returns the list of *invalid* required-field keys for its step.
+// Optional fields (Website, Middle Initial, Telephone, Compliance Officer) are
+// never included. The keys double as red-border / scroll anchors in the DOM.
+const isBlank = (value) => String(value ?? '').trim() === ''
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const isValidEmail = (value) => EMAIL_RE.test(String(value ?? '').trim())
+// A required email field is invalid when blank OR malformed.
+const emailFieldInvalid = (value) => isBlank(value) || !isValidEmail(value)
+// Live (during-typing) malformed check: only flags a non-empty bad email.
+const emailMalformed = (value) => !isBlank(value) && !isValidEmail(value)
+
+const step1InvalidKeys = () => {
+    const keys = []
+    if (emailFieldInvalid(accountForm.register_email)) keys.push('account.register_email')
+    const hasPassword = Boolean(accountForm.register_password) || (accountForm.has_password && !clearPasswordFlag.value)
+    if (!hasPassword) keys.push('account.register_password')
+    return keys
+}
+
+const step2InvalidKeys = () => {
+    const keys = []
+    const required = ['first_name', 'last_name', 'sex', 'designation', 'date_designated_dpo', 'mobile_no', 'role']
+    required.forEach((field) => { if (isBlank(dpoProfileForm[field])) keys.push(`dpo.${field}`) })
+    if (emailFieldInvalid(dpoProfileForm.official_dpo_email)) keys.push('dpo.official_dpo_email')
+    const filledCodes = backupCodes.value.filter((code) => !isBlank(code)).length
+    if (filledCodes < BACKUP_CODE_COUNT) keys.push('dpo.backup_codes')
+    return keys
+}
+
+const step3InvalidKeys = () => {
+    const keys = []
+    const r = registrationForm.value
+    if (!r) return ['reg']
+
+    const optionalOrg = ['website']
+    const optionalHead = ['middle_initial']
+
+    Object.keys(r.organization).forEach((k) => { if (!optionalOrg.includes(k) && isBlank(r.organization[k])) keys.push(`reg.organization.${k}`) })
+    Object.keys(r.sector).forEach((k) => { if (isBlank(r.sector[k])) keys.push(`reg.sector.${k}`) })
+    Object.keys(r.head_of_org).forEach((k) => { if (!optionalHead.includes(k) && isBlank(r.head_of_org[k])) keys.push(`reg.head_of_org.${k}`) })
+    // Email fields must also be well-formed (not just non-blank).
+    if (emailMalformed(r.organization.email)) keys.push('reg.organization.email')
+    if (emailMalformed(r.head_of_org.email)) keys.push('reg.head_of_org.email')
+    if (isBlank(r.classification)) keys.push('reg.classification')
+    if (isBlank(r.sub_classification)) keys.push('reg.sub_classification')
+
+    r.data_processing_systems.forEach((system, idx) => {
+        Object.keys(system).forEach((k) => {
+            if (k === 'life_cycle' || k === 'security_measures') {
+                Object.keys(system[k]).forEach((nk) => { if (isBlank(system[k][nk])) keys.push(`reg.dps.${idx}.${k}.${nk}`) })
+            } else if (isBlank(system[k])) {
+                keys.push(`reg.dps.${idx}.${k}`)
+            }
+        })
+    })
+
+    const docs = modalNpcStatus.value?.documents || {}
+    documentTypes.forEach((doc) => { if (!docs[doc.type]) keys.push(`reg.doc.${doc.type}`) })
+
+    return keys
+}
+
+const step4InvalidKeys = () => {
+    const keys = []
+    if (approvalForm.approval_status !== 'Approved') {
+        keys.push('approval.status')
+        return keys
+    }
+    const required = ['year', 'reference_no', 'transaction_no', 'date_of_payment', 'transaction_type', 'amount']
+    required.forEach((field) => { if (isBlank(approvalForm[field])) keys.push(`payment.${field}`) })
+    if (!modalNpcStatus.value?.documents?.payment_receipt) keys.push('payment.receipt')
+    return keys
+}
+
+const step5InvalidKeys = () => {
+    const keys = []
+    const seals = modalNpcStatus.value?.seals || {}
+    sealTypes.forEach((seal) => { if (!seals[seal.type]?.available) keys.push(`seal.${seal.type}`) })
+    if (!selectedStoreIds.value.length) keys.push('stores')
+    return keys
+}
+
+// Step 6 — every assigned store must have downloaded all 3 seals, uploaded
+// proof, and had all 3 seals confirmed before the step can be marked done.
+const step6InvalidKeys = () => {
+    const keys = []
+    const grid = receiptGrid.value
+    if (!grid.length) return ['step6.no_stores']
+    grid.forEach((row) => {
+        const allDownloaded = sealTypes.every((s) => row.seals?.[s.type]?.downloaded_at)
+        const allConfirmed = sealTypes.every((s) => row.seals?.[s.type]?.confirmed_at)
+        if (!allDownloaded || !row.proof || !allConfirmed) keys.push(`step6.store.${row.store_id}`)
+    })
+    return keys
+}
+
+const stepInvalidKeys = (index) => {
+    if (index === 0) return step1InvalidKeys()
+    if (index === 1) return step2InvalidKeys()
+    if (index === 2) return step3InvalidKeys()
+    if (index === 3) return step4InvalidKeys()
+    if (index === 4) return step5InvalidKeys()
+    if (index === 5) return step6InvalidKeys()
+    return []
+}
+
+const stepFieldsSatisfied = (index) => stepInvalidKeys(index).length === 0
+
+// Kept for the inline step hints.
+const step1Valid = computed(() => step1InvalidKeys().length === 0)
+const step2Valid = computed(() => step2InvalidKeys().length === 0)
+const step3Valid = computed(() => step3InvalidKeys().length === 0)
+const step4Valid = computed(() => step4InvalidKeys().length === 0)
+const step5Valid = computed(() => step5InvalidKeys().length === 0)
+const step6Valid = computed(() => step6InvalidKeys().length === 0)
+
+// Which steps have had a failed "mark done" attempt — only then do we paint
+// their unfilled required fields red. Recomputes live, so red clears as the
+// user fills each field.
+const attemptedSteps = ref(new Set())
+const invalidFieldKeys = computed(() => {
+    const set = new Set()
+    attemptedSteps.value.forEach((index) => {
+        stepInvalidKeys(index).forEach((key) => set.add(key))
+    })
+    return set
+})
+const isFieldInvalid = (key) => invalidFieldKeys.value.has(key)
+const invalidClass = (key) => (isFieldInvalid(key) ? 'border-red-500 ring-1 ring-red-500' : '')
+// Red border for an email input: flagged by a check attempt OR (live) malformed.
+const emailClass = (key, value) => ((isFieldInvalid(key) || emailMalformed(value)) ? 'border-red-500 ring-1 ring-red-500' : '')
+// Array form of the invalid keys for passing to the Step 3 child component.
+const invalidFieldKeysArray = computed(() => Array.from(invalidFieldKeys.value))
+
+const scrollToFirstInvalid = async () => {
+    await nextTick()
+    const el = document.querySelector('[data-invalid="true"]')
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
 
 onMounted(() => {
     if (props.viewMode !== 'admin') return
@@ -686,6 +1238,18 @@ const modalNpcStatus = computed(() => {
     if (!isHistoricalYear.value) return selectedCompany.value?.npc_status ?? null
     return (selectedCompany.value?.workflow_history || []).find((r) => r.year === effectiveModalYear.value) ?? null
 })
+// Most recent record from an earlier year — the source for renewal pre-fill.
+const priorRecord = computed(() => {
+    const history = selectedCompany.value?.workflow_history || []
+    return history
+        .filter((record) => Number(record.year) < effectiveModalYear.value)
+        .sort((a, b) => Number(b.year) - Number(a.year))[0] || null
+})
+
+// Application Type is automatic: Renewal when an earlier-year record exists for
+// the entity, otherwise New. (No longer a user-editable dropdown.)
+const computedEntryType = computed(() => (priorRecord.value ? 'Renewal' : 'New'))
+
 const canEditSelectedRecord = computed(() => (
     canEditNpcStatus.value
     && Boolean(modalNpcStatus.value)
@@ -708,11 +1272,6 @@ const workflowProgress = computed(() => {
     if (!workflowForm.value.length) return 0
     const done = workflowForm.value.filter((step) => step.is_done).length
     return Math.round((done / workflowForm.value.length) * 100)
-})
-
-const storeReceivingDone = computed(() => {
-    const step = (modalNpcStatus.value?.workflow_steps || []).find((s) => s.key === 'store_distribution')
-    return !!step?.is_done
 })
 
 const receiptGrid = computed(() => modalNpcStatus.value?.store_receipts || [])
@@ -763,13 +1322,18 @@ const applyFreshCompany = (company) => {
     }
 }
 
+// Used after an immediate server mutation (seal/document upload & delete, seal
+// confirmation). These refresh only server-derived, read-only data that the
+// template reads straight from modalNpcStatus (attachments, documents,
+// store_receipts). It intentionally does NOT call syncModalForms(), so the
+// user's unsaved Step 1–4 form edits are preserved (e.g. uploading a document
+// mid-edit must not wipe the registration/profile fields being typed).
 const replaceCompanyInPage = (company) => {
     if (!company?.id) return
     pagination.data.value = pagination.data.value.map((row) => String(row.id) === String(company.id) ? company : row)
     accumulatedNpcStatuses.value = accumulatedNpcStatuses.value.map((row) => String(row.id) === String(company.id) ? company : row)
     if (String(selectedCompany.value?.id) === String(company.id)) {
         selectedCompany.value = company
-        syncModalForms()
     }
 }
 
@@ -785,14 +1349,81 @@ const syncWorkflowFormToValidity = () => {
     workflowForm.value = modalNpcStatus.value
         ? workflowStepsFrom(modalNpcStatus.value.workflow_steps || [])
         : []
+    // Open the wizard on the first not-yet-done step (clamped to enabled).
+    activeStep.value = workflowForm.value.length ? firstIncompleteStep() : 0
 }
 
 const syncModalForms = () => {
     const record = modalNpcStatus.value
     statusForm.validity_from = record?.validity_from || `${effectiveModalYear.value}-01-01`
     statusForm.validity_to = record?.validity_to || `${effectiveModalYear.value}-12-31`
+
+    if (record) {
+        applyStep1And2(record)
+        applyStep3(record)
+        applyStep4(record)
+    } else {
+        // No record yet: pre-fill from the prior year when this is a Renewal.
+        applyStep1And2(computedEntryType.value === 'Renewal' ? priorRecord.value : null)
+        applyStep3(null)
+        applyStep4(null)
+    }
+
     syncWorkflowFormToValidity()
     syncSelectedStores()
+}
+
+// Populate the Step 1 (account) and Step 2 (DPO profile) forms from a
+// serialized record. Passing null resets them to blank defaults.
+const applyStep1And2 = (source) => {
+    accountForm.register_email = source?.account?.register_email || ''
+    accountForm.has_password = Boolean(source?.account?.has_password)
+    accountForm.register_password = ''
+    showPassword.value = false
+    clearPasswordFlag.value = false
+
+    const profile = source?.dpo_profile || {}
+    dpoProfileForm.first_name = profile.first_name || ''
+    dpoProfileForm.middle_initial = profile.middle_initial || ''
+    dpoProfileForm.last_name = profile.last_name || ''
+    dpoProfileForm.sex = profile.sex || ''
+    dpoProfileForm.designation = profile.designation || ''
+    dpoProfileForm.date_designated_dpo = profile.date_designated_dpo || ''
+    dpoProfileForm.official_dpo_email = profile.official_dpo_email || ''
+    dpoProfileForm.mobile_no = profile.mobile_no || ''
+    dpoProfileForm.telephone_no = profile.telephone_no || ''
+    dpoProfileForm.role = profile.role || 'PIC/PIP'
+
+    const codes = source?.backup_codes || []
+    const count = Math.max(BACKUP_CODE_COUNT, codes.length)
+    backupCodes.value = Array.from({ length: count }, (_, idx) => codes[idx] || '')
+}
+
+const togglePassword = async () => {
+    if (showPassword.value) {
+        showPassword.value = false
+        return
+    }
+    // Reveal the saved password only when the field is empty (i.e. the user is
+    // not typing a replacement) and a stored password exists.
+    if (!accountForm.register_password && accountForm.has_password && modalNpcStatus.value && !clearPasswordFlag.value) {
+        try {
+            const { data } = await axios.get(route('npc-statuses.register-password.reveal', modalNpcStatus.value.id), {
+                headers: { Accept: 'application/json' },
+            })
+            accountForm.register_password = data.register_password || ''
+        } catch (error) {
+            showError(axiosErrorText(error))
+            return
+        }
+    }
+    showPassword.value = true
+}
+
+const clearSavedPassword = () => {
+    clearPasswordFlag.value = true
+    accountForm.register_password = ''
+    showPassword.value = false
 }
 
 const syncSelectedStores = () => {
@@ -852,6 +1483,7 @@ const openStatusModal = (company) => {
     const shouldScrollIfFound = !company.npc_status
     selectedCompany.value = company
     statusForm.company_id = company.id
+    attemptedSteps.value = new Set()
     syncModalForms()
     storeSearch.value = ''
     storeAssignmentTab.value = 'all'
@@ -869,6 +1501,11 @@ const closeModal = () => {
     statusForm.validity_from = ''
     statusForm.validity_to = ''
     workflowForm.value = []
+    activeStep.value = 0
+    applyStep1And2(null)
+    applyStep3(null)
+    applyStep4(null)
+    attemptedSteps.value = new Set()
     selectedStoreIds.value = []
     storeSearch.value = ''
     storeAssignmentTab.value = 'all'
@@ -880,6 +1517,7 @@ const closeModal = () => {
 
 const switchModalYear = (year) => {
     modalYear.value = (year === currentYear.value) ? null : year
+    attemptedSteps.value = new Set()
     syncModalForms()
     loadSelectedCompany()
 }
@@ -915,6 +1553,14 @@ const onStepToggle = (index) => {
     if (!canEditSelectedRecord.value) return
     const step = workflowForm.value[index]
     if (step.is_done) {
+        // Required fields for this step must be complete before it can be done.
+        if (!stepFieldsSatisfied(index)) {
+            step.is_done = false
+            attemptedSteps.value = new Set(attemptedSteps.value).add(index)
+            showError('Please complete all required (*) fields for this step before marking it done.')
+            scrollToFirstInvalid()
+            return
+        }
         if (!step.completed_at) step.completed_at = todayString()
     } else {
         // Cascade: unchecking a step invalidates all later steps.
@@ -959,6 +1605,30 @@ const saveModalChanges = async () => {
     const existingRecord = modalNpcStatus.value
     const workflowSteps = workflowForm.value.map((step) => ({ ...step }))
     const storeIds = [...selectedStoreIds.value]
+    // Snapshot Step 1 & 2 forms before any applyFreshCompany() re-sync so the
+    // user's typed values survive the multi-request save sequence.
+    const accountSnapshot = {
+        register_email: accountForm.register_email || null,
+        register_password: accountForm.register_password || null,
+        clear_password: clearPasswordFlag.value,
+    }
+    const dpoProfileSnapshot = {
+        ...dpoProfileForm,
+        role: dpoProfileForm.role || 'PIC/PIP',
+        backup_codes: [...backupCodes.value],
+    }
+    const registrationSnapshot = JSON.parse(JSON.stringify(registrationForm.value))
+    const approvalSnapshot = {
+        approval_status: approvalForm.approval_status,
+        payment: {
+            year: approvalForm.year || null,
+            reference_no: approvalForm.reference_no || null,
+            transaction_no: approvalForm.transaction_no || null,
+            date_of_payment: approvalForm.date_of_payment || null,
+            transaction_type: approvalForm.transaction_type || null,
+            amount: approvalForm.amount === '' ? null : approvalForm.amount,
+        },
+    }
 
     try {
         let response = existingRecord
@@ -972,23 +1642,39 @@ const saveModalChanges = async () => {
                 validity_to: statusForm.validity_to,
             }, { headers: { Accept: 'application/json' } })
         let company = response.data.company
-        applyFreshCompany(company)
+        replaceCompanyInPage(company)
 
         // Dependent sections are only submitted when they were loaded for an
         // existing record. This avoids wiping data if a stale modal discovers
         // an existing renewal during the validity request.
         if (existingRecord && hasPermission('npc_status.edit')) {
+            response = await axios.put(route('npc-statuses.account.update', existingRecord.id), accountSnapshot, { headers: { Accept: 'application/json' } })
+            company = response.data.company
+            replaceCompanyInPage(company)
+
+            response = await axios.put(route('npc-statuses.dpo-profile.update', existingRecord.id), dpoProfileSnapshot, { headers: { Accept: 'application/json' } })
+            company = response.data.company
+            replaceCompanyInPage(company)
+
+            response = await axios.put(route('npc-statuses.registration.update', existingRecord.id), { details: registrationSnapshot }, { headers: { Accept: 'application/json' } })
+            company = response.data.company
+            replaceCompanyInPage(company)
+
+            response = await axios.put(route('npc-statuses.approval.update', existingRecord.id), approvalSnapshot, { headers: { Accept: 'application/json' } })
+            company = response.data.company
+            replaceCompanyInPage(company)
+
             response = await axios.put(route('npc-statuses.stores.update', existingRecord.id), {
                 store_ids: storeIds,
             }, { headers: { Accept: 'application/json' } })
             company = response.data.company
-            applyFreshCompany(company)
+            replaceCompanyInPage(company)
 
             response = await axios.put(route('npc-statuses.workflow.update', existingRecord.id), {
                 steps: workflowSteps,
             }, { headers: { Accept: 'application/json' } })
             company = response.data.company
-            applyFreshCompany(company)
+            replaceCompanyInPage(company)
         }
 
         showSuccess('NPC renewal changes saved successfully')
@@ -1044,6 +1730,54 @@ const deleteSeal = async (attachment) => {
         })
         replaceCompanyInPage(data.company)
         showSuccess(data.message || 'Seal removed successfully')
+    } catch (error) {
+        showError(axiosErrorText(error))
+    }
+}
+
+// ── Step 3 document uploads ──
+const uploadDocument = async ({ type, file }) => {
+    if (!canEditSelectedRecord.value || !file) return
+    const record = modalNpcStatus.value
+    if (!record) {
+        showError('Save the renewal before uploading documents.')
+        return
+    }
+    try {
+        const formData = new FormData()
+        formData.append('doc_type', type)
+        formData.append('file', file)
+        const { data } = await axios.post(route('npc-statuses.documents.store', record.id), formData, {
+            headers: { Accept: 'application/json' },
+        })
+        replaceCompanyInPage(data.company)
+        showSuccess(data.message || 'Document uploaded successfully')
+    } catch (error) {
+        showError(axiosErrorText(error))
+    }
+}
+
+const receiptInputKey = ref(0)
+const onReceiptFile = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    uploadDocument({ type: 'payment_receipt', file })
+    receiptInputKey.value++
+}
+
+const deleteDocument = async ({ id }) => {
+    if (!canEditSelectedRecord.value || !id) return
+    const ok = await confirm({
+        title: 'Remove Document',
+        message: 'Remove this supporting document?',
+    })
+    if (!ok) return
+    try {
+        const { data } = await axios.delete(route('npc-documents.destroy', id), {
+            headers: { Accept: 'application/json' },
+        })
+        replaceCompanyInPage(data.company)
+        showSuccess(data.message || 'Document removed successfully')
     } catch (error) {
         showError(axiosErrorText(error))
     }

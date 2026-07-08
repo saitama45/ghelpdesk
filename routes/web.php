@@ -57,6 +57,14 @@ Route::middleware('auth')->group(function () {
     Route::get('npc-status-attachments/{attachment}/download', [NpcStatusController::class, 'downloadStatusAttachment'])->name('npc-status-attachments.download');
     Route::delete('npc-status-attachments/{attachment}', [NpcStatusController::class, 'destroyAttachment'])->name('npc-status-attachments.destroy');
     Route::put('npc-statuses/{npcStatus}/workflow', [NpcStatusController::class, 'updateWorkflow'])->name('npc-statuses.workflow.update');
+    Route::put('npc-statuses/{npcStatus}/account', [NpcStatusController::class, 'updateAccount'])->name('npc-statuses.account.update');
+    Route::put('npc-statuses/{npcStatus}/dpo-profile', [NpcStatusController::class, 'updateDpoProfile'])->name('npc-statuses.dpo-profile.update');
+    Route::get('npc-statuses/{npcStatus}/register-password', [NpcStatusController::class, 'revealPassword'])->name('npc-statuses.register-password.reveal');
+    Route::put('npc-statuses/{npcStatus}/registration', [NpcStatusController::class, 'updateRegistration'])->name('npc-statuses.registration.update');
+    Route::put('npc-statuses/{npcStatus}/approval', [NpcStatusController::class, 'updateApproval'])->name('npc-statuses.approval.update');
+    Route::post('npc-statuses/{npcStatus}/documents', [NpcStatusController::class, 'storeDocument'])->name('npc-statuses.documents.store');
+    Route::delete('npc-documents/{document}', [NpcStatusController::class, 'destroyDocument'])->name('npc-documents.destroy');
+    Route::get('npc-documents/{document}/download', [NpcStatusController::class, 'downloadDocument'])->name('npc-documents.download');
     Route::put('npc-statuses/{npcStatus}/stores', [NpcStatusController::class, 'syncStores'])->name('npc-statuses.stores.update');
     Route::get('npc-statuses/{npcStatus}/stores/{store}/seals/{type}/download', [NpcStatusController::class, 'downloadStoreSeal'])
         ->whereIn('type', ['dpo_seal', 'dpo_registration', 'cctv_seal'])
@@ -64,6 +72,8 @@ Route::middleware('auth')->group(function () {
     Route::post('npc-statuses/{npcStatus}/stores/{store}/seals/{type}/confirm', [NpcStatusController::class, 'confirmStoreSeal'])
         ->whereIn('type', ['dpo_seal', 'dpo_registration', 'cctv_seal'])
         ->name('npc-statuses.stores.seal.confirm');
+    Route::post('npc-statuses/{npcStatus}/stores/{store}/proof', [NpcStatusController::class, 'uploadStoreProof'])->name('npc-statuses.stores.proof.upload');
+    Route::get('npc-statuses/{npcStatus}/stores/{store}/proof', [NpcStatusController::class, 'downloadStoreProof'])->name('npc-statuses.stores.proof.download');
     Route::get('npc-statuses/companies/{company}', [NpcStatusController::class, 'showCompany'])
         ->name('npc-statuses.companies.show');
     Route::post('stores/{store}/cctv-seal-notice', [NpcStatusController::class, 'storeCctvSealNotice'])->name('stores.cctv-seal-notice.store');

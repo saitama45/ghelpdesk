@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Company;
 use App\Models\NpcStatus;
 use App\Models\NpcStatusAttachment;
+use App\Models\NpcStoreProof;
 use App\Models\Store;
 use App\Models\User;
 use App\Support\CompanyContext;
@@ -26,7 +27,7 @@ class NpcStatusTest extends TestCase
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        foreach (['npc_status.view', 'npc_status.create', 'npc_status.edit', 'npc_status.delete', 'npc_status.download'] as $permission) {
+        foreach (['npc_status.view', 'npc_status.create', 'npc_status.edit', 'npc_status.delete', 'npc_status.download', 'npc_status.reveal_password'] as $permission) {
             Permission::findOrCreate($permission);
         }
 
@@ -454,12 +455,12 @@ class NpcStatusTest extends TestCase
         $this->actingAs($user)
             ->put(route('npc-statuses.workflow.update', $npcStatus), [
                 'steps' => [
-                    ['key' => 'form_completion', 'is_done' => true, 'completed_at' => '2026-01-02', 'remarks' => 'Done'],
-                    ['key' => 'documents_uploading', 'is_done' => true, 'completed_at' => '2026-01-03', 'remarks' => null],
-                    ['key' => 'application_signing', 'is_done' => true, 'completed_at' => '2026-01-04', 'remarks' => null],
+                    ['key' => 'account_registration', 'is_done' => true, 'completed_at' => '2026-01-02', 'remarks' => 'Done'],
+                    ['key' => 'dpo_profile', 'is_done' => true, 'completed_at' => '2026-01-03', 'remarks' => null],
+                    ['key' => 'dpo_registration', 'is_done' => true, 'completed_at' => '2026-01-04', 'remarks' => null],
                     ['key' => 'npc_approval', 'is_done' => false, 'completed_at' => null, 'remarks' => 'Waiting'],
-                    ['key' => 'payment_processing', 'is_done' => false, 'completed_at' => null, 'remarks' => null],
-                    ['key' => 'store_distribution', 'is_done' => false, 'completed_at' => null, 'remarks' => null],
+                    ['key' => 'store_receiving', 'is_done' => false, 'completed_at' => null, 'remarks' => null],
+                    ['key' => 'store_downloads', 'is_done' => false, 'completed_at' => null, 'remarks' => null],
                 ],
             ])
             ->assertRedirect();
@@ -495,12 +496,12 @@ class NpcStatusTest extends TestCase
         $this->actingAs($editor)
             ->put(route('npc-statuses.workflow.update', $status2027), [
                 'steps' => [
-                    ['key' => 'form_completion', 'is_done' => true, 'completed_at' => '2027-01-05', 'remarks' => '2027 renewal started'],
-                    ['key' => 'documents_uploading', 'is_done' => false, 'completed_at' => null, 'remarks' => null],
-                    ['key' => 'application_signing', 'is_done' => false, 'completed_at' => null, 'remarks' => null],
+                    ['key' => 'account_registration', 'is_done' => true, 'completed_at' => '2027-01-05', 'remarks' => '2027 renewal started'],
+                    ['key' => 'dpo_profile', 'is_done' => false, 'completed_at' => null, 'remarks' => null],
+                    ['key' => 'dpo_registration', 'is_done' => false, 'completed_at' => null, 'remarks' => null],
                     ['key' => 'npc_approval', 'is_done' => false, 'completed_at' => null, 'remarks' => null],
-                    ['key' => 'payment_processing', 'is_done' => false, 'completed_at' => null, 'remarks' => null],
-                    ['key' => 'store_distribution', 'is_done' => false, 'completed_at' => null, 'remarks' => null],
+                    ['key' => 'store_receiving', 'is_done' => false, 'completed_at' => null, 'remarks' => null],
+                    ['key' => 'store_downloads', 'is_done' => false, 'completed_at' => null, 'remarks' => null],
                 ],
             ])
             ->assertRedirect();
@@ -551,6 +552,15 @@ class NpcStatusTest extends TestCase
         $this->actingAs($editor)
             ->putJson(route('npc-statuses.workflow.update', $historicalStatus), ['steps' => $steps])
             ->assertOk();
+
+        // Proof of use is a precondition for admin confirmation.
+        NpcStoreProof::create([
+            'npc_status_id' => $historicalStatus->id,
+            'store_id' => $store->id,
+            'file_path' => 'npc-store-proofs/proof.jpg',
+            'file_name' => 'proof.jpg',
+            'uploaded_at' => now(),
+        ]);
 
         foreach (NpcStatusAttachment::SEAL_TYPES as $type) {
             $this->actingAs($editor)
@@ -712,6 +722,13 @@ class NpcStatusTest extends TestCase
             ->assertOk();
 
         $this->assertNull($npcStatus->sealReceipts()->where('store_id', $store->id)->first()->confirmed_at);
+
+        // The store must upload proof of use before an admin can confirm.
+        $this->actingAs($storeUser)
+            ->post(route('npc-statuses.stores.proof.upload', [$npcStatus, $store]), [
+                'file' => UploadedFile::fake()->image('proof.jpg'),
+            ])
+            ->assertSessionHasNoErrors();
 
         $this->actingAs($admin)
             ->post(route('npc-statuses.stores.seal.confirm', [$npcStatus, $store, NpcStatusAttachment::TYPE_DPO_SEAL]), [
@@ -921,6 +938,265 @@ class NpcStatusTest extends TestCase
 
         $this->actingAs($user)
             ->delete(route('npc-status-attachments.destroy', $attachment))
+            ->assertForbidden();
+    }
+
+    public function test_new_record_defaults_to_new_entry_type(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo('npc_status.create');
+        $company = $this->company();
+
+        $this->actingAs($user)
+            ->postJson(route('npc-statuses.store'), [
+                'company_id' => $company->id,
+                'validity_from' => '2026-01-01',
+                'validity_to' => '2026-12-31',
+            ])
+            ->assertOk()
+            ->assertJsonPath('company.npc_status.entry_type', 'New');
+
+        $this->assertDatabaseHas('npc_statuses', [
+            'company_id' => $company->id,
+            'year' => 2026,
+            'entry_type' => 'New',
+        ]);
+    }
+
+    public function test_renewal_copies_recent_details_from_prior_year(): void
+    {
+        $editor = User::factory()->create();
+        $editor->givePermissionTo(['npc_status.create', 'npc_status.edit', 'npc_status.reveal_password']);
+        $company = $this->company();
+
+        $prior = $this->npcStatus([
+            'company_id' => $company->id,
+            'year' => 2025,
+            'validity_from' => '2025-01-01',
+            'validity_to' => '2025-12-31',
+            'register_email' => 'dpo@example.com',
+            'register_password' => 'Sup3rSecret!',
+        ]);
+        $prior->dpoProfile()->create([
+            'first_name' => 'Jane',
+            'last_name' => 'Cruz',
+            'role' => 'PIC/PIP',
+        ]);
+        $prior->backupCodes()->create(['code' => '1871265874', 'sort_order' => 1]);
+
+        $this->actingAs($editor)
+            ->postJson(route('npc-statuses.store'), [
+                'company_id' => $company->id,
+                'entry_type' => 'Renewal',
+                'validity_from' => '2026-01-01',
+                'validity_to' => '2026-12-31',
+            ])
+            ->assertOk()
+            ->assertJsonPath('company.npc_status.entry_type', 'Renewal')
+            ->assertJsonPath('company.npc_status.account.register_email', 'dpo@example.com')
+            ->assertJsonPath('company.npc_status.account.has_password', true)
+            ->assertJsonPath('company.npc_status.dpo_profile.first_name', 'Jane')
+            ->assertJsonPath('company.npc_status.backup_codes.0', '1871265874');
+    }
+
+    public function test_account_and_dpo_profile_save_and_password_is_encrypted(): void
+    {
+        $editor = User::factory()->create();
+        $editor->givePermissionTo(['npc_status.edit', 'npc_status.reveal_password']);
+        $npcStatus = $this->npcStatus();
+
+        $this->actingAs($editor)
+            ->putJson(route('npc-statuses.account.update', $npcStatus), [
+                'register_email' => 'register@example.com',
+                'register_password' => 'PlainText123',
+            ])
+            ->assertOk()
+            ->assertJsonPath('company.npc_status.account.has_password', true);
+
+        // Stored value must be encrypted (reversible), never the plaintext.
+        $stored = NpcStatus::find($npcStatus->id)->getRawOriginal('register_password');
+        $this->assertNotEquals('PlainText123', $stored);
+        $this->assertEquals('PlainText123', NpcStatus::find($npcStatus->id)->register_password);
+
+        $this->actingAs($editor)
+            ->putJson(route('npc-statuses.dpo-profile.update', $npcStatus), [
+                'first_name' => 'Ana',
+                'sex' => 'Female',
+                'role' => 'PIC/PIP',
+                'backup_codes' => ['1111111111', '', '2222222222'],
+            ])
+            ->assertOk()
+            ->assertJsonPath('company.npc_status.dpo_profile.first_name', 'Ana')
+            ->assertJsonPath('company.npc_status.backup_codes.0', '1111111111')
+            ->assertJsonPath('company.npc_status.backup_codes.1', '2222222222');
+
+        // Blank codes are dropped, not stored.
+        $this->assertDatabaseCount('npc_backup_codes', 2);
+    }
+
+    public function test_reveal_password_requires_permission(): void
+    {
+        $npcStatus = $this->npcStatus(['register_password' => 'RevealMe1']);
+
+        $withoutPerm = User::factory()->create();
+        $withoutPerm->givePermissionTo('npc_status.edit');
+        $this->actingAs($withoutPerm)
+            ->getJson(route('npc-statuses.register-password.reveal', $npcStatus))
+            ->assertForbidden();
+
+        $withPerm = User::factory()->create();
+        $withPerm->givePermissionTo('npc_status.reveal_password');
+        $this->actingAs($withPerm)
+            ->getJson(route('npc-statuses.register-password.reveal', $npcStatus))
+            ->assertOk()
+            ->assertJsonPath('register_password', 'RevealMe1');
+    }
+
+    public function test_registration_details_and_documents_save(): void
+    {
+        $editor = User::factory()->create();
+        $editor->givePermissionTo('npc_status.edit');
+        $npcStatus = $this->npcStatus();
+
+        $details = [
+            'organization' => ['name' => 'Acme Corp', 'city' => 'Manila'],
+            'sector' => ['sector' => 'Retail', 'sub_sector' => 'Grocery'],
+            'head_of_org' => ['first_name' => 'Boss', 'last_name' => 'Man'],
+            'compliance_officer' => 'COP details',
+            'classification' => 'Class A',
+            'sub_classification' => 'Sub 1',
+            'data_processing_systems' => [
+                ['system_name' => 'HRIS', 'pic_or_pip' => 'PIC', 'life_cycle' => ['when_collected' => 'On hire'], 'security_measures' => ['organizational' => 'Policies']],
+                ['system_name' => 'POS', 'pic_or_pip' => 'PIP'],
+            ],
+        ];
+
+        $this->actingAs($editor)
+            ->putJson(route('npc-statuses.registration.update', $npcStatus), ['details' => $details])
+            ->assertOk()
+            ->assertJsonPath('company.npc_status.registration.organization.name', 'Acme Corp')
+            ->assertJsonPath('company.npc_status.registration.data_processing_systems.1.system_name', 'POS');
+
+        $this->assertDatabaseHas('npc_registrations', ['npc_status_id' => $npcStatus->id]);
+
+        // Upload a supporting document, then re-upload replaces it.
+        $this->actingAs($editor)
+            ->postJson(route('npc-statuses.documents.store', $npcStatus), [
+                'doc_type' => 'sec_certificate',
+                'file' => UploadedFile::fake()->create('sec.pdf', 40, 'application/pdf'),
+            ])
+            ->assertOk()
+            ->assertJsonPath('company.npc_status.documents.sec_certificate.name', 'sec.pdf');
+
+        $this->actingAs($editor)
+            ->postJson(route('npc-statuses.documents.store', $npcStatus), [
+                'doc_type' => 'sec_certificate',
+                'file' => UploadedFile::fake()->create('sec-v2.pdf', 40, 'application/pdf'),
+            ])
+            ->assertOk()
+            ->assertJsonPath('company.npc_status.documents.sec_certificate.name', 'sec-v2.pdf');
+
+        // Only one row per slot after replacement.
+        $this->assertDatabaseCount('npc_documents', 1);
+    }
+
+    public function test_approval_status_and_payment_save(): void
+    {
+        $editor = User::factory()->create();
+        $editor->givePermissionTo('npc_status.edit');
+        $npcStatus = $this->npcStatus();
+
+        $this->actingAs($editor)
+            ->putJson(route('npc-statuses.approval.update', $npcStatus), [
+                'approval_status' => 'Approved',
+                'payment' => [
+                    'year' => 2026,
+                    'reference_no' => 'REF-001',
+                    'transaction_no' => 'TXN-001',
+                    'date_of_payment' => '2026-03-15',
+                    'transaction_type' => 'Registration Fees',
+                    'amount' => 1500.50,
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('company.npc_status.approval_status', 'Approved')
+            ->assertJsonPath('company.npc_status.payment.reference_no', 'REF-001')
+            ->assertJsonPath('company.npc_status.payment.transaction_type', 'Registration Fees');
+
+        $this->assertDatabaseHas('npc_payments', [
+            'npc_status_id' => $npcStatus->id,
+            'reference_no' => 'REF-001',
+            'amount' => 1500.50,
+        ]);
+    }
+
+    public function test_approval_rejects_invalid_transaction_type(): void
+    {
+        $editor = User::factory()->create();
+        $editor->givePermissionTo('npc_status.edit');
+        $npcStatus = $this->npcStatus();
+
+        $this->actingAs($editor)
+            ->putJson(route('npc-statuses.approval.update', $npcStatus), [
+                'approval_status' => 'Approved',
+                'payment' => ['transaction_type' => 'Bogus'],
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('payment.transaction_type');
+    }
+
+    public function test_admin_cannot_confirm_seal_until_store_uploads_proof(): void
+    {
+        $storeUser = User::factory()->create();
+        $storeUser->givePermissionTo('npc_status.download');
+        $admin = User::factory()->create();
+        $admin->givePermissionTo('npc_status.edit');
+
+        $npcStatus = $this->npcStatus();
+        $store = $this->store();
+        $store->users()->attach($storeUser->id);
+        $npcStatus->stores()->syncWithPivotValues([$store->id], ['year' => 2026]);
+
+        // Without proof, confirmation is rejected.
+        $this->actingAs($admin)
+            ->postJson(route('npc-statuses.stores.seal.confirm', [$npcStatus, $store, NpcStatusAttachment::TYPE_DPO_SEAL]), [
+                'confirmed' => true,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('proof');
+
+        // Store uploads proof, then confirmation succeeds.
+        $this->actingAs($storeUser)
+            ->postJson(route('npc-statuses.stores.proof.upload', [$npcStatus, $store]), [
+                'file' => UploadedFile::fake()->image('proof.png'),
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('npc_store_proofs', [
+            'npc_status_id' => $npcStatus->id,
+            'store_id' => $store->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->postJson(route('npc-statuses.stores.seal.confirm', [$npcStatus, $store, NpcStatusAttachment::TYPE_DPO_SEAL]), [
+                'confirmed' => true,
+            ])
+            ->assertOk();
+    }
+
+    public function test_store_user_cannot_upload_proof_for_unassigned_store(): void
+    {
+        $storeUser = User::factory()->create();
+        $storeUser->givePermissionTo('npc_status.download');
+        $npcStatus = $this->npcStatus();
+        $store = $this->store();
+        $npcStatus->stores()->syncWithPivotValues([$store->id], ['year' => 2026]);
+        // Note: store NOT attached to the user.
+
+        $this->actingAs($storeUser)
+            ->postJson(route('npc-statuses.stores.proof.upload', [$npcStatus, $store]), [
+                'file' => UploadedFile::fake()->image('proof.png'),
+            ])
             ->assertForbidden();
     }
 

@@ -63,6 +63,26 @@
                         <div v-else class="text-xs font-bold text-gray-400">Not released yet</div>
                     </div>
                 </div>
+
+                <!-- Proof of use -->
+                <div class="mt-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                    <div class="text-[11px] font-black uppercase tracking-wider text-gray-600 dark:text-gray-300">Proof of Use</div>
+                    <p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Upload a screenshot/photo showing you posted/used the downloaded seal. Admins can confirm only after proof is uploaded.</p>
+                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                        <span v-if="yearRow.proof" class="text-[11px] font-bold text-green-600">
+                            ✓ Uploaded: {{ yearRow.proof.name }} <span class="font-normal text-gray-500">({{ formatDateTime(yearRow.proof.uploaded_at) }})</span>
+                        </span>
+                        <input
+                            :key="proofKey(store, yearRow)"
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.bmp,.heic,.heif"
+                            :disabled="isUploadingProof(store, yearRow)"
+                            class="text-xs text-gray-500 file:mr-2 file:rounded-full file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-blue-700 disabled:opacity-50 dark:text-gray-300"
+                            @change="uploadProof(store, yearRow, $event)"
+                        >
+                        <span v-if="isUploadingProof(store, yearRow)" class="text-[11px] font-bold text-blue-600">Uploading…</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -79,11 +99,33 @@ defineProps({
     },
 })
 
-const emit = defineEmits(['downloaded', 'download-error'])
+const emit = defineEmits(['downloaded', 'download-error', 'uploaded', 'upload-error'])
 const downloadingKeys = ref([])
 const locallyDownloadedKeys = ref([])
+const uploadingProofKeys = ref([])
 
 const sealKey = (store, yearRow, seal) => `${store.store_id}:${yearRow.npc_status_id}:${seal.type}`
+const proofKey = (store, yearRow) => `${store.store_id}:${yearRow.npc_status_id}`
+const isUploadingProof = (store, yearRow) => uploadingProofKeys.value.includes(proofKey(store, yearRow))
+
+const uploadProof = async (store, yearRow, event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const key = proofKey(store, yearRow)
+    if (uploadingProofKeys.value.includes(key)) return
+
+    uploadingProofKeys.value = [...uploadingProofKeys.value, key]
+    try {
+        const formData = new FormData()
+        formData.append('file', file)
+        await axios.post(yearRow.proof_upload_url, formData, { headers: { Accept: 'application/json' } })
+        emit('uploaded')
+    } catch (error) {
+        emit('upload-error', error)
+    } finally {
+        uploadingProofKeys.value = uploadingProofKeys.value.filter((item) => item !== key)
+    }
+}
 
 const isDownloading = (store, yearRow, seal) => {
     return downloadingKeys.value.includes(sealKey(store, yearRow, seal))
@@ -129,5 +171,12 @@ const formatDate = (value) => {
         month: 'short',
         day: '2-digit',
     })
+}
+
+const formatDateTime = (value) => {
+    if (!value) return ''
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return String(value)
+    return date.toLocaleString('en-US', { year: 'numeric', month: 'short', day: '2-digit', hour: 'numeric', minute: '2-digit' })
 }
 </script>

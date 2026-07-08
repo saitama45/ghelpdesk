@@ -3,8 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
+use App\Models\NpcBackupCode;
+use App\Models\NpcDocument;
+use App\Models\NpcDpoProfile;
+use App\Models\NpcPayment;
+use App\Models\NpcRegistration;
 use App\Models\NpcSealReceipt;
 use App\Models\NpcStatus;
+use App\Models\NpcStoreProof;
 use App\Models\NpcStatusAttachment;
 use App\Models\NpcStatusWorkflowStep;
 use App\Models\Store;
@@ -29,6 +35,12 @@ class NpcStatusController extends Controller implements HasMiddleware
 {
     private const MAX_ATTACHMENT_KILOBYTES = 1024000;
 
+    // Accept the image formats real users actually upload (phone photos and
+    // screenshots — incl. HEIC/HEIF from iPhones, gif/bmp) plus PDF. Kept as
+    // `mimes` (content-sniffed extension match) so a mislabeled .jpg that is
+    // really e.g. HEIC still resolves to an allowed type.
+    private const UPLOAD_FILE_RULE = 'required|file|mimes:pdf,jpg,jpeg,png,webp,gif,bmp,heic,heif|max:';
+
     private const STATUS_GROUPS = [
         'active' => ['Active'],
         'for_renewal' => ['Renewal Window', 'Critical Renewal', 'Due Today', 'Overdue'],
@@ -41,11 +53,9 @@ class NpcStatusController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            // index is reachable by admins (npc_status.view) and store users
-            // (npc_status.download); the split is authorized inside index().
-            new Middleware('can:npc_status.view', only: [
-                'showCompany',
-            ]),
+            // index and showCompany are reachable by admins (npc_status.view),
+            // editors (npc_status.edit — they open the same modal to edit), and
+            // store users (npc_status.download); each authorizes internally.
             new Middleware('can:npc_status.create', only: ['store']),
             new Middleware('can:npc_status.edit', only: [
                 'update',
@@ -53,14 +63,23 @@ class NpcStatusController extends Controller implements HasMiddleware
                 'storeAttachment',
                 'destroyAttachment',
                 'updateWorkflow',
+                'updateAccount',
+                'updateDpoProfile',
+                'updateRegistration',
+                'updateApproval',
+                'storeDocument',
+                'destroyDocument',
                 'storeCctvSealNotice',
                 'downloadAttachment',
                 'downloadStatusAttachment',
                 'downloadCctvSealNotice',
+                'downloadDocument',
+                'downloadStoreProof',
                 'confirmStoreSeal',
             ]),
+            new Middleware('can:npc_status.reveal_password', only: ['revealPassword']),
             new Middleware('can:npc_status.delete', only: ['destroy']),
-            new Middleware('can:npc_status.download', only: ['downloadStoreSeal']),
+            new Middleware('can:npc_status.download', only: ['downloadStoreSeal', 'uploadStoreProof']),
         ];
     }
 
@@ -111,6 +130,11 @@ class NpcStatusController extends Controller implements HasMiddleware
                 $npcQuery->with([
                         'attachments' => fn ($query) => $query->latest('validity_from')->latest('created_at'),
                         'workflowSteps',
+                        'dpoProfile',
+                        'backupCodes',
+                        'registration',
+                        'documents',
+                        'payment',
                         'stores' => fn ($query) => $query->when(
                             $restrictedStoreIds !== null,
                             fn ($storeQuery) => $storeQuery->whereIn('stores.id', $restrictedStoreIds)
@@ -118,6 +142,10 @@ class NpcStatusController extends Controller implements HasMiddleware
                         'sealReceipts' => fn ($query) => $query->when(
                             $restrictedStoreIds !== null,
                             fn ($receiptQuery) => $receiptQuery->whereIn('store_id', $restrictedStoreIds)
+                        ),
+                        'storeProofs' => fn ($query) => $query->when(
+                            $restrictedStoreIds !== null,
+                            fn ($proofQuery) => $proofQuery->whereIn('store_id', $restrictedStoreIds)
                         ),
                     ])
                     ->withCount(['stores' => fn ($query) => $query->when(
@@ -186,6 +214,10 @@ class NpcStatusController extends Controller implements HasMiddleware
         ]);
         $requestedYear = (int) ($validated['year'] ?? $year);
         $user = $request->user();
+        abort_unless(
+            $user->can('npc_status.view') || $user->can('npc_status.edit') || $user->can('npc_status.download'),
+            403
+        );
         $restrictedStoreIds = $user->can('npc_status.download') && !$user->can('npc_status.edit')
             ? $user->stores()->pluck('stores.id')->all()
             : null;
@@ -257,7 +289,67 @@ class NpcStatusController extends Controller implements HasMiddleware
 
         $this->ensureWorkflowSteps($npcStatus);
 
+        // On a Renewal, seed Step 1 & Step 2 details from the entity's most
+        // recent prior-year record so the user only has to update what changed.
+        if ($npcStatus->entry_type === 'Renewal') {
+            $this->copyRenewalDetailsFromPrior($npcStatus);
+        }
+
         return $this->respondWithCompany($request, $npcStatus, 'NPC renewal created successfully');
+    }
+
+    private function copyRenewalDetailsFromPrior(NpcStatus $npcStatus): void
+    {
+        $prior = NpcStatus::where('company_id', $npcStatus->company_id)
+            ->where('year', '<', $npcStatus->year)
+            ->orderByDesc('year')
+            ->with(['dpoProfile', 'backupCodes', 'registration'])
+            ->first();
+
+        if (!$prior) {
+            return;
+        }
+
+        // register_password is decrypted by the cast on read and re-encrypted
+        // on assignment.
+        $npcStatus->forceFill([
+            'register_email' => $prior->register_email,
+            'register_password' => $prior->register_password,
+        ])->save();
+
+        if ($prior->dpoProfile) {
+            NpcDpoProfile::updateOrCreate(
+                ['npc_status_id' => $npcStatus->id],
+                collect($prior->dpoProfile->only([
+                    'first_name',
+                    'middle_initial',
+                    'last_name',
+                    'sex',
+                    'designation',
+                    'date_designated_dpo',
+                    'official_dpo_email',
+                    'mobile_no',
+                    'telephone_no',
+                    'role',
+                ]))->all()
+            );
+        }
+
+        foreach ($prior->backupCodes as $code) {
+            NpcBackupCode::create([
+                'npc_status_id' => $npcStatus->id,
+                'code' => $code->code,
+                'sort_order' => $code->sort_order,
+            ]);
+        }
+
+        // Carry over Step 3 registration text (documents are re-uploaded fresh).
+        if ($prior->registration && $prior->registration->details) {
+            NpcRegistration::updateOrCreate(
+                ['npc_status_id' => $npcStatus->id],
+                ['details' => $prior->registration->details]
+            );
+        }
     }
 
     public function update(Request $request, NpcStatus $npcStatus)
@@ -360,7 +452,7 @@ class NpcStatusController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'type' => ['required', Rule::in(NpcStatusAttachment::TYPES)],
             'validity_from' => 'required|date',
-            'file' => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:' . self::MAX_ATTACHMENT_KILOBYTES,
+            'file' => self::UPLOAD_FILE_RULE . self::MAX_ATTACHMENT_KILOBYTES,
         ]);
 
         if (Carbon::parse($validated['validity_from'])->year !== (int) $npcStatus->year) {
@@ -481,10 +573,239 @@ class NpcStatusController extends Controller implements HasMiddleware
         return $this->respondWithCompany($request, $npcStatus->fresh(), 'Workflow checklist saved successfully');
     }
 
+    /**
+     * Step 1 — Account Registration. Saves the registration email and, when
+     * provided, the (encrypted) password. An empty password field leaves the
+     * stored password untouched; sending `clear_password` removes it.
+     */
+    public function updateAccount(Request $request, NpcStatus $npcStatus)
+    {
+        $this->ensureNpcStatusIsEditable($npcStatus);
+
+        $validated = $request->validate([
+            'register_email' => 'nullable|email|max:255',
+            'register_password' => 'nullable|string|max:255',
+            'clear_password' => 'nullable|boolean',
+        ]);
+
+        $npcStatus->register_email = $validated['register_email'] ?? null;
+
+        if ($request->boolean('clear_password')) {
+            $npcStatus->register_password = null;
+        } elseif (filled($validated['register_password'] ?? null)) {
+            $npcStatus->register_password = $validated['register_password'];
+        }
+
+        $npcStatus->updated_by = $request->user()->id;
+        $npcStatus->save();
+
+        return $this->respondWithCompany($request, $npcStatus, 'Account registration saved successfully');
+    }
+
+    /**
+     * Step 2 — DPO Profile Information + generated backup codes.
+     */
+    public function updateDpoProfile(Request $request, NpcStatus $npcStatus)
+    {
+        $this->ensureNpcStatusIsEditable($npcStatus);
+
+        $validated = $request->validate([
+            'first_name' => 'nullable|string|max:255',
+            'middle_initial' => 'nullable|string|max:20',
+            'last_name' => 'nullable|string|max:255',
+            'sex' => ['nullable', Rule::in(['Male', 'Female'])],
+            'designation' => 'nullable|string|max:255',
+            'date_designated_dpo' => 'nullable|date',
+            'official_dpo_email' => 'nullable|email|max:255',
+            'mobile_no' => 'nullable|string|max:50',
+            'telephone_no' => 'nullable|string|max:50',
+            'role' => 'nullable|string|max:255',
+            'backup_codes' => 'nullable|array|max:50',
+            'backup_codes.*' => 'nullable|string|max:100',
+        ]);
+
+        NpcDpoProfile::updateOrCreate(
+            ['npc_status_id' => $npcStatus->id],
+            [
+                'first_name' => $validated['first_name'] ?? null,
+                'middle_initial' => $validated['middle_initial'] ?? null,
+                'last_name' => $validated['last_name'] ?? null,
+                'sex' => $validated['sex'] ?? null,
+                'designation' => $validated['designation'] ?? null,
+                'date_designated_dpo' => $validated['date_designated_dpo'] ?? null,
+                'official_dpo_email' => $validated['official_dpo_email'] ?? null,
+                'mobile_no' => $validated['mobile_no'] ?? null,
+                'telephone_no' => $validated['telephone_no'] ?? null,
+                'role' => $validated['role'] ?: 'PIC/PIP',
+            ]
+        );
+
+        $this->syncBackupCodes($npcStatus, $validated['backup_codes'] ?? []);
+
+        $npcStatus->updated_by = $request->user()->id;
+        $npcStatus->save();
+
+        return $this->respondWithCompany($request, $npcStatus->fresh(), 'DPO profile saved successfully');
+    }
+
+    private function syncBackupCodes(NpcStatus $npcStatus, array $codes): void
+    {
+        $npcStatus->backupCodes()->delete();
+
+        $rows = collect($codes)
+            ->map(fn ($code) => trim((string) $code))
+            ->filter(fn ($code) => $code !== '')
+            ->values();
+
+        foreach ($rows as $index => $code) {
+            NpcBackupCode::create([
+                'npc_status_id' => $npcStatus->id,
+                'code' => $code,
+                'sort_order' => $index + 1,
+            ]);
+        }
+    }
+
+    /**
+     * Reveal the decrypted Step 1 password for users holding the dedicated
+     * permission (gated by middleware).
+     */
+    public function revealPassword(NpcStatus $npcStatus)
+    {
+        return response()->json([
+            'register_password' => $npcStatus->register_password,
+        ]);
+    }
+
+    /**
+     * Step 3 — DPO Registration. The whole free-text registration content is
+     * saved as one JSON document.
+     */
+    public function updateRegistration(Request $request, NpcStatus $npcStatus)
+    {
+        $this->ensureNpcStatusIsEditable($npcStatus);
+
+        $validated = $request->validate([
+            'details' => 'nullable|array',
+        ]);
+
+        NpcRegistration::updateOrCreate(
+            ['npc_status_id' => $npcStatus->id],
+            ['details' => $validated['details'] ?? null]
+        );
+
+        $npcStatus->updated_by = $request->user()->id;
+        $npcStatus->save();
+
+        return $this->respondWithCompany($request, $npcStatus->fresh(), 'DPO registration saved successfully');
+    }
+
+    /**
+     * Step 4 — Status of DPO Registration / NPC Approval. Payment details are
+     * only persisted (and only meaningful) once the status is Approved.
+     */
+    public function updateApproval(Request $request, NpcStatus $npcStatus)
+    {
+        $this->ensureNpcStatusIsEditable($npcStatus);
+
+        $validated = $request->validate([
+            'approval_status' => ['required', Rule::in(['For Submission', 'Submitted', 'Approved'])],
+            'payment' => 'nullable|array',
+            'payment.year' => 'nullable|integer|min:2000|max:2100',
+            'payment.reference_no' => 'nullable|string|max:255',
+            'payment.transaction_no' => 'nullable|string|max:255',
+            'payment.date_of_payment' => 'nullable|date',
+            'payment.transaction_type' => ['nullable', Rule::in(NpcPayment::TRANSACTION_TYPES)],
+            'payment.amount' => 'nullable|numeric|min:0',
+        ]);
+
+        $npcStatus->approval_status = $validated['approval_status'];
+        $npcStatus->updated_by = $request->user()->id;
+        $npcStatus->save();
+
+        $payment = $validated['payment'] ?? [];
+        NpcPayment::updateOrCreate(
+            ['npc_status_id' => $npcStatus->id],
+            [
+                'year' => $payment['year'] ?? null,
+                'reference_no' => $payment['reference_no'] ?? null,
+                'transaction_no' => $payment['transaction_no'] ?? null,
+                'date_of_payment' => $payment['date_of_payment'] ?? null,
+                'transaction_type' => $payment['transaction_type'] ?? null,
+                'amount' => $payment['amount'] ?? null,
+            ]
+        );
+
+        return $this->respondWithCompany($request, $npcStatus->fresh(), 'NPC approval status saved successfully');
+    }
+
+    public function storeDocument(Request $request, NpcStatus $npcStatus)
+    {
+        $this->ensureNpcStatusIsEditable($npcStatus);
+
+        $validated = $request->validate([
+            'doc_type' => ['required', Rule::in(NpcDocument::TYPES)],
+            'file' => self::UPLOAD_FILE_RULE . self::MAX_ATTACHMENT_KILOBYTES,
+        ]);
+
+        // One current file per slot: replace any previous upload for this type.
+        foreach ($npcStatus->documents()->where('doc_type', $validated['doc_type'])->get() as $existing) {
+            $this->deleteAttachmentPath($existing->file_path);
+            $existing->delete();
+        }
+
+        $file = $request->file('file');
+        $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+        $fileName = "{$validated['doc_type']}-" . Str::uuid() . ($extension ? ".{$extension}" : '');
+        $path = $file->storeAs("npc-documents/{$npcStatus->year}/{$npcStatus->company_id}", $fileName, 'public');
+
+        $npcStatus->documents()->create([
+            'doc_type' => $validated['doc_type'],
+            'file_path' => str_replace('\\', '/', $path),
+            'file_name' => $file->getClientOriginalName(),
+            'mime_type' => $file->getClientMimeType(),
+            'file_size' => $file->getSize(),
+            'uploaded_by' => $request->user()->id,
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Document uploaded successfully',
+                'company' => $this->freshCompanyRow($npcStatus->company_id, (int) now()->year),
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Document uploaded successfully');
+    }
+
+    public function destroyDocument(Request $request, NpcDocument $document)
+    {
+        $npcStatus = $document->npcStatus;
+        $this->ensureNpcStatusIsEditable($npcStatus);
+        $companyId = $npcStatus->company_id;
+
+        $this->deleteAttachmentPath($document->file_path);
+        $document->delete();
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Document deleted successfully',
+                'company' => $this->freshCompanyRow($companyId, (int) now()->year),
+            ]);
+        }
+
+        return redirect()->back();
+    }
+
+    public function downloadDocument(NpcDocument $document)
+    {
+        return $this->downloadStoredFile($document->file_path, $document->file_name);
+    }
+
     public function storeCctvSealNotice(Request $request, Store $store)
     {
         $request->validate([
-            'file' => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:' . self::MAX_ATTACHMENT_KILOBYTES,
+            'file' => self::UPLOAD_FILE_RULE . self::MAX_ATTACHMENT_KILOBYTES,
         ]);
 
         $this->deleteAttachmentPath($store->cctv_seal_notice_path);
@@ -531,7 +852,21 @@ class NpcStatusController extends Controller implements HasMiddleware
         $npcStatus->validity_from = $validated['validity_from'];
         $npcStatus->validity_to = $validated['validity_to'];
         $npcStatus->status = $this->renewalStatus($validated['validity_to']);
+
+        // Application Type is always derived, never taken from the client:
+        // "Renewal" when an earlier-year record exists for the entity, else "New".
+        $npcStatus->entry_type = $this->defaultEntryType($npcStatus->company_id, (int) $npcStatus->year);
+
         $npcStatus->updated_by = $userId;
+    }
+
+    private function defaultEntryType(int $companyId, int $year): string
+    {
+        $hasPrior = NpcStatus::where('company_id', $companyId)
+            ->where('year', '<', $year)
+            ->exists();
+
+        return $hasPrior ? 'Renewal' : 'New';
     }
 
     private function storeStatusAttachment(NpcStatus $npcStatus, string $type, string $validityFrom, UploadedFile $file, int $userId): NpcStatusAttachment
@@ -630,6 +965,11 @@ class NpcStatusController extends Controller implements HasMiddleware
                 $npcQuery->with([
                         'attachments' => fn ($query) => $query->latest('validity_from')->latest('created_at'),
                         'workflowSteps',
+                        'dpoProfile',
+                        'backupCodes',
+                        'registration',
+                        'documents',
+                        'payment',
                         'stores' => fn ($query) => $query->when(
                             $restrictedStoreIds !== null,
                             fn ($storeQuery) => $storeQuery->whereIn('stores.id', $restrictedStoreIds)
@@ -637,6 +977,10 @@ class NpcStatusController extends Controller implements HasMiddleware
                         'sealReceipts' => fn ($query) => $query->when(
                             $restrictedStoreIds !== null,
                             fn ($receiptQuery) => $receiptQuery->whereIn('store_id', $restrictedStoreIds)
+                        ),
+                        'storeProofs' => fn ($query) => $query->when(
+                            $restrictedStoreIds !== null,
+                            fn ($proofQuery) => $proofQuery->whereIn('store_id', $restrictedStoreIds)
                         ),
                     ])
                     ->withCount(['stores' => fn ($query) => $query->when(
@@ -657,6 +1001,14 @@ class NpcStatusController extends Controller implements HasMiddleware
             'id' => $npcStatus->id,
             'company_id' => $npcStatus->company_id,
             'year' => $npcStatus->year,
+            'entry_type' => $npcStatus->entry_type ?: 'New',
+            'account' => $this->accountPayload($npcStatus),
+            'dpo_profile' => $this->dpoProfilePayload($npcStatus),
+            'backup_codes' => $this->backupCodesPayload($npcStatus),
+            'registration' => $this->registrationPayload($npcStatus),
+            'documents' => $this->documentsPayload($npcStatus),
+            'approval_status' => $npcStatus->approval_status ?: 'For Submission',
+            'payment' => $this->paymentPayload($npcStatus),
             'validity_from' => $npcStatus->validity_from?->format('Y-m-d'),
             'validity_to' => $npcStatus->validity_to?->format('Y-m-d'),
             'status' => $this->renewalStatus($npcStatus->validity_to),
@@ -677,6 +1029,107 @@ class NpcStatusController extends Controller implements HasMiddleware
             'dpo_seal' => $this->latestAttachmentPayload($npcStatus, NpcStatusAttachment::TYPE_DPO_SEAL),
             'dpo_registration' => $this->latestAttachmentPayload($npcStatus, NpcStatusAttachment::TYPE_DPO_REGISTRATION),
         ];
+    }
+
+    /**
+     * Step 1 — Account Registration. The password itself is never serialized;
+     * only whether one is set. It is revealed on demand via revealPassword().
+     */
+    private function accountPayload(NpcStatus $npcStatus): array
+    {
+        return [
+            'register_email' => $npcStatus->register_email,
+            'has_password' => filled($npcStatus->register_password),
+        ];
+    }
+
+    private function dpoProfilePayload(NpcStatus $npcStatus): array
+    {
+        $profile = $npcStatus->relationLoaded('dpoProfile')
+            ? $npcStatus->dpoProfile
+            : $npcStatus->dpoProfile()->first();
+
+        return [
+            'first_name' => $profile?->first_name,
+            'middle_initial' => $profile?->middle_initial,
+            'last_name' => $profile?->last_name,
+            'sex' => $profile?->sex,
+            'designation' => $profile?->designation,
+            'date_designated_dpo' => $profile?->date_designated_dpo?->format('Y-m-d'),
+            'official_dpo_email' => $profile?->official_dpo_email,
+            'mobile_no' => $profile?->mobile_no,
+            'telephone_no' => $profile?->telephone_no,
+            'role' => $profile?->role ?: 'PIC/PIP',
+        ];
+    }
+
+    private function backupCodesPayload(NpcStatus $npcStatus): array
+    {
+        $codes = $npcStatus->relationLoaded('backupCodes')
+            ? $npcStatus->backupCodes
+            : $npcStatus->backupCodes()->get();
+
+        return $codes
+            ->sortBy('sort_order')
+            ->pluck('code')
+            ->values()
+            ->all();
+    }
+
+    private function paymentPayload(NpcStatus $npcStatus): array
+    {
+        $payment = $npcStatus->relationLoaded('payment')
+            ? $npcStatus->payment
+            : $npcStatus->payment()->first();
+
+        return [
+            'year' => $payment?->year,
+            'reference_no' => $payment?->reference_no,
+            'transaction_no' => $payment?->transaction_no,
+            'date_of_payment' => $payment?->date_of_payment?->format('Y-m-d'),
+            'transaction_type' => $payment?->transaction_type,
+            'amount' => $payment?->amount,
+        ];
+    }
+
+    private function registrationPayload(NpcStatus $npcStatus): ?array
+    {
+        $registration = $npcStatus->relationLoaded('registration')
+            ? $npcStatus->registration
+            : $npcStatus->registration()->first();
+
+        return $registration?->details ?: null;
+    }
+
+    /**
+     * Step 3 documents keyed by slot type; each slot holds its latest upload.
+     */
+    private function documentsPayload(NpcStatus $npcStatus): array
+    {
+        $documents = $npcStatus->relationLoaded('documents')
+            ? $npcStatus->documents
+            : $npcStatus->documents()->get();
+
+        $out = [];
+
+        foreach (NpcDocument::TYPES as $type) {
+            $document = $documents
+                ->where('doc_type', $type)
+                ->sortByDesc('created_at')
+                ->first();
+
+            $out[$type] = $document ? [
+                'id' => $document->id,
+                'doc_type' => $document->doc_type,
+                'name' => $document->file_name,
+                'mime_type' => $document->mime_type,
+                'size' => $document->file_size,
+                'url' => route('npc-documents.download', $document),
+                'uploaded_at' => $document->created_at?->toDateTimeString(),
+            ] : null;
+        }
+
+        return $out;
     }
 
     /**
@@ -706,15 +1159,16 @@ class NpcStatusController extends Controller implements HasMiddleware
      */
     private function storeReceiptGrid(NpcStatus $npcStatus): array
     {
-        if (!$npcStatus->relationLoaded('stores') || !$npcStatus->relationLoaded('sealReceipts')) {
-            $npcStatus->loadMissing(['stores', 'sealReceipts']);
+        if (!$npcStatus->relationLoaded('stores') || !$npcStatus->relationLoaded('sealReceipts') || !$npcStatus->relationLoaded('storeProofs')) {
+            $npcStatus->loadMissing(['stores', 'sealReceipts', 'storeProofs']);
         }
 
         $receipts = $npcStatus->sealReceipts->groupBy('store_id');
+        $proofs = $npcStatus->storeProofs->keyBy('store_id');
 
         return $npcStatus->stores
             ->sortBy('name')
-            ->map(function (Store $store) use ($receipts) {
+            ->map(function (Store $store) use ($receipts, $proofs) {
                 $storeReceipts = $receipts->get($store->id, collect());
                 $seals = [];
 
@@ -726,11 +1180,18 @@ class NpcStatusController extends Controller implements HasMiddleware
                     ];
                 }
 
+                $proof = $proofs->get($store->id);
+
                 return [
                     'store_id' => $store->id,
                     'store_name' => $store->name,
                     'store_code' => $store->code,
                     'seals' => $seals,
+                    'proof' => $proof ? [
+                        'name' => $proof->file_name,
+                        'uploaded_at' => $proof->uploaded_at?->toIso8601String(),
+                        'url' => route('npc-statuses.stores.proof.download', [$proof->npc_status_id, $store->id]),
+                    ] : null,
                 ];
             })
             ->values()
@@ -1045,6 +1506,13 @@ class NpcStatusController extends Controller implements HasMiddleware
 
         $confirmed = $request->boolean('confirmed');
 
+        // The store must have uploaded proof-of-use before an admin can confirm.
+        if ($confirmed && !$npcStatus->storeProofs()->where('store_id', $store->id)->exists()) {
+            throw ValidationException::withMessages([
+                'proof' => 'This store must upload proof of use before its seals can be confirmed.',
+            ]);
+        }
+
         $receipt = NpcSealReceipt::firstOrNew([
             'npc_status_id' => $npcStatus->id,
             'store_id' => $store->id,
@@ -1063,6 +1531,63 @@ class NpcStatusController extends Controller implements HasMiddleware
         }
 
         return redirect()->back();
+    }
+
+    /**
+     * A store/office user uploads proof-of-use (a screenshot/photo) for their
+     * assigned store. One proof per (status, store); re-upload replaces it.
+     */
+    public function uploadStoreProof(Request $request, NpcStatus $npcStatus, Store $store)
+    {
+        $user = $request->user();
+        abort_unless($user->stores()->whereKey($store->id)->exists(), 403);
+        abort_unless($npcStatus->stores()->whereKey($store->id)->exists(), 404);
+
+        $request->validate([
+            'file' => self::UPLOAD_FILE_RULE . self::MAX_ATTACHMENT_KILOBYTES,
+        ]);
+
+        $existing = NpcStoreProof::where('npc_status_id', $npcStatus->id)
+            ->where('store_id', $store->id)
+            ->first();
+
+        if ($existing) {
+            $this->deleteAttachmentPath($existing->file_path);
+        }
+
+        $file = $request->file('file');
+        $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+        $fileName = 'proof-' . Str::uuid() . ($extension ? ".{$extension}" : '');
+        $path = $file->storeAs("npc-store-proofs/{$npcStatus->id}/{$store->id}", $fileName, 'public');
+
+        NpcStoreProof::updateOrCreate(
+            ['npc_status_id' => $npcStatus->id, 'store_id' => $store->id],
+            [
+                'file_path' => str_replace('\\', '/', $path),
+                'file_name' => $file->getClientOriginalName(),
+                'mime_type' => $file->getClientMimeType(),
+                'file_size' => $file->getSize(),
+                'uploaded_by' => $user->id,
+                'uploaded_at' => now(),
+            ]
+        );
+
+        if ($request->expectsJson()) {
+            return response()->json(['message' => 'Proof uploaded successfully']);
+        }
+
+        return redirect()->back()->with('success', 'Proof uploaded successfully');
+    }
+
+    public function downloadStoreProof(NpcStatus $npcStatus, Store $store)
+    {
+        $proof = NpcStoreProof::where('npc_status_id', $npcStatus->id)
+            ->where('store_id', $store->id)
+            ->first();
+
+        abort_if(!$proof, 404, 'No proof uploaded for this store.');
+
+        return $this->downloadStoredFile($proof->file_path, $proof->file_name);
     }
 
     private function ensureNpcStatusIsEditable(NpcStatus $npcStatus): void
@@ -1123,11 +1648,12 @@ class NpcStatusController extends Controller implements HasMiddleware
             ->get();
 
         $receipts = NpcSealReceipt::whereIn('store_id', $storeIds)->get();
+        $proofs = NpcStoreProof::whereIn('store_id', $storeIds)->get();
 
-        return $stores->map(function (Store $store) use ($statuses, $receipts) {
+        return $stores->map(function (Store $store) use ($statuses, $receipts, $proofs) {
             $years = $statuses
                 ->filter(fn (NpcStatus $status) => $status->stores->contains('id', $store->id))
-                ->map(function (NpcStatus $status) use ($store, $receipts) {
+                ->map(function (NpcStatus $status) use ($store, $receipts, $proofs) {
                     $seals = collect(NpcStatusAttachment::SEAL_TYPES)->map(function (string $type) use ($status, $store, $receipts) {
                         $attachment = $this->attachmentsPayload($status, $type, $status->year)[0] ?? null;
                         // SQL Server may hydrate BIGINT foreign keys as numeric
@@ -1149,6 +1675,9 @@ class NpcStatusController extends Controller implements HasMiddleware
                         ];
                     })->all();
 
+                    $proof = $proofs->first(fn (NpcStoreProof $p) => (string) $p->npc_status_id === (string) $status->id
+                        && (string) $p->store_id === (string) $store->id);
+
                     return [
                         'npc_status_id' => $status->id,
                         'year' => $status->year,
@@ -1157,6 +1686,11 @@ class NpcStatusController extends Controller implements HasMiddleware
                         'validity_from' => $status->validity_from?->format('Y-m-d'),
                         'validity_to' => $status->validity_to?->format('Y-m-d'),
                         'seals' => $seals,
+                        'proof' => $proof ? [
+                            'name' => $proof->file_name,
+                            'uploaded_at' => $proof->uploaded_at?->toIso8601String(),
+                        ] : null,
+                        'proof_upload_url' => route('npc-statuses.stores.proof.upload', [$status->id, $store->id]),
                     ];
                 })
                 ->values()
