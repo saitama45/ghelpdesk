@@ -307,6 +307,7 @@
                     <Calendar
                         :events="calendarSchedules"
                         :users="calendarUsers"
+                        :department-nodes="departmentNodes || []"
                         compact
                         height-class="h-[calc(100vh-10rem)] min-h-[580px]"
                         v-model:statusFilter="filterStatus"
@@ -1993,7 +1994,9 @@ const storeSelectOptions = computed(() => {
         .filter(s => s.id !== homeId)
         .map(s => ({ id: s.id, name: `${s.code} - ${s.name}` }))
 
-    return isLocationRequired.value ? storeChoices : [{ id: null, name: 'No location' }, ...storeChoices]
+    // For non-working statuses (SL, VL, Restday, Holiday, Offset, N/A) a real
+    // store is irrelevant — only offer "No location" and hide all stores.
+    return isLocationRequired.value ? storeChoices : [{ id: null, name: 'No location' }]
 })
 
 const subUnitOptions = computed(() => {
@@ -2505,6 +2508,10 @@ const onStatusChange = () => {
     const homeId = homeStoreId.value
     if (form.status === 'WFH') {
         if (homeId != null) form.stores.forEach(entry => { entry.store_id = homeId })
+    } else if (!isLocationRequired.value) {
+        // Non-working status: only "No location" is offered, so drop any
+        // previously-picked real store to keep the selection valid.
+        form.stores.forEach(entry => { entry.store_id = null })
     } else if (homeId != null) {
         form.stores.forEach(entry => {
             if (Number(entry.store_id) === Number(homeId)) entry.store_id = null

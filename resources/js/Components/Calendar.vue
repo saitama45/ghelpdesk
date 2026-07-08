@@ -23,6 +23,10 @@ const props = defineProps({
         type: Array,
         default: () => []
     },
+    departmentNodes: {
+        type: Array,
+        default: () => []
+    },
     compact: {
         type: Boolean,
         default: false
@@ -525,22 +529,90 @@ const showDayModal = ref(false);
 const selectedDayDate = ref(null);
 const selectedDayEvents = ref([]);
 const unscheduledUsers = ref([]);
+// Expansion state is namespaced per hierarchy group so the same status/location
+// subgroup key can appear under multiple teams without colliding.
 const expandedModalGroups = ref({});
+const expandedHierGroups = ref({});
 
-const toggleModalGroup = (groupId) => {
-    expandedModalGroups.value[groupId] = !expandedModalGroups.value[groupId];
+const toggleModalGroup = (hierId, groupId) => {
+    const key = `${hierId}::${groupId}`;
+    expandedModalGroups.value[key] = !expandedModalGroups.value[key];
 };
 
-const selectedDayEventGroups = computed(() => {
+const toggleHierGroup = (hierId) => {
+    expandedHierGroups.value[hierId] = !expandedHierGroups.value[hierId];
+};
+
+// Look up a department node (Setup Hierarchy team) by id so we can resolve each
+// user's team code for grouping.
+const departmentNodeMap = computed(() => {
+    const map = new Map();
+    for (const node of props.departmentNodes ?? []) {
+        map.set(Number(node.id), node);
+    }
+    return map;
+});
+
+const usersById = computed(() => {
+    const map = new Map();
+    for (const u of props.users ?? []) {
+        map.set(Number(u.id), u);
+    }
+    return map;
+});
+
+// Resolve a user's "team" the same way the Departments org chart does: use their
+// own hierarchy node, else inherit the nearest manager's node, else fall back to
+// the department code (top-level users sit at the department level, not a team).
+const resolveUserTeam = (event) => {
+    const startId = event.user_id != null
+        ? Number(event.user_id)
+        : (event.user?.id != null ? Number(event.user.id) : null);
+
+    let current = startId != null ? usersById.value.get(startId) : null;
+    const startUser = current || event.user || null;
+    const visited = new Set();
+
+    while (current && !visited.has(Number(current.id))) {
+        visited.add(Number(current.id));
+
+        const nodeId = current.department_node_id != null ? Number(current.department_node_id) : null;
+        const node = nodeId != null ? departmentNodeMap.value.get(nodeId) : null;
+        if (node) {
+            return { key: `node-${node.id}`, code: node.code || node.name };
+        }
+
+        const managerId = Array.isArray(current.managers) && current.managers.length
+            ? Number(current.managers[0].id)
+            : null;
+        current = managerId != null ? usersById.value.get(managerId) : null;
+    }
+
+    // No node anywhere in the chain → department-level user (e.g. a director).
+    const deptCode = startUser?.department_reference?.code;
+    const deptId = startUser?.department_id ?? event.user?.department_id;
+    if (deptCode) return { key: `dept-${deptId ?? deptCode}`, code: deptCode };
+    if (deptId != null) return { key: `dept-${deptId}`, code: `Dept ${deptId}` };
+
+    // Last resort: the event's own node if the user wasn't in the users list.
+    const directNodeId = event.user?.department_node_id != null ? Number(event.user.department_node_id) : null;
+    const directNode = directNodeId != null ? departmentNodeMap.value.get(directNodeId) : null;
+    if (directNode) return { key: `node-${directNode.id}`, code: directNode.code || directNode.name };
+
+    return { key: 'unassigned', code: 'No Team' };
+};
+
+// Existing behaviour: within a set of events, group by duty status (+ location).
+const buildStatusGroups = (events) => {
     const grouped = new Map();
 
-    for (const event of selectedDayEvents.value) {
+    for (const event of events) {
         const baseStatus = event.status || fallbackStatusMeta.label;
         let groupKey = baseStatus;
         if (event.store?.name) {
             groupKey = `${baseStatus} (${event.store.name})`;
         }
-        
+
         if (!grouped.has(groupKey)) grouped.set(groupKey, { status: baseStatus, events: [] });
         grouped.get(groupKey).events.push(event);
     }
@@ -565,9 +637,77 @@ const selectedDayEventGroups = computed(() => {
                 events: data.events,
             };
         });
+};
+
+// Free-text search inside the day modal: matches name, team code, location and
+// duty status.
+const daySearch = ref('');
+
+const eventSearchText = (event) => {
+    const parts = [
+        event.user?.name || '',
+        event.status || '',
+        resolveUserTeam(event).code || '',
+        event.store?.name || '',
+    ];
+    if (Array.isArray(event.day_segments)) {
+        for (const seg of event.day_segments) {
+            if (seg.store_name) parts.push(seg.store_name);
+        }
+    }
+    return parts.join(' ').toLowerCase();
+};
+
+const filteredDayEvents = computed(() => {
+    const term = daySearch.value.trim().toLowerCase();
+    if (!term) return selectedDayEvents.value;
+    return selectedDayEvents.value.filter(event => eventSearchText(event).includes(term));
+});
+
+const filteredUnscheduledUsers = computed(() => {
+    const term = daySearch.value.trim().toLowerCase();
+    if (!term) return unscheduledUsers.value;
+    return unscheduledUsers.value.filter(user => {
+        const team = resolveUserTeam({ user_id: user.id, user });
+        const text = [user.name || '', user.department_reference?.code || '', team.code || '']
+            .join(' ')
+            .toLowerCase();
+        return text.includes(term);
+    });
+});
+
+const hasDayMatches = computed(
+    () => filteredDayEvents.value.length > 0 || filteredUnscheduledUsers.value.length > 0
+);
+
+// Outer grouping: by the user's Setup Hierarchy team (shown as its code only),
+// each holding the existing duty-status/location subgroups.
+const selectedDayHierarchyGroups = computed(() => {
+    const grouped = new Map();
+
+    for (const event of filteredDayEvents.value) {
+        const team = resolveUserTeam(event);
+
+        if (!grouped.has(team.key)) grouped.set(team.key, { id: team.key, code: team.code, events: [] });
+        grouped.get(team.key).events.push(event);
+    }
+
+    return [...grouped.values()]
+        .sort((a, b) => {
+            if (a.id === 'unassigned') return 1;
+            if (b.id === 'unassigned') return -1;
+            return String(a.code).localeCompare(String(b.code));
+        })
+        .map(group => ({
+            id: group.id,
+            code: group.code,
+            events: group.events,
+            statusGroups: buildStatusGroups(group.events),
+        }));
 });
 
 const openDayModal = (date) => {
+    daySearch.value = '';
     selectedDayDate.value = date;
     selectedDayEvents.value = getEventsForDate(date);
     const dateKey = toDateKey(date);
@@ -578,18 +718,24 @@ const openDayModal = (date) => {
         return true;
     });
     
-    const initialExpanded = {};
-    for (const group of selectedDayEventGroups.value) {
-        initialExpanded[group.id] = true;
+    const initialHierExpanded = {};
+    const initialStatusExpanded = {};
+    for (const hierGroup of selectedDayHierarchyGroups.value) {
+        initialHierExpanded[hierGroup.id] = true;
+        for (const group of hierGroup.statusGroups) {
+            initialStatusExpanded[`${hierGroup.id}::${group.id}`] = true;
+        }
     }
-    expandedModalGroups.value = initialExpanded;
-    
+    expandedHierGroups.value = initialHierExpanded;
+    expandedModalGroups.value = initialStatusExpanded;
+
     showDayModal.value = true;
 };
 
 const closeDayModal = () => {
     showDayModal.value = false;
     unscheduledUsers.value = [];
+    daySearch.value = '';
 };
 
 const formatDateLong = (date) => {
@@ -882,16 +1028,45 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                             </svg>
                         </button>
                     </div>
+
+                    <!-- Search: name, team, location, duty status -->
+                    <div class="px-4 pt-3 pb-1">
+                        <div class="relative">
+                            <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+                            </svg>
+                            <input
+                                v-model="daySearch"
+                                type="text"
+                                placeholder="Search name, team, location, status..."
+                                class="w-full pl-9 pr-8 py-2 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all dark:bg-gray-900/50 dark:border-gray-700 dark:text-gray-200 dark:placeholder-gray-500"
+                            >
+                            <button
+                                v-if="daySearch"
+                                @click="daySearch = ''"
+                                class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors dark:hover:bg-gray-700"
+                                title="Clear search"
+                            >
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="p-4 max-h-[400px] overflow-y-auto custom-scrollbar space-y-2">
+                        <!-- No matches for the current search -->
+                        <div v-if="daySearch && !hasDayMatches" class="py-10 text-center">
+                            <p class="text-sm font-medium text-gray-400 dark:text-gray-400">No matches for "{{ daySearch }}"</p>
+                        </div>
+
                         <!-- Unscheduled Users (No Schedule Plotted) -->
-                        <div v-if="unscheduledUsers.length > 0" class="mb-3 pb-3 border-b border-dashed border-gray-200 dark:border-gray-700">
+                        <div v-if="filteredUnscheduledUsers.length > 0" class="mb-3 pb-3 border-b border-dashed border-gray-200 dark:border-gray-700">
                             <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5 dark:text-gray-400">
                                 <span class="inline-block w-2 h-2 rounded-full bg-gray-300 shrink-0"></span>
-                                No Schedule Plotted ({{ unscheduledUsers.length }})
+                                No Schedule Plotted ({{ filteredUnscheduledUsers.length }})
                             </p>
                             <div class="space-y-1">
                                 <div
-                                    v-for="user in unscheduledUsers"
+                                    v-for="user in filteredUnscheduledUsers"
                                     :key="user.id"
                                     class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors group dark:hover:bg-gray-700"
                                 >
@@ -913,28 +1088,52 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                         </div>
 
                         <div
-                            v-for="group in selectedDayEventGroups"
-                            :key="group.id"
+                            v-for="hierGroup in selectedDayHierarchyGroups"
+                            :key="hierGroup.id"
                             class="space-y-1.5 pt-1 first:pt-0"
                         >
-                            <button 
-                                @click="toggleModalGroup(group.id)"
-                                class="w-full flex items-center justify-between text-[10px] font-black text-gray-400 uppercase tracking-widest gap-1.5 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 p-1.5 rounded transition-colors -ml-1.5"
+                            <!-- Team (Setup Hierarchy code) header -->
+                            <button
+                                @click="toggleHierGroup(hierGroup.id)"
+                                class="w-full flex items-center justify-between text-[11px] font-black text-gray-600 uppercase tracking-widest gap-1.5 dark:text-gray-200 bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/40 dark:hover:bg-gray-700 px-2 py-2 rounded-lg transition-colors"
                             >
                                 <div class="flex items-center gap-1.5">
-                                    <span class="inline-block w-2 h-2 rounded-full shrink-0" :class="group.colorClass"></span>
-                                    {{ group.label }} ({{ group.events.length }})
+                                    <span class="inline-block w-1.5 h-4 rounded-full bg-blue-500 shrink-0"></span>
+                                    {{ hierGroup.code }} ({{ hierGroup.events.length }})
                                 </div>
-                                <svg 
-                                    class="w-3 h-3 transition-transform duration-200" 
-                                    :class="expandedModalGroups[group.id] ? 'rotate-180' : ''" 
+                                <svg
+                                    class="w-3 h-3 transition-transform duration-200"
+                                    :class="expandedHierGroups[hierGroup.id] !== false ? 'rotate-180' : ''"
                                     fill="none" stroke="currentColor" viewBox="0 0 24 24"
                                 >
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                                 </svg>
                             </button>
 
-                            <div v-show="expandedModalGroups[group.id]" class="space-y-1.5">
+                            <div v-show="expandedHierGroups[hierGroup.id] !== false" class="space-y-1.5 pl-2 ml-1 border-l-2 border-gray-100 dark:border-gray-700">
+                        <div
+                            v-for="group in hierGroup.statusGroups"
+                            :key="group.id"
+                            class="space-y-1.5 pt-1 first:pt-0"
+                        >
+                            <button
+                                @click="toggleModalGroup(hierGroup.id, group.id)"
+                                class="w-full flex items-center justify-between text-[10px] font-black text-gray-400 uppercase tracking-widest gap-1.5 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 p-1.5 rounded transition-colors -ml-1.5"
+                            >
+                                <div class="flex items-center gap-1.5">
+                                    <span class="inline-block w-2 h-2 rounded-full shrink-0" :class="group.colorClass"></span>
+                                    {{ group.label }} ({{ group.events.length }})
+                                </div>
+                                <svg
+                                    class="w-3 h-3 transition-transform duration-200"
+                                    :class="expandedModalGroups[hierGroup.id + '::' + group.id] !== false ? 'rotate-180' : ''"
+                                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                >
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+
+                            <div v-show="expandedModalGroups[hierGroup.id + '::' + group.id] !== false" class="space-y-1.5">
                             <div
                                 v-for="event in group.events"
                                 :key="event.id"
@@ -987,6 +1186,8 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                                     </div>
                                 </div>
                             </div>
+                            </div>
+                        </div>
                             </div>
                         </div>
                     </div>
