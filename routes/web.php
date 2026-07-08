@@ -72,8 +72,12 @@ Route::middleware('auth')->group(function () {
     Route::post('npc-statuses/{npcStatus}/stores/{store}/seals/{type}/confirm', [NpcStatusController::class, 'confirmStoreSeal'])
         ->whereIn('type', ['dpo_seal', 'dpo_registration', 'cctv_seal'])
         ->name('npc-statuses.stores.seal.confirm');
-    Route::post('npc-statuses/{npcStatus}/stores/{store}/proof', [NpcStatusController::class, 'uploadStoreProof'])->name('npc-statuses.stores.proof.upload');
-    Route::get('npc-statuses/{npcStatus}/stores/{store}/proof', [NpcStatusController::class, 'downloadStoreProof'])->name('npc-statuses.stores.proof.download');
+    Route::post('npc-statuses/{npcStatus}/stores/{store}/seals/{type}/proof', [NpcStatusController::class, 'uploadStoreProof'])
+        ->whereIn('type', ['dpo_seal', 'dpo_registration', 'cctv_seal'])
+        ->name('npc-statuses.stores.proof.upload');
+    Route::get('npc-statuses/{npcStatus}/stores/{store}/seals/{type}/proof', [NpcStatusController::class, 'downloadStoreProof'])
+        ->whereIn('type', ['dpo_seal', 'dpo_registration', 'cctv_seal'])
+        ->name('npc-statuses.stores.proof.download');
     Route::get('npc-statuses/companies/{company}', [NpcStatusController::class, 'showCompany'])
         ->name('npc-statuses.companies.show');
     Route::post('stores/{store}/cctv-seal-notice', [NpcStatusController::class, 'storeCctvSealNotice'])->name('stores.cctv-seal-notice.store');

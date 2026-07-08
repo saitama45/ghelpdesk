@@ -558,6 +558,7 @@
                                                     <option value="For Submission">For Submission</option>
                                                     <option value="Submitted">Submitted</option>
                                                     <option value="Approved">Approved</option>
+                                                    <option value="Rejected">Rejected</option>
                                                 </select>
                                             </div>
 
@@ -664,14 +665,13 @@
                                         <div v-if="i === 5 && stepEnabled(5)" class="mt-4 space-y-5 rounded-lg border border-blue-100 bg-blue-50/40 p-4 dark:border-blue-900/40 dark:bg-blue-900/10">
                                             <div v-if="receiptGrid.length">
                                                 <div class="mb-2 text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Store Downloads &amp; Confirmation</div>
-                                                <p class="mb-2 text-[11px] font-semibold text-gray-500 dark:text-gray-400">A store must upload proof of use before you can confirm its seals.</p>
+                                                <p class="mb-2 text-[11px] font-semibold text-gray-500 dark:text-gray-400">Each seal can be confirmed only after the store downloads it and uploads its proof of use.</p>
                                                 <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
                                                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                                         <thead class="bg-gray-50 dark:bg-gray-900/50">
                                                             <tr>
                                                                 <th class="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-gray-500">Store</th>
                                                                 <th v-for="sealType in sealTypes" :key="sealType.type" class="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-gray-500">{{ sealType.label }}</th>
-                                                                <th class="px-3 py-2 text-left text-[10px] font-black uppercase tracking-wider text-gray-500">Proof of Use</th>
                                                             </tr>
                                                         </thead>
                                                         <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
@@ -680,22 +680,30 @@
                                                                     <div class="text-xs font-bold text-gray-900 dark:text-gray-100">{{ row.store_name }}</div>
                                                                     <div class="font-mono text-[10px] text-gray-500">{{ row.store_code }}</div>
                                                                 </td>
-                                                                <td v-for="sealType in sealTypes" :key="sealType.type" class="px-3 py-2">
+                                                                <td v-for="sealType in sealTypes" :key="sealType.type" class="px-3 py-2 align-top">
                                                                     <div class="text-[10px] font-semibold" :class="row.seals[sealType.type]?.downloaded_at ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400'">
                                                                         {{ row.seals[sealType.type]?.downloaded_at ? 'Downloaded ' + formatDateTime(row.seals[sealType.type].downloaded_at) : 'Not downloaded' }}
+                                                                    </div>
+                                                                    <div class="mt-1">
+                                                                        <template v-if="row.seals[sealType.type]?.proof">
+                                                                            <a :href="row.seals[sealType.type].proof.url" class="block max-w-[160px] truncate text-[11px] font-bold text-blue-600 hover:underline">{{ row.seals[sealType.type].proof.name || 'View proof' }}</a>
+                                                                            <div class="text-[10px] text-gray-500">Proof {{ formatDateTime(row.seals[sealType.type].proof.uploaded_at) }}</div>
+                                                                        </template>
+                                                                        <span v-else class="text-[10px] font-bold text-amber-600">Awaiting proof</span>
                                                                     </div>
                                                                     <button
                                                                         v-if="canEditSelectedRecord"
                                                                         type="button"
-                                                                        :disabled="!row.proof"
-                                                                        :title="row.proof ? '' : 'Store must upload proof of use first'"
+                                                                        :disabled="!canToggleSeal(row, sealType.type)"
+                                                                        :title="sealCheckBlockReason(row, sealType.type)"
                                                                         @click="toggleConfirm(row, sealType.type)"
                                                                         :class="[
                                                                             'mt-1 rounded-full px-2.5 py-1 text-[10px] font-black',
-                                                                            !row.proof ? 'cursor-not-allowed bg-gray-100 text-gray-400'
-                                                                                : row.seals[sealType.type]?.confirmed_at
-                                                                                    ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                                                                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                                            row.seals[sealType.type]?.confirmed_at
+                                                                                ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                                                                : canToggleSeal(row, sealType.type)
+                                                                                    ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                                                    : 'cursor-not-allowed bg-gray-100 text-gray-400'
                                                                         ]"
                                                                     >
                                                                         {{ row.seals[sealType.type]?.confirmed_at ? 'Checked ✓' : 'Mark checked' }}
@@ -710,18 +718,13 @@
                                                                         {{ row.seals[sealType.type]?.confirmed_at ? 'Checked ✓' : 'Not checked' }}
                                                                     </span>
                                                                 </td>
-                                                                <td class="px-3 py-2">
-                                                                    <a v-if="row.proof" :href="row.proof.url" class="block truncate text-[11px] font-bold text-blue-600 hover:underline">{{ row.proof.name || 'View proof' }}</a>
-                                                                    <div v-if="row.proof" class="text-[10px] text-gray-500">{{ formatDateTime(row.proof.uploaded_at) }}</div>
-                                                                    <span v-else class="text-[10px] font-bold text-amber-600">Awaiting proof</span>
-                                                                </td>
                                                             </tr>
                                                         </tbody>
                                                     </table>
                                                 </div>
                                             </div>
                                             <p v-else class="text-xs font-semibold text-gray-500 dark:text-gray-300">Assign and save stores in Step 5 to track their seal downloads.</p>
-                                            <p v-if="canEditSelectedRecord && receiptGrid.length && !step6Valid" class="mt-3 rounded-md bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Every assigned store (highlighted) must download all 3 seals, upload proof of use, and have all 3 seals marked checked before you can mark Step 6 as done.</p>
+                                            <p v-if="canEditSelectedRecord && receiptGrid.length && !step6Valid" class="mt-3 rounded-md bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Every assigned store (highlighted) must download all 3 seals, upload proof of use for each seal, and have all 3 seals marked checked before you can mark Step 6 as done.</p>
                                         </div>
                                     </div>
 
@@ -1156,9 +1159,12 @@ const step6InvalidKeys = () => {
     const grid = receiptGrid.value
     if (!grid.length) return ['step6.no_stores']
     grid.forEach((row) => {
-        const allDownloaded = sealTypes.every((s) => row.seals?.[s.type]?.downloaded_at)
-        const allConfirmed = sealTypes.every((s) => row.seals?.[s.type]?.confirmed_at)
-        if (!allDownloaded || !row.proof || !allConfirmed) keys.push(`step6.store.${row.store_id}`)
+        // Each of the 3 seals must be downloaded, have its own proof, and be confirmed.
+        const complete = sealTypes.every((s) => {
+            const seal = row.seals?.[s.type]
+            return seal?.downloaded_at && seal?.proof && seal?.confirmed_at
+        })
+        if (!complete) keys.push(`step6.store.${row.store_id}`)
     })
     return keys
 }
@@ -1783,11 +1789,29 @@ const deleteDocument = async ({ id }) => {
     }
 }
 
+// A seal can only be *checked* once the store has downloaded it and uploaded
+// proof. An already-checked seal can always be unchecked.
+const sealCheckBlockReason = (row, type) => {
+    const seal = row.seals?.[type]
+    if (seal?.confirmed_at) return ''
+    if (!seal?.downloaded_at) return 'Store must download this seal first.'
+    if (!seal?.proof) return 'Store must upload proof of use for this seal first.'
+    return ''
+}
+const canToggleSeal = (row, type) => {
+    const seal = row.seals?.[type]
+    return Boolean(seal?.confirmed_at) || (Boolean(seal?.proof) && Boolean(seal?.downloaded_at))
+}
+
 const toggleConfirm = async (row, type) => {
     if (!canEditSelectedRecord.value) return
     const record = modalNpcStatus.value
     if (!record) return
     const confirmed = !row.seals[type]?.confirmed_at
+    if (confirmed && !canToggleSeal(row, type)) {
+        showError(sealCheckBlockReason(row, type) || 'This seal cannot be confirmed yet.')
+        return
+    }
     try {
         const { data } = await axios.post(route('npc-statuses.stores.seal.confirm', [record.id, row.store_id, type]), {
             confirmed,

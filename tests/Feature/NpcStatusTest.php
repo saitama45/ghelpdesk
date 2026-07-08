@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Company;
+use App\Models\NpcSealReceipt;
 use App\Models\NpcStatus;
 use App\Models\NpcStatusAttachment;
 use App\Models\NpcStoreProof;
@@ -553,14 +554,23 @@ class NpcStatusTest extends TestCase
             ->putJson(route('npc-statuses.workflow.update', $historicalStatus), ['steps' => $steps])
             ->assertOk();
 
-        // Proof of use is a precondition for admin confirmation.
-        NpcStoreProof::create([
-            'npc_status_id' => $historicalStatus->id,
-            'store_id' => $store->id,
-            'file_path' => 'npc-store-proofs/proof.jpg',
-            'file_name' => 'proof.jpg',
-            'uploaded_at' => now(),
-        ]);
+        // Each seal must be downloaded and have its own proof before confirming.
+        foreach (NpcStatusAttachment::SEAL_TYPES as $type) {
+            NpcSealReceipt::create([
+                'npc_status_id' => $historicalStatus->id,
+                'store_id' => $store->id,
+                'seal_type' => $type,
+                'downloaded_at' => now(),
+            ]);
+            NpcStoreProof::create([
+                'npc_status_id' => $historicalStatus->id,
+                'store_id' => $store->id,
+                'seal_type' => $type,
+                'file_path' => "npc-store-proofs/proof-{$type}.jpg",
+                'file_name' => 'proof.jpg',
+                'uploaded_at' => now(),
+            ]);
+        }
 
         foreach (NpcStatusAttachment::SEAL_TYPES as $type) {
             $this->actingAs($editor)
@@ -723,9 +733,9 @@ class NpcStatusTest extends TestCase
 
         $this->assertNull($npcStatus->sealReceipts()->where('store_id', $store->id)->first()->confirmed_at);
 
-        // The store must upload proof of use before an admin can confirm.
+        // The store must upload proof of use for this seal before an admin can confirm.
         $this->actingAs($storeUser)
-            ->post(route('npc-statuses.stores.proof.upload', [$npcStatus, $store]), [
+            ->post(route('npc-statuses.stores.proof.upload', [$npcStatus, $store, NpcStatusAttachment::TYPE_DPO_SEAL]), [
                 'file' => UploadedFile::fake()->image('proof.jpg'),
             ])
             ->assertSessionHasNoErrors();
@@ -983,6 +993,9 @@ class NpcStatusTest extends TestCase
             'role' => 'PIC/PIP',
         ]);
         $prior->backupCodes()->create(['code' => '1871265874', 'sort_order' => 1]);
+        // Step 5 assigned store on the prior year.
+        $store = $this->store();
+        $prior->stores()->syncWithPivotValues([$store->id], ['year' => 2025]);
 
         $this->actingAs($editor)
             ->postJson(route('npc-statuses.store'), [
@@ -996,7 +1009,15 @@ class NpcStatusTest extends TestCase
             ->assertJsonPath('company.npc_status.account.register_email', 'dpo@example.com')
             ->assertJsonPath('company.npc_status.account.has_password', true)
             ->assertJsonPath('company.npc_status.dpo_profile.first_name', 'Jane')
-            ->assertJsonPath('company.npc_status.backup_codes.0', '1871265874');
+            ->assertJsonPath('company.npc_status.backup_codes.0', '1871265874')
+            // Prior year's assigned stores carry over to the renewal.
+            ->assertJsonPath('company.npc_status.store_receipts.0.store_id', $store->id)
+            ->assertJsonCount(1, 'company.npc_status.store_receipts');
+
+        $this->assertDatabaseHas('npc_status_store', [
+            'store_id' => $store->id,
+            'year' => 2026,
+        ]);
     }
 
     public function test_account_and_dpo_profile_save_and_password_is_encrypted(): void
@@ -1157,7 +1178,22 @@ class NpcStatusTest extends TestCase
         $store->users()->attach($storeUser->id);
         $npcStatus->stores()->syncWithPivotValues([$store->id], ['year' => 2026]);
 
-        // Without proof, confirmation is rejected.
+        // Not downloaded yet: confirmation is rejected on the download gate.
+        $this->actingAs($admin)
+            ->postJson(route('npc-statuses.stores.seal.confirm', [$npcStatus, $store, NpcStatusAttachment::TYPE_DPO_SEAL]), [
+                'confirmed' => true,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('confirmed');
+
+        // Mark the seal downloaded; now it's blocked on the proof gate instead.
+        NpcSealReceipt::create([
+            'npc_status_id' => $npcStatus->id,
+            'store_id' => $store->id,
+            'seal_type' => NpcStatusAttachment::TYPE_DPO_SEAL,
+            'downloaded_at' => now(),
+        ]);
+
         $this->actingAs($admin)
             ->postJson(route('npc-statuses.stores.seal.confirm', [$npcStatus, $store, NpcStatusAttachment::TYPE_DPO_SEAL]), [
                 'confirmed' => true,
@@ -1165,9 +1201,9 @@ class NpcStatusTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonValidationErrors('proof');
 
-        // Store uploads proof, then confirmation succeeds.
+        // Store uploads proof for THIS seal, then confirmation succeeds.
         $this->actingAs($storeUser)
-            ->postJson(route('npc-statuses.stores.proof.upload', [$npcStatus, $store]), [
+            ->postJson(route('npc-statuses.stores.proof.upload', [$npcStatus, $store, NpcStatusAttachment::TYPE_DPO_SEAL]), [
                 'file' => UploadedFile::fake()->image('proof.png'),
             ])
             ->assertOk();
@@ -1175,6 +1211,7 @@ class NpcStatusTest extends TestCase
         $this->assertDatabaseHas('npc_store_proofs', [
             'npc_status_id' => $npcStatus->id,
             'store_id' => $store->id,
+            'seal_type' => NpcStatusAttachment::TYPE_DPO_SEAL,
         ]);
 
         $this->actingAs($admin)
@@ -1194,7 +1231,7 @@ class NpcStatusTest extends TestCase
         // Note: store NOT attached to the user.
 
         $this->actingAs($storeUser)
-            ->postJson(route('npc-statuses.stores.proof.upload', [$npcStatus, $store]), [
+            ->postJson(route('npc-statuses.stores.proof.upload', [$npcStatus, $store, NpcStatusAttachment::TYPE_DPO_SEAL]), [
                 'file' => UploadedFile::fake()->image('proof.png'),
             ])
             ->assertForbidden();

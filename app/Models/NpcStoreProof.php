@@ -10,6 +10,7 @@ class NpcStoreProof extends Model
     protected $fillable = [
         'npc_status_id',
         'store_id',
+        'seal_type',
         'file_path',
         'file_name',
         'mime_type',

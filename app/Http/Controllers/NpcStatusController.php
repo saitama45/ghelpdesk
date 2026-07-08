@@ -303,7 +303,7 @@ class NpcStatusController extends Controller implements HasMiddleware
         $prior = NpcStatus::where('company_id', $npcStatus->company_id)
             ->where('year', '<', $npcStatus->year)
             ->orderByDesc('year')
-            ->with(['dpoProfile', 'backupCodes', 'registration'])
+            ->with(['dpoProfile', 'backupCodes', 'registration', 'stores'])
             ->first();
 
         if (!$prior) {
@@ -349,6 +349,22 @@ class NpcStatusController extends Controller implements HasMiddleware
                 ['npc_status_id' => $npcStatus->id],
                 ['details' => $prior->registration->details]
             );
+        }
+
+        // Carry over Step 5 assigned stores, skipping any already claimed by
+        // another entity for the new year (the per-year single-entity rule).
+        $priorStoreIds = $prior->stores->pluck('id')->all();
+        if ($priorStoreIds) {
+            $taken = DB::table('npc_status_store')
+                ->where('year', $npcStatus->year)
+                ->whereIn('store_id', $priorStoreIds)
+                ->pluck('store_id')
+                ->all();
+            $available = array_values(array_diff($priorStoreIds, $taken));
+
+            if ($available) {
+                $npcStatus->stores()->syncWithPivotValues($available, ['year' => $npcStatus->year]);
+            }
         }
     }
 
@@ -709,7 +725,7 @@ class NpcStatusController extends Controller implements HasMiddleware
         $this->ensureNpcStatusIsEditable($npcStatus);
 
         $validated = $request->validate([
-            'approval_status' => ['required', Rule::in(['For Submission', 'Submitted', 'Approved'])],
+            'approval_status' => ['required', Rule::in(['For Submission', 'Submitted', 'Approved', 'Rejected'])],
             'payment' => 'nullable|array',
             'payment.year' => 'nullable|integer|min:2000|max:2100',
             'payment.reference_no' => 'nullable|string|max:255',
@@ -1164,34 +1180,34 @@ class NpcStatusController extends Controller implements HasMiddleware
         }
 
         $receipts = $npcStatus->sealReceipts->groupBy('store_id');
-        $proofs = $npcStatus->storeProofs->keyBy('store_id');
+        $proofs = $npcStatus->storeProofs->groupBy('store_id');
 
         return $npcStatus->stores
             ->sortBy('name')
-            ->map(function (Store $store) use ($receipts, $proofs) {
+            ->map(function (Store $store) use ($npcStatus, $receipts, $proofs) {
                 $storeReceipts = $receipts->get($store->id, collect());
+                $storeProofs = $proofs->get($store->id, collect());
                 $seals = [];
 
                 foreach (NpcStatusAttachment::SEAL_TYPES as $type) {
                     $receipt = $storeReceipts->firstWhere('seal_type', $type);
+                    $proof = $storeProofs->firstWhere('seal_type', $type);
                     $seals[$type] = [
                         'downloaded_at' => $receipt?->downloaded_at?->toIso8601String(),
                         'confirmed_at' => $receipt?->confirmed_at?->toIso8601String(),
+                        'proof' => $proof ? [
+                            'name' => $proof->file_name,
+                            'uploaded_at' => $proof->uploaded_at?->toIso8601String(),
+                            'url' => route('npc-statuses.stores.proof.download', [$npcStatus->id, $store->id, $type]),
+                        ] : null,
                     ];
                 }
-
-                $proof = $proofs->get($store->id);
 
                 return [
                     'store_id' => $store->id,
                     'store_name' => $store->name,
                     'store_code' => $store->code,
                     'seals' => $seals,
-                    'proof' => $proof ? [
-                        'name' => $proof->file_name,
-                        'uploaded_at' => $proof->uploaded_at?->toIso8601String(),
-                        'url' => route('npc-statuses.stores.proof.download', [$proof->npc_status_id, $store->id]),
-                    ] : null,
                 ];
             })
             ->values()
@@ -1506,22 +1522,33 @@ class NpcStatusController extends Controller implements HasMiddleware
 
         $confirmed = $request->boolean('confirmed');
 
-        // The store must have uploaded proof-of-use before an admin can confirm.
-        if ($confirmed && !$npcStatus->storeProofs()->where('store_id', $store->id)->exists()) {
-            throw ValidationException::withMessages([
-                'proof' => 'This store must upload proof of use before its seals can be confirmed.',
-            ]);
+        $receipt = NpcSealReceipt::where('npc_status_id', $npcStatus->id)
+            ->where('store_id', $store->id)
+            ->where('seal_type', $type)
+            ->first();
+
+        if ($confirmed) {
+            // The store must have downloaded THIS seal before it can be confirmed.
+            if (!$receipt || !$receipt->downloaded_at) {
+                throw ValidationException::withMessages([
+                    'confirmed' => 'This seal must be downloaded by the store before it can be confirmed.',
+                ]);
+            }
+
+            // ...and have uploaded proof-of-use for THIS seal.
+            if (!$npcStatus->storeProofs()->where('store_id', $store->id)->where('seal_type', $type)->exists()) {
+                throw ValidationException::withMessages([
+                    'proof' => 'This store must upload proof of use for this seal before it can be confirmed.',
+                ]);
+            }
         }
 
-        $receipt = NpcSealReceipt::firstOrNew([
-            'npc_status_id' => $npcStatus->id,
-            'store_id' => $store->id,
-            'seal_type' => $type,
-        ]);
-
-        $receipt->confirmed_at = $confirmed ? now() : null;
-        $receipt->confirmed_by = $confirmed ? $request->user()->id : null;
-        $receipt->save();
+        // Nothing to do when clearing a confirmation that was never recorded.
+        if ($receipt) {
+            $receipt->confirmed_at = $confirmed ? now() : null;
+            $receipt->confirmed_by = $confirmed ? $request->user()->id : null;
+            $receipt->save();
+        }
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -1534,11 +1561,13 @@ class NpcStatusController extends Controller implements HasMiddleware
     }
 
     /**
-     * A store/office user uploads proof-of-use (a screenshot/photo) for their
-     * assigned store. One proof per (status, store); re-upload replaces it.
+     * A store/office user uploads proof-of-use (a screenshot/photo) for one of
+     * their assigned store's seals. One proof per (status, store, seal); a
+     * re-upload replaces it.
      */
-    public function uploadStoreProof(Request $request, NpcStatus $npcStatus, Store $store)
+    public function uploadStoreProof(Request $request, NpcStatus $npcStatus, Store $store, string $type)
     {
+        abort_unless(in_array($type, NpcStatusAttachment::SEAL_TYPES, true), 404);
         $user = $request->user();
         abort_unless($user->stores()->whereKey($store->id)->exists(), 403);
         abort_unless($npcStatus->stores()->whereKey($store->id)->exists(), 404);
@@ -1549,6 +1578,7 @@ class NpcStatusController extends Controller implements HasMiddleware
 
         $existing = NpcStoreProof::where('npc_status_id', $npcStatus->id)
             ->where('store_id', $store->id)
+            ->where('seal_type', $type)
             ->first();
 
         if ($existing) {
@@ -1557,11 +1587,11 @@ class NpcStatusController extends Controller implements HasMiddleware
 
         $file = $request->file('file');
         $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-        $fileName = 'proof-' . Str::uuid() . ($extension ? ".{$extension}" : '');
+        $fileName = "proof-{$type}-" . Str::uuid() . ($extension ? ".{$extension}" : '');
         $path = $file->storeAs("npc-store-proofs/{$npcStatus->id}/{$store->id}", $fileName, 'public');
 
         NpcStoreProof::updateOrCreate(
-            ['npc_status_id' => $npcStatus->id, 'store_id' => $store->id],
+            ['npc_status_id' => $npcStatus->id, 'store_id' => $store->id, 'seal_type' => $type],
             [
                 'file_path' => str_replace('\\', '/', $path),
                 'file_name' => $file->getClientOriginalName(),
@@ -1579,13 +1609,14 @@ class NpcStatusController extends Controller implements HasMiddleware
         return redirect()->back()->with('success', 'Proof uploaded successfully');
     }
 
-    public function downloadStoreProof(NpcStatus $npcStatus, Store $store)
+    public function downloadStoreProof(NpcStatus $npcStatus, Store $store, string $type)
     {
         $proof = NpcStoreProof::where('npc_status_id', $npcStatus->id)
             ->where('store_id', $store->id)
+            ->where('seal_type', $type)
             ->first();
 
-        abort_if(!$proof, 404, 'No proof uploaded for this store.');
+        abort_if(!$proof, 404, 'No proof uploaded for this seal.');
 
         return $this->downloadStoredFile($proof->file_path, $proof->file_name);
     }
@@ -1654,13 +1685,16 @@ class NpcStatusController extends Controller implements HasMiddleware
             $years = $statuses
                 ->filter(fn (NpcStatus $status) => $status->stores->contains('id', $store->id))
                 ->map(function (NpcStatus $status) use ($store, $receipts, $proofs) {
-                    $seals = collect(NpcStatusAttachment::SEAL_TYPES)->map(function (string $type) use ($status, $store, $receipts) {
+                    $seals = collect(NpcStatusAttachment::SEAL_TYPES)->map(function (string $type) use ($status, $store, $receipts, $proofs) {
                         $attachment = $this->attachmentsPayload($status, $type, $status->year)[0] ?? null;
                         // SQL Server may hydrate BIGINT foreign keys as numeric
                         // strings while related model keys are integers.
                         $receipt = $receipts->first(fn (NpcSealReceipt $r) => (string) $r->npc_status_id === (string) $status->id
                             && (string) $r->store_id === (string) $store->id
                             && $r->seal_type === $type);
+                        $proof = $proofs->first(fn (NpcStoreProof $p) => (string) $p->npc_status_id === (string) $status->id
+                            && (string) $p->store_id === (string) $store->id
+                            && $p->seal_type === $type);
 
                         return [
                             'type' => $type,
@@ -1672,11 +1706,13 @@ class NpcStatusController extends Controller implements HasMiddleware
                                 : null,
                             'downloaded_at' => $receipt?->downloaded_at?->toIso8601String(),
                             'confirmed_at' => $receipt?->confirmed_at?->toIso8601String(),
+                            'proof' => $proof ? [
+                                'name' => $proof->file_name,
+                                'uploaded_at' => $proof->uploaded_at?->toIso8601String(),
+                            ] : null,
+                            'proof_upload_url' => route('npc-statuses.stores.proof.upload', [$status->id, $store->id, $type]),
                         ];
                     })->all();
-
-                    $proof = $proofs->first(fn (NpcStoreProof $p) => (string) $p->npc_status_id === (string) $status->id
-                        && (string) $p->store_id === (string) $store->id);
 
                     return [
                         'npc_status_id' => $status->id,
@@ -1686,11 +1722,6 @@ class NpcStatusController extends Controller implements HasMiddleware
                         'validity_from' => $status->validity_from?->format('Y-m-d'),
                         'validity_to' => $status->validity_to?->format('Y-m-d'),
                         'seals' => $seals,
-                        'proof' => $proof ? [
-                            'name' => $proof->file_name,
-                            'uploaded_at' => $proof->uploaded_at?->toIso8601String(),
-                        ] : null,
-                        'proof_upload_url' => route('npc-statuses.stores.proof.upload', [$status->id, $store->id]),
                     ];
                 })
                 ->values()
