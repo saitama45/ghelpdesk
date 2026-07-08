@@ -159,6 +159,10 @@ class TicketController extends Controller
 
         $filterDeptId  = $request->filled('department_id')      ? (int) $request->department_id      : null;
         $filterNodeId  = $request->filled('department_node_id') ? (int) $request->department_node_id : null;
+        // Whether the user explicitly picked a department vs. the automatic default
+        // scope (own department). Explicit picks filter by the ticket's department
+        // field; the default scope keeps the triage view (own dept + unassigned).
+        $explicitDeptFilter = $request->filled('department_id');
         $skipDefaultDepartmentScope = $request->boolean('skip_default_department')
             || $ticketKeys->isNotEmpty();
         $assignedDepartmentOnly = $request->boolean('assigned_department_only');
@@ -236,7 +240,22 @@ class TicketController extends Controller
         } elseif ($filterDeptId) {
             if ($assignedDepartmentOnly) {
                 $query->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId));
+            } elseif ($explicitDeptFilter) {
+                // User explicitly picked a department: filter by the ticket's own
+                // department field (matched to the selected department's name), not
+                // the assignee's — stops unrelated unassigned tickets leaking in.
+                $filterDeptName = \App\Models\Department::whereKey($filterDeptId)->value('name');
+
+                if ($filterDeptName !== null && $filterDeptName !== '') {
+                    $query->where('tickets.department', $filterDeptName);
+                } else {
+                    // Unknown department id — fall back to assignee scope so the
+                    // filter never silently matches everything.
+                    $query->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId));
+                }
             } else {
+                // Automatic default scope (viewer's own department): keep the triage
+                // view that also surfaces unassigned tickets for pick-up.
                 $query->where(function ($departmentQuery) use ($filterDeptId) {
                     $departmentQuery->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId))
                         ->orWhereNull('assignee_id');
@@ -479,6 +498,7 @@ class TicketController extends Controller
 
         $filterDeptId = $request->filled('department_id')      ? (int) $request->department_id      : null;
         $filterNodeId = $request->filled('department_node_id') ? (int) $request->department_node_id : null;
+        $explicitDeptFilter = $request->filled('department_id');
         if (!$filterDeptId && !$filterNodeId) {
             $filterDeptId = auth()->user()->department_id ? (int) auth()->user()->department_id : null;
         }
@@ -486,7 +506,23 @@ class TicketController extends Controller
             $descendantIds = \App\Models\DepartmentNode::getAllDescendantIds($filterNodeId);
             $query->whereHas('assignee', fn($q) => $q->whereIn('department_node_id', array_merge([$filterNodeId], $descendantIds)));
         } elseif ($filterDeptId) {
-            $query->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId));
+            // Mirror the index list so the export matches the view.
+            if ($request->boolean('assigned_department_only')) {
+                $query->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId));
+            } elseif ($explicitDeptFilter) {
+                $filterDeptName = \App\Models\Department::whereKey($filterDeptId)->value('name');
+
+                if ($filterDeptName !== null && $filterDeptName !== '') {
+                    $query->where('tickets.department', $filterDeptName);
+                } else {
+                    $query->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId));
+                }
+            } else {
+                $query->where(function ($departmentQuery) use ($filterDeptId) {
+                    $departmentQuery->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId))
+                        ->orWhereNull('assignee_id');
+                });
+            }
         }
 
         $assigneeFilters = $normalizeFilterValues($request->input('assignee_id'));

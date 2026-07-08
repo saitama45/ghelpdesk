@@ -368,6 +368,28 @@
                         </div>
                     </div>
 
+                    <!-- Transaction audit trail -->
+                    <div class="border-t border-gray-100 pt-4 dark:border-gray-700">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div class="rounded-lg border border-gray-100 bg-gray-50/60 p-3 dark:border-gray-700 dark:bg-gray-900/40">
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Created By</p>
+                                <p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ tripModal.trip.creator?.name || '—' }}</p>
+                            </div>
+                            <div class="rounded-lg border border-gray-100 bg-gray-50/60 p-3 dark:border-gray-700 dark:bg-gray-900/40">
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Updated By</p>
+                                <p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ tripModal.trip.updater?.name || '—' }}</p>
+                            </div>
+                            <div class="rounded-lg border border-gray-100 bg-gray-50/60 p-3 dark:border-gray-700 dark:bg-gray-900/40">
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Created At</p>
+                                <p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ formatDateTime(tripModal.trip.created_at) || '—' }}</p>
+                            </div>
+                            <div class="rounded-lg border border-gray-100 bg-gray-50/60 p-3 dark:border-gray-700 dark:bg-gray-900/40">
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Updated At</p>
+                                <p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ formatDateTime(tripModal.trip.updated_at) || '—' }}</p>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Approval History -->
                     <div v-if="tripModal.trip.approved_at || tripModal.trip.rejection_reason" class="border-t border-gray-100 pt-4 space-y-2 dark:border-gray-700">
                         <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2 dark:text-gray-400">Approval History</p>
@@ -953,10 +975,15 @@ const deleteVehicle = async (v) => {
 }
 
 // --- Permissions for action visibility ---
-const canApprove = computed(() => hasPermission('service_vehicle_trips.approve') && tripModal.trip?.status === 'Pending Approval')
-const canEdit    = computed(() => hasPermission('service_vehicle_trips.edit') && ['Pending Approval', 'Scheduled'].includes(tripModal.trip?.status))
-const canStart   = computed(() => hasPermission('service_vehicle_trips.edit') && tripModal.trip?.status === 'Scheduled')
-const canComplete= computed(() => hasPermission('service_vehicle_trips.edit') && ['Scheduled', 'In Progress'].includes(tripModal.trip?.status))
+// Approve/Reject is limited to the requester's manager chain (resolved server-side
+// as `can_approve`), even for users who hold the approve permission.
+const canApprove = computed(() => hasPermission('service_vehicle_trips.approve') && tripModal.trip?.status === 'Pending Approval' && !!tripModal.trip?.can_approve)
+// Edit is limited to the requester's manager chain (server-side `can_edit`), so it
+// is hidden from the requester even though they hold the edit permission.
+const canEdit    = computed(() => hasPermission('service_vehicle_trips.edit') && ['Pending Approval', 'Scheduled'].includes(tripModal.trip?.status) && !!tripModal.trip?.can_edit)
+// Start Trip / Log Completion are for the assigned driver only (server-side `is_driver`).
+const canStart   = computed(() => !!tripModal.trip?.is_driver && tripModal.trip?.status === 'Scheduled')
+const canComplete= computed(() => !!tripModal.trip?.is_driver && ['Scheduled', 'In Progress'].includes(tripModal.trip?.status))
 const canCancel  = computed(() => hasPermission('service_vehicle_trips.edit') && ['Pending Approval', 'Scheduled'].includes(tripModal.trip?.status))
 
 const modalTitle = computed(() => {

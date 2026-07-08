@@ -21,15 +21,123 @@ class ServiceVehicleTripController extends Controller implements HasMiddleware
 {
     public function __construct(private ServiceVehicleTripService $tripService) {}
 
+    /** Memoized approve-permission holders for the current request. */
+    private ?array $permissionHolders = null;
+
+    /** Per-requester cache of eligible approver ids for the current request. */
+    private array $approverCache = [];
+
     public static function middleware(): array
     {
         return [
             new Middleware('can:service_vehicle_trips.view',    only: ['index', 'show', 'detectConflict']),
             new Middleware('can:service_vehicle_trips.create',  only: ['store']),
-            new Middleware('can:service_vehicle_trips.edit',    only: ['update', 'start', 'complete', 'cancel']),
+            // start/complete are authorized by driver identity (below), not the
+            // edit permission — only the assigned driver executes their trip.
+            new Middleware('can:service_vehicle_trips.edit',    only: ['update', 'cancel']),
             new Middleware('can:service_vehicle_trips.delete',  only: ['destroy']),
             new Middleware('can:service_vehicle_trips.approve', only: ['approve', 'reject']),
         ];
+    }
+
+    /**
+     * Active user ids holding the approve permission (cached per request).
+     *
+     * @return array<int>
+     */
+    private function approvePermissionHolderIds(): array
+    {
+        return $this->permissionHolders ??= app(\App\Services\NotificationService::class)
+            ->usersWithPermission('service_vehicle_trips.approve');
+    }
+
+    /**
+     * Who may approve/reject a trip requested by $requesterId: the requester's
+     * direct managers (their "Report To") plus the next immediate head above
+     * (those managers' managers), limited to holders of the approve permission.
+     *
+     * Falls back to every permitted approver when the requester has no manager
+     * chain (or none of them hold the permission) so bookings never get stuck.
+     *
+     * @return array<int>
+     */
+    private function eligibleApproverIds(?int $requesterId): array
+    {
+        $key = (int) $requesterId;
+
+        if (array_key_exists($key, $this->approverCache)) {
+            return $this->approverCache[$key];
+        }
+
+        $permitted = $this->approvePermissionHolderIds();
+
+        $requester = $requesterId ? User::find($requesterId) : null;
+        if (! $requester) {
+            return $this->approverCache[$key] = $permitted;
+        }
+
+        $directManagerIds = $requester->managers()->pluck('users.id');
+
+        $headIds = $directManagerIds->isEmpty()
+            ? collect()
+            : User::whereIn('id', $directManagerIds)
+                ->with('managers:id')
+                ->get()
+                ->flatMap(fn (User $manager) => $manager->managers->pluck('id'));
+
+        $chain = $directManagerIds->merge($headIds)
+            ->map(fn ($id) => (int) $id)
+            ->unique();
+
+        $eligible = $chain->intersect($permitted)->values()->all();
+
+        return $this->approverCache[$key] = ! empty($eligible) ? $eligible : $permitted;
+    }
+
+    /**
+     * Whether $user sits in the requester's approver chain for this trip
+     * (requester's manager / next head above). This gates approve, reject and
+     * edit — the requester themselves is never their own approver.
+     */
+    private function tripApproverFlag(ServiceVehicleTrip $trip, ?User $user): bool
+    {
+        return $user
+            ? in_array((int) $user->id, $this->eligibleApproverIds($trip->created_by), true)
+            : false;
+    }
+
+    /**
+     * Whether $user may approve/reject the given pending trip — i.e. holds the
+     * approve permission AND sits in the requester's manager chain.
+     */
+    private function tripCanBeApprovedBy(ServiceVehicleTrip $trip, ?User $user): bool
+    {
+        if (! $user || ! $user->can('service_vehicle_trips.approve')) {
+            return false;
+        }
+
+        if ($trip->status !== 'Pending Approval') {
+            return false;
+        }
+
+        return $this->tripApproverFlag($trip, $user);
+    }
+
+    /**
+     * Whether $user may edit the given trip — the requester's approver chain plus
+     * the edit permission, while the trip is still Pending/Scheduled.
+     */
+    private function tripCanBeEditedBy(ServiceVehicleTrip $trip, ?User $user): bool
+    {
+        if (! $user || ! $user->can('service_vehicle_trips.edit')) {
+            return false;
+        }
+
+        if (! in_array($trip->status, ['Pending Approval', 'Scheduled'], true)) {
+            return false;
+        }
+
+        return $this->tripApproverFlag($trip, $user);
     }
 
     public function index(Request $request)
@@ -86,6 +194,19 @@ class ServiceVehicleTripController extends Controller implements HasMiddleware
 
         $calendarTrips = $calendarQuery->orderBy('date_used')->orderBy('planned_departure_time')->get();
 
+        // Flag each trip with the viewer's relationship to the requester so the
+        // Approve/Reject and Edit buttons only show for the requester's manager
+        // chain (never the requester themselves).
+        $viewer = $request->user();
+        $annotate = function (ServiceVehicleTrip $t) use ($viewer) {
+            $t->is_approver = $this->tripApproverFlag($t, $viewer);
+            $t->can_approve = $this->tripCanBeApprovedBy($t, $viewer);
+            $t->can_edit    = $this->tripCanBeEditedBy($t, $viewer);
+            $t->is_driver   = $viewer && (int) $t->driver_id === (int) $viewer->id;
+        };
+        $trips->getCollection()->each($annotate);
+        $calendarTrips->each($annotate);
+
         // Summary stat cards
         $today = Carbon::today();
         $summary = [
@@ -109,9 +230,14 @@ class ServiceVehicleTripController extends Controller implements HasMiddleware
         ]);
     }
 
-    public function show(ServiceVehicleTrip $serviceVehicleTrip)
+    public function show(Request $request, ServiceVehicleTrip $serviceVehicleTrip)
     {
         $serviceVehicleTrip->load(['vehicle', 'driver:id,name,email', 'approver:id,name', 'attachments.uploader:id,name', 'creator:id,name', 'updater:id,name']);
+        $serviceVehicleTrip->is_approver = $this->tripApproverFlag($serviceVehicleTrip, $request->user());
+        $serviceVehicleTrip->can_approve = $this->tripCanBeApprovedBy($serviceVehicleTrip, $request->user());
+        $serviceVehicleTrip->can_edit    = $this->tripCanBeEditedBy($serviceVehicleTrip, $request->user());
+        $serviceVehicleTrip->is_driver   = (int) $serviceVehicleTrip->driver_id === (int) $request->user()->id;
+
         return response()->json($serviceVehicleTrip);
     }
 
@@ -158,7 +284,8 @@ class ServiceVehicleTripController extends Controller implements HasMiddleware
 
         $notifications = app(\App\Services\NotificationService::class);
         $notifications->notifyApproval(
-            $notifications->usersWithPermission('service_vehicle_trips.approve'),
+            // Only the requester's manager chain (direct managers + next head above).
+            $this->eligibleApproverIds($trip->created_by),
             $request->user()->id,
             'pending',
             'Trip approval needed',
@@ -174,6 +301,11 @@ class ServiceVehicleTripController extends Controller implements HasMiddleware
     public function update(Request $request, ServiceVehicleTrip $serviceVehicleTrip)
     {
         abort_if(! in_array($serviceVehicleTrip->status, ['Pending Approval', 'Scheduled']), 422, 'Only Pending or Scheduled trips can be edited.');
+        abort_unless(
+            $this->tripApproverFlag($serviceVehicleTrip, $request->user()),
+            403,
+            'Only the requester\'s manager can edit this trip.'
+        );
 
         $validated = $this->validateBooking($request);
         $this->ensureTimesValid($validated);
@@ -188,6 +320,11 @@ class ServiceVehicleTripController extends Controller implements HasMiddleware
     public function approve(Request $request, ServiceVehicleTrip $serviceVehicleTrip)
     {
         abort_if($serviceVehicleTrip->status !== 'Pending Approval', 422, 'Only Pending trips can be approved.');
+        abort_unless(
+            in_array((int) $request->user()->id, $this->eligibleApproverIds($serviceVehicleTrip->created_by), true),
+            403,
+            'Only the requester\'s manager can approve this trip.'
+        );
 
         $serviceVehicleTrip->update([
             'status'      => 'Scheduled',
@@ -204,6 +341,11 @@ class ServiceVehicleTripController extends Controller implements HasMiddleware
     public function reject(Request $request, ServiceVehicleTrip $serviceVehicleTrip)
     {
         abort_if($serviceVehicleTrip->status !== 'Pending Approval', 422, 'Only Pending trips can be rejected.');
+        abort_unless(
+            in_array((int) $request->user()->id, $this->eligibleApproverIds($serviceVehicleTrip->created_by), true),
+            403,
+            'Only the requester\'s manager can reject this trip.'
+        );
 
         $validated = $request->validate([
             'rejection_reason' => 'required|string|max:1000',
@@ -246,6 +388,11 @@ class ServiceVehicleTripController extends Controller implements HasMiddleware
     public function start(Request $request, ServiceVehicleTrip $serviceVehicleTrip)
     {
         abort_if($serviceVehicleTrip->status !== 'Scheduled', 422, 'Only Scheduled trips can be started.');
+        abort_unless(
+            (int) $request->user()->id === (int) $serviceVehicleTrip->driver_id,
+            403,
+            'Only the assigned driver can start this trip.'
+        );
 
         $serviceVehicleTrip->update([
             'status'                 => 'In Progress',
@@ -259,6 +406,11 @@ class ServiceVehicleTripController extends Controller implements HasMiddleware
     public function complete(Request $request, ServiceVehicleTrip $serviceVehicleTrip)
     {
         abort_if(! in_array($serviceVehicleTrip->status, ['Scheduled', 'In Progress']), 422, 'Trip cannot be completed in its current status.');
+        abort_unless(
+            (int) $request->user()->id === (int) $serviceVehicleTrip->driver_id,
+            403,
+            'Only the assigned driver can log completion for this trip.'
+        );
 
         $validated = $request->validate([
             'actual_departure_time'    => 'required',

@@ -282,6 +282,49 @@ class TicketIndexSummaryTest extends TestCase
             );
     }
 
+    public function test_department_filter_matches_ticket_department_field_not_unassigned(): void
+    {
+        $company = Company::create([
+            'name' => 'Test Company',
+            'code' => 'TC',
+            'is_active' => true,
+        ]);
+
+        $viewerDepartment = Department::create(['name' => 'Support', 'is_active' => true]);
+        $newDepartment = Department::create(['name' => 'Business Development', 'is_active' => true]);
+
+        $viewer = User::factory()->create([
+            'company_id' => $company->id,
+            'department_id' => $viewerDepartment->id,
+        ]);
+
+        // Belongs to the selected department by its department field.
+        $tagged = $this->ticket($company, [
+            'ticket_key' => 'BD-1001',
+            'department' => 'Business Development',
+        ]);
+        // Unassigned but tagged to another department — must NOT leak in.
+        $this->ticket($company, [
+            'ticket_key' => 'SUP-1002',
+            'department' => 'Support',
+        ]);
+        // Unassigned with no department at all — must NOT leak in.
+        $this->ticket($company, ['ticket_key' => 'NONE-1003']);
+
+        $this->actingAs($viewer)
+            ->get(route('tickets.index', [
+                'department_id' => $newDepartment->id,
+                'status' => ['all'],
+                'ticket_scope' => 'all',
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Tickets/Index')
+                ->has('tickets.data', 1)
+                ->where('tickets.data.0.id', $tagged->id)
+            );
+    }
+
     private function ticket(Company $company, array $overrides = []): Ticket
     {
         return Ticket::create(array_merge([
