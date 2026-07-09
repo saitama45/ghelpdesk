@@ -92,11 +92,18 @@ watch(() => props.board, (board) => {
 const filters = reactive({
     keyword: '',
     assignee_id: '',
-    label_id: '',
+    label_ids: [],
     due: '',
     milestone: '',
     mine: false,
     showArchived: false,
+});
+
+const labelFilterOptions = computed(() => {
+    return (localBoard.value.labels || []).map((label) => ({
+        id: label.id,
+        label: label.name || label.color,
+    }));
 });
 
 const boardForm = reactive({
@@ -274,12 +281,11 @@ const activeFilterCount = computed(() => {
     return [
         filters.keyword,
         filters.assignee_id,
-        filters.label_id,
         filters.due,
         filters.milestone,
         filters.mine,
         filters.showArchived,
-    ].filter(Boolean).length;
+    ].filter(Boolean).length + (filters.label_ids.length ? 1 : 0);
 });
 
 const initials = (name) => (name || 'U').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
@@ -512,7 +518,7 @@ const matchesFilters = (card) => {
     }
 
     if (filters.assignee_id && !(card.assignees || []).some((user) => String(user.id) === String(filters.assignee_id))) return false;
-    if (filters.label_id && !(card.labels || []).some((label) => String(label.id) === String(filters.label_id))) return false;
+    if (filters.label_ids.length && !(card.labels || []).some((label) => filters.label_ids.includes(label.id))) return false;
     if (filters.milestone && card.project_task?.category !== filters.milestone) return false;
     if (filters.mine && !(card.assignees || []).some((user) => Number(user.id) === Number(authUser.value.id))) return false;
 
@@ -528,7 +534,7 @@ const matchesFilters = (card) => {
 const clearFilters = () => {
     filters.keyword = '';
     filters.assignee_id = '';
-    filters.label_id = '';
+    filters.label_ids = [];
     filters.due = '';
     filters.milestone = '';
     filters.mine = false;
@@ -1887,10 +1893,15 @@ onUnmounted(() => {
                         <option value="">All members</option>
                         <option v-for="member in boardMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                     </select>
-                    <select v-model="filters.label_id" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm dark:bg-gray-800/95 dark:text-gray-200">
-                        <option value="">All labels</option>
-                        <option v-for="label in localBoard.labels" :key="label.id" :value="label.id">{{ label.name || label.color }}</option>
-                    </select>
+                    <div class="w-52">
+                        <MultiAutocomplete
+                            v-model="filters.label_ids"
+                            :options="labelFilterOptions"
+                            label-key="label"
+                            value-key="id"
+                            placeholder="All labels"
+                        />
+                    </div>
                     <select v-if="isProjectBoard" v-model="filters.milestone" class="h-10 rounded-lg border-0 bg-white/95 text-sm text-gray-800 shadow-sm dark:bg-gray-800/95 dark:text-gray-200">
                         <option value="">All milestones</option>
                         <option v-for="milestone in projectMilestones" :key="milestone" :value="milestone">{{ milestone }}</option>
