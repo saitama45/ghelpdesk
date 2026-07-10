@@ -11,6 +11,7 @@ use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\PosRequestService;
+use App\Support\Concerns\ResolvesLinkedTicket;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,8 @@ use Illuminate\Routing\Controllers\Middleware;
 
 class PosRequestController extends Controller implements HasMiddleware
 {
+    use ResolvesLinkedTicket;
+
     protected PosRequestService $posRequestService;
 
     public function __construct(PosRequestService $posRequestService)
@@ -150,29 +153,9 @@ class PosRequestController extends Controller implements HasMiddleware
                             ->paginate($request->get('per_page', 10))
                             ->withQueryString();
 
-        // The `ticket` relation hides archived tickets AND tickets outside the active
-        // entity, so it can neither decide the state nor render the ticket number.
-        // Resolve the referenced tickets directly (one query for the page) with both
-        // filters lifted, then re-attach so the list always shows the real ticket key.
-        $ticketIds = $posRequests->getCollection()->pluck('ticket_id')->filter();
-
-        $resolved = $ticketIds->isEmpty()
-            ? collect()
-            : Ticket::withTrashed()
-                ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
-                ->with('archiver:id,name')
-                ->whereIn('id', $ticketIds)
-                ->get(['id', 'ticket_key', 'status', 'deleted_at', 'deleted_by'])
-                ->keyBy('id');
-
-        $posRequests->getCollection()->transform(function ($r) use ($resolved) {
-            $ticket = $r->ticket_id ? $resolved->get($r->ticket_id) : null;
-
-            $r->ticket_state = !$ticket ? 'none' : ($ticket->trashed() ? 'archived' : 'live');
-            $r->setRelation('ticket', $ticket);
-
-            return $r;
-        });
+        // `ticket` hides archived + cross-entity tickets, so it can neither decide the
+        // state nor render the ticket number. Resolve them directly (one extra query).
+        $this->annotateTicketState($posRequests->getCollection());
 
         return Inertia::render('PosRequests/Index', [
             'posRequests' => $posRequests,
@@ -249,7 +232,7 @@ class PosRequestController extends Controller implements HasMiddleware
 
         // The `ticket` relation is entity-scoped, so a live ticket belonging to another
         // company loads as null. Re-attach it, else the page claims it has no ticket.
-        $resolved = $this->resolveTicket($posRequest);
+        $resolved = $this->resolveTicket($posRequest->ticket_id);
 
         if (!$posRequest->ticket && $resolved && !$resolved->trashed()) {
             $posRequest->setRelation('ticket', $resolved->load('slaMetric'));
@@ -257,68 +240,10 @@ class PosRequestController extends Controller implements HasMiddleware
 
         return Inertia::render('PosRequests/Show', [
             'posRequest' => $posRequest,
-            'ticketState' => $this->ticketState($posRequest),
-            'archivedTicket' => $this->archivedTicket($posRequest),
+            'ticketState' => $this->ticketStateOf($resolved),
+            'archivedTicket' => $this->archivedTicketPayload($resolved),
             'users' => User::active()->orderBy('name')->get(['id', 'name', 'email']),
         ]);
-    }
-
-    /**
-     * The ticket this request points at, regardless of archive state or active entity.
-     *
-     * Both filters must be bypassed. Ticket carries ActiveEntityScope, so a ticket whose
-     * company differs from the viewer's active entity reads as absent through the normal
-     * relation — and treating that as "no ticket" would offer to generate a duplicate.
-     */
-    private function resolveTicket(PosRequest $posRequest): ?Ticket
-    {
-        if (!$posRequest->ticket_id) {
-            return null;
-        }
-
-        return Ticket::withTrashed()
-            ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
-            ->with('archiver:id,name')
-            ->find($posRequest->ticket_id);
-    }
-
-    /**
-     * Why this request has (or lacks) a ticket. Three distinct states, because the
-     * remedy differs: an archived ticket must NOT be regenerated (restoring it is the
-     * fix), while a ticket that was never created can be generated on demand.
-     *
-     *  - 'live'     : a ticket exists and is not archived
-     *  - 'archived' : ticket_id points at a soft-deleted ticket
-     *  - 'none'     : no ticket was ever created (or the row is gone entirely)
-     */
-    private function ticketState(PosRequest $posRequest): string
-    {
-        $ticket = $this->resolveTicket($posRequest);
-
-        if (!$ticket) {
-            return 'none';
-        }
-
-        return $ticket->trashed() ? 'archived' : 'live';
-    }
-
-    /**
-     * The archived ticket this request points at, with the actor who archived it.
-     * Null when the request has a live ticket or never had one.
-     */
-    private function archivedTicket(PosRequest $posRequest): ?array
-    {
-        $ticket = $this->resolveTicket($posRequest);
-
-        if (!$ticket || !$ticket->trashed()) {
-            return null;
-        }
-
-        return [
-            'ticket_key' => $ticket->ticket_key,
-            'deleted_at' => $ticket->deleted_at?->toIso8601String(),
-            'deleted_by' => $ticket->archiver?->name,
-        ];
     }
 
     public function edit(PosRequest $posRequest)
@@ -492,7 +417,7 @@ class PosRequestController extends Controller implements HasMiddleware
      */
     public function generateTicket(PosRequest $posRequest)
     {
-        $state = $this->ticketState($posRequest);
+        $state = $this->ticketStateOf($this->resolveTicket($posRequest->ticket_id));
 
         if ($posRequest->status !== 'Approved') {
             return redirect()->back()->with('error', 'This request is not fully approved yet.');
@@ -514,7 +439,7 @@ class PosRequestController extends Controller implements HasMiddleware
                 $locked = PosRequest::whereKey($posRequest->id)->lockForUpdate()->first();
 
                 // Re-check under the lock: a concurrent click may have ticketed it already.
-                if (!$locked || $locked->status !== 'Approved' || $this->ticketState($locked) !== 'none') {
+                if (!$locked || $locked->status !== 'Approved' || $this->ticketStateOf($this->resolveTicket($locked->ticket_id)) !== 'none') {
                     return;
                 }
 

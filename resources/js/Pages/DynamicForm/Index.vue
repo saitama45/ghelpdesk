@@ -366,6 +366,8 @@ function statusClass(s) {
     return STATUS_COLORS[s] ?? 'bg-gray-100 text-gray-500 dark:bg-slate-800 dark:text-slate-300 dark:border dark:border-slate-700'
 }
 
+// Only reached when ticket_state === 'none'. An archived ticket is rendered with its
+// number instead, so "Missing" now genuinely means "no ticket was ever created".
 const ticketPlaceholder = (record) => {
     return record.status === 'Approved' ? 'Missing' : 'Pending'
 }
@@ -557,13 +559,26 @@ const getStageDisplay = (record) => {
                                 <span class="text-xs font-black text-gray-500 dark:text-slate-300">#{{ record.id }}</span>
                             </td>
                             <td v-if="isColumnVisible('ticket')" class="px-6 py-5 whitespace-nowrap">
+                                <!-- Live ticket: clickable. -->
                                 <Link
-                                    v-if="record.ticket"
+                                    v-if="record.ticket_state === 'live'"
                                     :href="route('tickets.edit', record.ticket.id)"
                                     class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm dark:bg-blue-500/15 dark:text-blue-200 dark:hover:bg-blue-600 dark:hover:text-white"
                                 >
                                     {{ record.ticket.ticket_key }}
                                 </Link>
+                                <!-- Archived: still show the number, but it isn't openable. -->
+                                <div v-else-if="record.ticket_state === 'archived'" class="space-y-1">
+                                    <span class="inline-flex items-center px-3 py-1.5 bg-rose-50 text-rose-700 rounded-lg text-xs font-black shadow-sm dark:bg-rose-500/15 dark:text-rose-200">
+                                        <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8" />
+                                        </svg>
+                                        {{ record.ticket.ticket_key }}
+                                    </span>
+                                    <div class="text-[9px] font-black text-rose-600 uppercase tracking-wide dark:text-rose-300">
+                                        Archived{{ record.ticket.archiver ? ' by ' + record.ticket.archiver.name : '' }}
+                                    </div>
+                                </div>
                                 <span
                                     v-else
                                     class="text-[10px] font-black uppercase italic"

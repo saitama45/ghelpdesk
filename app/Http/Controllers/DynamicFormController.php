@@ -6,11 +6,14 @@ use App\Models\FormDefinition;
 use App\Models\FormRecord;
 use App\Models\User;
 use App\Services\DynamicForms\FormServiceFactory;
+use App\Support\Concerns\ResolvesLinkedTicket;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class DynamicFormController extends Controller
 {
+    use ResolvesLinkedTicket;
+
     protected FormServiceFactory $serviceFactory;
 
     public function __construct(FormServiceFactory $serviceFactory)
@@ -31,10 +34,14 @@ class DynamicFormController extends Controller
             $query->where('status', $request->status);
         }
 
-        $records = $query->with(['creator', 'definition', 'requestType', 'ticket:id,ticket_key,status'])
+        $records = $query->with(['creator', 'definition', 'requestType'])
             ->latest()
             ->paginate($request->get('per_page', 10))
             ->withQueryString();
+
+        // `ticket` hides archived + cross-entity tickets, which the list would otherwise
+        // render as "Missing". Resolve them directly and tag each row's ticket_state.
+        $this->annotateTicketState($records->getCollection());
 
         return Inertia::render('DynamicForm/List', [
             'records' => $records,
@@ -67,10 +74,13 @@ class DynamicFormController extends Controller
             $query->where('data->onboarding_date', '<=', $request->onboarding_date_to);
         }
 
-        $records = $query->with(['creator', 'updator', 'requestType', 'approvals', 'ticket:id,ticket_key,status'])
+        $records = $query->with(['creator', 'updator', 'requestType', 'approvals'])
                         ->latest()
                         ->paginate($request->get('per_page', 10))
                         ->withQueryString();
+
+        // See list(): the scoped relation can't distinguish archived from never-created.
+        $this->annotateTicketState($records->getCollection());
 
         return Inertia::render('DynamicForm/Index', [
             'form' => $form,
@@ -87,9 +97,19 @@ class DynamicFormController extends Controller
             ->where('form_definition_id', $form->id)
             ->findOrFail($id);
 
+        // A live ticket in another entity loads as null through the scoped relation;
+        // re-attach it so the page shows the ticket instead of claiming it's missing.
+        $resolved = $this->resolveTicket($record->ticket_id);
+
+        if (!$record->ticket && $resolved && !$resolved->trashed()) {
+            $record->setRelation('ticket', $resolved->load('slaMetric'));
+        }
+
         return Inertia::render('DynamicForm/Show', [
             'form' => $form,
             'record' => $record,
+            'ticketState' => $this->ticketStateOf($resolved),
+            'archivedTicket' => $this->archivedTicketPayload($resolved),
             'users' => User::active()->orderBy('name')->get(['id', 'name', 'email']),
         ]);
     }

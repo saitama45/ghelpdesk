@@ -111,11 +111,9 @@ class TicketArchiveController extends Controller implements HasMiddleware
                 ->unique()
                 ->values();
 
-            $targets = Ticket::withTrashed()
-                ->whereIn('id', $rootIds)
-                ->orWhereIn('parent_id', $rootIds)
-                ->get()
-                ->unique('id');
+            $targets = Ticket::withTrashed()->familyOf($rootIds)->get()->unique('id');
+
+            $restored = 0;
 
             foreach ($targets as $target) {
                 if (!$target->trashed() && !$target->is_deleted) {
@@ -127,9 +125,12 @@ class TicketArchiveController extends Controller implements HasMiddleware
                 if ($target->trashed()) {
                     $target->restore();
                 }
+
+                $restored++;
             }
 
-            return $targets->count();
+            // Report what actually changed, not every ticket in the family.
+            return $restored;
         });
     }
 
@@ -139,7 +140,11 @@ class TicketArchiveController extends Controller implements HasMiddleware
             return $ticket;
         }
 
-        $parent = Ticket::withTrashed()->find($ticket->parent_id);
+        // Unscoped: a parent in another entity would otherwise read as missing, and the
+        // child would be restored on its own, leaving the parent archived.
+        $parent = Ticket::withTrashed()
+            ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->find($ticket->parent_id);
 
         if ($parent && $parent->trashed() && $parent->is_deleted) {
             return $parent;
@@ -215,11 +220,9 @@ class TicketArchiveController extends Controller implements HasMiddleware
     {
         $rootIds = $archiveTickets->pluck('id')->unique()->values();
 
-        $targets = Ticket::withTrashed()
-            ->whereIn('id', $rootIds)
-            ->orWhereIn('parent_id', $rootIds)
-            ->get()
-            ->unique('id');
+        // Must see the whole family: the guards below refuse to purge a parent while any
+        // child is still active, and a hidden child would let that check pass wrongly.
+        $targets = Ticket::withTrashed()->familyOf($rootIds)->get()->unique('id');
 
         $notArchived = $targets->first(fn (Ticket $target) => !$target->trashed() || !$target->is_deleted);
         if ($notArchived) {

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Scopes\ActiveEntityScope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -50,6 +52,31 @@ class Ticket extends Model
         return $this->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
             ->where($field ?? $this->getRouteKeyName(), $value)
             ->firstOrFail();
+    }
+
+    /**
+     * The given root tickets plus their direct children — the unit that cascade
+     * operations (archive / restore / purge) act on.
+     *
+     * Two things this gets right that a bare `whereIn(...)->orWhereIn(...)` does not:
+     *
+     * 1. ActiveEntityScope is dropped. A ticket family can span entities, and the
+     *    scope is a listing filter, not an authorization boundary — resolveRouteBinding
+     *    bypasses it too. Leaving it on made cascades silently skip the root when the
+     *    viewer's active entity differed from the ticket's company.
+     * 2. The OR is grouped. Otherwise it compiles to
+     *    `company_id = ? AND id IN (...) OR parent_id IN (...)`, letting the second
+     *    branch escape every other constraint on the query.
+     *
+     * Callers are responsible for authorizing the roots before calling this.
+     */
+    public function scopeFamilyOf(Builder $query, $rootIds): Builder
+    {
+        return $query
+            ->withoutGlobalScope(ActiveEntityScope::class)
+            ->where(function (Builder $q) use ($rootIds) {
+                $q->whereIn('id', $rootIds)->orWhereIn('parent_id', $rootIds);
+            });
     }
 
     public function parent()

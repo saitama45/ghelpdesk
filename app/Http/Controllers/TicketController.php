@@ -1291,6 +1291,10 @@ class TicketController extends Controller
 
         $count = $this->archiveTickets(collect([$ticket]));
 
+        if ($count === 0) {
+            return redirect()->back()->with('error', 'This ticket is already archived.');
+        }
+
         return redirect()->route('tickets.index')->with('success', "{$count} ticket(s) archived successfully.");
     }
 
@@ -1303,13 +1307,22 @@ class TicketController extends Controller
             'ticket_ids.*' => 'exists:tickets,id',
         ]);
 
-        $tickets = Ticket::whereIn('id', $validated['ticket_ids'])->get();
+        // Unscoped, matching destroy(): route binding already lets a user open a ticket
+        // outside their active entity, so `tickets.delete` — not the entity scope — is
+        // the gate here. Scoped, this silently dropped cross-entity ids from selection.
+        $tickets = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->whereIn('id', $validated['ticket_ids'])
+            ->get();
 
         if ($tickets->isEmpty()) {
             return redirect()->back()->withErrors(['archive' => 'No active tickets selected for archive.']);
         }
 
         $count = $this->archiveTickets($tickets);
+
+        if ($count === 0) {
+            return redirect()->back()->with('error', 'The selected ticket(s) are already archived.');
+        }
 
         return redirect()->back()->with('success', "{$count} ticket(s) archived successfully.");
     }
@@ -1320,10 +1333,9 @@ class TicketController extends Controller
         $actorId = auth()->id();
 
         return DB::transaction(function () use ($rootIds, $actorId) {
-            $targets = Ticket::whereIn('id', $rootIds)
-                ->orWhereIn('parent_id', $rootIds)
-                ->get()
-                ->unique('id');
+            $targets = Ticket::familyOf($rootIds)->get()->unique('id');
+
+            $archived = 0;
 
             foreach ($targets as $target) {
                 if ($target->trashed()) {
@@ -1334,9 +1346,13 @@ class TicketController extends Controller
                 // whose ticket disappeared) need to explain who archived it.
                 $target->forceFill(['is_deleted' => true, 'deleted_by' => $actorId])->save();
                 $target->delete();
+
+                $archived++;
             }
 
-            return $targets->count();
+            // Count what actually changed, not what was considered — already-archived
+            // children would otherwise inflate the "N ticket(s) archived" message.
+            return $archived;
         });
     }
 

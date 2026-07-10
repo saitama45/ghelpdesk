@@ -10,6 +10,16 @@ import DynamicFormRenderer from '@/Components/DynamicFormRenderer.vue'
 const props = defineProps({
     form: Object,
     record: Object,
+    // 'live' | 'archived' | 'none' — why the record does or doesn't have a ticket.
+    ticketState: {
+        type: String,
+        default: 'none',
+    },
+    // Present only when ticketState === 'archived'.
+    archivedTicket: {
+        type: Object,
+        default: null,
+    },
     users: {
         type: Array,
         default: () => [],
@@ -62,19 +72,25 @@ function ticketStatusClass(status) {
 
 const ticketSlaMetric = computed(() => props.record.ticket?.sla_metric || props.record.ticket?.slaMetric || null)
 
+// Each variant needs a dark counterpart: the timestamps inside these boxes render
+// near-white in dark mode and would otherwise sit on a near-white background.
+const SLA_NEUTRAL = 'bg-white border-gray-100 dark:bg-gray-800 dark:border-gray-700'
+const SLA_BREACHED = 'bg-red-50 border-red-100 dark:bg-red-500/10 dark:border-red-500/30'
+const SLA_MET = 'bg-green-50 border-green-100 dark:bg-green-500/10 dark:border-green-500/30'
+
 function slaTargetClass(type) {
     const metric = ticketSlaMetric.value
-    if (!metric) return 'bg-white border-gray-100'
+    if (!metric) return SLA_NEUTRAL
 
     if (type === 'response') {
-        if (metric.is_response_breached) return 'bg-red-50 border-red-100'
-        if (metric.first_response_at) return 'bg-green-50 border-green-100'
-        return 'bg-white border-gray-100'
+        if (metric.is_response_breached) return SLA_BREACHED
+        if (metric.first_response_at) return SLA_MET
+        return SLA_NEUTRAL
     }
 
-    if (metric.is_resolution_breached) return 'bg-red-50 border-red-100'
-    if (metric.resolved_at) return 'bg-green-50 border-green-100'
-    return 'bg-white border-gray-100'
+    if (metric.is_resolution_breached) return SLA_BREACHED
+    if (metric.resolved_at) return SLA_MET
+    return SLA_NEUTRAL
 }
 
 function slaStatus(type) {
@@ -487,7 +503,37 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                     </div>
 
                     <!-- Right: Workflow Sidebar -->
-                    <div v-if="totalLevels > 0 || record.ticket" class="space-y-8">
+                    <div v-if="totalLevels > 0 || record.ticket || ticketState === 'archived'" class="space-y-8">
+                        <!-- Archived ticket: show which ticket it was and who archived it.
+                             Not a link — tickets.edit can't open an archived ticket. -->
+                        <div v-if="ticketState === 'archived'" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-rose-100 dark:bg-gray-800 dark:border-rose-500/30">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-lg font-black text-gray-900 flex items-center gap-2 dark:text-gray-100">
+                                    <svg class="w-5 h-5 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                                    Linked Ticket
+                                </h3>
+                                <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-200">
+                                    Archived
+                                </span>
+                            </div>
+                            <div class="w-full py-3 px-4 bg-rose-50 text-rose-700 rounded-2xl font-bold text-center dark:bg-rose-500/10 dark:text-rose-200">
+                                {{ archivedTicket?.ticket_key }}
+                            </div>
+                            <dl class="mt-4 space-y-2 text-xs text-gray-600 dark:text-gray-300">
+                                <div class="flex justify-between gap-2">
+                                    <dt class="font-black uppercase tracking-widest text-[10px] text-gray-400 dark:text-gray-400">Archived by</dt>
+                                    <dd class="font-bold text-right">{{ archivedTicket?.deleted_by || 'Unknown' }}</dd>
+                                </div>
+                                <div class="flex justify-between gap-2">
+                                    <dt class="font-black uppercase tracking-widest text-[10px] text-gray-400 dark:text-gray-400">Archived on</dt>
+                                    <dd class="font-bold text-right">{{ archivedTicket?.deleted_at ? fmt(archivedTicket.deleted_at) : 'Unknown' }}</dd>
+                                </div>
+                            </dl>
+                            <p class="mt-4 text-[11px] text-gray-400 italic dark:text-gray-400">
+                                Restore the ticket from the archive to relink it.
+                            </p>
+                        </div>
+
                         <!-- Linked Ticket & SLA Display -->
                         <div v-if="record.ticket" class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-8 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                             <div class="flex items-center justify-between mb-4">
