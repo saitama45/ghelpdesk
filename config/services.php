@@ -42,4 +42,10 @@ return [
         'redirect'      => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    'linkportal' => [
+        'base_url' => env('LINKPORTAL_URL'),
+        'token' => env('LINKPORTAL_API_TOKEN'),
+        'review_sla_days' => env('LINKPORTAL_REVIEW_SLA_DAYS', 3),
+    ],
+
 ];

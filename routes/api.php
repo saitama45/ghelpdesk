@@ -31,6 +31,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dtr/offline-bootstrap', [AttendanceController::class, 'offlineBootstrap']);
     Route::post('/dtr/log', [AttendanceController::class, 'log']);
     Route::get('/attendance/logs', [AttendanceController::class, 'logs']);
+
+    // Inbound handoff from linkportal (OCR vendor document intake)
+    Route::post('/accounting/document-reviews', [\App\Http\Controllers\Api\AccountingDocumentReviewController::class, 'store'])
+        ->name('api.accounting.document-reviews.store');
 });
 
 Route::middleware('api')->group(function () {

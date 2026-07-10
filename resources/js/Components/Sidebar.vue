@@ -93,7 +93,7 @@ onMounted(() => {
     if (route().current('attendance.*') || route().current('schedules.*') || route().current('presence.*') || route().current('kb-articles.*') || route().current('service-vehicle-trips.*')) {
         openMenus.value.adminTask = true;
     }
-    if (route().current('npc-statuses.*') || route().current('payments.*') || route().current('cctv-monitoring.*') || route().current('wigs.*') || route().current('mall-hookups.*')) {
+    if (route().current('npc-statuses.*') || route().current('payments.*') || route().current('cctv-monitoring.*') || route().current('wigs.*') || route().current('accounting-documents.*') || route().current('mall-hookups.*')) {
         openMenus.value.monitoring = true;
     }
     if (route().current('tickets.*') || route().current('queue.*') || route().current('task-boards.*') || route().current('pos-requests.*') || route().current('sap-requests.*') || route().current('stamps.*') || route().current('dynamic-form.*')) {
@@ -134,7 +134,7 @@ const canSeeAdminTask = computed(() => {
 });
 
 const canSeeMonitoring = computed(() => {
-    return hasPermission('npc_status.view') || hasPermission('npc_status.download') || hasPermission('payments.view') || hasPermission('cctv_monitoring.view') || hasPermission('wigs.view') || hasPermission('mall_hookup.view');
+    return hasPermission('npc_status.view') || hasPermission('npc_status.download') || hasPermission('payments.view') || hasPermission('cctv_monitoring.view') || hasPermission('wigs.view') || hasPermission('accounting-documents.view') || hasPermission('mall_hookup.view');
 });
 
 const canSeeServices = computed(() => {
@@ -428,6 +428,9 @@ const canSeeSettings = computed(() => {
                             <div v-if="hasPermission('payments.view')" :style="co('monitoring', 'payments')">
                                 <Link :href="route('payments.index')" :class="collapsedFlyoutLinkClass(route().current('payments.*'))">{{ getChildLabel('monitoring', 'payments') }}</Link>
                             </div>
+                            <div v-if="hasPermission('accounting-documents.view')" :style="co('monitoring', 'accounting-documents')">
+                                <Link :href="route('accounting-documents.index')" :class="collapsedFlyoutLinkClass(route().current('accounting-documents.*'))">{{ getChildLabel('monitoring', 'accounting-documents') }}</Link>
+                            </div>
                             <div v-if="hasPermission('mall_hookup.view')" :style="co('monitoring', 'mall-hookups')">
                                 <Link :href="route('mall-hookups.index')" :class="collapsedFlyoutLinkClass(route().current('mall-hookups.*'))">{{ getChildLabel('monitoring', 'mall-hookups') }}</Link>
                             </div>
@@ -446,6 +449,9 @@ const canSeeSettings = computed(() => {
                         </div>
                         <div v-if="hasPermission('payments.view')" :style="co('monitoring', 'payments')">
                             <Link :href="route('payments.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('payments.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'payments') }}</span></Link>
+                        </div>
+                        <div v-if="hasPermission('accounting-documents.view')" :style="co('monitoring', 'accounting-documents')">
+                            <Link :href="route('accounting-documents.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('accounting-documents.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'accounting-documents') }}</span></Link>
                         </div>
                         <div v-if="hasPermission('mall_hookup.view')" :style="co('monitoring', 'mall-hookups')">
                             <Link :href="route('mall-hookups.index')" :class="['flex items-center p-2 rounded-lg text-sm transition-all duration-200', route().current('mall-hookups.*') ? 'text-white font-bold' : 'text-gray-400 hover:text-white']"><span>{{ getChildLabel('monitoring', 'mall-hookups') }}</span></Link>

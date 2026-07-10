@@ -10,7 +10,8 @@ import { useDateFormatter } from '@/Composables/useDateFormatter';
 import { MapPinIcon, ClockIcon, ArrowTopRightOnSquareIcon, MagnifyingGlassPlusIcon, MagnifyingGlassMinusIcon, ArrowsPointingOutIcon, XMarkIcon, FunnelIcon, UserCircleIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
-    logs: Object,
+    sessions: Object,
+    officeAttendanceSummary: { type: Array, default: () => [] },
     users: Array,
     stores: Array,
     workHoursSummary: Array,
@@ -59,6 +60,21 @@ const filterSubUnit = ref(props.filters?.sub_unit || '');
 const filterStore = ref(props.filters?.store_id || '');
 const filterDateFrom = ref(props.filters?.date_from || '');
 const filterDateTo = ref(props.filters?.date_to || '');
+
+const selectedOfficeId = computed(() => {
+    const selectedId = Number(filterStore.value)
+    return (props.officeAttendanceSummary || []).some(office => office.id === selectedId)
+        ? selectedId
+        : null
+})
+
+const selectOffice = (officeId) => {
+    filterStore.value = selectedOfficeId.value === officeId ? '' : officeId
+}
+
+const clearOfficeFilter = () => {
+    filterStore.value = ''
+}
 
 const subUnitOptions = computed(() => {
     if (!props.users) return [{ id: '', name: 'All Sub-Units' }];
@@ -109,67 +125,67 @@ watch([filterSubUnit, filterStore, filterDateFrom, filterDateTo], () => {
 });
 
 // --- Infinite scroll accumulation (mirrors Tickets/Index) ---
-// Log rows are accumulated client-side across pages. The watcher on props.logs
+// Session rows are accumulated client-side across pages. The watcher on props.sessions
 // replaces the buffer on any filter/search change (page <= 1) and appends,
 // deduped, when a "load more" page arrives (page > 1).
-const accumulatedLogs = ref([...(props.logs?.data || [])]);
-const logsMeta = ref({
-    current_page: props.logs?.current_page || 1,
-    last_page: props.logs?.last_page || 1,
-    total: props.logs?.total || 0,
+const accumulatedSessions = ref([...(props.sessions?.data || [])]);
+const sessionsMeta = ref({
+    current_page: props.sessions?.current_page || 1,
+    last_page: props.sessions?.last_page || 1,
+    total: props.sessions?.total || 0,
 });
-const loadingMoreLogs = ref(false);
+const loadingMoreSessions = ref(false);
 
-const mergeLogsPage = (payload) => {
+const mergeSessionsPage = (payload) => {
     if (!payload) return;
     const incoming = payload.data || [];
     if ((payload.current_page || 1) <= 1) {
-        accumulatedLogs.value = [...incoming];
+        accumulatedSessions.value = [...incoming];
     } else {
-        const seen = new Set(accumulatedLogs.value.map(l => l.id));
-        accumulatedLogs.value = [
-            ...accumulatedLogs.value,
-            ...incoming.filter(l => !seen.has(l.id)),
+        const seen = new Set(accumulatedSessions.value.map(session => session.id));
+        accumulatedSessions.value = [
+            ...accumulatedSessions.value,
+            ...incoming.filter(session => !seen.has(session.id)),
         ];
     }
-    logsMeta.value = {
+    sessionsMeta.value = {
         current_page: payload.current_page || 1,
         last_page: payload.last_page || 1,
         total: payload.total || 0,
     };
 };
 
-const hasMoreLogs = computed(() => logsMeta.value.current_page < logsMeta.value.last_page);
+const hasMoreSessions = computed(() => sessionsMeta.value.current_page < sessionsMeta.value.last_page);
 
-const logsShowingText = computed(() => {
-    const total = logsMeta.value.total || 0;
+const sessionsShowingText = computed(() => {
+    const total = sessionsMeta.value.total || 0;
     if (total === 0) return 'No records found';
-    return `Showing ${accumulatedLogs.value.length} of ${total} results`;
+    return `Showing ${accumulatedSessions.value.length} of ${total} sessions`;
 });
 
-const loadMoreLogs = () => {
-    if (loadingMoreLogs.value || !hasMoreLogs.value) return;
-    loadingMoreLogs.value = true;
+const loadMoreSessions = () => {
+    if (loadingMoreSessions.value || !hasMoreSessions.value) return;
+    loadingMoreSessions.value = true;
     router.reload({
-        only: ['logs'],
+        only: ['sessions'],
         data: {
             search: search.value,
             sub_unit: filterSubUnit.value,
             store_id: filterStore.value,
             date_from: filterDateFrom.value,
             date_to: filterDateTo.value,
-            perPage: props.logs?.per_page,
-            page: logsMeta.value.current_page + 1,
+            perPage: props.sessions?.per_page,
+            page: sessionsMeta.value.current_page + 1,
         },
         preserveScroll: true,
         preserveState: true,
-        onFinish: () => { loadingMoreLogs.value = false; },
+        onFinish: () => { loadingMoreSessions.value = false; },
     });
 };
 
-// Merge every fresh `logs` payload (filter reload → replace, load-more → append).
-watch(() => props.logs, (newLogs) => {
-    mergeLogsPage(newLogs);
+// Merge every fresh session payload (filter reload -> replace, load-more -> append).
+watch(() => props.sessions, (newSessions) => {
+    mergeSessionsPage(newSessions);
 }, { deep: true });
 
 watch(search, (value) => {
@@ -190,6 +206,39 @@ watch(search, (value) => {
 const getGoogleMapsUrl = (lat, lng) => {
     return `https://www.google.com/maps?q=${lat},${lng}`;
 };
+
+const hasCoordinates = (event) => {
+    return event?.latitude !== null
+        && event?.latitude !== undefined
+        && event?.longitude !== null
+        && event?.longitude !== undefined
+}
+
+const formatSessionDate = (date) => {
+    if (!date) return '—'
+    return new Intl.DateTimeFormat('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'Asia/Manila',
+    }).format(new Date(`${date}T00:00:00+08:00`))
+}
+
+const formatEventTime = (event) => {
+    if (!event?.log_time) return '—'
+    return formatDate(event.log_time, {
+        year: undefined,
+        month: undefined,
+        day: undefined,
+        second: undefined,
+    })
+}
+
+const eventDateKey = (event) => event?.log_time ? event.log_time.slice(0, 10) : null
+
+const isNextDayTimeOut = (session) => {
+    return !!session.time_out && eventDateKey(session.time_out) !== session.date
+}
 
 // Preview Modal State
 const isPreviewOpen = ref(false);
@@ -320,6 +369,76 @@ const stopDrag = () => {
                 </div>
             </div>
 
+            <!-- Corporate office monitoring -->
+            <section class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:p-5">
+                <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V7a2 2 0 00-2-2h-1V3H8v2H7a2 2 0 00-2 2v14m14 0H5m4-4h.01M9 13h.01M9 9h.01M15 17h.01M15 13h.01M15 9h.01" />
+                                </svg>
+                            </span>
+                            <div>
+                                <h2 class="text-base font-black text-gray-900 dark:text-gray-100">Corporate Office Attendance</h2>
+                                <p class="text-xs font-medium text-gray-500 dark:text-gray-300">Time In, Time Out, and open sessions for the selected filters.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <button
+                        v-if="selectedOfficeId"
+                        type="button"
+                        @click="clearOfficeFilter"
+                        class="self-start rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300"
+                    >
+                        View all locations
+                    </button>
+                </div>
+
+                <div
+                    v-if="officeAttendanceSummary.length"
+                    class="flex snap-x gap-3 overflow-x-auto pb-2 xl:grid xl:grid-cols-3 xl:overflow-visible xl:pb-0 2xl:grid-cols-4"
+                >
+                    <button
+                        v-for="office in officeAttendanceSummary"
+                        :key="office.id"
+                        type="button"
+                        @click="selectOffice(office.id)"
+                        :aria-pressed="selectedOfficeId === office.id"
+                        class="min-w-[250px] snap-start rounded-xl border p-4 text-left transition-all xl:min-w-0"
+                        :class="selectedOfficeId === office.id
+                            ? 'border-blue-500 bg-blue-50 shadow-md ring-2 ring-blue-100 dark:border-blue-400 dark:bg-blue-950/30 dark:ring-blue-900/60'
+                            : 'border-gray-200 bg-gray-50/70 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-white hover:shadow-md dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-blue-700 dark:hover:bg-gray-900'"
+                    >
+                        <div class="mb-3 flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="truncate text-sm font-black text-gray-900 dark:text-gray-100">{{ office.name }}</p>
+                                <p v-if="office.code" class="truncate text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ office.code }}</p>
+                            </div>
+                            <span v-if="selectedOfficeId === office.id" class="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">Selected</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div class="rounded-lg bg-emerald-50 px-2 py-2 text-center dark:bg-emerald-950/30">
+                                <p class="text-lg font-black text-emerald-700 dark:text-emerald-300">{{ office.time_in_count }}</p>
+                                <p class="text-[9px] font-black uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Time In</p>
+                            </div>
+                            <div class="rounded-lg bg-orange-50 px-2 py-2 text-center dark:bg-orange-950/30">
+                                <p class="text-lg font-black text-orange-700 dark:text-orange-300">{{ office.time_out_count }}</p>
+                                <p class="text-[9px] font-black uppercase tracking-wide text-orange-600 dark:text-orange-400">Time Out</p>
+                            </div>
+                            <div class="rounded-lg bg-amber-50 px-2 py-2 text-center dark:bg-amber-950/30">
+                                <p class="text-lg font-black text-amber-700 dark:text-amber-300">{{ office.open_count }}</p>
+                                <p class="text-[9px] font-black uppercase tracking-wide text-amber-600 dark:text-amber-400">Open</p>
+                            </div>
+                        </div>
+                    </button>
+                </div>
+
+                <div v-else class="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm font-semibold text-gray-400 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-400">
+                    No active corporate office locations found.
+                </div>
+            </section>
+
             <!-- Tab Bar (Ultra-Emphasis Segmented Control) -->
             <div class="inline-flex p-2 bg-slate-100 rounded-[2rem] shadow-inner mb-4 dark:bg-slate-800">
                 <button
@@ -369,20 +488,20 @@ const stopDrag = () => {
 
             <DataTable
                 v-if="activeTab === 'logs'"
-                title="Logs"
-                subtitle="View your time-in and time-out history"
+                title="Attendance Sessions"
+                subtitle="Time In and Time Out are paired into a single row"
                 v-model:search="search"
-                :data="accumulatedLogs"
-                :currentPage="logsMeta.current_page"
-                :lastPage="logsMeta.last_page"
-                :perPage="logs.per_page"
-                :showingText="logsShowingText"
+                :data="accumulatedSessions"
+                :currentPage="sessionsMeta.current_page"
+                :lastPage="sessionsMeta.last_page"
+                :perPage="sessions.per_page"
+                :showingText="sessionsShowingText"
                 :isLoading="isLoading"
                 :showSearch="false"
                 infinite-scroll
-                :has-more="hasMoreLogs"
-                :loading-more="loadingMoreLogs"
-                @load-more="loadMoreLogs"
+                :has-more="hasMoreSessions"
+                :loading-more="loadingMoreSessions"
+                @load-more="loadMoreSessions"
             >
                 <template #actions>
                     <Link
@@ -395,81 +514,112 @@ const stopDrag = () => {
 
                 <template #header>
                     <tr class="bg-gray-50 dark:bg-gray-900/50">
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Selfie</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">User</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Store</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Log Time</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Type</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Location</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Device</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Employee</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Office / Store</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-emerald-700 uppercase tracking-wider dark:text-emerald-300">Time In</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-orange-700 uppercase tracking-wider dark:text-orange-300">Time Out</th>
                     </tr>
                 </template>
 
                 <template #body="{ data }">
-                    <tr v-for="log in data" :key="log.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
+                    <tr v-for="session in data" :key="session.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                         <td class="px-6 py-4 whitespace-nowrap">
-                            <div
-                                class="flex-shrink-0 h-12 w-12 group relative"
-                                :class="log.photo_path ? 'cursor-pointer' : 'cursor-default'"
-                                @click="openPreview(log.photo_path)"
-                            >
-                                <img
-                                    v-if="log.photo_path"
-                                    :src="'/serve-storage/' + log.photo_path"
-                                    class="h-12 w-12 rounded-lg object-cover border border-gray-200 shadow-sm transition-transform group-hover:scale-105 dark:border-gray-700"
-                                    alt="Selfie"
-                                />
-                                <div
-                                    v-else
-                                    class="h-12 w-12 rounded-lg border border-gray-200 bg-gray-100 flex items-center justify-center dark:border-gray-700 dark:bg-gray-900/50"
-                                    title="No selfie captured for this log"
+                            <div class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ formatSessionDate(session.date) }}</div>
+                            <div class="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Workday</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ session.user?.name || 'Unknown employee' }}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-300">{{ session.user?.email }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ session.store?.name || 'Unassigned location' }}</div>
+                            <div v-if="session.store?.code" class="text-[10px] font-bold text-blue-600 uppercase tracking-widest dark:text-blue-400">
+                                CODE: {{ session.store.code }}
+                            </div>
+                        </td>
+                        <td class="min-w-[260px] px-6 py-4">
+                            <div v-if="session.time_in" class="flex items-center gap-3">
+                                <button
+                                    type="button"
+                                    class="group relative h-12 w-12 shrink-0 rounded-lg"
+                                    :class="session.time_in.photo_path ? 'cursor-pointer' : 'cursor-default'"
+                                    :disabled="!session.time_in.photo_path"
+                                    @click="openPreview(session.time_in.photo_path)"
                                 >
-                                    <UserCircleIcon class="w-8 h-8 text-gray-300 dark:text-gray-600" />
+                                    <img
+                                        v-if="session.time_in.photo_path"
+                                        :src="'/serve-storage/' + session.time_in.photo_path"
+                                        class="h-12 w-12 rounded-lg border border-gray-200 object-cover shadow-sm transition-transform group-hover:scale-105 dark:border-gray-700"
+                                        alt="Time In selfie"
+                                    />
+                                    <span v-else class="flex h-12 w-12 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-900/50" title="No Time In selfie">
+                                        <UserCircleIcon class="h-8 w-8 text-gray-300 dark:text-gray-600" />
+                                    </span>
+                                    <span v-if="session.time_in.photo_path" class="absolute inset-0 flex items-center justify-center rounded-lg bg-black/20 opacity-0 transition-opacity group-hover:opacity-100">
+                                        <MagnifyingGlassPlusIcon class="h-5 w-5 text-white" />
+                                    </span>
+                                </button>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-black text-emerald-700 dark:text-emerald-300">{{ formatEventTime(session.time_in) }}</p>
+                                    <a
+                                        v-if="hasCoordinates(session.time_in)"
+                                        :href="getGoogleMapsUrl(session.time_in.latitude, session.time_in.longitude)"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="mt-1 inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                                    >
+                                        <MapPinIcon class="h-3.5 w-3.5" />
+                                        <span>View map</span>
+                                        <ArrowTopRightOnSquareIcon class="h-3 w-3" />
+                                    </a>
+                                    <span v-else class="mt-1 block text-[10px] font-semibold text-gray-400">No location captured</span>
                                 </div>
-                                <div v-if="log.photo_path" class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition-opacity">
-                                    <MagnifyingGlassPlusIcon class="w-5 h-5 text-white" />
+                            </div>
+                            <span v-else class="inline-flex rounded-full bg-red-100 px-3 py-1 text-xs font-black text-red-700 dark:bg-red-950/40 dark:text-red-300">Missing Time In</span>
+                        </td>
+                        <td class="min-w-[260px] px-6 py-4">
+                            <div v-if="session.time_out" class="flex items-center gap-3">
+                                <button
+                                    type="button"
+                                    class="group relative h-12 w-12 shrink-0 rounded-lg"
+                                    :class="session.time_out.photo_path ? 'cursor-pointer' : 'cursor-default'"
+                                    :disabled="!session.time_out.photo_path"
+                                    @click="openPreview(session.time_out.photo_path)"
+                                >
+                                    <img
+                                        v-if="session.time_out.photo_path"
+                                        :src="'/serve-storage/' + session.time_out.photo_path"
+                                        class="h-12 w-12 rounded-lg border border-gray-200 object-cover shadow-sm transition-transform group-hover:scale-105 dark:border-gray-700"
+                                        alt="Time Out selfie"
+                                    />
+                                    <span v-else class="flex h-12 w-12 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-900/50" title="No Time Out selfie">
+                                        <UserCircleIcon class="h-8 w-8 text-gray-300 dark:text-gray-600" />
+                                    </span>
+                                    <span v-if="session.time_out.photo_path" class="absolute inset-0 flex items-center justify-center rounded-lg bg-black/20 opacity-0 transition-opacity group-hover:opacity-100">
+                                        <MagnifyingGlassPlusIcon class="h-5 w-5 text-white" />
+                                    </span>
+                                </button>
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-1.5">
+                                        <p class="text-sm font-black text-orange-700 dark:text-orange-300">{{ formatEventTime(session.time_out) }}</p>
+                                        <span v-if="isNextDayTimeOut(session)" class="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[9px] font-black uppercase text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">Next day</span>
+                                    </div>
+                                    <a
+                                        v-if="hasCoordinates(session.time_out)"
+                                        :href="getGoogleMapsUrl(session.time_out.latitude, session.time_out.longitude)"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="mt-1 inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                                    >
+                                        <MapPinIcon class="h-3.5 w-3.5" />
+                                        <span>View map</span>
+                                        <ArrowTopRightOnSquareIcon class="h-3 w-3" />
+                                    </a>
+                                    <span v-else class="mt-1 block text-[10px] font-semibold text-gray-400">No location captured</span>
                                 </div>
                             </div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ log.user?.name }}</div>
-                            <div class="text-xs text-gray-500 dark:text-gray-300">{{ log.user?.email }}</div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{{ log.schedule_store?.store?.name || log.schedule?.store?.name || '-' }}</div>
-                            <div v-if="log.schedule_store?.store?.code || log.schedule?.store?.code" class="text-[10px] font-bold text-blue-600 uppercase tracking-widest">
-                                CODE: {{ log.schedule_store?.store?.code || log.schedule?.store?.code }}
-                            </div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="flex flex-col">
-                                <span class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ formatDate(log.log_time, { year: undefined, month: undefined, day: undefined }) }}</span>
-                                <span class="text-xs text-gray-500 dark:text-gray-300">{{ formatDate(log.log_time, { hour: undefined, minute: undefined, second: undefined }) }}</span>
-                            </div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <span 
-                                :class="[
-                                    'px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full uppercase tracking-tighter',
-                                    log.type === 'time_in' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
-                                ]"
-                            >
-                                {{ log.type === 'time_in' ? 'In' : 'Out' }}
-                            </span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
-                            <a 
-                                :href="getGoogleMapsUrl(log.latitude, log.longitude)" 
-                                target="_blank"
-                                class="inline-flex items-center text-blue-600 hover:text-blue-800 gap-1 font-medium transition-colors"
-                            >
-                                <MapPinIcon class="w-4 h-4" />
-                                <span>View on Map</span>
-                                <ArrowTopRightOnSquareIcon class="w-3 h-3" />
-                            </a>
-                        </td>
-                        <td class="px-6 py-4 text-xs text-gray-400 min-w-[220px] dark:text-gray-400">
-                            {{ log.device_info || 'Unknown Device' }}
+                            <span v-else class="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">Still clocked in</span>
                         </td>
                     </tr>
                 </template>

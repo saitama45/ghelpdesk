@@ -10,6 +10,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\Log;
@@ -100,51 +101,69 @@ class AttendanceController extends Controller implements HasMiddleware
     {
         $user = auth()->user();
 
-        // Base query - load relationships for both segment-based and legacy logs
+        // Default the monitoring view to today. Sessions are assigned to the
+        // Manila calendar date of Time In, not independently filtered events.
+        $dateFrom = $request->filled('date_from') ? $request->date_from : now()->toDateString();
+        $dateTo = $request->filled('date_to') ? $request->date_to : now()->toDateString();
+
+        // Include one day on either side so an overnight Time Out can be paired
+        // with its Time In while still filtering the completed session below.
+        $windowStart = Carbon::parse($dateFrom, 'Asia/Manila')->startOfDay()->subDay();
+        $windowEnd = Carbon::parse($dateTo, 'Asia/Manila')->endOfDay()->addDay();
+
         $query = AttendanceLog::with(['user', 'scheduleStore.store', 'schedule.store'])
             ->notVoided()
-            ->latest('log_time');
+            ->whereBetween('log_time', [$windowStart, $windowEnd])
+            ->orderBy('log_time');
 
-        // Privacy Logic: Show only own logs if not Admin/Dev/Manager
-        if (! $user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin']) && ! $user->is_manager) {
+        $isPrivileged = $user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin']) || $user->is_manager;
+
+        if (! $isPrivileged) {
             $query->where('user_id', $user->id);
         }
 
-        // Filter by Sub-Unit
         if ($request->filled('sub_unit')) {
             $query->whereHas('user', function ($q) use ($request) {
                 $q->where('org_path', 'like', '%'.$request->sub_unit.'%');
             });
         }
 
-        // Filter by Store
-        if ($request->filled('store_id')) {
-            $query->whereHas('scheduleStore', fn ($sq) => $sq->where('store_id', $request->store_id));
-        }
-
-        // Filter by Date Range (Default to today if not set)
-        $dateFrom = $request->get('date_from', now()->toDateString());
-        $dateTo = $request->get('date_to', now()->toDateString());
-
-        $query->whereDate('log_time', '>=', $dateFrom)
-            ->whereDate('log_time', '<=', $dateTo);
-
         if ($request->filled('search')) {
-            $query->where(function ($q) use ($request) {
-                $q->whereHas('user', fn ($uq) => $uq->where('name', 'like', "%{$request->search}%"))
-                    ->orWhere('device_info', 'like', "%{$request->search}%")
-                    ->orWhere('type', 'like', "%{$request->search}%");
-            });
+            $query->whereHas('user', fn ($q) => $q->where('name', 'like', '%'.$request->search.'%'));
         }
 
-        $logs = $query->paginate($request->get('perPage', 10))->withQueryString();
+        $sessions = $this->buildAttendanceSessions($query->get(), $dateFrom, $dateTo);
+        $officeAttendanceSummary = $this->buildOfficeAttendanceSummary($sessions);
+
+        if ($request->filled('store_id')) {
+            $selectedStoreId = (int) $request->store_id;
+            $sessions = $sessions
+                ->filter(fn (array $session) => (int) ($session['store']['id'] ?? 0) === $selectedStoreId)
+                ->values();
+        }
+
+        $perPage = max(1, min((int) $request->get('perPage', 10), 100));
+        $page = max(1, (int) $request->get('page', 1));
+        $pageItems = $sessions->forPage($page, $perPage)->values();
+        $sessionPaginator = new LengthAwarePaginator(
+            $pageItems,
+            $sessions->count(),
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+            ]
+        );
+
         $users = User::active()->orderBy('name')->get(['id', 'name', 'org_path']);
-        $stores = Store::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        $stores = Store::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code', 'class']);
 
         $workHoursSummary = $this->buildWorkHoursSummary($request, $dateFrom, $dateTo);
 
         return Inertia::render('Attendance/Logs', [
-            'logs' => $logs,
+            'sessions' => $sessionPaginator,
+            'officeAttendanceSummary' => $officeAttendanceSummary,
             'users' => $users,
             'stores' => $stores,
             'workHoursSummary' => $workHoursSummary,
@@ -156,6 +175,153 @@ class AttendanceController extends Controller implements HasMiddleware
                 'search' => $request->search,
             ],
         ]);
+    }
+
+    private function buildAttendanceSessions($logs, string $dateFrom, string $dateTo)
+    {
+        $groupedLogs = $logs->groupBy(function (AttendanceLog $log) {
+            if ($log->schedule_store_id) {
+                return 'user:'.$log->user_id.':schedule_store:'.$log->schedule_store_id;
+            }
+
+            if ($log->schedule_id) {
+                return 'user:'.$log->user_id.':schedule:'.$log->schedule_id;
+            }
+
+            // Logs without a schedule cannot be paired reliably, so retain each
+            // as its own incomplete session instead of guessing.
+            return 'log:'.$log->id;
+        });
+
+        $sessions = collect();
+
+        foreach ($groupedLogs as $sessionKey => $sessionLogs) {
+            $orderedLogs = $sessionLogs->sortBy('log_time')->values();
+            $timeIn = $orderedLogs->firstWhere('type', 'time_in');
+            $timeOutCandidates = $orderedLogs->where('type', 'time_out');
+            $timeOut = $timeIn
+                ? $timeOutCandidates->filter(fn (AttendanceLog $log) => $log->log_time->gte($timeIn->log_time))->last()
+                : $timeOutCandidates->last();
+
+            $anchor = $timeIn ?? $timeOut ?? $orderedLogs->first();
+            if (! $anchor) {
+                continue;
+            }
+
+            $sessionDate = ($timeIn?->log_time ?? $timeOut?->log_time ?? $anchor->log_time)->toDateString();
+            if ($sessionDate < $dateFrom || $sessionDate > $dateTo) {
+                continue;
+            }
+
+            $sessions->push($this->attendanceSessionPayload(
+                $sessionKey,
+                $sessionDate,
+                $anchor,
+                $timeIn,
+                $timeOut
+            ));
+
+            // Preserve an out-of-order Time Out as an explicit incomplete row.
+            if ($timeIn) {
+                foreach ($timeOutCandidates->filter(fn (AttendanceLog $log) => $log->log_time->lt($timeIn->log_time)) as $orphanTimeOut) {
+                    $orphanDate = $orphanTimeOut->log_time->toDateString();
+                    if ($orphanDate < $dateFrom || $orphanDate > $dateTo) {
+                        continue;
+                    }
+
+                    $sessions->push($this->attendanceSessionPayload(
+                        $sessionKey.':orphan:'.$orphanTimeOut->id,
+                        $orphanDate,
+                        $orphanTimeOut,
+                        null,
+                        $orphanTimeOut
+                    ));
+                }
+            }
+        }
+
+        return $sessions
+            ->sortByDesc('_sort_at')
+            ->map(function (array $session) {
+                unset($session['_sort_at']);
+
+                return $session;
+            })
+            ->values();
+    }
+
+    private function attendanceSessionPayload(
+        string $sessionKey,
+        string $sessionDate,
+        AttendanceLog $anchor,
+        ?AttendanceLog $timeIn,
+        ?AttendanceLog $timeOut
+    ): array {
+        $store = $anchor->scheduleStore?->store ?? $anchor->schedule?->store;
+        $sortAt = ($timeIn?->log_time ?? $timeOut?->log_time ?? $anchor->log_time)->toIso8601String();
+
+        return [
+            'id' => $sessionKey,
+            'date' => $sessionDate,
+            'user' => $anchor->user ? [
+                'id' => (int) $anchor->user->id,
+                'name' => $anchor->user->name,
+                'email' => $anchor->user->email,
+            ] : null,
+            'store' => $store ? [
+                'id' => (int) $store->id,
+                'name' => $store->name,
+                'code' => $store->code,
+                'class' => $store->class,
+            ] : null,
+            'time_in' => $this->attendanceEventPayload($timeIn),
+            'time_out' => $this->attendanceEventPayload($timeOut),
+            '_sort_at' => $sortAt,
+        ];
+    }
+
+    private function attendanceEventPayload(?AttendanceLog $log): ?array
+    {
+        if (! $log) {
+            return null;
+        }
+
+        return [
+            'id' => $log->id,
+            'log_time' => $log->log_time->toIso8601String(),
+            'photo_path' => $log->photo_path,
+            'latitude' => $log->latitude !== null ? (float) $log->latitude : null,
+            'longitude' => $log->longitude !== null ? (float) $log->longitude : null,
+        ];
+    }
+
+    private function buildOfficeAttendanceSummary($sessions): array
+    {
+        $sessionsByStore = $sessions
+            ->filter(fn (array $session) => ! empty($session['store']['id']))
+            ->groupBy(fn (array $session) => (int) $session['store']['id']);
+
+        return Store::query()
+            ->where('is_active', true)
+            ->where('class', 'Office')
+            ->orderBy('name')
+            ->get(['id', 'name', 'code'])
+            ->map(function (Store $store) use ($sessionsByStore) {
+                $storeSessions = $sessionsByStore->get((int) $store->id, collect());
+
+                return [
+                    'id' => (int) $store->id,
+                    'name' => $store->name,
+                    'code' => $store->code,
+                    'time_in_count' => $storeSessions->whereNotNull('time_in')->count(),
+                    'time_out_count' => $storeSessions->whereNotNull('time_out')->count(),
+                    'open_count' => $storeSessions
+                        ->filter(fn (array $session) => $session['time_in'] && ! $session['time_out'])
+                        ->count(),
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     public function log(Request $request)

@@ -22,7 +22,7 @@ export const DEFAULT_CHILD_ORDER = {
     projectTracker: [],
     services: ['tickets', 'queue', 'task-boards', 'pos-requests', 'sap-requests', 'stamps'],
     inventory: ['assets', 'stock-ins', 'stock-transfers', 'stock-receivings', 'inventory-report'],
-    monitoring: ['npc-status', 'cctv-monitoring', 'wigs', 'payments', 'mall-hookups'],
+    monitoring: ['npc-status', 'cctv-monitoring', 'wigs', 'payments', 'accounting-documents', 'mall-hookups'],
     adminTask: ['dtr', 'attendance-logs', 'scheduling', 'service-vehicle-trips', 'presence', 'kb-articles'],
     references: ['companies', 'departments', 'clusters', 'stores', 'vendors', 'activity-templates', 'categories', 'sub-categories', 'items', 'request-types', 'form-builder'],
     reports: ['store-health', 'sla-performance', 'assignee-performance'],
@@ -51,6 +51,7 @@ export const CHILD_LABELS = {
         'cctv-monitoring': 'CCTV Monitoring',
         'wigs': 'WIGS',
         'payments': 'Payments & SOA',
+        'accounting-documents': 'Accounting Documents',
         'mall-hookups': 'Mall Hookup',
     },
     adminTask: {

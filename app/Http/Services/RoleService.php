@@ -69,6 +69,7 @@ class RoleService
             'reports',
             'npc status',
             'payments',
+            'accounting documents',
             'mall hookup',
             'service vehicle trips',
             'attendance',
@@ -120,6 +121,8 @@ class RoleService
                 $categoryDisplay = 'Service Vehicle Trips';
             } elseif ($category === 'payments') {
                 $categoryDisplay = 'Payments & SOA';
+            } elseif ($category === 'accounting-documents') {
+                $categoryDisplay = 'Accounting Documents';
             } elseif ($category === 'cctv_monitoring') {
                 $categoryDisplay = 'CCTV Monitoring';
             } elseif ($category === 'mall_hookup') {

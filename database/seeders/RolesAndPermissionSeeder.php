@@ -266,6 +266,14 @@ class RolesAndPermissionSeeder extends Seeder
             'mall_hookup.edit' => 'Edit locations & record daily statuses',
             'mall_hookup.delete' => 'Remove stores from monitoring',
 
+            // Accounting Document Reviews (linkportal handoff)
+            'accounting-documents.view' => 'View vendor document reviews',
+            'accounting-documents.review' => 'Work the document review inbox',
+            'accounting-documents.approve' => 'Approve vendor documents',
+            'accounting-documents.return' => 'Return vendor documents for correction',
+            'accounting-documents.reject' => 'Reject vendor documents',
+            'accounting-documents.export' => 'Export document review data',
+
         ];
 
         // Create permissions

@@ -441,6 +441,16 @@ Route::middleware('auth')->group(function () {
         Route::put('settings', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateSettings'])->name('settings.update');
     });
 
+    // Accounting Document Reviews (vendor documents handed off from linkportal)
+    Route::prefix('accounting-documents')->name('accounting-documents.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\AccountingDocumentReviewController::class, 'index'])->name('index');
+        Route::get('{accounting_document}', [\App\Http\Controllers\AccountingDocumentReviewController::class, 'show'])->name('show');
+        Route::post('{accounting_document}/approve', [\App\Http\Controllers\AccountingDocumentReviewController::class, 'approve'])->name('approve');
+        Route::post('{accounting_document}/return', [\App\Http\Controllers\AccountingDocumentReviewController::class, 'returnDocument'])->name('return');
+        Route::post('{accounting_document}/reject', [\App\Http\Controllers\AccountingDocumentReviewController::class, 'reject'])->name('reject');
+        Route::post('{accounting_document}/retry-callback', [\App\Http\Controllers\AccountingDocumentReviewController::class, 'retryCallback'])->name('retry-callback');
+    });
+
     // Loyalty Stamps Monitoring
     Route::prefix('stamps')->name('stamps.')->group(function () {
         Route::get('/', [\App\Http\Controllers\StampController::class, 'index'])->name('index');
