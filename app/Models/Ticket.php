@@ -42,6 +42,7 @@ class Ticket extends Model
         'called_at',
         'queue_called_lane',
         'is_deleted',
+        'deleted_by',
     ];
 
     public function resolveRouteBinding($value, $field = null)
@@ -192,6 +193,14 @@ class Ticket extends Model
     public function assignee()
     {
         return $this->belongsTo(User::class, 'assignee_id');
+    }
+
+    /**
+     * Who archived this ticket. Null for tickets archived before deleted_by existed.
+     */
+    public function deletedBy()
+    {
+        return $this->belongsTo(User::class, 'deleted_by');
     }
 
     public function company()

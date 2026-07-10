@@ -10,6 +10,7 @@ use App\Models\Store;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\ProjectTemplate;
+use App\Services\ProjectDashboardService;
 use App\Services\ProjectTaskBoardSyncService;
 use App\Services\OrganizationReferenceService;
 use Illuminate\Http\Request;
@@ -20,7 +21,8 @@ class ProjectController extends Controller
 {
     public function __construct(
         private ProjectTaskBoardSyncService $projectTaskBoards,
-        private OrganizationReferenceService $organizationReferenceService
+        private OrganizationReferenceService $organizationReferenceService,
+        private ProjectDashboardService $projectDashboard
     ) {
     }
 
@@ -30,6 +32,14 @@ class ProjectController extends Controller
         $status     = trim((string) $request->input('status', ''));
         $storeId    = $request->input('store_id');
         $typeFilter = trim((string) $request->input('type', ''));
+
+        // Dashboard tab filters — independent of the project-list filters above.
+        $dashFrom  = trim((string) $request->input('dash_from', '')) ?: now()->startOfMonth()->toDateString();
+        $dashTo    = trim((string) $request->input('dash_to', '')) ?: now()->toDateString();
+        $dashTypes = array_values(array_intersect(
+            array_map('strval', (array) $request->input('dash_types', [])),
+            Project::projectTypes()
+        ));
 
         $projects = Project::with(['store', 'tasks', 'subject'])
             ->when($typeFilter !== '', fn ($query) => $query->where('project_type', $typeFilter))
@@ -87,6 +97,15 @@ class ProjectController extends Controller
                 'store_id' => $storeId ? (int) $storeId : null,
                 'type'     => $typeFilter,
             ],
+            'dashboardFilters' => [
+                'dash_from'  => $dashFrom,
+                'dash_to'    => $dashTo,
+                'dash_types' => $dashTypes,
+            ],
+            // Only resolved when the Dashboard tab asks for it (router.reload({ only: ['dashboard'] })).
+            'dashboard' => Inertia::optional(
+                fn () => $this->projectDashboard->build($dashTypes, $dashFrom, $dashTo)
+            ),
             'statusOptions' => $statusOptions,
             'storeOptions' => Store::orderBy('name')->get(['id', 'name'])
                 ->map(fn (Store $store) => ['label' => $store->name, 'value' => $store->id]),

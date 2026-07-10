@@ -9,6 +9,16 @@ import DynamicFormRenderer from '@/Components/DynamicFormRenderer.vue'
 
 const props = defineProps({
     posRequest: Object,
+    // 'live' | 'archived' | 'none' — why the request does or doesn't have a ticket.
+    ticketState: {
+        type: String,
+        default: 'none',
+    },
+    // Present only when ticketState === 'archived'.
+    archivedTicket: {
+        type: Object,
+        default: null,
+    },
     users: {
         type: Array,
         default: () => [],
@@ -16,14 +26,16 @@ const props = defineProps({
 })
 
 const page = usePage()
-const { showSuccess, showError } = useToast()
+const { showError } = useToast()
 const { hasPermission } = usePermission()
 const { confirm } = useConfirm()
 
 const reminderLoading = ref(false)
 
 // Approved request whose ticket never got generated — the recovery affordance.
-const needsTicket = computed(() => props.posRequest.status === 'Approved' && !props.posRequest.ticket)
+const needsTicket = computed(() => props.posRequest.status === 'Approved' && props.ticketState === 'none')
+// Approved request whose ticket was archived — explain, don't offer to regenerate.
+const ticketArchived = computed(() => props.posRequest.status === 'Approved' && props.ticketState === 'archived')
 const isGenerating = ref(false)
 
 async function generateTicket() {
@@ -35,10 +47,11 @@ async function generateTicket() {
     })
     if (!confirmed) return
     isGenerating.value = true
+    // No toasts here: the controller flashes success/error and AppLayout renders it.
+    // Inertia treats a redirect carrying an error flash as onSuccess, so toasting
+    // here would stack a bogus "generated" message on top of the real failure.
     router.post(route('pos-requests.generate-ticket', props.posRequest.id), {}, {
         preserveScroll: true,
-        onSuccess: () => showSuccess('Ticket generated successfully'),
-        onError: () => showError('Failed to generate ticket'),
         onFinish: () => { isGenerating.value = false },
     })
 }
@@ -599,6 +612,34 @@ const formatDateTime = (dateStr) => {
                                         <div class="text-[11px] font-bold text-gray-900 truncate dark:text-gray-100">
                                             {{ posRequest.ticket.sla_metric.resolved_at ? formatDateTime(posRequest.ticket.sla_metric.resolved_at) : (posRequest.ticket.sla_metric.resolution_target_at ? formatDateTime(posRequest.ticket.sla_metric.resolution_target_at) : 'No target') }}
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Archived ticket: explain why there's no ticket. Restoring the
+                                 archived ticket is the fix, so no Generate button here. -->
+                            <div v-if="ticketArchived" class="mb-8 bg-rose-50 rounded-2xl border border-rose-200 p-5 dark:bg-rose-500/10 dark:border-rose-500/30">
+                                <div class="flex items-start gap-3">
+                                    <svg class="w-5 h-5 text-rose-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                                    </svg>
+                                    <div>
+                                        <h4 class="text-[11px] font-black text-rose-700 uppercase tracking-widest dark:text-rose-300">Ticket Archived</h4>
+                                        <p class="text-xs text-rose-700/80 mt-1 dark:text-rose-200/80">
+                                            This request's ticket
+                                            <span v-if="archivedTicket?.ticket_key" class="font-bold">{{ archivedTicket.ticket_key }}</span>
+                                            was archived, so it no longer appears here. Restore the ticket from the archive to relink it — generating a new one would create a duplicate.
+                                        </p>
+                                        <dl class="mt-3 space-y-1 text-xs text-rose-700/90 dark:text-rose-200/90">
+                                            <div class="flex gap-2">
+                                                <dt class="font-bold min-w-[76px]">Archived by</dt>
+                                                <dd>{{ archivedTicket?.deleted_by || 'Unknown (archived before this was recorded)' }}</dd>
+                                            </div>
+                                            <div class="flex gap-2">
+                                                <dt class="font-bold min-w-[76px]">Archived on</dt>
+                                                <dd>{{ archivedTicket?.deleted_at ? formatDateTime(archivedTicket.deleted_at) : 'Unknown' }}</dd>
+                                            </div>
+                                        </dl>
                                     </div>
                                 </div>
                             </div>

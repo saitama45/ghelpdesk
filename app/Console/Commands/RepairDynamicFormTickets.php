@@ -45,10 +45,14 @@ class RepairDynamicFormTickets extends Command
         $finalizeStuck = (bool) $this->option('finalize-stuck');
 
         foreach ($records as $record) {
-            if ($record->ticket_id) {
+            if ($record->ticket_id && $record->ticket) {
                 $this->line("Record #{$record->id}: skipped, already linked to {$record->ticket->ticket_key}.");
 
                 continue;
+            }
+
+            if ($record->ticket_id && ! $record->ticket) {
+                $this->warn("Record #{$record->id}: ticket {$record->ticket_id} was deleted — regenerating.");
             }
 
             $shouldFinalize = false;

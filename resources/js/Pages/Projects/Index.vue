@@ -16,12 +16,14 @@ import {
     ExclamationTriangleIcon,
     CalendarDaysIcon,
     FolderOpenIcon,
+    ChartBarIcon,
 } from '@heroicons/vue/24/outline';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/vue/24/solid';
 import { ref, computed, watch } from 'vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { usePermission } from '@/Composables/usePermission';
 import Autocomplete from '@/Components/Autocomplete.vue';
+import ProjectDashboard from './ProjectDashboard.vue';
 
 const { confirm } = useConfirm()
 const { hasPermission } = usePermission()
@@ -84,6 +86,14 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    dashboard: {
+        type: Object,
+        default: null,
+    },
+    dashboardFilters: {
+        type: Object,
+        default: () => ({}),
+    },
 });
 
 const searchQuery = ref(props.filters?.search || '');
@@ -91,6 +101,17 @@ const statusFilter = ref(props.filters?.status || null);
 const storeFilter = ref(props.filters?.store_id || null);
 const activeType = ref(props.filters?.type || '');
 let searchTimeout = null;
+
+// 'projects' = the existing list; 'dashboard' = the lazy-loaded trend chart.
+const activeTab = ref('projects');
+
+const openDashboard = () => {
+    activeTab.value = 'dashboard';
+    // Inertia::optional means the prop is absent until we ask for it.
+    if (!props.dashboard) {
+        router.reload({ only: ['dashboard', 'dashboardFilters'] });
+    }
+};
 
 const visibleProjects = computed(() => props.projects?.data || []);
 const hasPagination = computed(() => Number(props.projects?.last_page || 1) > 1);
@@ -117,6 +138,7 @@ const updateFilter = (key, value) => {
 };
 
 const setType = (type) => {
+    activeTab.value = 'projects';
     activeType.value = type;
     applyFilters();
 };
@@ -306,13 +328,13 @@ const typeTabConfig = computed(() => {
                     @click="setType('')"
                     :class="[
                         'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-all',
-                        activeType === ''
+                        activeTab === 'projects' && activeType === ''
                             ? 'bg-gray-900 text-white shadow dark:bg-gray-100 dark:text-gray-900'
                             : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
                     ]"
                 >
                     All
-                    <span :class="['rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums', activeType === '' ? 'bg-white/20 text-white dark:bg-gray-900/20 dark:text-gray-900' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400']">
+                    <span :class="['rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums', activeTab === 'projects' && activeType === '' ? 'bg-white/20 text-white dark:bg-gray-900/20 dark:text-gray-900' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400']">
                         {{ stats.total ?? 0 }}
                     </span>
                 </button>
@@ -327,19 +349,37 @@ const typeTabConfig = computed(() => {
                     @click="setType(tab.label)"
                     :class="[
                         'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-all',
-                        activeType === tab.label
+                        activeTab === 'projects' && activeType === tab.label
                             ? 'bg-gray-900 text-white shadow dark:bg-gray-100 dark:text-gray-900'
                             : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
                     ]"
                 >
                     <span :class="['inline-block h-2 w-2 rounded-full', tab.dot]" />
                     {{ tab.label }}
-                    <span v-if="tab.count > 0" :class="['rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums', activeType === tab.label ? 'bg-white/20 text-white dark:bg-gray-900/20 dark:text-gray-900' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400']">
+                    <span v-if="tab.count > 0" :class="['rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums', activeTab === 'projects' && activeType === tab.label ? 'bg-white/20 text-white dark:bg-gray-900/20 dark:text-gray-900' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400']">
                         {{ tab.count }}
                     </span>
                 </button>
+
+                <div class="mx-1 h-5 w-px bg-gray-200 dark:bg-gray-700" />
+
+                <!-- Dashboard tab -->
+                <button
+                    type="button"
+                    @click="openDashboard"
+                    :class="[
+                        'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-all',
+                        activeTab === 'dashboard'
+                            ? 'bg-gray-900 text-white shadow dark:bg-gray-100 dark:text-gray-900'
+                            : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                    ]"
+                >
+                    <ChartBarIcon class="h-4 w-4" />
+                    Dashboard
+                </button>
             </div>
 
+            <div v-if="activeTab === 'projects'" class="space-y-6">
             <!-- Filters + New Project Button -->
             <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div class="grid w-full grid-cols-1 gap-3 md:grid-cols-4">
@@ -586,6 +626,15 @@ const typeTabConfig = computed(() => {
                     </span>
                 </div>
             </div>
+            </div>
+
+            <!-- Dashboard tab -->
+            <ProjectDashboard
+                v-else
+                :dashboard="dashboard"
+                :project-types="projectTypes"
+                :filters="dashboardFilters"
+            />
         </div>
     </AppLayout>
 </template>

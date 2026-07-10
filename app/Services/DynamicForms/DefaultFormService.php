@@ -485,7 +485,10 @@ class DefaultFormService implements FormServiceContract
      */
     public function processApprovedRequest(FormDefinition $formDefinition, FormRecord $record): void
     {
-        if ($record->ticket_id) {
+        // An existing ticket blocks generation, archived ones included: they are
+        // recoverable by restoring, and a second ticket would duplicate on restore.
+        // Only a hard-deleted (dangling) ticket_id falls through and regenerates.
+        if ($record->ticket_id && Ticket::withTrashed()->whereKey($record->ticket_id)->exists()) {
             return;
         }
 

@@ -1317,8 +1317,9 @@ class TicketController extends Controller
     private function archiveTickets($tickets): int
     {
         $rootIds = $tickets->pluck('id');
+        $actorId = auth()->id();
 
-        return DB::transaction(function () use ($rootIds) {
+        return DB::transaction(function () use ($rootIds, $actorId) {
             $targets = Ticket::whereIn('id', $rootIds)
                 ->orWhereIn('parent_id', $rootIds)
                 ->get()
@@ -1329,7 +1330,9 @@ class TicketController extends Controller
                     continue;
                 }
 
-                $target->forceFill(['is_deleted' => true])->save();
+                // Stamp the actor before deleting: downstream screens (e.g. a POS request
+                // whose ticket disappeared) need to explain who archived it.
+                $target->forceFill(['is_deleted' => true, 'deleted_by' => $actorId])->save();
                 $target->delete();
             }
 

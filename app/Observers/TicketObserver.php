@@ -270,8 +270,8 @@ class TicketObserver
      */
     public function restored(Ticket $ticket): void
     {
-        if ($ticket->is_deleted) {
-            $ticket->forceFill(['is_deleted' => false])->save();
+        if ($ticket->is_deleted || $ticket->deleted_by) {
+            $ticket->forceFill(['is_deleted' => false, 'deleted_by' => null])->save();
         }
     }
 

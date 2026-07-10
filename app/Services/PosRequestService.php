@@ -238,6 +238,8 @@ class PosRequestService
     public function processApprovedRequest(PosRequest $posRequest): ?Ticket
     {
         // Idempotency guard — never create a duplicate ticket for the same request.
+        // An archived (soft-deleted) ticket still counts: it is recoverable by restoring
+        // it, and generating a second ticket would duplicate it on restore.
         if ($posRequest->ticket_id) {
             $existing = Ticket::withTrashed()
                 ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)

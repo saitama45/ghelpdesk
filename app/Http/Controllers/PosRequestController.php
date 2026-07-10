@@ -149,7 +149,28 @@ class PosRequestController extends Controller implements HasMiddleware
         $posRequests = $query->orderBy('pos_requests.created_at', 'desc')
                             ->paginate($request->get('per_page', 10))
                             ->withQueryString();
-        
+
+        // The `ticket` relation hides archived tickets AND tickets outside the active
+        // entity, so it can't decide the state. Resolve the referenced tickets directly
+        // (one query for the page) with both filters lifted.
+        $ticketIds = $posRequests->getCollection()->pluck('ticket_id')->filter();
+
+        $resolved = $ticketIds->isEmpty()
+            ? collect()
+            : Ticket::withTrashed()
+                ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+                ->whereIn('id', $ticketIds)
+                ->get(['id', 'deleted_at'])
+                ->keyBy('id');
+
+        $posRequests->getCollection()->transform(function ($r) use ($resolved) {
+            $ticket = $r->ticket_id ? $resolved->get($r->ticket_id) : null;
+
+            $r->ticket_state = !$ticket ? 'none' : ($ticket->trashed() ? 'archived' : 'live');
+
+            return $r;
+        });
+
         return Inertia::render('PosRequests/Index', [
             'posRequests' => $posRequests,
             'companies' => $this->getAccessibleCompanies(),
@@ -222,11 +243,79 @@ class PosRequestController extends Controller implements HasMiddleware
     public function show(PosRequest $posRequest)
     {
         $posRequest->load(['company', 'requestType', 'user', 'details', 'approvals.user', 'ticket.slaMetric']);
-        
+
+        // The `ticket` relation is entity-scoped, so a live ticket belonging to another
+        // company loads as null. Re-attach it, else the page claims it has no ticket.
+        $resolved = $this->resolveTicket($posRequest);
+
+        if (!$posRequest->ticket && $resolved && !$resolved->trashed()) {
+            $posRequest->setRelation('ticket', $resolved->load('slaMetric'));
+        }
+
         return Inertia::render('PosRequests/Show', [
             'posRequest' => $posRequest,
+            'ticketState' => $this->ticketState($posRequest),
+            'archivedTicket' => $this->archivedTicket($posRequest),
             'users' => User::active()->orderBy('name')->get(['id', 'name', 'email']),
         ]);
+    }
+
+    /**
+     * The ticket this request points at, regardless of archive state or active entity.
+     *
+     * Both filters must be bypassed. Ticket carries ActiveEntityScope, so a ticket whose
+     * company differs from the viewer's active entity reads as absent through the normal
+     * relation — and treating that as "no ticket" would offer to generate a duplicate.
+     */
+    private function resolveTicket(PosRequest $posRequest): ?Ticket
+    {
+        if (!$posRequest->ticket_id) {
+            return null;
+        }
+
+        return Ticket::withTrashed()
+            ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->with('deletedBy:id,name')
+            ->find($posRequest->ticket_id);
+    }
+
+    /**
+     * Why this request has (or lacks) a ticket. Three distinct states, because the
+     * remedy differs: an archived ticket must NOT be regenerated (restoring it is the
+     * fix), while a ticket that was never created can be generated on demand.
+     *
+     *  - 'live'     : a ticket exists and is not archived
+     *  - 'archived' : ticket_id points at a soft-deleted ticket
+     *  - 'none'     : no ticket was ever created (or the row is gone entirely)
+     */
+    private function ticketState(PosRequest $posRequest): string
+    {
+        $ticket = $this->resolveTicket($posRequest);
+
+        if (!$ticket) {
+            return 'none';
+        }
+
+        return $ticket->trashed() ? 'archived' : 'live';
+    }
+
+    /**
+     * The archived ticket this request points at, with the actor who archived it.
+     * Null when the request has a live ticket or never had one.
+     */
+    private function archivedTicket(PosRequest $posRequest): ?array
+    {
+        $ticket = $this->resolveTicket($posRequest);
+
+        if (!$ticket || !$ticket->trashed()) {
+            return null;
+        }
+
+        return [
+            'ticket_key' => $ticket->ticket_key,
+            'deleted_at' => $ticket->deleted_at?->toIso8601String(),
+            'deleted_by' => $ticket->deletedBy?->name,
+        ];
     }
 
     public function edit(PosRequest $posRequest)
@@ -400,9 +489,20 @@ class PosRequestController extends Controller implements HasMiddleware
      */
     public function generateTicket(PosRequest $posRequest)
     {
-        // Eligible only when the request is done with approvals and still ticketless.
-        if ($posRequest->status !== 'Approved' || $posRequest->ticket_id) {
-            return redirect()->back()->with('error', 'This request already has a ticket or is not fully approved yet.');
+        $state = $this->ticketState($posRequest);
+
+        if ($posRequest->status !== 'Approved') {
+            return redirect()->back()->with('error', 'This request is not fully approved yet.');
+        }
+
+        if ($state === 'live') {
+            return redirect()->back()->with('error', 'This request already has a ticket.');
+        }
+
+        // An archived ticket is recoverable by restoring it. Generating a second ticket
+        // would orphan the original and duplicate it if anyone restores the archive.
+        if ($state === 'archived') {
+            return redirect()->back()->with('error', 'This request\'s ticket was archived. Restore the ticket instead of generating a new one.');
         }
 
         try {
@@ -410,7 +510,8 @@ class PosRequestController extends Controller implements HasMiddleware
                 // Lock the row so two concurrent clicks can't create two tickets.
                 $locked = PosRequest::whereKey($posRequest->id)->lockForUpdate()->first();
 
-                if (!$locked || $locked->status !== 'Approved' || $locked->ticket_id) {
+                // Re-check under the lock: a concurrent click may have ticketed it already.
+                if (!$locked || $locked->status !== 'Approved' || $this->ticketState($locked) !== 'none') {
                     return;
                 }
 
@@ -423,11 +524,11 @@ class PosRequestController extends Controller implements HasMiddleware
 
         $fresh = $posRequest->fresh('ticket');
 
-        if (!$fresh || !$fresh->ticket_id) {
+        if (!$fresh || !$fresh->ticket) {
             return redirect()->back()->with('error', 'Ticket could not be generated. Please try again.');
         }
 
-        return redirect()->back()->with('success', 'Ticket ' . ($fresh->ticket->ticket_key ?? '') . ' generated successfully.');
+        return redirect()->back()->with('success', 'Ticket ' . $fresh->ticket->ticket_key . ' generated successfully.');
     }
 
     /**

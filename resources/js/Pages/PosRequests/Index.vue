@@ -64,7 +64,8 @@ const deleteRequest = async (request) => {
 
 // A fully-approved request (0-approver auto-approval OR all levels signed off)
 // that never got its ticket — the rare "blue moon" miss that needs recovery.
-const needsTicket = (request) => request.status === 'Approved' && !request.ticket
+// An archived ticket is excluded: it's restorable, so regenerating would duplicate it.
+const needsTicket = (request) => request.status === 'Approved' && request.ticket_state === 'none'
 
 const generatingId = ref(null)
 
@@ -78,10 +79,11 @@ const generateTicket = async (request) => {
     if (!confirmed) return
 
     generatingId.value = request.id
+    // No toasts here: the controller flashes success/error and AppLayout renders it.
+    // Inertia treats a redirect carrying an error flash as onSuccess, so toasting
+    // here would stack a bogus "generated" message on top of the real failure.
     router.post(route('pos-requests.generate-ticket', request.id), {}, {
         preserveScroll: true,
-        onSuccess: () => showSuccess('Ticket generated successfully'),
-        onError: () => showError('Failed to generate ticket'),
         onFinish: () => { generatingId.value = null },
     })
 }
