@@ -197,8 +197,10 @@ class Ticket extends Model
 
     /**
      * Who archived this ticket. Null for tickets archived before deleted_by existed.
+     * Named `archiver`, not `deletedBy`: the latter serializes to the key `deleted_by`
+     * and would overwrite the integer column of the same name in toArray().
      */
-    public function deletedBy()
+    public function archiver()
     {
         return $this->belongsTo(User::class, 'deleted_by');
     }

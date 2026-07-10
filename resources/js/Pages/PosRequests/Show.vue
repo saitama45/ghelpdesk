@@ -590,24 +590,24 @@ const formatDateTime = (dateStr) => {
                                 <div v-if="posRequest.ticket.sla_metric" class="space-y-3">
                                     <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-4 dark:text-gray-400">Ticket SLA</h4>
                                     <!-- Response Target -->
-                                    <div class="p-3 rounded-xl border" :class="posRequest.ticket.sla_metric.is_response_breached ? 'bg-red-50 border-red-100' : (posRequest.ticket.sla_metric.first_response_at ? 'bg-green-50 border-green-100' : 'bg-white border-gray-100')">
+                                    <div class="p-3 rounded-xl border" :class="posRequest.ticket.sla_metric.is_response_breached ? 'bg-red-50 border-red-100 dark:bg-red-500/10 dark:border-red-500/30' : (posRequest.ticket.sla_metric.first_response_at ? 'bg-green-50 border-green-100 dark:bg-green-500/10 dark:border-green-500/30' : 'bg-white border-gray-100 dark:bg-gray-800 dark:border-gray-700')">
                                         <div class="flex justify-between items-center mb-1">
                                             <span class="text-[9px] font-black text-gray-500 uppercase dark:text-gray-300">Response Target</span>
-                                            <span v-if="posRequest.ticket.sla_metric.is_response_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
-                                            <span v-else-if="posRequest.ticket.sla_metric.first_response_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
-                                            <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
+                                            <span v-if="posRequest.ticket.sla_metric.is_response_breached" class="text-[9px] font-black text-red-600 uppercase dark:text-red-300">BREACHED</span>
+                                            <span v-else-if="posRequest.ticket.sla_metric.first_response_at" class="text-[9px] font-black text-green-600 uppercase dark:text-green-300">MET</span>
+                                            <span v-else class="text-[9px] font-black text-blue-600 uppercase dark:text-blue-300">ACTIVE</span>
                                         </div>
                                         <div class="text-[11px] font-bold text-gray-900 truncate dark:text-gray-100">
                                             {{ posRequest.ticket.sla_metric.first_response_at ? formatDateTime(posRequest.ticket.sla_metric.first_response_at) : (posRequest.ticket.sla_metric.response_target_at ? formatDateTime(posRequest.ticket.sla_metric.response_target_at) : 'No target') }}
                                         </div>
                                     </div>
                                     <!-- Resolution Target -->
-                                    <div class="p-3 rounded-xl border" :class="posRequest.ticket.sla_metric.is_resolution_breached ? 'bg-red-50 border-red-100' : (posRequest.ticket.sla_metric.resolved_at ? 'bg-green-50 border-green-100' : 'bg-white border-gray-100')">
+                                    <div class="p-3 rounded-xl border" :class="posRequest.ticket.sla_metric.is_resolution_breached ? 'bg-red-50 border-red-100 dark:bg-red-500/10 dark:border-red-500/30' : (posRequest.ticket.sla_metric.resolved_at ? 'bg-green-50 border-green-100 dark:bg-green-500/10 dark:border-green-500/30' : 'bg-white border-gray-100 dark:bg-gray-800 dark:border-gray-700')">
                                         <div class="flex justify-between items-center mb-1">
                                             <span class="text-[9px] font-black text-gray-500 uppercase dark:text-gray-300">Resolution Target</span>
-                                            <span v-if="posRequest.ticket.sla_metric.is_resolution_breached" class="text-[9px] font-black text-red-600 uppercase">BREACHED</span>
-                                            <span v-else-if="posRequest.ticket.sla_metric.resolved_at" class="text-[9px] font-black text-green-600 uppercase">MET</span>
-                                            <span v-else class="text-[9px] font-black text-blue-600 uppercase">ACTIVE</span>
+                                            <span v-if="posRequest.ticket.sla_metric.is_resolution_breached" class="text-[9px] font-black text-red-600 uppercase dark:text-red-300">BREACHED</span>
+                                            <span v-else-if="posRequest.ticket.sla_metric.resolved_at" class="text-[9px] font-black text-green-600 uppercase dark:text-green-300">MET</span>
+                                            <span v-else class="text-[9px] font-black text-blue-600 uppercase dark:text-blue-300">ACTIVE</span>
                                         </div>
                                         <div class="text-[11px] font-bold text-gray-900 truncate dark:text-gray-100">
                                             {{ posRequest.ticket.sla_metric.resolved_at ? formatDateTime(posRequest.ticket.sla_metric.resolved_at) : (posRequest.ticket.sla_metric.resolution_target_at ? formatDateTime(posRequest.ticket.sla_metric.resolution_target_at) : 'No target') }}

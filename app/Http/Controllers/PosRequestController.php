@@ -151,22 +151,25 @@ class PosRequestController extends Controller implements HasMiddleware
                             ->withQueryString();
 
         // The `ticket` relation hides archived tickets AND tickets outside the active
-        // entity, so it can't decide the state. Resolve the referenced tickets directly
-        // (one query for the page) with both filters lifted.
+        // entity, so it can neither decide the state nor render the ticket number.
+        // Resolve the referenced tickets directly (one query for the page) with both
+        // filters lifted, then re-attach so the list always shows the real ticket key.
         $ticketIds = $posRequests->getCollection()->pluck('ticket_id')->filter();
 
         $resolved = $ticketIds->isEmpty()
             ? collect()
             : Ticket::withTrashed()
                 ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+                ->with('archiver:id,name')
                 ->whereIn('id', $ticketIds)
-                ->get(['id', 'deleted_at'])
+                ->get(['id', 'ticket_key', 'status', 'deleted_at', 'deleted_by'])
                 ->keyBy('id');
 
         $posRequests->getCollection()->transform(function ($r) use ($resolved) {
             $ticket = $r->ticket_id ? $resolved->get($r->ticket_id) : null;
 
             $r->ticket_state = !$ticket ? 'none' : ($ticket->trashed() ? 'archived' : 'live');
+            $r->setRelation('ticket', $ticket);
 
             return $r;
         });
@@ -275,7 +278,7 @@ class PosRequestController extends Controller implements HasMiddleware
 
         return Ticket::withTrashed()
             ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
-            ->with('deletedBy:id,name')
+            ->with('archiver:id,name')
             ->find($posRequest->ticket_id);
     }
 
@@ -314,7 +317,7 @@ class PosRequestController extends Controller implements HasMiddleware
         return [
             'ticket_key' => $ticket->ticket_key,
             'deleted_at' => $ticket->deleted_at?->toIso8601String(),
-            'deleted_by' => $ticket->deletedBy?->name,
+            'deleted_by' => $ticket->archiver?->name,
         ];
     }
 

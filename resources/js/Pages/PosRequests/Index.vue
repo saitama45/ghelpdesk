@@ -88,8 +88,12 @@ const generateTicket = async (request) => {
     })
 }
 
+// Only a live ticket dictates the row status; an archived one is not the
+// request's current state, so fall back to the request's own status.
+const liveTicket = (request) => (request.ticket_state === 'live' ? request.ticket : null)
+
 const getStatusLabel = (request) => {
-    const status = request.ticket ? request.ticket.status : request.status
+    const status = liveTicket(request) ? request.ticket.status : request.status
     switch (status) {
         case 'open': return 'Ticket: Open'
         case 'for_schedule': return 'For Schedule'
@@ -103,7 +107,7 @@ const getStatusLabel = (request) => {
 }
 
 const getStatusClass = (request) => {
-    const status = request.ticket ? request.ticket.status : request.status
+    const status = liveTicket(request) ? request.ticket.status : request.status
     if (status.startsWith('Approved Level')) return 'bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-500/15 dark:text-blue-200 dark:border-blue-400/30'
     
     switch (status) {
@@ -134,7 +138,7 @@ const getStageDisplay = (request) => {
         return { label: 'Cancelled', class: 'text-[10px] font-black text-rose-600 uppercase tracking-widest dark:text-rose-300' }
     }
 
-    if (requestStatus === 'Approved' || request.ticket) {
+    if (requestStatus === 'Approved' || liveTicket(request)) {
         return { label: 'Completed', class: 'text-[10px] font-black text-emerald-600 uppercase tracking-widest dark:text-emerald-300' }
     }
 
@@ -233,13 +237,26 @@ const getStageDisplay = (request) => {
                                 </div>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap">
-                                <div v-if="request.ticket">
+                                <!-- Live ticket: clickable. -->
+                                <div v-if="request.ticket_state === 'live'">
                                     <Link :href="route('tickets.edit', request.ticket.id)" class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm dark:bg-blue-500/15 dark:text-blue-200 dark:hover:bg-blue-600 dark:hover:text-white">
                                         <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                         </svg>
                                         {{ request.ticket.ticket_key }}
                                     </Link>
+                                </div>
+                                <!-- Archived: still show the number, but it isn't openable. -->
+                                <div v-else-if="request.ticket_state === 'archived'" class="space-y-1">
+                                    <span class="inline-flex items-center px-3 py-1.5 bg-rose-50 text-rose-700 rounded-lg text-xs font-black shadow-sm dark:bg-rose-500/15 dark:text-rose-200">
+                                        <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8" />
+                                        </svg>
+                                        {{ request.ticket.ticket_key }}
+                                    </span>
+                                    <div class="text-[9px] font-black text-rose-600 uppercase tracking-wide dark:text-rose-300">
+                                        Archived{{ request.ticket.archiver ? ' by ' + request.ticket.archiver.name : '' }}
+                                    </div>
                                 </div>
                                 <span v-else class="text-[10px] font-black text-gray-400 uppercase italic dark:text-slate-400">Pending</span>
                             </td>
