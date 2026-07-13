@@ -408,6 +408,9 @@ const ticketFilterParams = () => ({
 });
 
 const pagination = usePagination(props.tickets, 'tickets.index', ticketFilterParams);
+// Deep links and browser navigation must hydrate the visible search control.
+// Set this before mounting so the composable watcher does not issue a request.
+pagination.search.value = props.filters?.search || '';
 
 // --- Infinite scroll accumulation ---
 // Rows are accumulated client-side across pages. The watcher on props.tickets
@@ -485,6 +488,7 @@ const scrollToTop = () => {
 };
 
 const applyFilter = () => {
+    pagination.currentPage.value = 1;
     const params = {
         ...ticketFilterParams(),
         search: pagination.search.value
@@ -1540,35 +1544,10 @@ const summaryCards = computed(() => {
     ];
 });
 
-const displayedTickets = computed(() => {
-    const data = accumulatedTickets.value || [];
-
-    switch (activeDashboardFilter.value) {
-        case 'new':
-            return data.filter(isNewTicket);
-        case 'unassigned':
-            return data.filter(ticket => !ticket.assignee);
-        case 'breached':
-            return data.filter(hasBreachedSla);
-        case 'due_soon':
-            return data.filter(isTicketNearlyDue);
-        case 'in_progress':
-            return data.filter(ticket => ticket.status === 'in_progress');
-        case 'open':
-            return data.filter(ticket => ticket.status === 'open');
-        case 'total':
-            return data;
-        case 'waiting':
-            return data.filter(t => ['waiting_service_provider', 'waiting_client_feedback'].includes(t.status));
-        case 'urgent':
-            return data.filter(t => t.priority === 'urgent' || t.item?.priority === 'Urgent');
-        case 'closed':
-            return data.filter(t => t.status === 'closed');
-        case 'all':
-        default:
-            return data;
-    }
-});
+// Quick filters are applied server-side before pagination. Filtering a second
+// time here caused visible rows to disagree with the server total and could
+// hide valid rows because of client/server SLA timing differences.
+const displayedTickets = computed(() => accumulatedTickets.value || []);
 
 const getDashboardFilterLabel = (filterKey) => {
     switch (filterKey) {
@@ -1609,7 +1588,11 @@ const toggleDashboardFilter = (filterKey) => {
             return;
         }
     }
-    activeDashboardFilter.value = activeDashboardFilter.value === filterKey ? 'all' : filterKey;
+    const isClearing = activeDashboardFilter.value === filterKey;
+    activeDashboardFilter.value = isClearing ? 'all' : filterKey;
+    // A quick filter is an alternate status view. Do not intersect e.g.
+    // "In Progress" or "Closed" with the normal default status of "Open".
+    filterStatus.value = isClearing ? defaultStatusFilters() : ['all'];
     pagination.currentPage.value = 1;
     applyFilter();
 };

@@ -34,6 +34,7 @@ class AccountingDocumentReviewController extends Controller
             'submitted_at' => 'nullable|date',
         ]);
 
+        // Exact replay of the same submission → return unchanged (idempotent).
         $existing = AcctDocumentReview::where('idempotency_key', $validated['idempotency_key'])->first();
         if ($existing) {
             return response()->json([
@@ -43,7 +44,7 @@ class AccountingDocumentReviewController extends Controller
             ]);
         }
 
-        $review = AcctDocumentReview::create([
+        $attributes = [
             'idempotency_key' => $validated['idempotency_key'],
             'source_document_id' => $validated['source_document_id'],
             'source_reference_no' => $validated['reference_no'],
@@ -61,15 +62,35 @@ class AccountingDocumentReviewController extends Controller
             'status' => AcctDocumentReview::STATUS_PENDING,
             'received_at' => now(),
             'due_at' => now()->addDays((int) config('services.linkportal.review_sla_days', 3)),
-        ]);
+        ];
 
-        $review->recordEvent('received', null, null, ['submitted_at' => $validated['submitted_at'] ?? null]);
+        // A resubmission (new idempotency_key for a document already handed off)
+        // supersedes the prior review in place instead of stacking a duplicate,
+        // resetting it to a fresh pending review with the latest data.
+        $review = AcctDocumentReview::where('source_document_id', $validated['source_document_id'])->first();
+        $isResubmission = (bool) $review;
+
+        if ($isResubmission) {
+            $review->update($attributes + [
+                'decision' => null,
+                'decision_remarks' => null,
+                'decided_by' => null,
+                'decided_at' => null,
+                'callback_status' => null,
+                'callback_attempts' => 0,
+                'callback_error' => null,
+            ]);
+            $review->recordEvent('resubmitted', null, null, ['submitted_at' => $validated['submitted_at'] ?? null]);
+        } else {
+            $review = AcctDocumentReview::create($attributes);
+            $review->recordEvent('received', null, null, ['submitted_at' => $validated['submitted_at'] ?? null]);
+        }
 
         $notifications->notifyApproval(
             $notifications->usersWithPermission('accounting-documents.review'),
             null,
             'received',
-            'Vendor document for review',
+            $isResubmission ? 'Vendor document resubmitted for review' : 'Vendor document for review',
             "{$review->vendor_name}: {$review->source_reference_no} ({$review->document_type})",
             $notifications->relativeRoute('accounting-documents.show', $review->id),
             "Document {$review->source_reference_no}",
@@ -78,6 +99,6 @@ class AccountingDocumentReviewController extends Controller
         return response()->json([
             'status' => 'ok',
             'review' => ['id' => $review->id, 'status' => $review->status],
-        ], 201);
+        ], $isResubmission ? 200 : 201);
     }
 }

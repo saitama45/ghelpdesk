@@ -362,7 +362,7 @@ const rolePermissionGroups = computed(() => {
         { name: 'Project Tracker', categories: ['Projects'] },
         { name: 'Services', categories: servicesCategories },
         { name: 'Inventory', categories: ['Assets', 'Stock_in', 'Stock_transfer', 'Reports'] },
-        { name: 'Monitoring', categories: ['NPC Status', 'CCTV Monitoring', 'WIGS', 'Payments & SOA', 'Mall Hookup'] },
+        { name: 'Monitoring', categories: ['NPC Status', 'CCTV Monitoring', 'WIGS', 'Payments & SOA', 'Accounting Documents', 'Mall Hookup'] },
         { name: 'Administrative', categories: ['Attendance', 'Schedules', 'Presence', 'KB Articles'] },
         { name: 'References', categories: ['Companies', 'Departments', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Project Type & Store Class', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Form_builder'] },
         { name: 'Reports', categories: ['Reports'] },
@@ -1139,6 +1139,7 @@ const sortRolePermissions = (permissions) => {
                                     <option value="kb-articles.index">KB Articles</option>
                                     <option value="npc-statuses.index">NPC Status</option>
                                     <option value="payments.index">Payments & SOA</option>
+                                    <option value="accounting-documents.index">Accounting Documents</option>
                                     <option value="mall-hookups.index">Mall Hookup</option>
                                     <option value="reports.store-health">Store Health Report</option>
                                     <option value="companies.index">Companies</option>

@@ -248,7 +248,7 @@ const submitDecision = () => {
         { remarks: remarks.value || null },
         {
             preserveScroll: true,
-            onSuccess: () => { decisionModal.value = null; showSuccess('Decision recorded.') },
+            onSuccess: () => { decisionModal.value = null },
             onError: (errors) => showError(Object.values(errors).flat().join(', ') || 'Failed to record decision'),
             onFinish: () => { submitting.value = false },
         })

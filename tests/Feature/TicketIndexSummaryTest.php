@@ -325,6 +325,80 @@ class TicketIndexSummaryTest extends TestCase
             );
     }
 
+    public function test_automatic_department_scope_is_not_returned_as_an_explicit_filter(): void
+    {
+        $company = Company::create(['name' => 'Test Company', 'code' => 'TC', 'is_active' => true]);
+        $department = Department::create(['name' => 'Support', 'is_active' => true]);
+        $viewer = User::factory()->create(['company_id' => $company->id, 'department_id' => $department->id]);
+        $assignee = User::factory()->create(['company_id' => $company->id, 'department_id' => $department->id]);
+
+        $assigned = $this->ticket($company, [
+            'ticket_key' => 'AUTO-1001',
+            'title' => 'Scope marker',
+            'assignee_id' => $assignee->id,
+            'department' => null,
+        ]);
+
+        $this->actingAs($viewer)
+            ->get(route('tickets.index', ['search' => 'Scope marker']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('filters.department_id', null)
+                ->has('tickets.data', 1)
+                ->where('tickets.data.0.id', $assigned->id)
+            );
+    }
+
+    public function test_quick_filter_is_not_intersected_with_open_status(): void
+    {
+        $company = Company::create(['name' => 'Test Company', 'code' => 'TC', 'is_active' => true]);
+        $department = Department::create(['name' => 'Support', 'is_active' => true]);
+        $viewer = User::factory()->create(['company_id' => $company->id, 'department_id' => $department->id]);
+        $inProgress = $this->ticket($company, ['status' => 'in_progress']);
+        $this->ticket($company, ['status' => 'open']);
+
+        $this->actingAs($viewer)
+            ->get(route('tickets.index', [
+                'status' => ['all'],
+                'dashboard_filter' => 'in_progress',
+                'skip_default_department' => true,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('tickets.data', 1)
+                ->where('tickets.data.0.id', $inProgress->id)
+            );
+    }
+
+    public function test_each_date_bound_filters_independently_and_inverted_range_is_rejected(): void
+    {
+        $company = Company::create(['name' => 'Test Company', 'code' => 'TC', 'is_active' => true]);
+        $department = Department::create(['name' => 'Support', 'is_active' => true]);
+        $viewer = User::factory()->create(['company_id' => $company->id, 'department_id' => $department->id]);
+        $older = $this->ticket($company);
+        $older->forceFill(['created_at' => '2026-06-01 12:00:00'])->saveQuietly();
+        $newer = $this->ticket($company);
+        $newer->forceFill(['created_at' => '2026-06-10 12:00:00'])->saveQuietly();
+
+        $this->actingAs($viewer)
+            ->get(route('tickets.index', ['status' => ['all'], 'skip_default_department' => true, 'start_date' => '2026-06-05']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('tickets.data', 1)
+                ->where('tickets.data.0.id', $newer->id)
+            );
+
+        $this->actingAs($viewer)
+            ->get(route('tickets.index', ['status' => ['all'], 'skip_default_department' => true, 'end_date' => '2026-06-05']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('tickets.data', 1)
+                ->where('tickets.data.0.id', $older->id)
+            );
+
+        $this->actingAs($viewer)
+            ->get(route('tickets.index', ['start_date' => '2026-06-10', 'end_date' => '2026-06-01']))
+            ->assertSessionHasErrors('end_date');
+    }
+
     private function ticket(Company $company, array $overrides = []): Ticket
     {
         return Ticket::create(array_merge([

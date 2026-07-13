@@ -130,7 +130,14 @@ class AccountingDocumentReviewController extends Controller implements HasMiddle
             $review->recordEvent($status, auth()->id(), $remarks);
         });
 
-        SendDecisionCallbackJob::dispatch($review->id);
+        // Send the decision back to linkportal immediately so the status updates
+        // without depending on a running queue worker. If linkportal is briefly
+        // unreachable, fall back to the queue for retry-with-backoff.
+        try {
+            SendDecisionCallbackJob::dispatchSync($review->id);
+        } catch (\Throwable $e) {
+            SendDecisionCallbackJob::dispatch($review->id);
+        }
 
         $notifications->notifyApproval(
             $notifications->usersWithPermission('accounting-documents.view'),

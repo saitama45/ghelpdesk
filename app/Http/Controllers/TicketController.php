@@ -157,7 +157,8 @@ class TicketController extends Controller
             });
         }
 
-        $filterDeptId  = $request->filled('department_id')      ? (int) $request->department_id      : null;
+        $requestedDeptId = $request->filled('department_id') ? (int) $request->department_id : null;
+        $filterDeptId  = $requestedDeptId;
         $filterNodeId  = $request->filled('department_node_id') ? (int) $request->department_node_id : null;
         // Whether the user explicitly picked a department vs. the automatic default
         // scope (own department). Explicit picks filter by the ticket's department
@@ -189,12 +190,19 @@ class TicketController extends Controller
             $query->whereIn('sub_category_id', $subCategoryFilters->map(fn ($id) => (int) $id)->all());
         }
 
-        // Apply Date Range filter
-        if ($request->filled('start_date') && $request->filled('end_date')) {
-            $start = \Carbon\Carbon::parse($request->start_date)->startOfDay();
-            $end = \Carbon\Carbon::parse($request->end_date)->endOfDay();
-            $query->whereBetween('created_at', [$start, $end]);
-        } else {
+        // Apply either or both date bounds. Previously a lone bound was displayed
+        // as an active filter by the UI but silently ignored here.
+        $request->validate([
+            'start_date' => ['nullable', 'date_format:Y-m-d'],
+            'end_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:start_date'],
+        ]);
+        if ($request->filled('start_date')) {
+            $query->where('created_at', '>=', \Carbon\Carbon::createFromFormat('Y-m-d', $request->start_date)->startOfDay());
+        }
+        if ($request->filled('end_date')) {
+            $query->where('created_at', '<=', \Carbon\Carbon::createFromFormat('Y-m-d', $request->end_date)->endOfDay());
+        }
+        if (!$request->filled('start_date') && !$request->filled('end_date')) {
             if ($request->filled('year')) {
                 $query->whereYear('created_at', (int) $request->year);
             }
@@ -429,7 +437,10 @@ class TicketController extends Controller
             'filters' => [
                 'status' => $statusFilters->all(),
                 'search' => $request->search,
-                'department_id' => $filterDeptId,
+                // Only echo an explicitly requested department. Returning the
+                // inferred default made the next request reinterpret it as an
+                // explicit tickets.department filter and changed the result set.
+                'department_id' => $requestedDeptId,
                 'department_node_id' => $filterNodeId,
                 'assigned_department_only' => $assignedDepartmentOnly,
                 'assignee_id' => $assigneeFilters->all(),
@@ -528,11 +539,15 @@ class TicketController extends Controller
         $assigneeFilters = $normalizeFilterValues($request->input('assignee_id'));
         if ($assigneeFilters->isNotEmpty()) $query->whereIn('assignee_id', $assigneeFilters->all());
 
-        if ($request->filled('start_date') && $request->filled('end_date')) {
-            $query->whereBetween('created_at', [
-                \Carbon\Carbon::parse($request->start_date)->startOfDay(),
-                \Carbon\Carbon::parse($request->end_date)->endOfDay(),
-            ]);
+        $request->validate([
+            'start_date' => ['nullable', 'date_format:Y-m-d'],
+            'end_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:start_date'],
+        ]);
+        if ($request->filled('start_date')) {
+            $query->where('created_at', '>=', \Carbon\Carbon::createFromFormat('Y-m-d', $request->start_date)->startOfDay());
+        }
+        if ($request->filled('end_date')) {
+            $query->where('created_at', '<=', \Carbon\Carbon::createFromFormat('Y-m-d', $request->end_date)->endOfDay());
         }
 
         if ($request->filled('search')) {
