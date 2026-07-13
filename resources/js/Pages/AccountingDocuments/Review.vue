@@ -116,29 +116,26 @@
                                 <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700">
                                     <thead class="bg-gray-50 dark:bg-gray-900">
                                         <tr>
-                                            <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Description</th>
-                                            <th class="px-4 py-2.5 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Qty</th>
-                                            <th class="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">UOM</th>
-                                            <th class="px-4 py-2.5 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Unit Price</th>
-                                            <th class="px-4 py-2.5 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Line Total</th>
+                                            <th v-for="col in lineItemColumns" :key="col.key"
+                                                class="px-4 py-2.5 text-xs font-medium text-gray-500 uppercase dark:text-slate-300"
+                                                :class="col.right ? 'text-right' : 'text-left'">{{ col.label }}</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-gray-50 dark:divide-gray-700">
                                         <tr v-for="(item, i) in lineItems" :key="i">
-                                            <td class="px-4 py-2.5 text-sm text-gray-800 dark:text-gray-100">{{ item.description }}</td>
-                                            <td class="px-4 py-2.5 text-right text-sm text-gray-600 dark:text-gray-300">{{ item.quantity ?? '—' }}</td>
-                                            <td class="px-4 py-2.5 text-sm text-gray-600 dark:text-gray-300">{{ item.uom || '—' }}</td>
-                                            <td class="px-4 py-2.5 text-right text-sm text-gray-600 dark:text-gray-300">{{ money(item.unit_price) }}</td>
-                                            <td class="px-4 py-2.5 text-right text-sm font-semibold text-gray-800 dark:text-gray-100">{{ money(item.line_total) }}</td>
+                                            <td v-for="col in lineItemColumns" :key="col.key"
+                                                class="px-4 py-2.5 text-sm"
+                                                :class="[col.right ? 'text-right' : 'text-left', col.key === 'line_total' ? 'font-semibold text-gray-800 dark:text-gray-100' : 'text-gray-600 dark:text-gray-300']">{{ lineCell(item, col) }}</td>
                                         </tr>
                                         <tr v-if="lineItems.length === 0">
-                                            <td colspan="5" class="px-4 py-8 text-center text-sm text-gray-400">No line items.</td>
+                                            <td :colspan="lineItemColumns.length" class="px-4 py-8 text-center text-sm text-gray-400">No line items.</td>
                                         </tr>
                                     </tbody>
-                                    <tfoot v-if="lineItems.length" class="bg-gray-50 dark:bg-gray-900">
+                                    <tfoot v-if="lineItems.length && lineTotalIndex >= 0" class="bg-gray-50 dark:bg-gray-900">
                                         <tr>
-                                            <td colspan="4" class="px-4 py-2.5 text-right text-xs font-bold text-gray-500 uppercase dark:text-gray-300">Line sum</td>
+                                            <td v-if="lineTotalIndex > 0" :colspan="lineTotalIndex" class="px-4 py-2.5 text-right text-xs font-bold text-gray-500 uppercase dark:text-gray-300">Line sum</td>
                                             <td class="px-4 py-2.5 text-right text-sm font-bold text-gray-900 dark:text-gray-100">{{ money(lineSum) }}</td>
+                                            <td v-if="lineItemColumns.length - lineTotalIndex - 1 > 0" :colspan="lineItemColumns.length - lineTotalIndex - 1"></td>
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -214,6 +211,40 @@ const fileExpired = computed(() => props.review.file_url_expires_at && new Date(
 const exceptions = computed(() => props.review.exceptions_summary || [])
 const lineItems = computed(() => props.review.line_items || [])
 const lineSum = computed(() => lineItems.value.reduce((sum, item) => sum + (Number(item.line_total) || 0), 0))
+
+// Line-item columns are template-driven (custom names + unlimited count). Prefer
+// the columns sent with the handoff; otherwise derive them from the keys present
+// in the rows so older reviews still render every value.
+const STANDARD_LINE_LABELS = { description: 'Description', quantity: 'Qty', uom: 'UOM', unit_price: 'Unit Price', line_total: 'Line Total' }
+const MONEY_KEYS = new Set(['unit_price', 'line_total', 'amount', 'subtotal', 'tax', 'tax_amount', 'discount', 'total', 'total_amount'])
+const RIGHT_KEYS = new Set([...MONEY_KEYS, 'quantity', 'qty'])
+const humanizeKey = (k) => String(k).replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase())
+
+const lineItemColumns = computed(() => {
+    const stored = props.review.line_item_columns
+    let keys
+    if (stored?.length) {
+        keys = stored.map((c) => c.key)
+    } else {
+        const seen = []
+        for (const row of lineItems.value) {
+            for (const k of Object.keys(row || {})) if (!seen.includes(k)) seen.push(k)
+        }
+        keys = seen.length ? seen : ['description', 'quantity', 'uom', 'unit_price', 'line_total']
+    }
+    return keys.map((k) => ({
+        key: k,
+        label: stored?.find((c) => c.key === k)?.label || STANDARD_LINE_LABELS[k] || humanizeKey(k),
+        right: RIGHT_KEYS.has(k),
+        money: MONEY_KEYS.has(k),
+    }))
+})
+const lineTotalIndex = computed(() => lineItemColumns.value.findIndex((c) => c.key === 'line_total'))
+const lineCell = (item, col) => {
+    const v = item?.[col.key]
+    if (col.money) return money(v)
+    return v === null || v === undefined || v === '' ? '—' : v
+}
 
 const displayFields = computed(() => {
     const preferred = ['invoice_no', 'po_number', 'document_date', 'due_date', 'currency', 'subtotal', 'tax_amount', 'total_amount', 'vendor_address']
