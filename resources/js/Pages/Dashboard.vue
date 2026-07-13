@@ -596,6 +596,10 @@ const showNewModal = ref(false);
 const showClosedModal = ref(false);
 const showSurveyModal = ref(false);
 const showLeaderboardModal = ref(false);
+const showChartTicketsModal = ref(false);
+const chartTicketsLoading = ref(false);
+const chartTickets = ref([]);
+const chartTicketSelection = ref({ bucket: 'all', concern_type: null, title: '' });
 const selectedSurveyTicket = ref(null);
 
 const openSurveyModal = (ticket) => {
@@ -617,6 +621,48 @@ const exportToExcel = (type) => {
         month: filterForm.month
     });
     window.open(route('dashboard.export') + '?' + params.toString(), '_blank');
+};
+
+const chartTicketParams = (bucket, concernType = null) => ({
+    bucket,
+    ...(concernType ? { concern_type: concernType } : {}),
+    ...deptFilterParams.value,
+    ...(filterForm.user_id && filterForm.user_id !== 'all' ? { user_id: filterForm.user_id } : {}),
+    ...(filterForm.store_id && filterForm.store_id !== 'all' ? { store_id: filterForm.store_id } : {}),
+    ...(filterForm.year ? { year: filterForm.year } : {}),
+    ...(filterForm.month ? { month: filterForm.month } : {}),
+    ...(entityFilterEnabled.value ? { entity_ids: resolvedEntityIds() } : {}),
+});
+
+const openChartTickets = async (bucket, concernType = null) => {
+    chartTicketSelection.value = {
+        bucket,
+        concern_type: concernType,
+        title: `${concernType ? concernType + ' - ' : ''}${bucket === 'all' ? 'Open & Closed' : (bucket === 'closed' ? 'Closed' : 'Open')} Tickets`,
+    };
+    chartTickets.value = [];
+    showChartTicketsModal.value = true;
+    chartTicketsLoading.value = true;
+    try {
+        const response = await axios.get(route('dashboard.chart-tickets', undefined, false), {
+            params: chartTicketParams(bucket, concernType),
+        });
+        chartTickets.value = response.data.tickets || [];
+    } catch (error) {
+        console.error('Unable to load chart tickets', error);
+    } finally {
+        chartTicketsLoading.value = false;
+    }
+};
+
+const exportChartTickets = () => {
+    const selection = chartTicketSelection.value;
+    const params = new URLSearchParams();
+    Object.entries(chartTicketParams(selection.bucket, selection.concern_type)).forEach(([key, value]) => {
+        if (Array.isArray(value)) value.forEach(item => params.append(`${key}[]`, item));
+        else params.set(key, value);
+    });
+    window.open(route('dashboard.chart-tickets.export') + '?' + params.toString(), '_blank');
 };
 </script>
 
@@ -1029,8 +1075,8 @@ const exportToExcel = (type) => {
         <template v-else>
         <!-- Ticket Charts -->
         <div class="grid grid-cols-1 gap-6 mb-8">
-            <Link
-                :href="route('tickets.index', overallChartFilterParams)"
+            <div
+                @click="openChartTickets('all')"
                 class="block bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6 hover:shadow-md hover:border-blue-200 transition-all cursor-pointer dark:bg-gray-800 dark:border-gray-700"
             >
                 <div class="flex items-start justify-between gap-4 mb-6">
@@ -1051,7 +1097,7 @@ const exportToExcel = (type) => {
                         </div>
                     </div>
                     <div class="space-y-3">
-                        <div class="flex items-center justify-between rounded-lg bg-blue-50 px-4 py-3">
+                        <button type="button" @click.stop="openChartTickets('open')" class="w-full flex items-center justify-between rounded-lg bg-blue-50 px-4 py-3 text-left hover:ring-2 hover:ring-blue-300">
                             <div class="flex items-center gap-2">
                                 <span class="h-3 w-3 rounded-full bg-blue-600"></span>
                                 <span class="text-sm font-bold text-blue-900">Open</span>
@@ -1060,8 +1106,8 @@ const exportToExcel = (type) => {
                                 <div class="text-sm font-black text-blue-900">{{ overallChartData.open }}</div>
                                 <div class="text-[10px] font-bold text-blue-600">{{ chartPercent(overallChartData.open, totalChartCount(overallChartData)) }}%</div>
                             </div>
-                        </div>
-                        <div class="flex items-center justify-between rounded-lg bg-green-50 px-4 py-3">
+                        </button>
+                        <button type="button" @click.stop="openChartTickets('closed')" class="w-full flex items-center justify-between rounded-lg bg-green-50 px-4 py-3 text-left hover:ring-2 hover:ring-green-300">
                             <div class="flex items-center gap-2">
                                 <span class="h-3 w-3 rounded-full bg-green-600"></span>
                                 <span class="text-sm font-bold text-green-900">Closed</span>
@@ -1070,7 +1116,7 @@ const exportToExcel = (type) => {
                                 <div class="text-sm font-black text-green-900">{{ overallChartData.closed }}</div>
                                 <div class="text-[10px] font-bold text-green-600">{{ chartPercent(overallChartData.closed, totalChartCount(overallChartData)) }}%</div>
                             </div>
-                        </div>
+                        </button>
                     </div>
                 </div>
 
@@ -1082,43 +1128,43 @@ const exportToExcel = (type) => {
                         </span>
                     </div>
                     <div class="space-y-5">
-                        <div v-for="row in concernTypeBars" :key="row.key">
+                        <div v-for="row in concernTypeBars" :key="row.key" @click.stop="openChartTickets('all', row.key)" class="cursor-pointer rounded-lg p-2 -m-2 hover:bg-gray-50 dark:hover:bg-gray-700/40">
                             <div class="flex items-center justify-between mb-1.5">
                                 <span class="text-sm font-bold text-gray-700 dark:text-gray-300">{{ row.label }}</span>
                                 <span class="text-sm font-black text-gray-900 dark:text-gray-100">{{ row.total }}</span>
                             </div>
                             <div class="flex h-4 rounded-full bg-gray-100 overflow-hidden dark:bg-gray-800">
-                                <div
+                                <button type="button" @click.stop="openChartTickets('open', row.key)"
                                     v-if="row.open > 0"
-                                    class="h-full bg-blue-600 transition-all"
+                                    class="h-full bg-blue-600 transition-all hover:bg-blue-500"
                                     :style="{ width: `${chartPercent(row.open, row.total)}%` }"
-                                ></div>
-                                <div
+                                ></button>
+                                <button type="button" @click.stop="openChartTickets('closed', row.key)"
                                     v-if="row.closed > 0"
-                                    class="h-full bg-green-600 transition-all"
+                                    class="h-full bg-green-600 transition-all hover:bg-green-500"
                                     :style="{ width: `${chartPercent(row.closed, row.total)}%` }"
-                                ></div>
+                                ></button>
                             </div>
                             <div class="mt-2 grid grid-cols-2 gap-2">
-                                <div class="rounded-lg bg-blue-50 px-3 py-2">
+                                <button type="button" @click.stop="openChartTickets('open', row.key)" class="rounded-lg bg-blue-50 px-3 py-2 text-left hover:ring-2 hover:ring-blue-300">
                                     <div class="flex items-center justify-between gap-2">
                                         <span class="text-xs font-bold text-blue-900">Open</span>
                                         <span class="text-xs font-black text-blue-900">{{ row.open }}</span>
                                     </div>
                                     <p class="mt-0.5 text-[10px] font-bold text-blue-600">{{ chartPercent(row.open, row.total) }}%</p>
-                                </div>
-                                <div class="rounded-lg bg-green-50 px-3 py-2">
+                                </button>
+                                <button type="button" @click.stop="openChartTickets('closed', row.key)" class="rounded-lg bg-green-50 px-3 py-2 text-left hover:ring-2 hover:ring-green-300">
                                     <div class="flex items-center justify-between gap-2">
                                         <span class="text-xs font-bold text-green-900">Closed</span>
                                         <span class="text-xs font-black text-green-900">{{ row.closed }}</span>
                                     </div>
                                     <p class="mt-0.5 text-[10px] font-bold text-green-600">{{ chartPercent(row.closed, row.total) }}%</p>
-                                </div>
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
-            </Link>
+            </div>
 
             <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 sm:p-6 dark:bg-gray-800 dark:border-gray-700">
@@ -2000,6 +2046,33 @@ const exportToExcel = (type) => {
             </div>
         </div>
 
+        <!-- Open/Closed chart ticket details -->
+        <Modal :show="false" @close="showChartTicketsModal = false" maxWidth="5xl">
+            <div class="p-5 sm:p-6">
+                <div class="flex items-start justify-between gap-4 border-b border-gray-200 pb-4 dark:border-gray-700">
+                    <div><h2 class="text-xl font-black text-gray-900 dark:text-gray-100">{{ chartTicketSelection.title }}</h2><p class="mt-1 text-xs text-gray-500">Matches the current dashboard filters.</p></div>
+                    <div class="flex gap-2">
+                        <button v-if="chartTickets.length" @click="exportChartTickets" class="rounded-lg bg-green-600 px-3 py-2 text-xs font-black uppercase text-white hover:bg-green-700">Export Excel</button>
+                        <button @click="showChartTicketsModal = false" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100"><svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                    </div>
+                </div>
+                <div v-if="chartTicketsLoading" class="flex justify-center py-16 text-sm font-bold text-gray-500"><span class="mr-3 h-5 w-5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></span>Loading tickets...</div>
+                <div v-else-if="chartTickets.length" class="mt-4 max-h-[65vh] overflow-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
+                        <thead class="sticky top-0 bg-gray-50 dark:bg-gray-800"><tr><th v-for="heading in ['Ticket','Status','Concern','Location','Assignee','Created']" :key="heading" class="px-4 py-3 text-left text-xs font-black uppercase text-gray-500">{{ heading }}</th></tr></thead>
+                        <tbody class="divide-y divide-gray-100 bg-white dark:divide-gray-700 dark:bg-gray-900">
+                            <tr v-for="ticket in chartTickets" :key="ticket.id" class="hover:bg-blue-50/50 dark:hover:bg-gray-800">
+                                <td class="px-4 py-3"><Link :href="route('tickets.edit', ticket.id)" class="font-black text-blue-600 hover:underline">{{ ticket.ticket_key }}</Link><div class="max-w-xs truncate text-xs text-gray-600 dark:text-gray-300">{{ ticket.title }}</div></td>
+                                <td class="px-4 py-3 font-bold capitalize">{{ ticket.status.replaceAll('_', ' ') }}</td>
+                                <td class="px-4 py-3">{{ ticket.concern_type || '—' }}</td><td class="px-4 py-3">{{ ticket.store || ticket.company || '—' }}</td><td class="px-4 py-3">{{ ticket.assignee }}</td><td class="whitespace-nowrap px-4 py-3">{{ ticket.created_at }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div v-else class="py-16 text-center text-sm font-semibold text-gray-500">No matching tickets found.</div>
+            </div>
+        </Modal>
+
         <!-- Waiting Alarm Tickets Modal -->
         <Modal :show="showWaitingAlarmModal" @close="showWaitingAlarmModal = false" maxWidth="2xl">
             <div class="p-6">
@@ -2401,6 +2474,52 @@ const exportToExcel = (type) => {
             </div>
         </div><!-- /pipeline tab -->
     </AppLayout>
+
+    <!-- Open/Closed chart ticket details -->
+    <Modal :show="showChartTicketsModal" @close="showChartTicketsModal = false" maxWidth="5xl">
+        <div class="p-5 sm:p-6">
+            <div class="flex items-start justify-between gap-4 border-b border-gray-200 pb-4 dark:border-gray-700">
+                <div>
+                    <h2 class="text-xl font-black text-gray-900 dark:text-gray-100">{{ chartTicketSelection.title }}</h2>
+                    <p class="mt-1 text-xs text-gray-500">Matches the current dashboard filters.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button v-if="chartTickets.length" @click="exportChartTickets" class="rounded-lg bg-green-600 px-3 py-2 text-xs font-black uppercase text-white hover:bg-green-700">Export Excel</button>
+                    <button @click="showChartTicketsModal = false" class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div v-if="chartTicketsLoading" class="flex justify-center py-16 text-sm font-bold text-gray-500">
+                <span class="mr-3 h-5 w-5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></span>Loading tickets...
+            </div>
+            <div v-else-if="chartTickets.length" class="mt-4 max-h-[65vh] overflow-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
+                    <thead class="sticky top-0 bg-gray-50 dark:bg-gray-800">
+                        <tr>
+                            <th v-for="heading in ['Ticket','Status','Concern','Location','Assignee','Created']" :key="heading" class="px-4 py-3 text-left text-xs font-black uppercase text-gray-500">{{ heading }}</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 bg-white dark:divide-gray-700 dark:bg-gray-900">
+                        <tr v-for="ticket in chartTickets" :key="ticket.id" class="hover:bg-blue-50/50 dark:hover:bg-gray-800">
+                            <td class="px-4 py-3">
+                                <Link :href="route('tickets.edit', ticket.id)" class="font-black text-blue-600 hover:underline">{{ ticket.ticket_key }}</Link>
+                                <div class="max-w-xs truncate text-xs text-gray-600 dark:text-gray-300">{{ ticket.title }}</div>
+                            </td>
+                            <td class="px-4 py-3 font-bold capitalize">{{ ticket.status.replaceAll('_', ' ') }}</td>
+                            <td class="px-4 py-3">{{ ticket.concern_type || '-' }}</td>
+                            <td class="px-4 py-3">{{ ticket.store || ticket.company || '-' }}</td>
+                            <td class="px-4 py-3">{{ ticket.assignee }}</td>
+                            <td class="whitespace-nowrap px-4 py-3">{{ ticket.created_at }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div v-else class="py-16 text-center text-sm font-semibold text-gray-500">No matching tickets found.</div>
+        </div>
+    </Modal>
 
     <!-- Survey Modal -->
     <Modal :show="showSurveyModal" @close="closeSurveyModal">

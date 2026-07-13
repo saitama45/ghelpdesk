@@ -169,6 +169,124 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function chartTickets(Request $request)
+    {
+        $tickets = $this->dashboardChartTicketQuery($request)
+            ->with(['assignee:id,name', 'company:id,name', 'store:id,name,code', 'item:id,name,concern_type'])
+            ->latest('created_at')
+            ->limit(2000)
+            ->get()
+            ->map(fn (Ticket $ticket) => [
+                'id' => $ticket->id,
+                'ticket_key' => $ticket->ticket_key,
+                'title' => $ticket->title,
+                'status' => $ticket->status,
+                'company' => $ticket->company?->name,
+                'store' => $ticket->store ? trim(($ticket->store->code ? $ticket->store->code . ' - ' : '') . $ticket->store->name) : null,
+                'assignee' => $ticket->assignee?->name ?? 'Unassigned',
+                'concern_type' => $ticket->item?->concern_type,
+                'created_at' => $ticket->created_at?->format('Y-m-d H:i:s'),
+            ]);
+
+        return response()->json(['tickets' => $tickets, 'count' => $tickets->count()]);
+    }
+
+    public function exportChartTickets(Request $request)
+    {
+        $tickets = $this->dashboardChartTicketQuery($request)
+            ->with(['assignee:id,name', 'company:id,name', 'store:id,name,code', 'item:id,name,concern_type'])
+            ->latest('created_at')
+            ->limit(5000)
+            ->get();
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Chart Tickets');
+        foreach (['Ticket ID', 'Title', 'Status', 'Concern Type', 'Company', 'Location', 'Assignee', 'Created At'] as $index => $header) {
+            $sheet->setCellValue(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1) . '1', $header);
+        }
+        $sheet->getStyle('A1:H1')->getFont()->setBold(true);
+
+        foreach ($tickets as $index => $ticket) {
+            $row = $index + 2;
+            $sheet->fromArray([
+                $ticket->ticket_key,
+                $ticket->title,
+                str_replace('_', ' ', $ticket->status),
+                $ticket->item?->concern_type,
+                $ticket->company?->name,
+                $ticket->store ? trim(($ticket->store->code ? $ticket->store->code . ' - ' : '') . $ticket->store->name) : null,
+                $ticket->assignee?->name ?? 'Unassigned',
+                $ticket->created_at?->format('Y-m-d H:i:s'),
+            ], null, "A{$row}");
+        }
+        foreach (range('A', 'H') as $column) {
+            $sheet->getColumnDimension($column)->setAutoSize(true);
+        }
+
+        $bucket = $request->input('bucket');
+        $concern = $request->input('concern_type');
+        $filename = strtolower(trim(($concern ? str_replace(' ', '_', $concern) . '_' : '') . $bucket . '_tickets_' . date('Y-m-d_His'), '_')) . '.xlsx';
+
+        return response()->streamDownload(function () use ($spreadsheet) {
+            (new Xlsx($spreadsheet))->save('php://output');
+        }, $filename, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
+    }
+
+    private function dashboardChartTicketQuery(Request $request)
+    {
+        $validated = $request->validate([
+            'bucket' => ['required', 'in:all,open,closed'],
+            'concern_type' => ['nullable', 'in:Incident,Service Request,Problem'],
+            'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+            'month' => ['nullable', 'integer', 'between:1,12'],
+            'department_id' => ['nullable', 'integer'],
+            'department_node_id' => ['nullable', 'integer'],
+            'user_id' => ['nullable'],
+            'store_id' => ['nullable'],
+            'entity_ids' => ['nullable', 'array'],
+            'entity_ids.*' => ['integer'],
+        ]);
+
+        $user = $request->user();
+        $effectiveCompanyIds = CompanyContext::effectiveEntityIds(
+            $user,
+            (array) $request->input('entity_ids', []),
+            $user->can('dashboard.filter_entity')
+        );
+
+        $query = Ticket::withoutGlobalScope(ActiveEntityScope::class)->whereNull('parent_id');
+        if ($user->hasRole('User')) {
+            $query->where('reporter_id', $user->id);
+        } elseif (empty($effectiveCompanyIds)) {
+            $query->whereRaw('1 = 0');
+        } else {
+            $query->whereIn('company_id', $effectiveCompanyIds);
+        }
+
+        $query->when($validated['year'] ?? null, fn ($q, $year) => $q->whereYear('created_at', $year))
+            ->when($validated['month'] ?? null, fn ($q, $month) => $q->whereMonth('created_at', $month));
+
+        $this->applyAssigneeScopeFilters(
+            $query,
+            $validated['department_id'] ?? null,
+            $validated['department_node_id'] ?? null,
+            $validated['user_id'] ?? 'all',
+            $validated['store_id'] ?? 'all'
+        );
+
+        if ($validated['bucket'] === 'closed') {
+            $query->whereIn('status', ['resolved', 'closed']);
+        } elseif ($validated['bucket'] === 'open') {
+            $query->whereNotIn('status', ['resolved', 'closed']);
+        }
+        if (!empty($validated['concern_type'])) {
+            $query->whereHas('item', fn ($q) => $q->where('concern_type', $validated['concern_type']));
+        }
+
+        return $query;
+    }
+
     /**
      * Store / Project Pipeline timeline for a given year (lazy dashboard tab).
      *

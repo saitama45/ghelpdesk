@@ -46,6 +46,10 @@ Route::middleware('auth')->group(function () {
         ->name('dashboard');
     Route::get('/dashboard/export', [\App\Http\Controllers\DashboardController::class, 'export'])
         ->name('dashboard.export');
+    Route::get('/dashboard/chart-tickets', [\App\Http\Controllers\DashboardController::class, 'chartTickets'])
+        ->name('dashboard.chart-tickets');
+    Route::get('/dashboard/chart-tickets/export', [\App\Http\Controllers\DashboardController::class, 'exportChartTickets'])
+        ->name('dashboard.chart-tickets.export');
     Route::get('/global-search', [\App\Http\Controllers\GlobalSearchController::class, 'search'])->name('global-search');
     Route::get('/dtr', [\App\Http\Controllers\AttendanceController::class, 'index'])->name('attendance.index');
     Route::get('/attendance/logs', [\App\Http\Controllers\AttendanceController::class, 'logs'])->name('attendance.logs');
