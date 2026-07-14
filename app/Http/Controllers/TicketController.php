@@ -41,9 +41,9 @@ class TicketController extends Controller
 
     private function normalizeTicketScope(Request $request): string
     {
-        $scope = $request->input('ticket_scope', 'parents');
+        $scope = $request->input('ticket_scope', 'all');
 
-        return in_array($scope, self::TICKET_SCOPES, true) ? $scope : 'parents';
+        return in_array($scope, self::TICKET_SCOPES, true) ? $scope : 'all';
     }
 
     private function applyTicketScope($query, string $scope): void
@@ -53,6 +53,104 @@ class TicketController extends Controller
             'all' => null,
             default => $query->whereNull('parent_id'),
         };
+    }
+
+    private function normalizeRequesterKeys(Request $request): \Illuminate\Support\Collection
+    {
+        return collect((array) $request->input('requester_keys', []))
+            ->map(fn ($key) => is_string($key) ? trim($key) : '')
+            ->filter()
+            ->unique()
+            ->values();
+    }
+
+    private function applyRequesterKeys($query, \Illuminate\Support\Collection $requesterKeys): void
+    {
+        if ($requesterKeys->isEmpty()) {
+            return;
+        }
+
+        $reporterIds = $requesterKeys
+            ->filter(fn ($key) => preg_match('/^user:\d+$/', $key))
+            ->map(fn ($key) => (int) substr($key, 5))
+            ->filter()
+            ->unique()
+            ->values();
+        $externalEmails = $requesterKeys
+            ->filter(fn ($key) => str_starts_with($key, 'email:'))
+            ->map(fn ($key) => strtolower(trim(substr($key, 6))))
+            ->filter(fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL))
+            ->unique()
+            ->values();
+
+        if ($reporterIds->isEmpty() && $externalEmails->isEmpty()) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        $query->where(function ($requesterQuery) use ($reporterIds, $externalEmails) {
+            if ($reporterIds->isNotEmpty()) {
+                $requesterQuery->whereIn('reporter_id', $reporterIds->all());
+            }
+
+            if ($externalEmails->isNotEmpty()) {
+                $method = $reporterIds->isNotEmpty() ? 'orWhere' : 'where';
+                $requesterQuery->{$method}(function ($externalQuery) use ($externalEmails) {
+                    $externalQuery->whereNull('reporter_id')
+                        ->whereIn(DB::raw('LOWER(sender_email)'), $externalEmails->all());
+                });
+            }
+        });
+    }
+
+    private function ticketIndexFilterOptions($baseQuery): array
+    {
+        $ticketKeyQuery = clone $baseQuery;
+        $ticketKeyQuery->setEagerLoads([]);
+        $ticketKeyOptions = $ticketKeyQuery
+            ->whereNotNull('ticket_key')
+            ->orderBy('ticket_key')
+            ->pluck('ticket_key')
+            ->filter()
+            ->unique()
+            ->map(fn ($key) => ['value' => $key, 'label' => $key])
+            ->values();
+
+        $requesterQuery = clone $baseQuery;
+        $requesterQuery->setEagerLoads([]);
+        $requesterRows = $requesterQuery
+            ->select(['reporter_id', 'sender_name', 'sender_email'])
+            ->distinct()
+            ->get();
+
+        $reporterIds = $requesterRows->pluck('reporter_id')->filter()->map(fn ($id) => (int) $id)->unique();
+        $internalOptions = User::whereIn('id', $reporterIds)
+            ->get(['id', 'name', 'email'])
+            ->map(fn (User $reporter) => [
+                'value' => 'user:'.$reporter->id,
+                'label' => $reporter->name.($reporter->email ? ' ('.$reporter->email.')' : ''),
+            ]);
+        $externalOptions = $requesterRows
+            ->filter(fn ($row) => ! $row->reporter_id && $row->sender_email)
+            ->map(function ($row) {
+                $email = strtolower(trim($row->sender_email));
+                $name = trim($row->sender_name ?: 'External requester');
+
+                return [
+                    'value' => 'email:'.$email,
+                    'label' => $name.' ('.$email.') - External',
+                ];
+            })
+            ->unique('value');
+
+        return [
+            'ticketKeyOptions' => $ticketKeyOptions->all(),
+            'requesterOptions' => $internalOptions
+                ->concat($externalOptions)
+                ->sortBy(fn ($option) => strtolower($option['label']))
+                ->values()
+                ->all(),
+        ];
     }
 
     /**
@@ -104,6 +202,8 @@ class TicketController extends Controller
             }
         }
 
+        $filterOptions = $this->ticketIndexFilterOptions(clone $query);
+
         // Snapshot before any filters — used for dept stat box counts so they are never
         // distorted by the user's current status/date/search selection.
         $deptStatsBase = clone $query;
@@ -126,6 +226,9 @@ class TicketController extends Controller
         if ($ticketKeys->isNotEmpty()) {
             $query->whereIn('ticket_key', $ticketKeys->all());
         }
+
+        $requesterKeys = $this->normalizeRequesterKeys($request);
+        $this->applyRequesterKeys($query, $requesterKeys);
 
         $defaultStatus = $user->hasRole('User') ? 'all' : 'open';
         $statusFilters = $normalizeFilterValues($request->input('status', [$defaultStatus]));
@@ -434,6 +537,8 @@ class TicketController extends Controller
             'hierarchicalDepartments' => $this->organizationReferences->tree(),
             'summaryStats' => $summaryStats,
             'summaryStatsByDept' => $summaryStatsByDept,
+            'ticketKeyOptions' => $filterOptions['ticketKeyOptions'],
+            'requesterOptions' => $filterOptions['requesterOptions'],
             'filters' => [
                 'status' => $statusFilters->all(),
                 'search' => $request->search,
@@ -452,7 +557,8 @@ class TicketController extends Controller
                 'month' => $request->month,
                 'dashboard_filter' => $request->input('dashboard_filter', 'all'),
                 'ticket_scope' => $ticketScope,
-                'ticket_keys' => $ticketKeys->implode(','),
+                'ticket_keys' => $ticketKeys->all(),
+                'requester_keys' => $requesterKeys->all(),
                 'entity_ids' => array_map('intval', $effectiveCompanyIds),
             ],
             'entityFilter' => [
@@ -492,6 +598,17 @@ class TicketController extends Controller
             ->unique(fn ($item) => (string) $item)
             ->values();
 
+        $rawTicketKeys = $request->input('ticket_keys', []);
+        $ticketKeys = $normalizeFilterValues(
+            is_string($rawTicketKeys) ? explode(',', $rawTicketKeys) : $rawTicketKeys
+        )->map(fn ($key) => (string) $key);
+        if ($ticketKeys->isNotEmpty()) {
+            $query->whereIn('ticket_key', $ticketKeys->all());
+        }
+
+        $requesterKeys = $this->normalizeRequesterKeys($request);
+        $this->applyRequesterKeys($query, $requesterKeys);
+
         $defaultStatus = $user->hasRole('User') ? 'all' : 'open';
         $statusFilters = $normalizeFilterValues($request->input('status', [$defaultStatus]));
         if ($statusFilters->isEmpty()) $statusFilters = collect([$defaultStatus]);
@@ -510,7 +627,7 @@ class TicketController extends Controller
         $filterDeptId = $request->filled('department_id')      ? (int) $request->department_id      : null;
         $filterNodeId = $request->filled('department_node_id') ? (int) $request->department_node_id : null;
         $explicitDeptFilter = $request->filled('department_id');
-        if (!$filterDeptId && !$filterNodeId) {
+        if (!$filterDeptId && !$filterNodeId && $ticketKeys->isEmpty()) {
             $filterDeptId = auth()->user()->department_id ? (int) auth()->user()->department_id : null;
         }
         if ($filterNodeId) {

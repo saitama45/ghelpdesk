@@ -30,6 +30,8 @@ const props = defineProps({
     summaryStats: Object,
     summaryStatsByDept: { type: Object, default: () => ({}) },
     entityFilter: { type: Object, default: () => ({ enabled: false, options: [], selected: [] }) },
+    ticketKeyOptions: { type: Array, default: () => [] },
+    requesterOptions: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -123,13 +125,13 @@ onMounted(() => {
         if (savedFiltersStr) {
             try {
                 const savedFilters = JSON.parse(savedFiltersStr);
-                const currentParams = {
-                    ...ticketFilterParams(),
-                    search: pagination.search.value
-                };
+                const { entity_ids, ticket_keys, ...currentParams } = ticketFilterParams();
                 
                 // Entity selection is never restored from storage (resets each visit).
                 delete savedFilters.entity_ids;
+                // Ticket deep links and the removed general search are never restored.
+                delete savedFilters.ticket_keys;
+                delete savedFilters.search;
                 if (JSON.stringify(savedFilters) !== JSON.stringify(currentParams)) {
                     if (savedFilters.status !== undefined) filterStatus.value = savedFilters.status;
                     if (savedFilters.department_node_id !== undefined) filterNodeId.value = savedFilters.department_node_id;
@@ -140,23 +142,19 @@ onMounted(() => {
                     if (savedFilters.end_date !== undefined) filterEndDate.value = savedFilters.end_date;
                     if (savedFilters.dashboard_filter !== undefined) activeDashboardFilter.value = savedFilters.dashboard_filter;
                     if (savedFilters.assigned_department_only !== undefined) assignedDepartmentOnly.value = Boolean(savedFilters.assigned_department_only);
+                    if (savedFilters.requester_keys !== undefined) filterRequesterKeys.value = normalizeFilterValues(savedFilters.requester_keys, [], normalizeStringFilterValue);
                     if (savedFilters.ticket_scope !== undefined) {
                         savedFilters.ticket_scope = normalizeTicketScope(savedFilters.ticket_scope);
                         filterTicketScope.value = savedFilters.ticket_scope;
                     }
-                    if (savedFilters.search !== undefined) pagination.search.value = savedFilters.search;
-                    
                     router.get(route('tickets.index'), savedFilters, { replace: true, preserveState: true });
                     return;
                 }
             } catch (e) {}
         }
     } else {
-        const params = {
-            ...ticketFilterParams(),
-            search: pagination.search.value
-        };
-        if (!filterTicketKeys.value) {
+        const params = ticketFilterParams();
+        if (!filterTicketKeys.value.length) {
             const { entity_ids, ticket_keys, ...persistedParams } = params;
             localStorage.setItem('ghelpdesk_ticket_filters', JSON.stringify(persistedParams));
         }
@@ -266,7 +264,7 @@ const normalizeStoreFilterValue = (value) => {
     return matchingStore?.id ?? value;
 };
 
-const defaultTicketScope = 'parents';
+const defaultTicketScope = 'all';
 const ticketScopeOptions = [
     { value: 'parents', label: 'Parent Tickets' },
     { value: 'children', label: 'Child Tickets' },
@@ -278,7 +276,7 @@ const normalizeTicketScope = (scope) => {
 };
 
 const getTicketScopeLabel = (scope) => {
-    return ticketScopeOptions.find(option => option.value === scope)?.label || 'Parent Tickets';
+    return ticketScopeOptions.find(option => option.value === scope)?.label || 'All Tickets';
 };
 
 const filterStatus = ref(normalizeFilterValues(props.filters?.status, defaultStatusFilters(), normalizeStringFilterValue));
@@ -294,7 +292,8 @@ const filterStartDate = ref(props.filters?.start_date || '');
 const filterEndDate = ref(props.filters?.end_date || '');
 const assignedDepartmentOnly = ref(Boolean(props.filters?.assigned_department_only));
 const filterTicketScope = ref(normalizeTicketScope(props.filters?.ticket_scope || defaultTicketScope));
-const filterTicketKeys = ref(props.filters?.ticket_keys || '');
+const filterTicketKeys = ref(normalizeFilterValues(props.filters?.ticket_keys, [], normalizeStringFilterValue));
+const filterRequesterKeys = ref(normalizeFilterValues(props.filters?.requester_keys, [], normalizeStringFilterValue));
 // Entity/Company filter — defaults to the active sidebar entity (server-seeded).
 const entityFilterEnabled = computed(() => !!props.entityFilter?.enabled);
 const entityFilterOptions = computed(() => props.entityFilter?.options || []);
@@ -403,13 +402,13 @@ const ticketFilterParams = () => ({
     dashboard_filter: activeDashboardFilter.value,
     assigned_department_only: assignedDepartmentOnly.value ? 1 : undefined,
     ticket_scope: filterTicketScope.value,
-    ticket_keys: filterTicketKeys.value || undefined,
+    ticket_keys: filterTicketKeys.value.length ? filterTicketKeys.value : undefined,
+    requester_keys: filterRequesterKeys.value.length ? filterRequesterKeys.value : undefined,
     entity_ids: entityFilterEnabled.value ? resolvedEntityIds() : undefined,
 });
 
 const pagination = usePagination(props.tickets, 'tickets.index', ticketFilterParams);
-// Deep links and browser navigation must hydrate the visible search control.
-// Set this before mounting so the composable watcher does not issue a request.
+// Preserve legacy ?search= links even though the general search control is no longer shown.
 pagination.search.value = props.filters?.search || '';
 
 // --- Infinite scroll accumulation ---
@@ -496,8 +495,8 @@ const applyFilter = () => {
 
     // Entity/Company selection is intentionally NOT persisted — each visit
     // resets to the active sidebar entity (server-seeded default).
-    if (!filterTicketKeys.value) {
-        const { entity_ids, ticket_keys, ...persistedParams } = params;
+    if (!filterTicketKeys.value.length) {
+        const { entity_ids, ticket_keys, search, ...persistedParams } = params;
         localStorage.setItem('ghelpdesk_ticket_filters', JSON.stringify(persistedParams));
     }
 
@@ -529,6 +528,16 @@ const handleStatusFilterChange = (value) => {
 
 const handleAssigneeFilterChange = (value) => {
     filterAssignee.value = normalizeFilterValues(value, [], normalizeAssigneeFilterValue);
+    applyFilter();
+};
+
+const handleTicketKeyFilterChange = (value) => {
+    filterTicketKeys.value = normalizeFilterValues(value, [], normalizeStringFilterValue);
+    applyFilter();
+};
+
+const handleRequesterFilterChange = (value) => {
+    filterRequesterKeys.value = normalizeFilterValues(value, [], normalizeStringFilterValue);
     applyFilter();
 };
 
@@ -607,7 +616,8 @@ const clearFilters = () => {
     activeDashboardFilter.value = 'all';
     assignedDepartmentOnly.value = false;
     filterTicketScope.value = defaultTicketScope;
-    filterTicketKeys.value = '';
+    filterTicketKeys.value = [];
+    filterRequesterKeys.value = [];
     pagination.search.value = '';
     applyFilter();
 };
@@ -847,8 +857,8 @@ const toggleAll = () => {
     selectedIds.value = allSelected.value ? [] : displayedTickets.value.map(t => t.id)
 }
 
-// Clear selection when the result set changes (search). Page growth via
-// infinite scroll must NOT clear the current selection.
+// Clear selection if a legacy search URL changes. Page growth via infinite
+// scroll must not clear the current selection.
 watch(() => pagination.search.value, () => {
     selectedIds.value = []
 })
@@ -1619,6 +1629,9 @@ const activeFilterBadges = computed(() => {
     if (filterAssignee.value.length) {
         badges.push(`Assignee: ${formatFilterBadgeValues(filterAssignee.value, getAssigneeFilterLabel)}`);
     }
+    if (filterRequesterKeys.value.length) {
+        badges.push(`Requester: ${formatFilterBadgeValues(filterRequesterKeys.value, getRequesterFilterLabel)}`);
+    }
     if (filterStore.value.length) {
         badges.push(`Location: ${formatFilterBadgeValues(filterStore.value, getStoreFilterLabel)}`);
     }
@@ -1641,9 +1654,8 @@ const activeFilterBadges = computed(() => {
     if (activeDashboardFilter.value !== 'all') {
         badges.push(getDashboardFilterLabel(activeDashboardFilter.value));
     }
-    if (filterTicketKeys.value) {
-        const ticketCount = filterTicketKeys.value.split(',').filter(Boolean).length;
-        badges.push(`SLA notification: ${ticketCount} ticket${ticketCount === 1 ? '' : 's'}`);
+    if (filterTicketKeys.value.length) {
+        badges.push(`Ticket #: ${formatFilterBadgeValues(filterTicketKeys.value)}`);
     }
 
     return badges;
@@ -1664,6 +1676,11 @@ const getAssigneeFilterLabel = (assigneeId) => {
     return assignee?.name || assigneeId;
 };
 
+const getRequesterFilterLabel = (requesterKey) => {
+    const requester = props.requesterOptions.find(option => option.value === requesterKey);
+    return requester?.label || requesterKey;
+};
+
 const getStoreFilterLabel = (storeId) => {
     const store = props.stores?.find(s => String(s.id) === String(storeId));
     return store?.name || storeId;
@@ -1682,7 +1699,7 @@ const tableSubtitle = computed(() => {
 
 const emptyStateMessage = computed(() => {
     if (hasActiveFilters.value) {
-        return 'No tickets match the current search or filters. Adjust the monitoring controls and try again.';
+        return 'No tickets match the current filters. Adjust the monitoring controls and try again.';
     }
 
     return 'No tickets are visible right now. Create a new ticket to start monitoring the queue.';
@@ -1928,6 +1945,32 @@ const requesterTabs = computed(() => {
                                         {{ option.label }}
                                     </option>
                                 </select>
+                            </div>
+
+                            <div class="flex flex-col gap-1.5">
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Ticket #</label>
+                                <MultiAutocomplete
+                                    :model-value="filterTicketKeys"
+                                    :options="ticketKeyOptions"
+                                    label-key="label"
+                                    value-key="value"
+                                    placeholder="Ticket #..."
+                                    :limit="1"
+                                    @update:modelValue="handleTicketKeyFilterChange"
+                                />
+                            </div>
+
+                            <div class="flex flex-col gap-1.5">
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Requester</label>
+                                <MultiAutocomplete
+                                    :model-value="filterRequesterKeys"
+                                    :options="requesterOptions"
+                                    label-key="label"
+                                    value-key="value"
+                                    placeholder="Requester..."
+                                    :limit="1"
+                                    @update:modelValue="handleRequesterFilterChange"
+                                />
                             </div>
 
                             <div v-if="hierarchicalOptions.length > 0" class="flex flex-col gap-1.5">
@@ -2215,9 +2258,8 @@ const requesterTabs = computed(() => {
                     title="Ticket Monitoring Board"
                     :subtitle="tableSubtitle"
                     freeze-header
-                    search-placeholder="Search by key, title, reporter, or assignee..."
+                    :show-search="false"
                     :empty-message="emptyStateMessage"
-                    :search="pagination.search.value"
                     :data="displayedTickets"
                     :current-page="pagination.currentPage.value"
                     :last-page="pagination.lastPage.value"
@@ -2227,7 +2269,6 @@ const requesterTabs = computed(() => {
                     infinite-scroll
                     :has-more="hasMoreTickets"
                     :loading-more="loadingMoreTickets"
-                    @update:search="pagination.search.value = $event"
                     @load-more="loadMoreTickets"
                 >
                 <template #actions>

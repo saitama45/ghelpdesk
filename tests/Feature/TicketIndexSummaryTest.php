@@ -272,13 +272,91 @@ class TicketIndexSummaryTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Tickets/Index')
-                ->where('filters.ticket_keys', 'SLA-1001,SLA-1002')
+                ->where('filters.ticket_keys', ['SLA-1001', 'SLA-1002'])
                 ->has('tickets.data', 2)
                 ->where('tickets.data', fn ($tickets) => collect($tickets)
                     ->pluck('ticket_key')
                     ->sort()
                     ->values()
                     ->all() === ['SLA-1001', 'SLA-1002'])
+            );
+    }
+
+    public function test_ticket_type_defaults_to_all_tickets(): void
+    {
+        $company = Company::create(['name' => 'Test Company', 'code' => 'TC', 'is_active' => true]);
+        $viewer = User::factory()->create(['company_id' => $company->id]);
+        $parent = $this->ticket($company, ['ticket_key' => 'ALL-1001']);
+        $child = $this->ticket($company, ['ticket_key' => 'ALL-1002', 'parent_id' => $parent->id]);
+
+        $this->actingAs($viewer)
+            ->get(route('tickets.index', ['status' => ['all'], 'skip_default_department' => true]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Tickets/Index')
+                ->where('filters.ticket_scope', 'all')
+                ->has('tickets.data', 2)
+                ->where('tickets.data', fn ($tickets) => collect($tickets)
+                    ->pluck('id')
+                    ->sort()
+                    ->values()
+                    ->all() === collect([$parent->id, $child->id])->sort()->values()->all())
+            );
+    }
+
+    public function test_requester_filter_supports_internal_and_external_requesters_and_scopes_options(): void
+    {
+        $company = Company::create(['name' => 'Test Company', 'code' => 'TC', 'is_active' => true]);
+        $otherCompany = Company::create(['name' => 'Other Company', 'code' => 'OC', 'is_active' => true]);
+        $viewer = User::factory()->create(['company_id' => $company->id]);
+        $internalRequester = User::factory()->create([
+            'company_id' => $company->id,
+            'name' => 'Internal Requester',
+            'email' => 'internal@example.test',
+        ]);
+        $internalTicket = $this->ticket($company, [
+            'ticket_key' => 'REQ-1001',
+            'reporter_id' => $internalRequester->id,
+        ]);
+        $externalTicket = $this->ticket($company, [
+            'ticket_key' => 'REQ-1002',
+            'sender_name' => 'External Requester',
+            'sender_email' => 'External@Example.test',
+        ]);
+        $this->ticket($company, ['ticket_key' => 'REQ-1003']);
+        $this->ticket($otherCompany, [
+            'ticket_key' => 'HIDDEN-1001',
+            'sender_name' => 'Hidden Requester',
+            'sender_email' => 'hidden@example.test',
+        ]);
+
+        $requesterKeys = ['user:'.$internalRequester->id, 'email:external@example.test'];
+
+        $this->actingAs($viewer)
+            ->get(route('tickets.index', [
+                'status' => ['all'],
+                'skip_default_department' => true,
+                'requester_keys' => $requesterKeys,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Tickets/Index')
+                ->where('filters.requester_keys', $requesterKeys)
+                ->has('tickets.data', 2)
+                ->where('tickets.data', fn ($tickets) => collect($tickets)
+                    ->pluck('id')
+                    ->sort()
+                    ->values()
+                    ->all() === collect([$internalTicket->id, $externalTicket->id])->sort()->values()->all())
+                ->where('ticketKeyOptions', fn ($options) => collect($options)
+                    ->pluck('value')
+                    ->contains('REQ-1001')
+                    && ! collect($options)->pluck('value')->contains('HIDDEN-1001'))
+                ->where('requesterOptions', fn ($options) => collect($options)
+                    ->pluck('value')
+                    ->contains('user:'.$internalRequester->id)
+                    && collect($options)->pluck('value')->contains('email:external@example.test')
+                    && ! collect($options)->pluck('value')->contains('email:hidden@example.test'))
             );
     }
 
