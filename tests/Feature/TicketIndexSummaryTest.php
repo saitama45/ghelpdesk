@@ -494,6 +494,48 @@ class TicketIndexSummaryTest extends TestCase
             );
     }
 
+    public function test_ticket_index_can_filter_vendor_escalations_by_multiple_vendors(): void
+    {
+        $company = Company::create(['name' => 'Vendor Filter Company', 'code' => 'VFC', 'is_active' => true]);
+        $viewer = User::factory()->create(['company_id' => $company->id]);
+        $firstVendor = Vendor::create([
+            'code' => 'FILTER-1',
+            'name' => 'First Filter Vendor',
+            'vendor_type' => 'Service Provider',
+            'is_active' => true,
+        ]);
+        $secondVendor = Vendor::create([
+            'code' => 'FILTER-2',
+            'name' => 'Second Filter Vendor',
+            'vendor_type' => 'Service Provider',
+            'is_active' => true,
+        ]);
+        $otherVendor = Vendor::create([
+            'code' => 'FILTER-3',
+            'name' => 'Other Filter Vendor',
+            'vendor_type' => 'Service Provider',
+            'is_active' => true,
+        ]);
+
+        $firstTicket = $this->ticket($company, ['vendor_id' => $firstVendor->id]);
+        $secondTicket = $this->ticket($company, ['vendor_id' => $secondVendor->id]);
+        $this->ticket($company, ['vendor_id' => $otherVendor->id]);
+
+        $this->actingAs($viewer)
+            ->get(route('tickets.index', [
+                'status' => ['all'],
+                'skip_default_department' => true,
+                'vendor_id' => [$firstVendor->id, $secondVendor->id],
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('filters.vendor_id', [$firstVendor->id, $secondVendor->id])
+                ->where('tickets.total', 2)
+                ->where('tickets.data', fn ($tickets) => collect($tickets)->pluck('id')->sort()->values()->all()
+                    === collect([$firstTicket->id, $secondTicket->id])->sort()->values()->all())
+            );
+    }
+
     public function test_department_filter_matches_ticket_department_field_not_unassigned(): void
     {
         $company = Company::create([

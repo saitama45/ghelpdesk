@@ -296,6 +296,14 @@ class TicketController extends Controller
             $query->whereIn('store_id', $storeFilters->all());
         }
 
+        // Apply Vendor Escalation filter
+        $vendorFilters = $normalizeFilterValues($request->input('vendor_id'))
+            ->map(fn ($id) => (int) $id)
+            ->filter();
+        if ($vendorFilters->isNotEmpty()) {
+            $query->whereIn('vendor_id', $vendorFilters->all());
+        }
+
         // Apply SubCategory filter
         $subCategoryFilters = $normalizeFilterValues($request->input('sub_category_id'));
         if ($subCategoryFilters->isNotEmpty()) {
@@ -559,6 +567,7 @@ class TicketController extends Controller
                 'assigned_department_only' => $assignedDepartmentOnly,
                 'assignee_id' => $assigneeFilters->all(),
                 'store_id' => $storeFilters->all(),
+                'vendor_id' => $vendorFilters->all(),
                 'sub_category_id' => $subCategoryFilters->first(),
                 'start_date' => $request->start_date,
                 'end_date' => $request->end_date,

@@ -137,6 +137,7 @@ onMounted(() => {
                     if (savedFilters.department_node_id !== undefined) filterNodeId.value = savedFilters.department_node_id;
                     if (savedFilters.assignee_id !== undefined) filterAssignee.value = savedFilters.assignee_id;
                     if (savedFilters.store_id !== undefined) filterStore.value = savedFilters.store_id;
+                    if (savedFilters.vendor_id !== undefined) filterVendor.value = normalizeFilterValues(savedFilters.vendor_id, [], normalizeVendorFilterValue);
                     if (savedFilters.sub_category_id !== undefined) filterSubCategory.value = savedFilters.sub_category_id;
                     if (savedFilters.start_date !== undefined) filterStartDate.value = savedFilters.start_date;
                     if (savedFilters.end_date !== undefined) filterEndDate.value = savedFilters.end_date;
@@ -264,6 +265,11 @@ const normalizeStoreFilterValue = (value) => {
     return matchingStore?.id ?? value;
 };
 
+const normalizeVendorFilterValue = (value) => {
+    const matchingVendor = props.vendors?.find(vendor => String(vendor.id) === String(value));
+    return matchingVendor?.id ?? value;
+};
+
 const defaultTicketScope = 'all';
 const ticketScopeOptions = [
     { value: 'parents', label: 'Parent Tickets' },
@@ -287,6 +293,7 @@ const filterNodeId = ref(
 )
 const filterAssignee = ref(normalizeFilterValues(props.filters?.assignee_id, [], normalizeAssigneeFilterValue));
 const filterStore = ref(normalizeFilterValues(props.filters?.store_id, [], normalizeStoreFilterValue));
+const filterVendor = ref(normalizeFilterValues(props.filters?.vendor_id, [], normalizeVendorFilterValue));
 const filterSubCategory = ref(props.filters?.sub_category_id ?? '');
 const filterStartDate = ref(props.filters?.start_date || '');
 const filterEndDate = ref(props.filters?.end_date || '');
@@ -390,6 +397,10 @@ const assigneeOptions = computed(() => {
     return (props.staff || []).map(s => ({ id: s.id, name: s.name }));
 });
 
+const vendorFilterOptions = computed(() =>
+    (props.vendors || []).filter(vendor => vendor.id !== null && vendor.id !== '')
+);
+
 const subCategoryOptions = computed(() => [
     { id: '', name: 'All SubCategories' },
     ...(props.subCategories || []),
@@ -400,6 +411,7 @@ const ticketFilterParams = () => ({
     ...deptFilterParams.value,
     assignee_id: filterAssignee.value,
     store_id: filterStore.value,
+    vendor_id: filterVendor.value,
     sub_category_id: filterSubCategory.value,
     start_date: filterStartDate.value,
     end_date: filterEndDate.value,
@@ -550,6 +562,11 @@ const handleStoreFilterChange = (value) => {
     applyFilter();
 };
 
+const handleVendorFilterChange = (value) => {
+    filterVendor.value = normalizeFilterValues(value, [], normalizeVendorFilterValue);
+    applyFilter();
+};
+
 const handleEntityFilterChange = (value) => {
     let next = Array.isArray(value) ? value : [];
     const hadAll = filterEntities.value.includes('all');
@@ -634,6 +651,7 @@ const clearFilters = () => {
     filterNodeId.value = '';
     filterAssignee.value = [];
     filterStore.value = [];
+    filterVendor.value = [];
     filterSubCategory.value = '';
     filterStartDate.value = '';
     filterEndDate.value = '';
@@ -728,6 +746,19 @@ const createForm = useForm({
     sender_email: '',
     department: page.props.auth.user?.department || '',
     notify_requester: true,
+});
+
+const createVendorSelection = computed({
+    get: () => createForm.vendor_id === null || createForm.vendor_id === ''
+        ? []
+        : [createForm.vendor_id],
+    set: (vendorIds) => {
+        const selectedVendorIds = Array.isArray(vendorIds)
+            ? vendorIds.filter(vendorId => vendorId !== null && vendorId !== '')
+            : [];
+
+        createForm.vendor_id = selectedVendorIds.at(-1) ?? null;
+    },
 });
 
 const createDepartmentNodes = computed(() => {
@@ -2052,6 +2083,19 @@ const requesterTabs = computed(() => {
                             </div>
 
                             <div class="flex flex-col gap-1.5">
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Vendor Escalation</label>
+                                <MultiAutocomplete
+                                    :model-value="filterVendor"
+                                    :options="vendorFilterOptions"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Vendor Escalation..."
+                                    :limit="1"
+                                    @update:modelValue="handleVendorFilterChange"
+                                />
+                            </div>
+
+                            <div class="flex flex-col gap-1.5">
                                 <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">SubCategory</label>
                                 <Autocomplete
                                     :model-value="filterSubCategory"
@@ -2685,13 +2729,13 @@ const requesterTabs = computed(() => {
 
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Vendor Escalation</label>
-                            <Autocomplete
-                                v-model="createForm.vendor_id"
+                            <MultiAutocomplete
+                                v-model="createVendorSelection"
                                 :options="vendors"
                                 label-key="name"
                                 value-key="id"
                                 placeholder="None"
-                                size="sm"
+                                :limit="1"
                             />
                         </div>
 
