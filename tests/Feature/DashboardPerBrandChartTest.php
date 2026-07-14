@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Company;
 use App\Models\Role;
+use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Support\CompanyContext;
@@ -14,7 +15,7 @@ class DashboardPerBrandChartTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_per_brand_chart_follows_the_entity_filter_selection(): void
+    public function test_per_store_brand_chart_groups_by_store_ownership_and_follows_entity_filter(): void
     {
         $activeCompany = $this->company('Alpha Brand', 'ALPHA');
         $secondaryCompany = $this->company('Beta Brand', 'BETA');
@@ -26,10 +27,7 @@ class DashboardPerBrandChartTest extends TestCase
         \Spatie\Permission\Models\Permission::findOrCreate('dashboard.filter_entity', 'web');
 
         $viewer = User::factory()->create(['company_id' => $activeCompany->id]);
-        $role = Role::create([
-            'name' => 'Cross-brand dashboard viewer',
-            'guard_name' => 'web',
-        ]);
+        $role = Role::create(['name' => 'Cross-brand dashboard viewer', 'guard_name' => 'web']);
         $role->companies()->attach([
             $activeCompany->id,
             $secondaryCompany->id,
@@ -39,22 +37,25 @@ class DashboardPerBrandChartTest extends TestCase
         $role->givePermissionTo('dashboard.filter_entity');
         $viewer->assignRole($role);
 
-        $this->ticket($activeCompany, 'open');
-        $this->ticket($activeCompany, 'resolved');
-        $this->ticket($secondaryCompany, 'closed');
-        $outsidePeriodTicket = $this->ticket($secondaryCompany, 'open');
-        $outsidePeriodTicket->forceFill([
+        // Each brand OWNS a store; the chart counts tickets sitting on that store,
+        // regardless of the ticket's stamped company (store ownership).
+        $alphaStore = $this->store($activeCompany, 'ALP-1');
+        $betaStore = $this->store($secondaryCompany, 'BET-1');
+        $this->store($emptyCompany, 'GAM-1');
+        $inactiveStore = $this->store($inactiveCompany, 'INA-1');
+        $unauthStore = $this->store($unauthorizedCompany, 'UNA-1');
+
+        $this->ticket($alphaStore, 'open');
+        $this->ticket($alphaStore, 'resolved');
+        $this->ticket($betaStore, 'closed');
+        // Out-of-period ticket on Beta's store — excluded by the year filter below.
+        $this->ticket($betaStore, 'open')->forceFill([
             'created_at' => now()->subYear(),
             'updated_at' => now()->subYear(),
         ])->save();
-        $this->ticket($inactiveCompany, 'open');
-        $this->ticket($unauthorizedCompany, 'open');
+        $this->ticket($inactiveStore, 'open');
+        $this->ticket($unauthStore, 'open');
 
-        // ticketCharts is a lazy (Inertia optional) prop — request it the way the
-        // dashboard's "Open vs Closed / Per Brand" tab does (partial reload). The
-        // Entity/Company filter selects the three accessible active brands; the
-        // chart now reflects exactly that selection (INACTIVE/UNAUTH excluded as
-        // they are not selectable). Default (no selection) shows the active entity.
         $response = $this
             ->actingAs($viewer)
             ->withSession([CompanyContext::SESSION_KEY => $activeCompany->id])
@@ -73,8 +74,9 @@ class DashboardPerBrandChartTest extends TestCase
         $response->assertOk();
 
         $charts = $response->json('props.ticketCharts');
-        $brands = collect($charts['perBrand'])->keyBy('code');
+        $brands = collect($charts['perStoreBrand'])->keyBy('code');
 
+        // Only the accessible active brands are rows; INACTIVE/UNAUTH are excluded.
         $this->assertSame(['ALPHA', 'BETA', 'GAMMA'], $brands->keys()->all());
         $this->assertSame(1, $brands['ALPHA']['open']);
         $this->assertSame(1, $brands['ALPHA']['closed']);
@@ -85,7 +87,7 @@ class DashboardPerBrandChartTest extends TestCase
         $this->assertFalse($brands->has('INACTIVE'));
         $this->assertFalse($brands->has('UNAUTH'));
 
-        // Overall now spans the selected brands (ALPHA open+resolved, BETA closed).
+        // Overall spans the selected brands' stores (Alpha open+resolved, Beta closed).
         $this->assertSame(1, $charts['overall']['open']);
         $this->assertSame(2, $charts['overall']['closed']);
     }
@@ -99,16 +101,31 @@ class DashboardPerBrandChartTest extends TestCase
         ]);
     }
 
-    private function ticket(Company $company, string $status): Ticket
+    private function store(Company $company, string $code): Store
+    {
+        return Store::create([
+            'code' => $code,
+            'name' => "Store {$code}",
+            'sector' => 1,
+            'area' => 'Test Area',
+            'brand' => 'Test Brand',
+            'class' => 'Regular',
+            'is_active' => true,
+            'company_id' => $company->id,
+        ]);
+    }
+
+    private function ticket(Store $store, string $status): Ticket
     {
         return Ticket::create([
-            'title' => "{$company->code} ticket",
+            'title' => "{$store->code} ticket",
             'description' => 'Dashboard chart regression fixture.',
             'type' => 'task',
             'status' => $status,
             'priority' => 'medium',
             'severity' => 'minor',
-            'company_id' => $company->id,
+            'store_id' => $store->id,
+            'company_id' => $store->company_id,
         ]);
     }
 }

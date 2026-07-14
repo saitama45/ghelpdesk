@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\StoreReportService;
+use App\Models\Scopes\ActiveEntityScope;
 use App\Models\Store;
 use App\Models\User;
 use App\Models\Setting;
@@ -78,6 +79,7 @@ class StoreReportController extends Controller implements HasMiddleware
             'subUnits' => $subUnits,
             'hierarchicalDepartments' => $hierarchicalDepartments,
             'thresholds' => $data['thresholds'],
+            'thresholdBands' => $data['thresholdBands'],
             'entityHealth' => $data['entityHealth'],
             'filters' => [
                 'user_id' => $filters['user_id'] ?? 'all',
@@ -124,6 +126,7 @@ class StoreReportController extends Controller implements HasMiddleware
             'reportData' => $reportDataObjects,
             'summary' => $summaryObjects,
             'thresholds' => $data['thresholds'],
+            'thresholdBands' => $data['thresholdBands'],
             'asOfDate' => Carbon::parse($filters['as_of_date'])->format('F d, Y'),
             'filters' => [
                 'user_id' => $filters['user_id'] ?? 'all',
@@ -143,11 +146,19 @@ class StoreReportController extends Controller implements HasMiddleware
         $userId = $request->input('user_id');
         $departmentId = $request->input('department_id');
         $departmentNodeId = $request->input('department_node_id');
-        
+        $companyIds = $this->entityScopeIds($request);
+
         $query = $store->tickets()
+            ->whereNull('tickets.parent_id')
             ->whereNotIn('tickets.status', ['resolved', 'closed'])
             ->with(['store:id,name,code,sector,is_active', 'assignee:id,name,department_node_id'])
             ->select('tickets.id', 'tickets.ticket_key', 'tickets.title', 'tickets.status', 'tickets.created_at', 'tickets.store_id', 'tickets.assignee_id');
+
+        // Dashboard entity filter: count every ticket on this store regardless of the
+        // ticket's stamped company (store ownership), matching the sector card count.
+        if (!empty($companyIds)) {
+            $query->withoutGlobalScope(ActiveEntityScope::class);
+        }
 
         if ($asOfDate) {
             $query->whereDate('tickets.created_at', '<=', $asOfDate);
@@ -183,14 +194,26 @@ class StoreReportController extends Controller implements HasMiddleware
         $userId = $request->input('user_id');
         $departmentId = $request->input('department_id');
         $departmentNodeId = $request->input('department_node_id');
-        
-        $query = Ticket::whereHas('store', function($q) use ($sector) {
+        $companyIds = $this->entityScopeIds($request);
+
+        $query = Ticket::whereHas('store', function($q) use ($sector, $companyIds) {
                 $q->where('sector', $sector)
                     ->where('is_active', true);
+
+                // Restrict to stores OWNED by the selected entities (store ownership),
+                // so the modal tallies with the sector card, which counts the same way.
+                if (!empty($companyIds)) {
+                    $q->whereIn('company_id', $companyIds);
+                }
             })
+            ->whereNull('tickets.parent_id')
             ->whereNotIn('tickets.status', ['resolved', 'closed'])
             ->with(['store:id,name,code,sector,is_active', 'assignee:id,name,department_node_id'])
             ->select('tickets.id', 'tickets.ticket_key', 'tickets.title', 'tickets.status', 'tickets.created_at', 'tickets.store_id', 'tickets.assignee_id');
+
+        if (!empty($companyIds)) {
+            $query->withoutGlobalScope(ActiveEntityScope::class);
+        }
 
         if ($asOfDate) {
             $query->whereDate('tickets.created_at', '<=', $asOfDate);
@@ -221,6 +244,19 @@ class StoreReportController extends Controller implements HasMiddleware
             'store_name' => 'Sector ' . $sector,
             'tickets' => $tickets
         ]);
+    }
+
+    /**
+     * The dashboard drill-downs pass the active Entity/Company filter as entity_ids so
+     * the modal can scope by store ownership (matching the sector/store cards). The
+     * standalone report page sends none, keeping its active-entity scope unchanged.
+     */
+    private function entityScopeIds(Request $request): array
+    {
+        return array_values(array_filter(array_map(
+            'intval',
+            (array) $request->input('entity_ids', [])
+        )));
     }
 
     private function selectedDepartmentLabel($departmentId, $departmentNodeId): string

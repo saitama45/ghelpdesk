@@ -123,20 +123,18 @@
 </head>
 <body>
     @php
-        function getHealthColor($count, $thresholds) {
-            $th = [
-                'green_max' => (int)($thresholds['threshold_green_max'] ?? 2),
-                'yellow_min' => (int)($thresholds['threshold_yellow_min'] ?? 3),
-                'orange_min' => (int)($thresholds['threshold_orange_min'] ?? 4),
-                'red_min' => (int)($thresholds['threshold_red_min'] ?? 5),
-            ];
-
-            if ($count >= $th['red_min']) return '#ef4444';
-            if ($count >= $th['orange_min']) return '#f97316';
-            if ($count >= $th['yellow_min']) return '#eab308';
-            if ($count >= 1) return '#22c55e';
+        function getHealthColor($count, $thresholdBands) {
+            $colors = ['green' => '#22c55e', 'yellow' => '#eab308', 'orange' => '#f97316', 'red' => '#ef4444'];
+            foreach ($thresholdBands as $band) {
+                $withinMaximum = $band['max'] === null || $count <= $band['max'];
+                if ($count >= $band['min'] && $withinMaximum) {
+                    return $colors[$band['key']];
+                }
+            }
             return '#cbd5e0';
         }
+        $thresholdColors = ['green' => '#22c55e', 'yellow' => '#eab308', 'orange' => '#f97316', 'red' => '#ef4444'];
+        $criticalMinimum = collect($thresholdBands)->firstWhere('key', 'red')['min'] ?? 1;
     @endphp
 
     <div class="header">
@@ -154,43 +152,21 @@
         <table width="100%" style="border-collapse: collapse;">
             <tr>
                 <td width="15%" style="font-weight: bold; font-size: 8pt; text-transform: uppercase; color: #4a5568;">Legend:</td>
-                <td width="20%">
-                    <div style="display: inline-block; width: 10px; height: 10px; background-color: #22c55e; margin-right: 5px; border-radius: 2px;"></div>
-                    <span style="font-size: 8pt; color: #4a5568;">
-                        @if(($thresholds['threshold_green_min'] ?? 1) == ($thresholds['threshold_green_max'] ?? 2))
-                            {{ $thresholds['threshold_green_min'] ?? 1 }}
-                        @else
-                            {{ $thresholds['threshold_green_min'] ?? 1 }}-{{ $thresholds['threshold_green_max'] ?? 2 }}
-                        @endif
-                        ({{ $thresholds['threshold_green_label'] ?? 'Healthy' }})
-                    </span>
-                </td>
-                <td width="20%">
-                    <div style="display: inline-block; width: 10px; height: 10px; background-color: #eab308; margin-right: 5px; border-radius: 2px;"></div>
-                    <span style="font-size: 8pt; color: #4a5568;">
-                        @if(($thresholds['threshold_yellow_min'] ?? 3) == ($thresholds['threshold_yellow_max'] ?? 3))
-                            {{ $thresholds['threshold_yellow_min'] ?? 3 }}
-                        @else
-                            {{ $thresholds['threshold_yellow_min'] ?? 3 }}-{{ $thresholds['threshold_yellow_max'] ?? 3 }}
-                        @endif
-                        ({{ $thresholds['threshold_yellow_label'] ?? 'Warning' }})
-                    </span>
-                </td>
-                <td width="20%">
-                    <div style="display: inline-block; width: 10px; height: 10px; background-color: #f97316; margin-right: 5px; border-radius: 2px;"></div>
-                    <span style="font-size: 8pt; color: #4a5568;">
-                        @if(($thresholds['threshold_orange_min'] ?? 4) == ($thresholds['threshold_orange_max'] ?? 4))
-                            {{ $thresholds['threshold_orange_min'] ?? 4 }}
-                        @else
-                            {{ $thresholds['threshold_orange_min'] ?? 4 }}-{{ $thresholds['threshold_orange_max'] ?? 4 }}
-                        @endif
-                        ({{ $thresholds['threshold_orange_label'] ?? 'At-risk' }})
-                    </span>
-                </td>
-                <td width="25%">
-                    <div style="display: inline-block; width: 10px; height: 10px; background-color: #ef4444; margin-right: 5px; border-radius: 2px;"></div>
-                    <span style="font-size: 8pt; color: #4a5568;">{{ $thresholds['threshold_red_min'] ?? 5 }}+ ({{ $thresholds['threshold_red_label'] ?? 'Critical' }})</span>
-                </td>
+                @foreach($thresholdBands as $band)
+                    <td width="20%">
+                        <div style="display: inline-block; width: 10px; height: 10px; background-color: {{ $thresholdColors[$band['key']] }}; margin-right: 5px; border-radius: 2px;"></div>
+                        <span style="font-size: 8pt; color: #4a5568;">
+                            @if($band['max'] === null)
+                                {{ $band['min'] }}+
+                            @elseif($band['min'] === $band['max'])
+                                {{ $band['min'] }}
+                            @else
+                                {{ $band['min'] }}-{{ $band['max'] }}
+                            @endif
+                            ({{ $band['label'] }})
+                        </span>
+                    </td>
+                @endforeach
             </tr>
         </table>
     </div>
@@ -222,12 +198,12 @@
                             <div style="font-size: 7pt; color: #718096;">{{ $item->total_tickets ?? 0 }} tickets</div>
                             <table class="health-breakdown">
                                 <tr>
-                                    <td><span style="color:#22c55e;">G</span> {{ data_get($item, 'health_counts.green', 0) }}</td>
-                                    <td><span style="color:#eab308;">Y</span> {{ data_get($item, 'health_counts.yellow', 0) }}</td>
+                                    <td><span style="color:#22c55e;">G</span> {{ data_get($item, 'health_store_counts.green', 0) }} stores / {{ data_get($item, 'health_ticket_counts.green', 0) }} tickets</td>
+                                    <td><span style="color:#eab308;">Y</span> {{ data_get($item, 'health_store_counts.yellow', 0) }} stores / {{ data_get($item, 'health_ticket_counts.yellow', 0) }} tickets</td>
                                 </tr>
                                 <tr>
-                                    <td><span style="color:#f97316;">O</span> {{ data_get($item, 'health_counts.orange', 0) }}</td>
-                                    <td><span style="color:#ef4444;">R</span> {{ data_get($item, 'health_counts.red', 0) }}</td>
+                                    <td><span style="color:#f97316;">O</span> {{ data_get($item, 'health_store_counts.orange', 0) }} stores / {{ data_get($item, 'health_ticket_counts.orange', 0) }} tickets</td>
+                                    <td><span style="color:#ef4444;">R</span> {{ data_get($item, 'health_store_counts.red', 0) }} stores / {{ data_get($item, 'health_ticket_counts.red', 0) }} tickets</td>
                                 </tr>
                             </table>
                         </td>
@@ -262,12 +238,12 @@
                             <div style="font-size: 7pt; color: #718096;">{{ $item->total_tickets ?? 0 }} tickets</div>
                             <table class="health-breakdown">
                                 <tr>
-                                    <td><span style="color:#22c55e;">G</span> {{ data_get($item, 'health_counts.green', 0) }}</td>
-                                    <td><span style="color:#eab308;">Y</span> {{ data_get($item, 'health_counts.yellow', 0) }}</td>
+                                    <td><span style="color:#22c55e;">G</span> {{ data_get($item, 'health_store_counts.green', 0) }} stores / {{ data_get($item, 'health_ticket_counts.green', 0) }} tickets</td>
+                                    <td><span style="color:#eab308;">Y</span> {{ data_get($item, 'health_store_counts.yellow', 0) }} stores / {{ data_get($item, 'health_ticket_counts.yellow', 0) }} tickets</td>
                                 </tr>
                                 <tr>
-                                    <td><span style="color:#f97316;">O</span> {{ data_get($item, 'health_counts.orange', 0) }}</td>
-                                    <td><span style="color:#ef4444;">R</span> {{ data_get($item, 'health_counts.red', 0) }}</td>
+                                    <td><span style="color:#f97316;">O</span> {{ data_get($item, 'health_store_counts.orange', 0) }} stores / {{ data_get($item, 'health_ticket_counts.orange', 0) }} tickets</td>
+                                    <td><span style="color:#ef4444;">R</span> {{ data_get($item, 'health_store_counts.red', 0) }} stores / {{ data_get($item, 'health_ticket_counts.red', 0) }} tickets</td>
                                 </tr>
                             </table>
                         </td>
@@ -303,12 +279,12 @@
                             <div style="font-size: 7pt; color: #718096;">{{ $item->total_tickets ?? 0 }} tickets</div>
                             <table class="health-breakdown">
                                 <tr>
-                                    <td><span style="color:#22c55e;">G</span> {{ data_get($item, 'health_counts.green', 0) }}</td>
-                                    <td><span style="color:#eab308;">Y</span> {{ data_get($item, 'health_counts.yellow', 0) }}</td>
+                                    <td><span style="color:#22c55e;">G</span> {{ data_get($item, 'health_store_counts.green', 0) }} stores / {{ data_get($item, 'health_ticket_counts.green', 0) }} tickets</td>
+                                    <td><span style="color:#eab308;">Y</span> {{ data_get($item, 'health_store_counts.yellow', 0) }} stores / {{ data_get($item, 'health_ticket_counts.yellow', 0) }} tickets</td>
                                 </tr>
                                 <tr>
-                                    <td><span style="color:#f97316;">O</span> {{ data_get($item, 'health_counts.orange', 0) }}</td>
-                                    <td><span style="color:#ef4444;">R</span> {{ data_get($item, 'health_counts.red', 0) }}</td>
+                                    <td><span style="color:#f97316;">O</span> {{ data_get($item, 'health_store_counts.orange', 0) }} stores / {{ data_get($item, 'health_ticket_counts.orange', 0) }} tickets</td>
+                                    <td><span style="color:#ef4444;">R</span> {{ data_get($item, 'health_store_counts.red', 0) }} stores / {{ data_get($item, 'health_ticket_counts.red', 0) }} tickets</td>
                                 </tr>
                             </table>
                         </td>
@@ -345,7 +321,7 @@
                             <td style="text-align: center; font-weight: bold;">{{ $store->ticket_count }}</td>
                             <td>
                                 <div class="health-bar-bg">
-                                    <div class="health-bar-fill" style="width: {{ min(100, ($store->ticket_count / 10) * 100) }}%; background-color: {{ getHealthColor($store->ticket_count, $thresholds) }};"></div>
+                                    <div class="health-bar-fill" style="width: {{ min(100, ($store->ticket_count / max(1, $criticalMinimum)) * 100) }}%; background-color: {{ getHealthColor($store->ticket_count, $thresholdBands) }};"></div>
                                 </div>
                             </td>
                         </tr>

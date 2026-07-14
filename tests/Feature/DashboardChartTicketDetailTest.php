@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Company;
 use App\Models\Item;
+use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -61,6 +62,19 @@ class DashboardChartTicketDetailTest extends TestCase
 
     private function ticket(Company $company, Item $item, string $status): Ticket
     {
+        // The dashboard counts on-store tickets only, so every fixture sits on a
+        // store owned by the company.
+        $store = Store::create([
+            'code' => 'CH-'.uniqid(),
+            'name' => 'Chart Store',
+            'sector' => 1,
+            'area' => 'A',
+            'brand' => 'B',
+            'class' => 'Regular',
+            'is_active' => true,
+            'company_id' => $company->id,
+        ]);
+
         return Ticket::create([
             'title' => "{$status} chart ticket",
             'description' => 'Dashboard modal test.',
@@ -70,6 +84,7 @@ class DashboardChartTicketDetailTest extends TestCase
             'severity' => 'minor',
             'company_id' => $company->id,
             'item_id' => $item->id,
+            'store_id' => $store->id,
         ]);
     }
 }

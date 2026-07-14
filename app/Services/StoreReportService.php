@@ -12,6 +12,20 @@ use Carbon\Carbon;
 
 class StoreReportService
 {
+    private const DEFAULT_THRESHOLDS = [
+        'threshold_green_min' => 0,
+        'threshold_green_max' => 2,
+        'threshold_green_label' => 'Healthy',
+        'threshold_yellow_min' => 3,
+        'threshold_yellow_max' => 3,
+        'threshold_yellow_label' => 'Warning',
+        'threshold_orange_min' => 4,
+        'threshold_orange_max' => 4,
+        'threshold_orange_label' => 'At-risk',
+        'threshold_red_min' => 5,
+        'threshold_red_label' => 'Critical',
+    ];
+
     public function getStoreHealthData(array $filters)
     {
         $userId = $filters['user_id'] ?? 'all';
@@ -29,16 +43,31 @@ class StoreReportService
         // own "office" block. Opt-in so the full report page / PDF stay unchanged.
         $splitOffice = (bool) ($filters['split_office'] ?? false);
 
+        // Resolve the configured bands once so every dashboard/report section uses
+        // the same hierarchy scope, labels, ranges, and classification rules.
+        $allThresholds = Setting::where('group', 'thresholds')->pluck('value', 'key');
+        $thresholds = $this->getThresholdsForScope($subUnit, $allThresholds, $departmentId, $departmentNodeId);
+        $thresholdBands = $this->thresholdBands($thresholds);
+
         // Query active tickets. Sector summaries intentionally stay based on
         // the ticket's configured store sector, not the assignee hierarchy.
         $baseTicketsQuery = Ticket::query();
 
         if (is_array($companyIds)) {
+            // Store Health is scoped by the STORE'S owning entity, not the ticket's
+            // stamped company. A ticket stamped to entity A that sits on a store owned
+            // by entity B is entity B's store health — so we filter on store.company_id.
+            // This keeps the sector cards tallied with the Store-Health-by-Entity heatmap
+            // (which counts stores by ownership) and the corporate-office block.
             $baseTicketsQuery->withoutGlobalScope(ActiveEntityScope::class)
-                ->whereIn('tickets.company_id', $companyIds);
+                ->whereHas('store', fn ($q) => $q->whereIn('company_id', $companyIds));
         }
 
-        $baseTicketsQuery->whereNotIn('tickets.status', ['resolved', 'closed']);
+        // Parent tickets only — child/sub-tickets are not counted separately, matching
+        // the rest of the dashboard (Ticket Flow Board, Open vs Closed, Overview) so
+        // every widget tallies to the same ticket universe.
+        $baseTicketsQuery->whereNull('tickets.parent_id')
+            ->whereNotIn('tickets.status', ['resolved', 'closed']);
 
         if ($asOfDate) {
             $baseTicketsQuery->whereDate('tickets.created_at', '<=', $asOfDate);
@@ -86,13 +115,13 @@ class StoreReportService
             }
 
             return $ticket->assignee_id ? "assignee-{$ticket->assignee_id}" : 'unassigned';
-        })->map(function ($tickets, $groupKey) use ($sectorAssignments, $isCtMode) {
+        })->map(function ($tickets, $groupKey) use ($sectorAssignments, $isCtMode, $thresholdBands) {
             $firstTicket = $tickets->first();
             $sector = (int) $firstTicket->store->sector;
             $assignee = $firstTicket->assignee;
             $firstStore = $firstTicket->store;
 
-            $stores = $tickets->groupBy('store_id')->map(function ($storeTickets, $storeId) {
+            $stores = $tickets->groupBy('store_id')->map(function ($storeTickets, $storeId) use ($thresholdBands) {
                 $store = $storeTickets->first()->store;
                 if (!$store) return null;
                 if (!$store->is_active) return null;
@@ -104,6 +133,7 @@ class StoreReportService
                     'sector' => $store->sector,
                     'area' => $store->area,
                     'ticket_count' => $storeTickets->count(),
+                    'health_bucket' => $this->healthBucket($storeTickets->count(), $thresholdBands),
                 ];
             })->filter()
                 ->sortBy([
@@ -132,10 +162,6 @@ class StoreReportService
             ['name', 'asc'],
         ])->values();
 
-        // Thresholds
-        $allThresholds = Setting::where('group', 'thresholds')->pluck('value', 'key');
-        $thresholds = $this->getThresholdsForScope($subUnit, $allThresholds, $departmentId, $departmentNodeId);
-
         // Entity health heatmap — every active store in scope bucketed by open-ticket
         // count (0 open = Healthy). Entity-wide, independent of assignee/dept/sector.
         // When splitting out offices, the sector heatmap excludes them.
@@ -143,13 +169,13 @@ class StoreReportService
             $companyIds,
             $storeId,
             $asOfDate,
-            $thresholds,
+            $thresholdBands,
             $splitOffice ? 'exclude_office' : null
         );
 
         // Corporate-office block (per-office cards + detail table + office-only heatmap).
         $office = $splitOffice
-            ? $this->buildOfficeHealth($companyIds, $storeId, $asOfDate, $thresholds)
+            ? $this->buildOfficeHealth($companyIds, $storeId, $asOfDate, $thresholdBands)
             : null;
 
         // Summary logic
@@ -170,12 +196,13 @@ class StoreReportService
             ->filter(fn ($ticket) => $this->ticketMatchesDisplayUser($ticket, $userId, $sectorAssignments));
 
         if ($isCtMode) {
-            $summary['ct'] = $this->buildCtSummary($summaryTickets, $thresholds);
+            $summary['ct'] = $this->buildCtSummary($summaryTickets, $thresholdBands);
 
             return array_filter([
                 'reportData' => $reportData,
                 'summary' => $summary,
                 'thresholds' => $thresholds,
+                'thresholdBands' => $thresholdBands,
                 'entityHealth' => $entityHealth,
                 'office' => $office,
             ], fn ($value) => $value !== null);
@@ -192,18 +219,21 @@ class StoreReportService
 
         for ($i = 1; $i <= 8; $i++) {
             $sectorStoreTicketCounts = $ticketCountsBySectorStore->get($i, collect());
-            $healthCounts = [
+            $healthTicketCounts = [
                 'green' => 0,
                 'yellow' => 0,
                 'orange' => 0,
                 'red' => 0,
             ];
+            $healthStoreCounts = $healthTicketCounts;
             $totalTickets = 0;
 
             foreach ($sectorStoreTicketCounts as $ticketCount) {
                 $ticketCount = (int) $ticketCount;
                 $totalTickets += $ticketCount;
-                $healthCounts[$this->healthBucket($ticketCount, $thresholds)] += $ticketCount;
+                $bucket = $this->healthBucket($ticketCount, $thresholdBands);
+                $healthTicketCounts[$bucket] += $ticketCount;
+                $healthStoreCounts[$bucket]++;
             }
 
             $nodeName = "Sector $i";
@@ -221,7 +251,10 @@ class StoreReportService
                 'user' => $assignedUserDisplay,
                 'store_count' => $sectorStoreTicketCounts->count(),
                 'total_tickets' => $totalTickets,
-                'health_counts' => $healthCounts,
+                // Keep health_counts as a compatibility alias for ticket totals.
+                'health_counts' => $healthTicketCounts,
+                'health_ticket_counts' => $healthTicketCounts,
+                'health_store_counts' => $healthStoreCounts,
             ];
 
             if ($i <= 4) {
@@ -235,6 +268,7 @@ class StoreReportService
             'reportData' => $reportData,
             'summary' => $summary,
             'thresholds' => $thresholds,
+            'thresholdBands' => $thresholdBands,
             'entityHealth' => $entityHealth,
             'office' => $office,
         ], fn ($value) => $value !== null);
@@ -250,7 +284,7 @@ class StoreReportService
      * the store filter and the as-of date, but NOT the assignee dept/user/sector
      * (an entity's health spans every sector).
      */
-    private function buildEntityHealthHeatmap($companyIds, $storeId, $asOfDate, array $thresholds, ?string $classScope = null): array
+    private function buildEntityHealthHeatmap($companyIds, $storeId, $asOfDate, array $thresholdBands, ?string $classScope = null): array
     {
         $storesQuery = Store::query()
             ->where('is_active', true)
@@ -275,21 +309,17 @@ class StoreReportService
             return [];
         }
 
-        // Open-ticket counts per store, same open/as-of scope as the tab. We bypass
-        // the active-entity global scope so counts match the stores we listed above.
+        // Open-ticket counts per store. Scoped by the listed stores (which are already
+        // restricted to the entity by ownership), so every open ticket sitting on the
+        // entity's store is counted regardless of the ticket's own stamped company.
         $ticketQuery = Ticket::query()
             ->withoutGlobalScope(ActiveEntityScope::class)
+            ->whereNull('tickets.parent_id')
             ->whereNotIn('tickets.status', ['resolved', 'closed'])
-            ->whereNotNull('tickets.store_id');
+            ->whereIn('tickets.store_id', $stores->pluck('id'));
 
-        if (is_array($companyIds)) {
-            $ticketQuery->whereIn('tickets.company_id', $companyIds);
-        }
         if ($asOfDate) {
             $ticketQuery->whereDate('tickets.created_at', '<=', $asOfDate);
-        }
-        if ($storeId && $storeId !== 'all') {
-            $ticketQuery->where('tickets.store_id', $storeId);
         }
 
         $openCountsByStore = $ticketQuery
@@ -299,7 +329,7 @@ class StoreReportService
 
         return $stores
             ->groupBy('company_id')
-            ->map(function ($companyStores) use ($openCountsByStore, $thresholds) {
+            ->map(function ($companyStores) use ($openCountsByStore, $thresholdBands) {
                 $company = $companyStores->first()->company;
                 $counts = ['green' => 0, 'yellow' => 0, 'orange' => 0, 'red' => 0];
                 $openTickets = 0;
@@ -311,7 +341,7 @@ class StoreReportService
                     if ($count > 0) {
                         $affected++;
                     }
-                    $counts[$this->healthBucket($count, $thresholds)]++;
+                    $counts[$this->healthBucket($count, $thresholdBands)]++;
                 }
 
                 return [
@@ -336,7 +366,7 @@ class StoreReportService
      * store is shown as its own health card (0 open tickets = Healthy), plus a
      * per-entity detail table and an office-only entity heatmap.
      */
-    private function buildOfficeHealth($companyIds, $storeId, $asOfDate, array $thresholds): array
+    private function buildOfficeHealth($companyIds, $storeId, $asOfDate, array $thresholdBands): array
     {
         $storesQuery = Store::query()
             ->where('is_active', true)
@@ -367,6 +397,7 @@ class StoreReportService
         // Open-ticket counts per office store, same open/as-of scope as the tab.
         $ticketQuery = Ticket::query()
             ->withoutGlobalScope(ActiveEntityScope::class)
+            ->whereNull('tickets.parent_id')
             ->whereNotIn('tickets.status', ['resolved', 'closed'])
             ->whereIn('tickets.store_id', $stores->pluck('id'));
 
@@ -381,10 +412,11 @@ class StoreReportService
 
         // One health card per office store — the store's own open count is bucketed,
         // so a store with zero open tickets folds into "Healthy".
-        $cards = $stores->map(function ($store) use ($openCountsByStore, $thresholds) {
+        $cards = $stores->map(function ($store) use ($openCountsByStore, $thresholdBands) {
             $count = (int) ($openCountsByStore->get($store->id) ?? 0);
             $healthCounts = ['green' => 0, 'yellow' => 0, 'orange' => 0, 'red' => 0];
-            $healthCounts[$this->healthBucket($count, $thresholds)] = 1;
+            $healthBucket = $this->healthBucket($count, $thresholdBands);
+            $healthCounts[$healthBucket] = 1;
             $team = $store->users->pluck('name')->implode(', ');
 
             return [
@@ -394,6 +426,7 @@ class StoreReportService
                 'area' => $store->area,
                 'team' => $team !== '' ? $team : 'Unassigned',
                 'total_tickets' => $count,
+                'health_bucket' => $healthBucket,
                 'health_counts' => $healthCounts,
             ];
         })->sortBy('store_code')->values()->all();
@@ -401,7 +434,7 @@ class StoreReportService
         // Detail table, grouped by entity, reusing the sector reportData shape.
         $reportData = $stores
             ->groupBy('company_id')
-            ->map(function ($companyStores) use ($openCountsByStore) {
+            ->map(function ($companyStores) use ($openCountsByStore, $thresholdBands) {
                 $company = $companyStores->first()->company;
 
                 $storeRows = $companyStores->map(fn ($store) => [
@@ -411,6 +444,7 @@ class StoreReportService
                     'sector' => $store->sector,
                     'area' => $store->area,
                     'ticket_count' => (int) ($openCountsByStore->get($store->id) ?? 0),
+                    'health_bucket' => $this->healthBucket((int) ($openCountsByStore->get($store->id) ?? 0), $thresholdBands),
                 ])->sortBy([['code', 'asc'], ['name', 'asc']])->values();
 
                 return [
@@ -427,7 +461,7 @@ class StoreReportService
         return [
             'summary' => ['office' => $cards, 'is_office_mode' => true],
             'reportData' => $reportData,
-            'entityHealth' => $this->buildEntityHealthHeatmap($companyIds, $storeId, $asOfDate, $thresholds, 'only_office'),
+            'entityHealth' => $this->buildEntityHealthHeatmap($companyIds, $storeId, $asOfDate, $thresholdBands, 'only_office'),
         ];
     }
 
@@ -490,33 +524,37 @@ class StoreReportService
             }
         }
 
+        foreach (self::DEFAULT_THRESHOLDS as $key => $default) {
+            if ($thresholds[$key] === null || $thresholds[$key] === '') {
+                $thresholds[$key] = $default;
+            }
+        }
+
         return $thresholds;
     }
 
-    private function healthBucket(int $ticketCount, array $thresholds): string
+    private function thresholdBands(array $thresholds): array
     {
-        $redMin = (int) ($thresholds['threshold_red_min'] ?? 5);
-        $orangeMin = (int) ($thresholds['threshold_orange_min'] ?? 4);
-        $yellowMin = (int) ($thresholds['threshold_yellow_min'] ?? 3);
-        $greenMax = (int) ($thresholds['threshold_green_max'] ?? 2);
+        return [
+            ['key' => 'green', 'label' => (string) $thresholds['threshold_green_label'], 'min' => (int) $thresholds['threshold_green_min'], 'max' => (int) $thresholds['threshold_green_max']],
+            ['key' => 'yellow', 'label' => (string) $thresholds['threshold_yellow_label'], 'min' => (int) $thresholds['threshold_yellow_min'], 'max' => (int) $thresholds['threshold_yellow_max']],
+            ['key' => 'orange', 'label' => (string) $thresholds['threshold_orange_label'], 'min' => (int) $thresholds['threshold_orange_min'], 'max' => (int) $thresholds['threshold_orange_max']],
+            ['key' => 'red', 'label' => (string) $thresholds['threshold_red_label'], 'min' => (int) $thresholds['threshold_red_min'], 'max' => null],
+        ];
+    }
 
-        if ($ticketCount >= $redMin) {
-            return 'red';
+    private function healthBucket(int $ticketCount, array $thresholdBands): string
+    {
+        foreach ($thresholdBands as $band) {
+            $withinMaximum = $band['max'] === null || $ticketCount <= $band['max'];
+            if ($ticketCount >= $band['min'] && $withinMaximum) {
+                return $band['key'];
+            }
         }
 
-        if ($ticketCount >= $orangeMin) {
-            return 'orange';
-        }
-
-        if ($ticketCount >= $yellowMin) {
-            return 'yellow';
-        }
-
-        if ($ticketCount <= $greenMax) {
-            return 'green';
-        }
-
-        return 'green';
+        // Saved settings are validated as continuous. This defensive fallback only
+        // protects reports created before that validation was introduced.
+        return $ticketCount >= $thresholdBands[array_key_last($thresholdBands)]['min'] ? 'red' : 'green';
     }
 
     private function sectorAssignments(): array
@@ -614,11 +652,11 @@ class StoreReportService
 
 
 
-    private function buildCtSummary($tickets, array $thresholds): array
+    private function buildCtSummary($tickets, array $thresholdBands): array
     {
         return $tickets
             ->groupBy('store_id')
-            ->map(function ($storeTickets) use ($thresholds) {
+            ->map(function ($storeTickets) use ($thresholdBands) {
                 $store = $storeTickets->first()->store;
 
                 if (!$store || !$store->is_active) {
@@ -626,13 +664,16 @@ class StoreReportService
                 }
 
                 $ticketCount = $storeTickets->count();
-                $healthCounts = [
+                $healthTicketCounts = [
                     'green' => 0,
                     'yellow' => 0,
                     'orange' => 0,
                     'red' => 0,
                 ];
-                $healthCounts[$this->healthBucket($ticketCount, $thresholds)] = $ticketCount;
+                $healthStoreCounts = ['green' => 0, 'yellow' => 0, 'orange' => 0, 'red' => 0];
+                $bucket = $this->healthBucket($ticketCount, $thresholdBands);
+                $healthTicketCounts[$bucket] = $ticketCount;
+                $healthStoreCounts[$bucket] = 1;
 
                 return [
                     'store_id' => $store->id,
@@ -641,7 +682,9 @@ class StoreReportService
                     'area' => $store->area,
                     'store_count' => 1,
                     'total_tickets' => $ticketCount,
-                    'health_counts' => $healthCounts,
+                    'health_counts' => $healthTicketCounts,
+                    'health_ticket_counts' => $healthTicketCounts,
+                    'health_store_counts' => $healthStoreCounts,
                 ];
             })
             ->filter()

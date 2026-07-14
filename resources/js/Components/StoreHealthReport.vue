@@ -11,7 +11,18 @@ const props = defineProps({
     reportData: Array,
     summary: Object,
     thresholds: Object,
+    thresholdBands: {
+        type: Array,
+        default: () => []
+    },
     entityHealth: {
+        type: Array,
+        default: () => []
+    },
+    // Effective Entity/Company ids from the dashboard's filter. Passed to the ticket
+    // drill-down endpoints so the modal scopes by store ownership like the cards.
+    // Empty on the standalone report page (keeps its active-entity scope).
+    entityIds: {
         type: Array,
         default: () => []
     },
@@ -109,10 +120,11 @@ const fetchTickets = async (storeId) => {
     showTicketsModal.value = true;
     try {
         const response = await axios.get(route('reports.store-health.tickets', storeId, false), {
-            params: { 
+            params: {
                 as_of_date: filterForm.value.as_of_date,
                 user_id: filterForm.value.user_id,
                 ...deptFilterParams.value,
+                ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
             }
         });
         selectedStoreTickets.value = response.data.tickets;
@@ -129,11 +141,12 @@ const fetchSectorTickets = async (sector) => {
     showTicketsModal.value = true;
     try {
         const response = await axios.get(route('reports.store-health.sector-tickets', sector, false), {
-            params: { 
+            params: {
                 as_of_date: filterForm.value.as_of_date,
                 store_id: filterForm.value.store_id,
                 user_id: filterForm.value.user_id,
                 ...deptFilterParams.value,
+                ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
             }
         });
         selectedStoreTickets.value = response.data.tickets;
@@ -149,24 +162,6 @@ const applyFilters = () => {
     emit('filter', filterPayload());
 };
 
-const getHealthStatus = (ticketCount) => {
-    const s = props.thresholds || {};
-    
-    const th = {
-        green: { min: parseInt(s.threshold_green_min) || 1, max: parseInt(s.threshold_green_max) || 2, color: 'bg-green-500' },
-        yellow: { min: parseInt(s.threshold_yellow_min) || 3, max: parseInt(s.threshold_yellow_max) || 3, color: 'bg-yellow-500' },
-        orange: { min: parseInt(s.threshold_orange_min) || 4, max: parseInt(s.threshold_orange_max) || 4, color: 'bg-orange-500' },
-        red: { min: parseInt(s.threshold_red_min) || 5, color: 'bg-red-500' }
-    };
-
-    if (ticketCount >= th.red.min) return th.red;
-    if (ticketCount >= th.orange.min && (th.orange.max ? ticketCount <= th.orange.max : true)) return th.orange;
-    if (ticketCount >= th.yellow.min && (th.yellow.max ? ticketCount <= th.yellow.max : true)) return th.yellow;
-    if (ticketCount >= th.green.min && (th.green.max ? ticketCount <= th.green.max : true)) return th.green;
-    
-    return { color: 'bg-gray-200' };
-};
-
 const getStatusLabel = (status) => {
     switch (status) {
         case 'waiting_service_provider': return 'Waiting for service provider';
@@ -180,36 +175,41 @@ const exportPDF = () => {
     window.open(route('reports.store-health.pdf') + '?' + params, '_blank');
 };
 
-const healthSummaryItems = computed(() => [
-    {
-        key: 'green',
-        label: props.thresholds?.threshold_green_label || 'Healthy',
-        class: 'bg-green-500',
-    },
-    {
-        key: 'yellow',
-        label: props.thresholds?.threshold_yellow_label || 'Warning',
-        class: 'bg-yellow-500',
-    },
-    {
-        key: 'orange',
-        label: props.thresholds?.threshold_orange_label || 'At-risk',
-        class: 'bg-orange-500',
-    },
-    {
-        key: 'red',
-        label: props.thresholds?.threshold_red_label || 'Critical',
-        class: 'bg-red-500',
-    },
-]);
+const BAND_CLASSES = {
+    green: 'bg-green-500',
+    yellow: 'bg-yellow-500',
+    orange: 'bg-orange-500',
+    red: 'bg-red-500',
+};
 
-const healthCount = (item, key) => item.health_counts?.[key] ?? 0;
+const healthSummaryItems = computed(() => {
+    if (props.thresholdBands?.length) {
+        return props.thresholdBands.map(band => ({ ...band, class: BAND_CLASSES[band.key] }));
+    }
+
+    const s = props.thresholds || {};
+    return [
+        { key: 'green', label: s.threshold_green_label ?? 'Healthy', min: Number(s.threshold_green_min ?? 0), max: Number(s.threshold_green_max ?? 2), class: BAND_CLASSES.green },
+        { key: 'yellow', label: s.threshold_yellow_label ?? 'Warning', min: Number(s.threshold_yellow_min ?? 3), max: Number(s.threshold_yellow_max ?? 3), class: BAND_CLASSES.yellow },
+        { key: 'orange', label: s.threshold_orange_label ?? 'At-risk', min: Number(s.threshold_orange_min ?? 4), max: Number(s.threshold_orange_max ?? 4), class: BAND_CLASSES.orange },
+        { key: 'red', label: s.threshold_red_label ?? 'Critical', min: Number(s.threshold_red_min ?? 5), max: null, class: BAND_CLASSES.red },
+    ];
+});
+
+const bandRange = (band) => band.max === null
+    ? `${band.min}+`
+    : (band.min === band.max ? `${band.min}` : `${band.min}-${band.max}`);
+const healthItem = (key) => healthSummaryItems.value.find(item => item.key === key) || healthSummaryItems.value[0];
+const healthTicketCount = (item, key) => item.health_ticket_counts?.[key] ?? item.health_counts?.[key] ?? 0;
+const healthStoreCount = (item, key) => item.health_store_counts?.[key] ?? 0;
+const criticalMinimum = computed(() => healthSummaryItems.value.find(item => item.key === 'red')?.min || 1);
 const isCtMode = computed(() => Boolean(props.summary?.is_ct_mode));
 const isOfficeMode = computed(() => Boolean(props.summary?.is_office_mode));
 
 // The single health bucket an office store falls into (its own open-ticket count).
 // Cards carry exactly one non-zero bucket; default to Healthy when none.
 const officeBucket = (item) => {
+    if (item.health_bucket) return healthItem(item.health_bucket);
     const counts = item.health_counts || {};
     for (const bucket of healthSummaryItems.value) {
         if ((counts[bucket.key] || 0) > 0) return bucket;
@@ -373,46 +373,10 @@ const getAreaItemClass = (count, maxCols) => {
             <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 text-[10px] sm:text-xs">
                 <span class="font-black text-gray-700 uppercase tracking-widest dark:text-gray-300">Legend:</span>
                 <div class="grid grid-cols-2 sm:flex sm:items-center gap-3 sm:gap-6">
-                    <div class="flex items-center space-x-2">
-                        <div class="w-3 h-3 sm:w-4 sm:h-4 bg-green-500 rounded shadow-sm"></div>
+                    <div v-for="band in healthSummaryItems" :key="band.key" class="flex items-center space-x-2">
+                        <div class="w-3 h-3 sm:w-4 sm:h-4 rounded shadow-sm" :class="band.class"></div>
                         <span class="text-gray-600 font-bold dark:text-gray-300">
-                            <template v-if="(thresholds.threshold_green_min || 1) == (thresholds.threshold_green_max || 2)">
-                                {{ thresholds.threshold_green_min || 1 }}
-                            </template>
-                            <template v-else>
-                                {{ thresholds.threshold_green_min || 1 }}-{{ thresholds.threshold_green_max || 2 }}
-                            </template>
-                            ({{ thresholds.threshold_green_label || 'Healthy' }})
-                        </span>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <div class="w-3 h-3 sm:w-4 sm:h-4 bg-yellow-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-bold dark:text-gray-300">
-                            <template v-if="(thresholds.threshold_yellow_min || 3) == (thresholds.threshold_yellow_max || 3)">
-                                {{ thresholds.threshold_yellow_min || 3 }}
-                            </template>
-                            <template v-else>
-                                {{ thresholds.threshold_yellow_min || 3 }}-{{ thresholds.threshold_yellow_max || 3 }}
-                            </template>
-                            ({{ thresholds.threshold_yellow_label || 'Warning' }})
-                        </span>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <div class="w-3 h-3 sm:w-4 sm:h-4 bg-orange-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-bold dark:text-gray-300">
-                            <template v-if="(thresholds.threshold_orange_min || 4) == (thresholds.threshold_orange_max || 4)">
-                                {{ thresholds.threshold_orange_min || 4 }}
-                            </template>
-                            <template v-else>
-                                {{ thresholds.threshold_orange_min || 4 }}-{{ thresholds.threshold_orange_max || 4 }}
-                            </template>
-                            ({{ thresholds.threshold_orange_label || 'At-risk' }})
-                        </span>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <div class="w-3 h-3 sm:w-4 sm:h-4 bg-red-500 rounded shadow-sm"></div>
-                        <span class="text-gray-600 font-bold dark:text-gray-300">
-                            {{ thresholds.threshold_red_min || 5 }}+ ({{ thresholds.threshold_red_label || 'Critical' }})
+                            {{ bandRange(band) }} ({{ band.label }})
                         </span>
                     </div>
                 </div>
@@ -435,7 +399,7 @@ const getAreaItemClass = (count, maxCols) => {
                             <th v-for="col in healthSummaryItems" :key="col.key" class="px-2 py-2 text-center font-black">
                                 <div class="flex items-center justify-center gap-1.5">
                                     <span class="w-2.5 h-2.5 rounded-full" :class="col.class"></span>
-                                    <span>{{ col.label }}</span>
+                                    <span>{{ col.label }} stores</span>
                                 </div>
                             </th>
                         </tr>
@@ -516,7 +480,10 @@ const getAreaItemClass = (count, maxCols) => {
                                         <span class="w-2 h-2 rounded-full shrink-0" :class="health.class"></span>
                                         <span class="truncate text-[9px] font-bold text-gray-500 dark:text-gray-300">{{ health.label }}</span>
                                     </span>
-                                    <span class="text-[10px] font-black text-gray-900 dark:text-gray-100">{{ healthCount(item, health.key) }}</span>
+                                    <span class="text-right text-[9px] font-black leading-tight text-gray-900 dark:text-gray-100">
+                                        <span class="block">{{ healthStoreCount(item, health.key) }} stores</span>
+                                        <span class="block text-blue-600">{{ healthTicketCount(item, health.key) }} tickets</span>
+                                    </span>
                                 </span>
                             </span>
                         </button>
@@ -599,7 +566,10 @@ const getAreaItemClass = (count, maxCols) => {
                                         <span class="w-2 h-2 rounded-full shrink-0" :class="health.class"></span>
                                         <span class="truncate text-[9px] font-bold text-gray-500 dark:text-gray-300">{{ health.label }}</span>
                                     </span>
-                                    <span class="text-[10px] font-black text-gray-900 dark:text-gray-100">{{ healthCount(item, health.key) }}</span>
+                                    <span class="text-right text-[9px] font-black leading-tight text-gray-900 dark:text-gray-100">
+                                        <span class="block">{{ healthStoreCount(item, health.key) }} stores</span>
+                                        <span class="block text-blue-600">{{ healthTicketCount(item, health.key) }} tickets</span>
+                                    </span>
                                 </span>
                             </span>
                         </button>
@@ -646,7 +616,10 @@ const getAreaItemClass = (count, maxCols) => {
                                         <span class="w-2 h-2 rounded-full shrink-0" :class="health.class"></span>
                                         <span class="truncate text-[9px] font-bold text-gray-500 dark:text-gray-300">{{ health.label }}</span>
                                     </span>
-                                    <span class="text-[10px] font-black text-gray-900 dark:text-gray-100">{{ healthCount(item, health.key) }}</span>
+                                    <span class="text-right text-[9px] font-black leading-tight text-gray-900 dark:text-gray-100">
+                                        <span class="block">{{ healthStoreCount(item, health.key) }} stores</span>
+                                        <span class="block text-blue-600">{{ healthTicketCount(item, health.key) }} tickets</span>
+                                    </span>
                                 </span>
                             </span>
                         </button>
@@ -689,8 +662,8 @@ const getAreaItemClass = (count, maxCols) => {
                                     <div class="w-full bg-gray-100 rounded-full h-4 overflow-hidden shadow-inner dark:bg-gray-800">
                                         <div 
                                             class="h-full transition-all duration-500 shadow-sm"
-                                            :class="getHealthStatus(store.ticket_count).color"
-                                            :style="{ width: Math.min(100, (store.ticket_count / 10) * 100) + '%' }"
+                                            :class="healthItem(store.health_bucket).class"
+                                            :style="{ width: Math.min(100, (store.ticket_count / criticalMinimum) * 100) + '%' }"
                                         ></div>
                                     </div>
                                 </td>

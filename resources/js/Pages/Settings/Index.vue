@@ -419,7 +419,7 @@ const getInitialFormData = () => {
         mail_from_address: props.settings.mail_from_address || '',
         mail_from_name: props.settings.mail_from_name || '',
         google_maps_api_key: props.settings.google_maps_api_key || '',
-        threshold_green_min: props.settings.threshold_green_min || 1,
+        threshold_green_min: props.settings.threshold_green_min ?? 0,
         threshold_green_max: props.settings.threshold_green_max || 2,
         threshold_green_label: props.settings.threshold_green_label || 'Healthy',
         threshold_yellow_min: props.settings.threshold_yellow_min || 3,
@@ -461,25 +461,9 @@ const getInitialFormData = () => {
             data[scopedSettingKey('working_days', scope.id)] = parseWorkingDays(scopedSettingValue('working_days', scope, props.settings.working_days));
         });
 
-    // Add hierarchy-scoped threshold settings.
-    buildSettingsScopeOptions().options
-        .filter(scope => scope.id !== 'global')
-        .forEach(scope => {
-            const defaults = {
-                green_min: 1, green_max: 2, green_label: 'Healthy',
-                yellow_min: 3, yellow_max: 3, yellow_label: 'Warning',
-                orange_min: 4, orange_max: 4, orange_label: 'At-risk',
-                red_min: 5, red_label: 'Critical',
-            };
-            Object.entries(defaults).forEach(([field, fallback]) => {
-                const parts = field.split('_');
-                const color = parts[0];
-                const suffix = parts.slice(1).join('_');
-                const key = scopedSettingKey(`threshold_${color}_${suffix}`, scope.id);
-                const globalKey = `threshold_${color}_${suffix}`;
-                data[key] = scopedSettingValue(globalKey, scope, props.settings[globalKey] || fallback);
-            });
-        });
+    // Health thresholds are managed globally only (single "Global Default" scope),
+    // so the form carries just the base threshold_* keys above. Per-department
+    // threshold overrides are intentionally not editable here.
 
     return data;
 };
@@ -1018,22 +1002,21 @@ const syncEmails = () => {
                                         </div>
                                         <div>
                                             <p class="text-sm font-black text-blue-900">Threshold Configuration</p>
-                                            <p class="text-xs text-blue-600">Configure per department hierarchy level or set a global default.</p>
+                                            <p class="text-xs text-blue-600">Applies globally to every department. These values are the single source of truth for store health.</p>
                                         </div>
                                     </div>
                                     <div class="w-full max-w-xs">
-                                        <HierarchySelector
-                                            v-model="selectedThresholdSubUnit"
-                                            :nodes="settingsScopeNodes"
-                                            placeholder="Select scope"
-                                        />
+                                        <div class="flex items-center gap-2 rounded-md border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-900 shadow-sm cursor-not-allowed select-none dark:bg-gray-800 dark:border-blue-800 dark:text-blue-200" title="Health thresholds are configured globally">
+                                            <svg class="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                            Global Default
+                                        </div>
                                     </div>
                                 </div>
 
                                 <div class="p-4 bg-purple-50 rounded-lg border border-purple-100 flex items-start mb-8 dark:bg-purple-900/20 dark:border-purple-800">
                                     <AdjustmentsHorizontalIcon class="w-5 h-5 text-purple-600 mt-0.5 mr-3 flex-shrink-0" />
                                     <p class="text-xs text-purple-700 leading-relaxed">
-                                        Define how the system categorizes store health based on the number of open tickets. These thresholds will reflect across the <strong>Store Management</strong> and <strong>Health Reports</strong>.
+                                        Define how the system categorizes store health based on each store's open tickets. Ranges must be continuous, Healthy must start at 0, and these values and labels appear throughout the dashboard and Health Reports.
                                     </p>
                                 </div>
 
@@ -1046,15 +1029,18 @@ const syncEmails = () => {
                                                 <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider dark:text-gray-300">Healthy</span>
                                             </div>
                                             <InputLabel value="Min Tickets" class="!text-[9px] uppercase" />
-                                            <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('green', 'min')]" />
+                                            <TextInput type="number" min="0" step="1" class="mt-1 block w-full" v-model="form[thresholdKey('green', 'min')]" />
+                                            <InputError class="mt-2" :message="form.errors[thresholdKey('green', 'min')]" />
                                         </div>
                                         <div class="col-span-1">
                                             <InputLabel value="Max Tickets" class="!text-[9px] uppercase" />
-                                            <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('green', 'max')]" />
+                                            <TextInput type="number" min="0" step="1" class="mt-1 block w-full" v-model="form[thresholdKey('green', 'max')]" />
+                                            <InputError class="mt-2" :message="form.errors[thresholdKey('green', 'max')]" />
                                         </div>
                                         <div class="col-span-2">
                                             <InputLabel value="Custom Label" class="!text-[9px] uppercase" />
                                             <TextInput type="text" class="mt-1 block w-full" v-model="form[thresholdKey('green', 'label')]" />
+                                            <InputError class="mt-2" :message="form.errors[thresholdKey('green', 'label')]" />
                                         </div>
                                     </div>
 
@@ -1066,15 +1052,18 @@ const syncEmails = () => {
                                                 <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider dark:text-gray-300">Warning</span>
                                             </div>
                                             <InputLabel value="Min Tickets" class="!text-[9px] uppercase" />
-                                            <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('yellow', 'min')]" />
+                                            <TextInput type="number" min="0" step="1" class="mt-1 block w-full" v-model="form[thresholdKey('yellow', 'min')]" />
+                                            <InputError class="mt-2" :message="form.errors[thresholdKey('yellow', 'min')]" />
                                         </div>
                                         <div class="col-span-1">
                                             <InputLabel value="Max Tickets" class="!text-[9px] uppercase" />
-                                            <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('yellow', 'max')]" />
+                                            <TextInput type="number" min="0" step="1" class="mt-1 block w-full" v-model="form[thresholdKey('yellow', 'max')]" />
+                                            <InputError class="mt-2" :message="form.errors[thresholdKey('yellow', 'max')]" />
                                         </div>
                                         <div class="col-span-2">
                                             <InputLabel value="Custom Label" class="!text-[9px] uppercase" />
                                             <TextInput type="text" class="mt-1 block w-full" v-model="form[thresholdKey('yellow', 'label')]" />
+                                            <InputError class="mt-2" :message="form.errors[thresholdKey('yellow', 'label')]" />
                                         </div>
                                     </div>
 
@@ -1086,15 +1075,18 @@ const syncEmails = () => {
                                                 <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider dark:text-gray-300">At-risk</span>
                                             </div>
                                             <InputLabel value="Min Tickets" class="!text-[9px] uppercase" />
-                                            <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('orange', 'min')]" />
+                                            <TextInput type="number" min="0" step="1" class="mt-1 block w-full" v-model="form[thresholdKey('orange', 'min')]" />
+                                            <InputError class="mt-2" :message="form.errors[thresholdKey('orange', 'min')]" />
                                         </div>
                                         <div class="col-span-1">
                                             <InputLabel value="Max Tickets" class="!text-[9px] uppercase" />
-                                            <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('orange', 'max')]" />
+                                            <TextInput type="number" min="0" step="1" class="mt-1 block w-full" v-model="form[thresholdKey('orange', 'max')]" />
+                                            <InputError class="mt-2" :message="form.errors[thresholdKey('orange', 'max')]" />
                                         </div>
                                         <div class="col-span-2">
                                             <InputLabel value="Custom Label" class="!text-[9px] uppercase" />
                                             <TextInput type="text" class="mt-1 block w-full" v-model="form[thresholdKey('orange', 'label')]" />
+                                            <InputError class="mt-2" :message="form.errors[thresholdKey('orange', 'label')]" />
                                         </div>
                                     </div>
 
@@ -1106,11 +1098,13 @@ const syncEmails = () => {
                                                 <span class="text-[10px] font-black text-gray-700 uppercase tracking-wider dark:text-gray-300">Critical</span>
                                             </div>
                                             <InputLabel value="Min (and up)" class="!text-[9px] uppercase" />
-                                            <TextInput type="number" class="mt-1 block w-full" v-model="form[thresholdKey('red', 'min')]" />
+                                            <TextInput type="number" min="0" step="1" class="mt-1 block w-full" v-model="form[thresholdKey('red', 'min')]" />
+                                            <InputError class="mt-2" :message="form.errors[thresholdKey('red', 'min')]" />
                                         </div>
                                         <div class="col-span-3">
                                             <InputLabel value="Custom Label" class="!text-[9px] uppercase" />
                                             <TextInput type="text" class="mt-1 block w-full" v-model="form[thresholdKey('red', 'label')]" />
+                                            <InputError class="mt-2" :message="form.errors[thresholdKey('red', 'label')]" />
                                         </div>
                                     </div>
 

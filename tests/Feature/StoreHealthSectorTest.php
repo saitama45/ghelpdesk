@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Company;
 use App\Models\Department;
 use App\Models\DepartmentNode;
+use App\Models\Setting;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\User;
@@ -15,6 +17,90 @@ use Tests\TestCase;
 class StoreHealthSectorTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_custom_thresholds_drive_legend_store_buckets_and_both_area_count_units(): void
+    {
+        $settings = [
+            'threshold_green_min' => 0, 'threshold_green_max' => 1, 'threshold_green_label' => 'Good',
+            'threshold_yellow_min' => 2, 'threshold_yellow_max' => 3, 'threshold_yellow_label' => 'Watch',
+            'threshold_orange_min' => 4, 'threshold_orange_max' => 5, 'threshold_orange_label' => 'Act',
+            'threshold_red_min' => 6, 'threshold_red_label' => 'Urgent',
+        ];
+        foreach ($settings as $key => $value) {
+            Setting::set($key, $value, 'thresholds');
+        }
+
+        $user = User::factory()->create();
+        $this->store('ZERO', 1);
+        $watchStore = $this->store('WATCH', 1);
+        $actStore = $this->store('ACT', 1);
+
+        for ($i = 1; $i <= 2; $i++) {
+            $this->ticket("HD-W{$i}", $watchStore, $user, 'open', '2026-05-20 09:00:00');
+        }
+        for ($i = 1; $i <= 4; $i++) {
+            $this->ticket("HD-A{$i}", $actStore, $user, 'open', '2026-05-20 10:00:00');
+        }
+
+        $data = app(StoreReportService::class)->getStoreHealthData([
+            'as_of_date' => '2026-05-20',
+            'user_id' => 'all',
+            'store_id' => 'all',
+        ]);
+
+        $this->assertSame(['Good', 'Watch', 'Act', 'Urgent'], collect($data['thresholdBands'])->pluck('label')->all());
+        $this->assertSame(0, $data['thresholdBands'][0]['min']);
+
+        $sector = collect($data['summary']['north'])->firstWhere('sector', 1);
+        $this->assertSame(1, $sector['health_store_counts']['yellow']);
+        $this->assertSame(2, $sector['health_ticket_counts']['yellow']);
+        $this->assertSame(1, $sector['health_store_counts']['orange']);
+        $this->assertSame(4, $sector['health_ticket_counts']['orange']);
+        $this->assertSame($sector['health_ticket_counts'], $sector['health_counts']);
+
+        $storeBuckets = collect($data['reportData'])
+            ->flatMap(fn (array $group) => $group['stores'])
+            ->pluck('health_bucket', 'code');
+        $this->assertSame('yellow', $storeBuckets['WATCH']);
+        $this->assertSame('orange', $storeBuckets['ACT']);
+
+        $entity = collect($data['entityHealth'])->first();
+        $this->assertSame(1, $entity['counts']['green']);
+        $this->assertSame(1, $entity['counts']['yellow']);
+        $this->assertSame(1, $entity['counts']['orange']);
+        $this->assertSame(3, $entity['total_stores']);
+        $this->assertSame(6, $entity['open_tickets']);
+    }
+
+    public function test_corporate_office_cards_use_the_same_dynamic_threshold_buckets(): void
+    {
+        $user = User::factory()->create();
+        $healthyOffice = $this->store('OFF-ZERO', 9);
+        $healthyOffice->update(['class' => 'Office']);
+        $criticalOffice = $this->store('OFF-RED', 9);
+        $criticalOffice->update(['class' => 'Office']);
+
+        for ($i = 1; $i <= 5; $i++) {
+            $this->ticket("HD-O{$i}", $criticalOffice, $user, 'open', '2026-05-20 09:00:00');
+        }
+
+        $data = app(StoreReportService::class)->getStoreHealthData([
+            'as_of_date' => '2026-05-20',
+            'user_id' => 'all',
+            'store_id' => 'all',
+            'split_office' => true,
+        ]);
+
+        $cards = collect($data['office']['summary']['office'])->keyBy('store_code');
+        $this->assertSame('green', $cards['OFF-ZERO']['health_bucket']);
+        $this->assertSame(0, $cards['OFF-ZERO']['total_tickets']);
+        $this->assertSame('red', $cards['OFF-RED']['health_bucket']);
+        $this->assertSame(5, $cards['OFF-RED']['total_tickets']);
+
+        $officeEntity = collect($data['office']['entityHealth'])->first();
+        $this->assertSame(1, $officeEntity['counts']['green']);
+        $this->assertSame(1, $officeEntity['counts']['red']);
+    }
 
     public function test_sector_summary_respects_department_node_and_child_filters(): void
     {
@@ -510,6 +596,33 @@ class StoreHealthSectorTest extends TestCase
             ->assertJsonPath('tickets.0.id', $included->id);
     }
 
+    public function test_sector_ticket_endpoint_scopes_by_entity_store_ownership(): void
+    {
+        $owner = Company::create(['name' => 'Owner Co', 'code' => 'OWN'.uniqid(), 'is_active' => true]);
+        $other = Company::create(['name' => 'Other Co', 'code' => 'OTH'.uniqid(), 'is_active' => true]);
+
+        $ownerStore = $this->ownedStore('EOS1', 1, $owner->id);
+        $otherStore = $this->ownedStore('EOS2', 1, $other->id);
+
+        $ownerParent = $this->companyTicket('E-1', $ownerStore, $owner->id, '2026-05-20 09:00:00');
+        // Child on the owner's store — excluded (parent-only), matching the card count.
+        $child = $this->companyTicket('E-2', $ownerStore, $owner->id, '2026-05-20 09:30:00');
+        $child->forceFill(['parent_id' => $ownerParent->id])->save();
+        // Same sector but on ANOTHER entity's store — excluded by the entity_ids scope.
+        $this->companyTicket('E-3', $otherStore, $other->id, '2026-05-20 10:00:00');
+
+        $response = $this->actingAs(User::factory()->create())
+            ->getJson(route('reports.store-health.sector-tickets', [
+                'sector' => 1,
+                'as_of_date' => '2026-05-20',
+                'entity_ids' => [$owner->id],
+            ]));
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'tickets')
+            ->assertJsonPath('tickets.0.id', $ownerParent->id);
+    }
+
     public function test_corporate_technology_uses_sector_zero_store_code_boxes_and_table_groups(): void
     {
         $department = Department::create(['name' => 'IT']);
@@ -596,6 +709,102 @@ class StoreHealthSectorTest extends TestCase
             ->assertJsonPath('store_name', 'Store OVP')
             ->assertJsonCount(1, 'tickets')
             ->assertJsonPath('tickets.0.id', $included->id);
+    }
+
+    public function test_entity_filter_scopes_by_store_ownership_not_ticket_company(): void
+    {
+        $owner = Company::create(['name' => 'Owner Co', 'code' => 'OWN'.uniqid(), 'is_active' => true]);
+        $other = Company::create(['name' => 'Other Co', 'code' => 'OTH'.uniqid(), 'is_active' => true]);
+
+        // A store OWNED by $other in sector 1, and a store OWNED by $owner in sector 2.
+        $otherStore = $this->ownedStore('OS1', 1, $other->id);
+        $ownerStore = $this->ownedStore('OW1', 2, $owner->id);
+
+        // Ticket stamped to $owner but sitting on $other's store — must NOT count for $owner.
+        $this->companyTicket('X-1', $otherStore, $owner->id, '2026-05-20 09:00:00');
+        // Ticket on $owner's own store — must count.
+        $this->companyTicket('X-2', $ownerStore, $owner->id, '2026-05-20 09:00:00');
+
+        $data = app(StoreReportService::class)->getStoreHealthData([
+            'as_of_date' => '2026-05-20',
+            'user_id' => 'all',
+            'store_id' => 'all',
+            'company_ids' => [$owner->id],
+        ]);
+
+        // Sector cards: the other-owned store (sector 1) is excluded even though its
+        // ticket is stamped to the owner; the owner's own store (sector 2) is counted.
+        $sector1 = collect($data['summary']['north'])->firstWhere('sector', 1);
+        $sector2 = collect($data['summary']['north'])->firstWhere('sector', 2);
+        $this->assertSame(0, $sector1['total_tickets']);
+        $this->assertSame(1, $sector2['total_tickets']);
+
+        // Heatmap tallies to the same universe: the owner entity has exactly its own store.
+        $entity = collect($data['entityHealth'])->firstWhere('id', $owner->id);
+        $this->assertSame(1, $entity['total_stores']);
+        $this->assertSame(1, $entity['open_tickets']);
+    }
+
+    public function test_store_health_counts_parent_tickets_only(): void
+    {
+        $owner = Company::create(['name' => 'Parent Co', 'code' => 'PAR'.uniqid(), 'is_active' => true]);
+        $store = $this->ownedStore('PAR1', 1, $owner->id);
+
+        // One parent ticket and one child ticket on the same store — only the parent
+        // is counted, so every tab tallies to the same on-store parent universe.
+        $parent = $this->companyTicket('P-1', $store, $owner->id, '2026-05-20 09:00:00');
+        $child = $this->companyTicket('P-2', $store, $owner->id, '2026-05-20 09:00:00');
+        $child->forceFill(['parent_id' => $parent->id])->save();
+
+        $data = app(StoreReportService::class)->getStoreHealthData([
+            'as_of_date' => '2026-05-20',
+            'user_id' => 'all',
+            'store_id' => 'all',
+            'company_ids' => [$owner->id],
+        ]);
+
+        $sector1 = collect($data['summary']['north'])->firstWhere('sector', 1);
+        $this->assertSame(1, $sector1['total_tickets']);
+        $entity = collect($data['entityHealth'])->firstWhere('id', $owner->id);
+        $this->assertSame(1, $entity['open_tickets']);
+    }
+
+    private function ownedStore(string $code, int $sector, int $companyId): Store
+    {
+        return Store::create([
+            'code' => $code,
+            'name' => "Store {$code}",
+            'sector' => $sector,
+            'area' => 'Test Area',
+            'brand' => 'Test Brand',
+            'class' => 'Regular',
+            'is_active' => true,
+            'company_id' => $companyId,
+        ]);
+    }
+
+    private function companyTicket(string $key, Store $store, int $companyId, string $createdAt): Ticket
+    {
+        $ticket = Ticket::create([
+            'ticket_key' => $key,
+            'title' => "Ticket {$key}",
+            'description' => 'Test ticket',
+            'type' => 'task',
+            'status' => 'open',
+            'priority' => 'medium',
+            'severity' => 'minor',
+            'store_id' => $store->id,
+            'company_id' => $companyId,
+            'created_at' => $createdAt,
+            'updated_at' => $createdAt,
+        ]);
+
+        DB::table('tickets')->where('id', $ticket->id)->update([
+            'created_at' => $createdAt,
+            'updated_at' => $createdAt,
+        ]);
+
+        return $ticket->refresh();
     }
 
     private function store(string $code, int $sector, bool $active = true): Store

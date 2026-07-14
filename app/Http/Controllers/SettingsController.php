@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\OrganizationReferenceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -52,6 +53,7 @@ class SettingsController extends Controller implements HasMiddleware
 
     public function update(Request $request)
     {
+        $this->validateHealthThresholds($request);
         $settings = $request->all();
 
         foreach ($settings as $key => $value) {
@@ -99,6 +101,81 @@ class SettingsController extends Controller implements HasMiddleware
         Cache::forget('sidebar_layout_config');
 
         return redirect()->back()->with('success', 'Settings updated successfully.');
+    }
+
+    private function validateHealthThresholds(Request $request): void
+    {
+        $suffixes = collect(array_keys($request->all()))
+            ->map(fn ($key) => preg_match('/^threshold_green_min(.*)$/', $key, $matches) ? $matches[1] : null)
+            ->filter(fn ($suffix) => $suffix !== null)
+            ->unique();
+
+        $errors = [];
+
+        foreach ($suffixes as $suffix) {
+            $key = fn (string $color, string $field) => "threshold_{$color}_{$field}{$suffix}";
+            $numericFields = [
+                $key('green', 'min'), $key('green', 'max'),
+                $key('yellow', 'min'), $key('yellow', 'max'),
+                $key('orange', 'min'), $key('orange', 'max'),
+                $key('red', 'min'),
+            ];
+
+            foreach ($numericFields as $field) {
+                $value = $request->input($field);
+                if (filter_var($value, FILTER_VALIDATE_INT) === false || (int) $value < 0) {
+                    $errors[$field] = 'Enter a whole ticket count of zero or greater.';
+                }
+            }
+
+            foreach (['green', 'yellow', 'orange', 'red'] as $color) {
+                $field = $key($color, 'label');
+                $label = trim((string) $request->input($field, ''));
+                if ($label === '') {
+                    $errors[$field] = 'Enter a status label.';
+                } elseif (mb_strlen($label) > 50) {
+                    $errors[$field] = 'The status label must not exceed 50 characters.';
+                }
+            }
+
+            if (array_intersect($numericFields, array_keys($errors))) {
+                continue;
+            }
+
+            $greenMin = (int) $request->input($key('green', 'min'));
+            $greenMax = (int) $request->input($key('green', 'max'));
+            $yellowMin = (int) $request->input($key('yellow', 'min'));
+            $yellowMax = (int) $request->input($key('yellow', 'max'));
+            $orangeMin = (int) $request->input($key('orange', 'min'));
+            $orangeMax = (int) $request->input($key('orange', 'max'));
+            $redMin = (int) $request->input($key('red', 'min'));
+
+            if ($greenMin !== 0) {
+                $errors[$key('green', 'min')] = 'Healthy must begin at 0 so stores without open tickets remain Healthy.';
+            }
+            if ($greenMax < $greenMin) {
+                $errors[$key('green', 'max')] = 'Healthy maximum must be at least its minimum.';
+            }
+            if ($yellowMin !== $greenMax + 1) {
+                $errors[$key('yellow', 'min')] = 'Warning must begin immediately after the Healthy maximum.';
+            }
+            if ($yellowMax < $yellowMin) {
+                $errors[$key('yellow', 'max')] = 'Warning maximum must be at least its minimum.';
+            }
+            if ($orangeMin !== $yellowMax + 1) {
+                $errors[$key('orange', 'min')] = 'At-risk must begin immediately after the Warning maximum.';
+            }
+            if ($orangeMax < $orangeMin) {
+                $errors[$key('orange', 'max')] = 'At-risk maximum must be at least its minimum.';
+            }
+            if ($redMin !== $orangeMax + 1) {
+                $errors[$key('red', 'min')] = 'Critical must begin immediately after the At-risk maximum.';
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
     }
 
     public function testImap(Request $request, \App\Services\EmailTicketService $service)

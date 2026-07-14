@@ -5,7 +5,6 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import StoreHealthReport from '@/Components/StoreHealthReport.vue';
 import StorePipelineTimeline from '@/Components/StorePipelineTimeline.vue';
-import HierarchySelector from '@/Components/HierarchySelector.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
 import axios from 'axios';
@@ -50,12 +49,6 @@ onMounted(() => {
 const page = usePage();
 const user = computed(() => page.props.auth?.user || {});
 const kanbanView = ref('project');
-const skipDefaultDepartment = ref(false);
-const filterNodeId = ref(
-    props.filters?.department_node_id
-        ? props.filters.department_node_id
-        : (props.filters?.department_id ? `dept-${props.filters.department_id}` : '')
-);
 
 const filterForm = reactive({
     year: props.filters.year || '',
@@ -73,6 +66,9 @@ const filterEntities = ref([...(props.entityFilter?.selected || [])]);
 const resolvedEntityIds = () => filterEntities.value.includes('all')
     ? entityFilterOptions.value.map(o => o.id)
     : filterEntities.value;
+// Effective entity ids for the Live Store Health drill-down modals, so they scope by
+// store ownership exactly like the sector/store cards.
+const drillEntityIds = computed(() => resolvedEntityIds());
 const handleEntityFilterChange = (value) => {
     let next = Array.isArray(value) ? value : [];
     const hadAll = filterEntities.value.includes('all');
@@ -86,53 +82,9 @@ const handleEntityFilterChange = (value) => {
     applyFilters();
 };
 
-const hierarchicalOptions = computed(() =>
-    (props.hierarchicalDepartments || []).map(dept => ({
-        ...dept,
-        id: `dept-${dept.id}`,
-        children: dept.nodes || [],
-    }))
-);
-
-const getDescendantNodeIds = (nodeId, nodes = []) => {
-    for (const node of nodes || []) {
-        if (Number(node.id) === Number(nodeId)) {
-            return collectDescendantNodeIds(node.children || []);
-        }
-
-        const descendants = getDescendantNodeIds(nodeId, node.children || []);
-        if (descendants.length > 0) {
-            return descendants;
-        }
-    }
-
-    return [];
-};
-
-const collectDescendantNodeIds = (nodes = []) => {
-    const ids = [];
-
-    for (const node of nodes) {
-        ids.push(Number(node.id));
-        ids.push(...collectDescendantNodeIds(node.children || []));
-    }
-
-    return ids;
-};
-
-const deptFilterParams = computed(() => {
-    const nodeId = filterNodeId.value;
-
-    if (!nodeId) {
-        return {};
-    }
-
-    if (typeof nodeId === 'string' && nodeId.startsWith('dept-')) {
-        return { department_id: nodeId.replace('dept-', '') };
-    }
-
-    return { department_node_id: nodeId };
-});
+// Department filtering was removed from the dashboard. Kept as an empty object so
+// the downstream param spreads (…deptFilterParams.value) stay untouched.
+const deptFilterParams = computed(() => ({}));
 
 // --- Lazy tabs ---------------------------------------------------------------
 // Each tab maps to the Inertia props it needs. Only the default Ticket Flow Board
@@ -227,9 +179,9 @@ const applyFilters = () => {
         pipeline_year: pipelineYear.value,
         pipeline_status: pipelineStatus.value || undefined,
         pipeline_type: pipelineType.value || undefined,
-        ...deptFilterParams.value,
         ...(entityFilterEnabled.value ? { entity_ids: resolvedEntityIds() } : {}),
-        ...(skipDefaultDepartment.value ? { skip_default_department: 1 } : {}),
+        // Department filtering is disabled — always span every department.
+        skip_default_department: 1,
     }, {
         // Refresh only the active tab; invalidate the rest so they reload on open.
         only: TAB_PROPS[activeTab.value],
@@ -242,8 +194,6 @@ const applyFilters = () => {
             Object.keys(loaded).forEach((k) => { loaded[k] = (k === activeTab.value); });
         },
     });
-
-    skipDefaultDepartment.value = false;
 };
 
 const clearFilters = () => {
@@ -251,12 +201,10 @@ const clearFilters = () => {
     filterForm.month = '';
     filterForm.user_id = 'all';
     filterForm.store_id = 'all';
-    filterNodeId.value = '';
-    skipDefaultDepartment.value = true;
     applyFilters();
 };
 
-watch(() => [filterForm.year, filterForm.month, filterNodeId.value, filterForm.user_id, filterForm.store_id], () => {
+watch(() => [filterForm.year, filterForm.month, filterForm.user_id, filterForm.store_id], () => {
     applyFilters();
 });
 
@@ -264,38 +212,13 @@ const hasActiveFilters = computed(() => {
     return Boolean(
         filterForm.year ||
         filterForm.month ||
-        filterNodeId.value ||
         filterForm.user_id !== 'all' ||
         filterForm.store_id !== 'all'
     );
 });
 
-const filteredUsers = computed(() => {
-    const users = props.users || [];
-    let matchingUsers = users;
-
-    if (deptFilterParams.value.department_id) {
-        matchingUsers = matchingUsers.filter(u => Number(u.department_id) === Number(deptFilterParams.value.department_id));
-    }
-
-    if (deptFilterParams.value.department_node_id) {
-        const selectedNodeId = Number(deptFilterParams.value.department_node_id);
-        const allowedNodeIds = new Set([
-            selectedNodeId,
-            ...getDescendantNodeIds(selectedNodeId, props.hierarchicalDepartments || []),
-        ]);
-
-        matchingUsers = matchingUsers.filter(u => allowedNodeIds.has(Number(u.department_node_id)));
-    }
-
-    const selectedUser = users.find(u => String(u.id) === String(filterForm.user_id));
-
-    if (selectedUser && !matchingUsers.some(u => String(u.id) === String(selectedUser.id))) {
-        return [selectedUser, ...matchingUsers];
-    }
-
-    return matchingUsers;
-});
+// All users are selectable — the dashboard no longer scopes the User list by department.
+const filteredUsers = computed(() => props.users || []);
 
 const usersWithLabel = computed(() => {
     const list = filteredUsers.value.map(u => ({
@@ -333,7 +256,13 @@ const monthsWithLabel = computed(() => {
     return [{ id: '', display_name: 'All Months' }, ...list];
 });
 
-const activeTicketCount = computed(() => (Number(props.stats?.open || 0) + Number(props.stats?.in_progress || 0)));
+// stats.open already counts every non-terminal ticket (see buildOverview), so the
+// "active tickets" banner reads it directly instead of re-adding in_progress.
+const activeTicketCount = computed(() => Number(props.stats?.open || 0));
+
+// The statuses that make up an "active" (not resolved/closed) ticket, used to build
+// the banner's drill-through link so it lists exactly what stats.open counted.
+const ACTIVE_TICKET_STATUSES = ['open', 'for_schedule', 'in_progress', 'waiting_service_provider', 'waiting_client_feedback'];
 
 const chartNumber = (value) => Number(value || 0);
 
@@ -415,7 +344,7 @@ const formatMinutes = (minutes) => {
 
 const activeTicketFilterParams = computed(() => {
     const params = {
-        status: ['open', 'in_progress'],
+        status: ACTIVE_TICKET_STATUSES,
         skip_default_department: 1,
     };
 
@@ -715,8 +644,8 @@ const exportChartTickets = () => {
                     Clear
                 </button>
             </div>
-            <div class="p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-                <div v-if="entityFilterEnabled" class="sm:col-span-2 xl:col-span-5">
+            <div class="p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                <div v-if="entityFilterEnabled" class="sm:col-span-2 xl:col-span-4">
                     <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Entity/Company</label>
                     <MultiAutocomplete
                         :model-value="filterEntities"
@@ -725,14 +654,6 @@ const exportChartTickets = () => {
                         value-key="id"
                         placeholder="Defaults to your active entity — pick All or add more to compare..."
                         @update:modelValue="handleEntityFilterChange"
-                    />
-                </div>
-                <div>
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Department</label>
-                    <HierarchySelector
-                        v-model="filterNodeId"
-                        :nodes="hierarchicalOptions"
-                        placeholder="All Departments"
                     />
                 </div>
                 <div>
@@ -1321,7 +1242,9 @@ const exportChartTickets = () => {
                 :report-data="storeHealth.reportData"
                 :summary="storeHealth.summary"
                 :thresholds="storeHealth.thresholds"
+                :threshold-bands="storeHealth.thresholdBands"
                 :entity-health="storeHealth.entityHealth"
+                :entity-ids="drillEntityIds"
                 :show-filters="false"
                 :filters="filters"
             />
@@ -1332,7 +1255,9 @@ const exportChartTickets = () => {
                 :report-data="storeHealth.office.reportData"
                 :summary="storeHealth.office.summary"
                 :thresholds="storeHealth.thresholds"
+                :threshold-bands="storeHealth.thresholdBands"
                 :entity-health="storeHealth.office.entityHealth"
+                :entity-ids="drillEntityIds"
                 :show-filters="false"
                 :filters="filters"
             />

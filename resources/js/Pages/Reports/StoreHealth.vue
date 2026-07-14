@@ -11,6 +11,7 @@ const props = defineProps({
     subUnits: Array,
     hierarchicalDepartments: Array,
     thresholds: Object,
+    thresholdBands: Array,
     entityHealth: Array,
     filters: Object
 });
@@ -35,6 +36,7 @@ const handleFilter = (filterData) => {
             :report-data="reportData"
             :summary="summary"
             :thresholds="thresholds"
+            :threshold-bands="thresholdBands"
             :entity-health="entityHealth"
             :users="users"
             :stores="stores"

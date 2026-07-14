@@ -37,27 +37,17 @@ class DashboardController extends Controller
         $user = Auth::user();
         $year = $request->input('year');
         $month = $request->input('month');
-        $departmentIdFilter = $request->input('department_id');
-        $departmentNodeIdFilter = $request->input('department_node_id');
+        // Department filtering was removed from the dashboard — every widget spans all
+        // departments. Any incoming department params are intentionally ignored so the
+        // results are never narrowed by the viewer's (or a selected) department.
+        $departmentIdFilter = null;
+        $departmentNodeIdFilter = null;
         $userIdFilter = $request->input('user_id', 'all');
         $storeIdFilter = $request->input('store_id', 'all');
         $pipelineYear = (int) $request->input('pipeline_year', (int) date('Y'));
         $pipelineStatus = trim((string) $request->input('pipeline_status', ''));
         $pipelineType = trim((string) $request->input('pipeline_type', ''));
         $selectedSubUnitLabel = 'all';
-
-        if (
-            !$request->boolean('skip_default_department')
-            && !$request->has('department_id')
-            && !$request->has('department_node_id')
-        ) {
-            $departmentIdFilter = $user->department_id
-                ?? optional($user->loadMissing('departmentNode')->departmentNode)->department_id;
-        }
-
-        if ($departmentNodeIdFilter) {
-            $selectedSubUnitLabel = $this->organizationReferenceService->payloadFromNodeId((int) $departmentNodeIdFilter)['org_path'] ?? 'all';
-        }
 
         // Entity/Company filter. Defaults to the active sidebar entity; permitted
         // users can widen it to any subset of their accessible entities. Resolved
@@ -80,7 +70,7 @@ class DashboardController extends Controller
         } elseif ($allowedCompanyIds->isEmpty()) {
             $query->whereRaw('1 = 0');
         } else {
-            $query->whereIn('company_id', $allowedCompanyIds);
+            $this->applyEntityScope($query, $allowedCompanyIds);
         }
 
         $filteredQuery = clone $query;
@@ -261,7 +251,7 @@ class DashboardController extends Controller
         } elseif (empty($effectiveCompanyIds)) {
             $query->whereRaw('1 = 0');
         } else {
-            $query->whereIn('company_id', $effectiveCompanyIds);
+            $this->applyEntityScope($query, $effectiveCompanyIds);
         }
 
         $query->when($validated['year'] ?? null, fn ($q, $year) => $q->whereYear('created_at', $year))
@@ -424,6 +414,19 @@ class DashboardController extends Controller
      * Overall Open vs Closed + Per Store Brand + Per Corporate Office + Concern Type charts (lazy dashboard tab).
      */
     /**
+     * Scope a ticket query to an entity selection by the STORE's owning company,
+     * not the ticket's stamped company_id. A ticket counts for the entity that owns
+     * the store it sits on, regardless of how the ticket was stamped. Tickets with
+     * NO store are intentionally excluded so every dashboard tab counts the exact
+     * same universe as Live Store Health (which can only report on-store tickets),
+     * making the tabs tally precisely. See [[project_entity_health_heatmap]].
+     */
+    private function applyEntityScope($query, $companyIds)
+    {
+        return $query->whereHas('store', fn ($s) => $s->whereIn('company_id', $companyIds));
+    }
+
+    /**
      * Applies the shared Management Filters scope (department/user/store) to a
      * ticket query. Used by every widget that ranks/counts tickets directly
      * (Ticket Flow Board, Open vs Closed charts, Top Brands, Top Teams).
@@ -474,29 +477,24 @@ class DashboardController extends Controller
             ->get(['id', 'name', 'code']);
         $officeStoreIds = $officeStores->pluck('id');
 
-        // Per Store Brand: relies solely on the Entity/Company filter; $filteredQuery is
-        // already restricted to the effective entities, so we just group by company,
-        // excluding tickets raised from an Office Store (those go to Per Corporate Office).
+        // Per Store Brand: one row per selected entity, counting tickets that sit on
+        // that entity's NON-office stores (store ownership, matching Live Store Health).
+        // Grouping by the store's company — not the ticket's stamp — keeps this tallied
+        // with the store-owner-scoped Overall chart above.
         $brandCompanies = CompanyContext::accessibleCompanies($user)
             ->whereIn('id', $effectiveCompanyIds)
             ->values();
         $brandChartQuery = $applyDashboardChartFilters(clone $filteredQuery);
 
-        $brandCounts = (clone $brandChartQuery)
-            ->selectRaw(
-                "company_id, " .
-                "SUM(CASE WHEN status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as open_count, " .
-                "SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed_count"
-            )
-            ->whereNotNull('company_id')
-            ->when($officeStoreIds->isNotEmpty(), fn ($q) => $q->whereNotIn('store_id', $officeStoreIds))
-            ->groupBy('company_id')
-            ->get()
-            ->keyBy('company_id');
-
         $brandChartRows = $brandCompanies
-            ->map(function ($company) use ($brandCounts) {
-                $row = $brandCounts->get($company->id);
+            ->map(function ($company) use ($brandChartQuery) {
+                $row = (clone $brandChartQuery)
+                    ->whereHas('store', fn ($s) => $s->where('company_id', $company->id)->where('class', '!=', 'Office'))
+                    ->selectRaw(
+                        "SUM(CASE WHEN status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as open_count, " .
+                        "SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed_count"
+                    )
+                    ->first();
 
                 return [
                     'id' => (int) $company->id,
@@ -566,22 +564,42 @@ class DashboardController extends Controller
                 return $counts;
             }, []);
 
+        $overallOpen = (int) ($overallChartRow->open_count ?? 0);
+        $overallClosed = (int) ($overallChartRow->closed_count ?? 0);
+
+        $concernTypes = collect(['Incident', 'Service Request', 'Problem'])
+            ->map(fn ($type) => [
+                'key' => $type,
+                'label' => $type,
+                'open' => (int) ($concernCounts[$type]['open'] ?? 0),
+                'closed' => (int) ($concernCounts[$type]['closed'] ?? 0),
+                'total' => (int) (($concernCounts[$type]['open'] ?? 0) + ($concernCounts[$type]['closed'] ?? 0)),
+            ])
+            ->values();
+
+        // Tickets with no item / a concern type outside the three above still belong to
+        // the overall total, so surface them as "Uncategorized" — this makes the Concern
+        // Type section tally to the Overall Open vs Closed count (no silent gap).
+        $uncategorizedOpen = max(0, $overallOpen - $concernTypes->sum('open'));
+        $uncategorizedClosed = max(0, $overallClosed - $concernTypes->sum('closed'));
+        if ($uncategorizedOpen > 0 || $uncategorizedClosed > 0) {
+            $concernTypes->push([
+                'key' => 'Uncategorized',
+                'label' => 'Uncategorized',
+                'open' => $uncategorizedOpen,
+                'closed' => $uncategorizedClosed,
+                'total' => $uncategorizedOpen + $uncategorizedClosed,
+            ]);
+        }
+
         return [
             'overall' => [
-                'open' => (int) ($overallChartRow->open_count ?? 0),
-                'closed' => (int) ($overallChartRow->closed_count ?? 0),
+                'open' => $overallOpen,
+                'closed' => $overallClosed,
             ],
             'perStoreBrand' => $brandChartRows,
             'perCorporateOffice' => $officeChartRows,
-            'concernTypes' => collect(['Incident', 'Service Request', 'Problem'])
-                ->map(fn ($type) => [
-                    'key' => $type,
-                    'label' => $type,
-                    'open' => (int) ($concernCounts[$type]['open'] ?? 0),
-                    'closed' => (int) ($concernCounts[$type]['closed'] ?? 0),
-                    'total' => (int) (($concernCounts[$type]['open'] ?? 0) + ($concernCounts[$type]['closed'] ?? 0)),
-                ])
-                ->values(),
+            'concernTypes' => $concernTypes->values(),
         ];
     }
 
@@ -1000,18 +1018,22 @@ class DashboardController extends Controller
                 });
         };
 
+        // "Open" and "Closed" use the same definition as the Open vs Closed tab and
+        // the Store Health report: open = anything not yet terminal, closed = resolved
+        // OR closed. This keeps every dashboard tab tallied to the same universe, so
+        // Total = Open + Closed and no resolved ticket goes uncounted.
         $totalTicketsList = $listWithDetails(clone $filteredQuery);
-        $openTicketsList = $listWithDetails((clone $filteredQuery)->where('status', 'open'));
+        $openTicketsList = $listWithDetails((clone $filteredQuery)->whereNotIn('status', ['resolved', 'closed']));
         $newTicketsList = $listWithDetails(clone $newTicketsQuery);
-        $closedTicketsList = $listWithDetails((clone $filteredQuery)->where('status', 'closed'));
+        $closedTicketsList = $listWithDetails((clone $filteredQuery)->whereIn('status', ['resolved', 'closed']));
 
         // Stats (Filtered)
         $stats = [
             'total' => (clone $filteredQuery)->count(),
-            'open' => (clone $filteredQuery)->where('status', 'open')->count(),
+            'open' => (clone $filteredQuery)->whereNotIn('status', ['resolved', 'closed'])->count(),
             'new' => (clone $newTicketsQuery)->count(),
             'in_progress' => (clone $filteredQuery)->where('status', 'in_progress')->count(),
-            'closed' => (clone $filteredQuery)->where('status', 'closed')->count(),
+            'closed' => (clone $filteredQuery)->whereIn('status', ['resolved', 'closed'])->count(),
             'waiting' => (clone $filteredQuery)->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])->count(),
             'waiting_alarm' => $alarmedWaitingTickets->count(),
             'urgent' => $urgentTickets->count(),
@@ -1074,7 +1096,7 @@ class DashboardController extends Controller
                 } elseif ($allowedCompanyIds->isEmpty()) {
                     $q->whereRaw('1 = 0');
                 } else {
-                    $q->whereIn('company_id', $allowedCompanyIds);
+                    $this->applyEntityScope($q, $allowedCompanyIds);
                 }
             })
             ->latest('changed_at')->take(10)->get()
@@ -1100,7 +1122,7 @@ class DashboardController extends Controller
                 } elseif ($allowedCompanyIds->isEmpty()) {
                     $q->whereRaw('1 = 0');
                 } else {
-                    $q->whereIn('company_id', $allowedCompanyIds);
+                    $this->applyEntityScope($q, $allowedCompanyIds);
                 }
             })
             ->latest()->take(10)->get()
@@ -1321,7 +1343,7 @@ class DashboardController extends Controller
             'top3' => $rankings->take(3)->values()->toArray(),
             'rankings' => $rankings->values()->toArray(),
             'trophies' => $trophies,
-            'topBrands' => $this->buildTopBrands($filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter),
+            'topBrands' => $this->buildTopBrands($filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter, $companyIds),
             'topTeams' => $this->buildTopTeams($filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter),
         ];
     }
@@ -1331,33 +1353,32 @@ class DashboardController extends Controller
      * (open + closed concerns), same Management Filters scope as the rest of
      * the dashboard.
      */
-    private function buildTopBrands($filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter): array
+    private function buildTopBrands($filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter, array $companyIds = []): array
     {
         $brandScopeQuery = $this->applyAssigneeScopeFilters(clone $filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter);
 
-        $brandCounts = (clone $brandScopeQuery)
-            ->selectRaw(
-                "company_id, " .
-                "SUM(CASE WHEN status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as open_count, " .
-                "SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed_count"
-            )
-            ->whereNotNull('company_id')
-            ->groupBy('company_id')
-            ->get()
-            ->keyBy('company_id');
+        // Rank entities by the tickets sitting on the stores they OWN (store ownership),
+        // not by the ticket's stamped company_id — this keeps the ranking tallied with
+        // Live Store Health and the Open vs Closed / Per-Store-Brand charts.
+        $companies = \App\Models\Company::whereIn('id', $companyIds)->get(['id', 'name', 'code']);
 
-        $companies = \App\Models\Company::whereIn('id', $brandCounts->keys())->get(['id', 'name', 'code'])->keyBy('id');
+        return $companies
+            ->map(function ($company) use ($brandScopeQuery) {
+                $row = (clone $brandScopeQuery)
+                    ->whereHas('store', fn ($s) => $s->where('company_id', $company->id))
+                    ->selectRaw(
+                        "SUM(CASE WHEN status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as open_count, " .
+                        "SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed_count"
+                    )
+                    ->first();
 
-        return $brandCounts
-            ->map(function ($row, $companyId) use ($companies) {
-                $company = $companies->get($companyId);
-                $open = (int) $row->open_count;
-                $closed = (int) $row->closed_count;
+                $open = (int) ($row->open_count ?? 0);
+                $closed = (int) ($row->closed_count ?? 0);
 
                 return [
-                    'id' => (int) $companyId,
-                    'name' => $company->name ?? 'Unknown',
-                    'code' => $company->code ?? null,
+                    'id' => (int) $company->id,
+                    'name' => $company->name,
+                    'code' => $company->code,
                     'open' => $open,
                     'closed' => $closed,
                     'total' => $open + $closed,
@@ -1618,11 +1639,11 @@ class DashboardController extends Controller
                 $filename = "new_tickets";
                 break;
             case 'open':
-                $query->where('status', 'open');
+                $query->whereNotIn('status', ['resolved', 'closed']);
                 $filename = "open_tickets";
                 break;
             case 'closed':
-                $query->where('status', 'closed');
+                $query->whereIn('status', ['resolved', 'closed']);
                 $filename = "closed_tickets";
                 break;
             default:

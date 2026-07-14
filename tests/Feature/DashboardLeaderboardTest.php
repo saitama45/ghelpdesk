@@ -33,6 +33,7 @@ class DashboardLeaderboardTest extends TestCase
             'area' => 'North',
             'brand' => 'Brand A',
             'is_active' => true,
+            'company_id' => $company->id,
         ]);
 
         $otherStore = Store::create([
@@ -42,6 +43,7 @@ class DashboardLeaderboardTest extends TestCase
             'area' => 'South',
             'brand' => 'Brand A',
             'is_active' => true,
+            'company_id' => $company->id,
         ]);
 
         $viewer = User::factory()->create(['company_id' => $company->id]);
@@ -87,6 +89,14 @@ class DashboardLeaderboardTest extends TestCase
         $this->assertSame('Fast Resolution', $rankings[0]['point_breakdown'][0]['label']);
         $this->assertSame('Bert Tech', $rankings[1]['name']);
         $this->assertSame('Cara Tech', $rankings[2]['name']);
+
+        // Top Brands ranks by the entity that OWNS the store (store ownership), counting
+        // the store-filtered tickets — 4 closed tickets sit on the filtered Main Store.
+        $topBrands = $response->json('props.leaderboard.topBrands');
+        $this->assertCount(1, $topBrands);
+        $this->assertSame($company->id, $topBrands[0]['id']);
+        $this->assertSame(0, $topBrands[0]['open']);
+        $this->assertSame(4, $topBrands[0]['closed']);
 
         $filtered = $this->actingAs($viewer)
             ->withHeaders($partial)
