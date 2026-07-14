@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Company;
+use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -92,5 +93,63 @@ class TicketKeyTest extends TestCase
         $this->assertDatabaseHas('tickets', ['ticket_key' => 'CA-1']);
         $this->assertDatabaseHas('tickets', ['ticket_key' => 'CB-1']);
         $this->assertDatabaseHas('tickets', ['ticket_key' => 'CA-2']);
+    }
+
+    public function test_ticket_key_uses_the_store_owning_company_not_the_ticket_company()
+    {
+        $ticketCompany = Company::create(['name' => 'Ticket Co', 'code' => 'TC', 'is_active' => true]);
+        $storeCompany = Company::create(['name' => 'Store Co', 'code' => 'SC', 'is_active' => true]);
+        $store = $this->store($storeCompany);
+
+        // The ticket is stamped to TC but sits on an SC-owned store — key must be SC-*.
+        $ticket = Ticket::create([
+            'title' => 'On store',
+            'description' => 'x',
+            'type' => 'task',
+            'status' => 'open',
+            'priority' => 'medium',
+            'severity' => 'minor',
+            'company_id' => $ticketCompany->id,
+            'store_id' => $store->id,
+        ]);
+
+        $this->assertSame('SC-1', $ticket->ticket_key);
+    }
+
+    public function test_ticket_key_regenerates_to_store_company_when_store_is_set_later()
+    {
+        // Mirrors the email-fetch flow: created store-less, then a store is assigned.
+        $ticketCompany = Company::create(['name' => 'Ticket Co', 'code' => 'TC', 'is_active' => true]);
+        $storeCompany = Company::create(['name' => 'Store Co', 'code' => 'SC', 'is_active' => true]);
+        $store = $this->store($storeCompany);
+
+        $ticket = Ticket::create([
+            'title' => 'From email',
+            'description' => 'x',
+            'type' => 'task',
+            'status' => 'open',
+            'priority' => 'medium',
+            'severity' => 'minor',
+            'company_id' => $ticketCompany->id,
+        ]);
+        $this->assertSame('TC-1', $ticket->ticket_key);
+
+        // Auto-assign later resolves the store — key follows the store's company.
+        $ticket->update(['store_id' => $store->id]);
+        $this->assertSame('SC-1', $ticket->fresh()->ticket_key);
+    }
+
+    private function store(Company $company): Store
+    {
+        return Store::create([
+            'code' => 'ST-'.uniqid(),
+            'name' => 'Store',
+            'sector' => 1,
+            'area' => 'A',
+            'brand' => 'B',
+            'class' => 'Regular',
+            'is_active' => true,
+            'company_id' => $company->id,
+        ]);
     }
 }

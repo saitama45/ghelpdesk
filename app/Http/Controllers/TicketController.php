@@ -1571,7 +1571,14 @@ class TicketController extends Controller
         }
 
         $childTicket = DB::transaction(function () use ($validated, $ticket, $hasSchedule) {
-            $company = $ticket->company;
+            // Key follows the child's STORE-owning company (store ownership), falling
+            // back to the parent's company when the child has no store.
+            $childStore = ($validated['store_id'] ?? null)
+                ? \App\Models\Store::find($validated['store_id'])
+                : null;
+            $company = ($childStore && $childStore->company_id
+                ? Company::find($childStore->company_id)
+                : null) ?? $ticket->company;
             $companyCode = $company->code;
 
             $maxNumber = Ticket::withTrashed()

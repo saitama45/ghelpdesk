@@ -5,6 +5,7 @@ namespace App\Observers;
 use App\Models\Ticket;
 use App\Models\TicketSlaMetric;
 use App\Models\Company;
+use App\Models\Store;
 use App\Models\User;
 use App\Services\SlaService;
 use App\Services\LeadershipPointService;
@@ -20,9 +21,9 @@ class TicketObserver
     public function creating(Ticket $ticket): void
     {
         if (!$ticket->ticket_key) {
-            $company = Company::find($ticket->company_id);
-            if ($company) {
-                $ticket->ticket_key = $this->nextTicketKey($company->code);
+            $code = $this->keyCompanyCode($ticket);
+            if ($code) {
+                $ticket->ticket_key = $this->nextTicketKey($code);
             }
         }
 
@@ -49,12 +50,39 @@ class TicketObserver
      */
     public function updating(Ticket $ticket): void
     {
-        if ($ticket->isDirty('company_id')) {
-            $company = Company::find($ticket->company_id);
-            if ($company) {
-                $ticket->ticket_key = $this->nextTicketKey($company->code);
+        // The key follows the STORE's owning company, so regenerate when either the
+        // store or the (fallback) company changes — but only if the resolved prefix
+        // actually differs, so we don't renumber the ticket needlessly.
+        if ($ticket->isDirty('store_id') || $ticket->isDirty('company_id')) {
+            $code = $this->keyCompanyCode($ticket);
+            if ($code && !$this->keyHasPrefix($ticket->ticket_key, $code)) {
+                $ticket->ticket_key = $this->nextTicketKey($code);
             }
         }
+    }
+
+    /**
+     * The company code that drives a ticket's key: the owning company of the ticket's
+     * STORE, falling back to the ticket's own company for store-less tickets.
+     */
+    private function keyCompanyCode(Ticket $ticket): ?string
+    {
+        if ($ticket->store_id) {
+            $store = Store::find($ticket->store_id);
+            if ($store && $store->company_id) {
+                $code = Company::find($store->company_id)?->code;
+                if ($code) {
+                    return $code;
+                }
+            }
+        }
+
+        return $ticket->company_id ? Company::find($ticket->company_id)?->code : null;
+    }
+
+    private function keyHasPrefix(?string $ticketKey, string $code): bool
+    {
+        return $ticketKey !== null && str_starts_with($ticketKey, $code . '-');
     }
 
     private function nextTicketKey(string $prefix): string
