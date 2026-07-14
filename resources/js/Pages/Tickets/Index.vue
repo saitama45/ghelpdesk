@@ -814,6 +814,28 @@ watch(() => createForm.item_id, (newVal) => {
     }
 });
 
+// Company auto-follows the selected Store/Location (the store's owning company),
+// mirroring the backend ticket_key rule. Only applied when that company is in the
+// user's available list so the Company select stays valid.
+const storeOwningCompanyId = (storeId) => {
+    const store = props.stores?.find(s => String(s.id) === String(storeId));
+    return store?.company_id ?? null;
+};
+
+watch(() => createForm.store_id, (storeId) => {
+    const companyId = storeOwningCompanyId(storeId);
+    if (companyId && availableCompanies.value.some(c => c.id === companyId)) {
+        createForm.company_id = companyId;
+    }
+});
+
+watch(() => acceptForm.store_id, (storeId) => {
+    const companyId = storeOwningCompanyId(storeId);
+    if (companyId && availableCompanies.value.some(c => c.id === companyId)) {
+        acceptForm.company_id = companyId;
+    }
+});
+
 // Set default company when modal opens or companies load
 watch(() => showCreateModal.value, (isOpen) => {
     if (isOpen && !createForm.company_id) {
@@ -2696,14 +2718,6 @@ const requesterTabs = computed(() => {
                             </div>
                         </div>
 
-                        <div v-if="availableCompanies.length > 0">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Company</label>
-                            <select v-model="createForm.company_id" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
-                                <option value="">Select Company</option>
-                                <option v-for="company in availableCompanies" :key="company.id" :value="company.id">{{ company.name }}</option>
-                            </select>
-                        </div>
-
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Store</label>
                             <Autocomplete
@@ -2714,7 +2728,15 @@ const requesterTabs = computed(() => {
                                 placeholder="Select store..."
                             />
                         </div>
-                        
+
+                        <div v-if="availableCompanies.length > 0">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Company <span class="normal-case font-medium text-gray-400">(auto-set from Store)</span></label>
+                            <select v-model="createForm.company_id" required disabled class="block w-full border-gray-300 rounded-lg shadow-sm text-sm dark:border-gray-600 bg-gray-100 text-gray-500 cursor-not-allowed dark:bg-gray-800 dark:text-gray-400">
+                                <option value="">Select Company</option>
+                                <option v-for="company in availableCompanies" :key="company.id" :value="company.id">{{ company.name }}</option>
+                            </select>
+                        </div>
+
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Item</label>
                             <Autocomplete
@@ -2803,13 +2825,6 @@ const requesterTabs = computed(() => {
                     </p>
 
                     <div class="space-y-4">
-                        <div v-if="availableCompanies.length > 0">
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Company <span class="text-red-500">*</span></label>
-                            <select v-model="acceptForm.company_id" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
-                                <option value="">Select Company</option>
-                                <option v-for="company in availableCompanies" :key="company.id" :value="company.id">{{ company.name }}</option>
-                            </select>
-                        </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Store <span class="text-red-500">*</span></label>
                             <Autocomplete
@@ -2819,6 +2834,13 @@ const requesterTabs = computed(() => {
                                 value-key="id"
                                 placeholder="Select store..."
                             />
+                        </div>
+                        <div v-if="availableCompanies.length > 0">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Company <span class="normal-case font-medium text-gray-400">(auto-set from Store)</span></label>
+                            <select v-model="acceptForm.company_id" required disabled class="block w-full border-gray-300 rounded-lg shadow-sm text-sm dark:border-gray-600 bg-gray-100 text-gray-500 cursor-not-allowed dark:bg-gray-800 dark:text-gray-400">
+                                <option value="">Select Company</option>
+                                <option v-for="company in availableCompanies" :key="company.id" :value="company.id">{{ company.name }}</option>
+                            </select>
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Item <span class="text-red-500">*</span></label>

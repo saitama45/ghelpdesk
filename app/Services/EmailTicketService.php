@@ -273,6 +273,13 @@ class EmailTicketService
             }
             if ($resolved['store_id'] ?? null) {
                 $autoUpdateData['store_id'] = $resolved['store_id'];
+                // Company auto-follows the resolved Store/Location's owning company
+                // first (mirrors the ticket_key rule); falls back to the rule-based
+                // company above when the store has no owning company.
+                $storeCompanyId = \App\Models\Store::whereKey($resolved['store_id'])->value('company_id');
+                if ($storeCompanyId) {
+                    $autoUpdateData['company_id'] = $storeCompanyId;
+                }
             }
             if (!empty($autoUpdateData)) {
                 $ticket->update($autoUpdateData);

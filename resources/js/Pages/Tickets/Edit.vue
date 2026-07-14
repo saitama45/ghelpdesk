@@ -1691,6 +1691,19 @@ watch(() => props.ticket, (newTicket) => {
     });
 }, { deep: true });
 
+// Company auto-follows the selected Store/Location (the store's owning company),
+// mirroring the backend ticket_key rule. Declared before the auto-save watcher
+// below so both fields are updated in the same flush → a single save. Skipped
+// during server sync so it doesn't fight the incoming ticket state.
+watch(() => editForm.store_id, (storeId) => {
+    if (syncingTicketState.value) return;
+    const store = props.stores?.find(s => String(s.id) === String(storeId));
+    const companyId = store?.company_id ?? null;
+    if (companyId && availableCompanies.value.some(c => c.id === companyId)) {
+        editForm.company_id = companyId;
+    }
+});
+
 // Watchers for select/toggle fields (save immediately on change)
 watch(() => [
     editForm.company_id,
@@ -2360,18 +2373,6 @@ const linkify = (text) => {
 
                             </div>
 
-                            <div v-if="availableCompanies.length > 0">
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Company</label>
-                                <Autocomplete
-                                    v-model="editForm.company_id"
-                                    :options="availableCompanies"
-                                    label-key="name"
-                                    value-key="id"
-                                    placeholder="Select company..."
-                                    :disabled="!hasPermission('tickets.edit')"
-                                />
-                            </div>
-
                             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 sm:gap-6">
                                 <div>
                                     <div class="flex items-center justify-between mb-2">
@@ -2394,6 +2395,18 @@ const linkify = (text) => {
                                         value-key="id"
                                         placeholder="Select store..."
                                         :disabled="!hasPermission('tickets.edit')"
+                                    />
+                                </div>
+
+                                <div v-if="availableCompanies.length > 0">
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Company <span class="normal-case font-medium text-gray-400">(auto-set from Store)</span></label>
+                                    <Autocomplete
+                                        v-model="editForm.company_id"
+                                        :options="availableCompanies"
+                                        label-key="name"
+                                        value-key="id"
+                                        placeholder="Select company..."
+                                        :disabled="true"
                                     />
                                 </div>
 

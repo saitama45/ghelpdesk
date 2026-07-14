@@ -189,24 +189,10 @@ class SapRequestService
 
     public function processApprovedRequest(SapRequest $sapRequest): void
     {
-        $company = $sapRequest->company;
-        $companyCode = $company->code;
-
-        $maxNumber = Ticket::withTrashed()
-            ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
-            ->where('ticket_key', 'LIKE', "{$companyCode}-%")
-            ->get(['ticket_key'])
-            ->map(function ($t) {
-                if (preg_match('/-(\d+)$/', $t->ticket_key, $matches)) {
-                    return (int) $matches[1];
-                }
-                return 0;
-            })
-            ->max();
-
-        $nextNumber = ($maxNumber ?? 0) + 1;
-        $ticketKey  = "{$companyCode}-{$nextNumber}";
-
+        // ticket_key is left for TicketObserver to derive so it follows the same
+        // store-owning-company rule as every other channel. SAP requests are
+        // entity-level (no store), so the observer resolves the ticket's own
+        // company code — matching the historical prefix.
         $requestType = $sapRequest->requestType;
         $requestTypeName = $requestType->name;
         $subject = $this->buildTicketTitle($requestTypeName, $sapRequest->company?->name);
@@ -245,7 +231,6 @@ class SapRequestService
         }
 
         $ticket = Ticket::create([
-            'ticket_key'   => $ticketKey,
             'title'        => $subject,
             'description'  => $description,
             'status'       => 'open',
