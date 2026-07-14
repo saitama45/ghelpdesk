@@ -5,10 +5,12 @@ namespace Tests\Feature;
 use App\Models\Company;
 use App\Models\Department;
 use App\Models\DepartmentNode;
+use App\Models\Role;
 use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 class TicketIndexSummaryTest extends TestCase
@@ -357,6 +359,60 @@ class TicketIndexSummaryTest extends TestCase
                     ->contains('user:'.$internalRequester->id)
                     && collect($options)->pluck('value')->contains('email:external@example.test')
                     && ! collect($options)->pluck('value')->contains('email:hidden@example.test'))
+            );
+    }
+
+    public function test_ticket_key_options_follow_the_selected_accessible_entities(): void
+    {
+        $tgi = Company::create(['name' => 'The Table Group', 'code' => 'TGI', 'is_active' => true]);
+        $cbtl = Company::create(['name' => 'Coffee Bean and Tea Leaf', 'code' => 'CBTL', 'is_active' => true]);
+        $hidden = Company::create(['name' => 'Hidden Company', 'code' => 'HIDDEN', 'is_active' => true]);
+
+        Permission::findOrCreate('tickets.filter_entity', 'web');
+        $role = Role::create(['name' => 'Cross-entity ticket viewer', 'guard_name' => 'web']);
+        $role->companies()->attach([$tgi->id, $cbtl->id]);
+        $role->givePermissionTo('tickets.filter_entity');
+
+        $viewer = User::factory()->create(['company_id' => $tgi->id]);
+        $viewer->assignRole($role);
+
+        $tgiTicket = $this->ticket($tgi, ['ticket_key' => 'TGI-1001']);
+        $cbtlTicket = $this->ticket($cbtl, ['ticket_key' => 'CBTL-2001']);
+        $this->ticket($hidden, ['ticket_key' => 'HIDDEN-3001']);
+
+        $this->actingAs($viewer)
+            ->get(route('tickets.index', [
+                'status' => ['all'],
+                'skip_default_department' => true,
+                'entity_ids' => [$tgi->id, $cbtl->id],
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('filters.entity_ids', [$tgi->id, $cbtl->id])
+                ->where('tickets.data', fn ($tickets) => collect($tickets)
+                    ->pluck('id')
+                    ->sort()
+                    ->values()
+                    ->all() === collect([$tgiTicket->id, $cbtlTicket->id])->sort()->values()->all())
+                ->where('ticketKeyOptions', fn ($options) => collect($options)->contains(fn ($option) =>
+                    $option['value'] === 'TGI-1001' && $option['company_id'] === $tgi->id
+                ) && collect($options)->contains(fn ($option) =>
+                    $option['value'] === 'CBTL-2001' && $option['company_id'] === $cbtl->id
+                ) && ! collect($options)->pluck('value')->contains('HIDDEN-3001'))
+            );
+
+        $this->actingAs($viewer)
+            ->get(route('tickets.index', [
+                'status' => ['all'],
+                'skip_default_department' => true,
+                'entity_ids' => [$cbtl->id],
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('filters.entity_ids', [$cbtl->id])
+                ->has('tickets.data', 1)
+                ->where('tickets.data.0.id', $cbtlTicket->id)
+                ->where('ticketKeyOptions', fn ($options) => collect($options)->pluck('value')->all() === ['CBTL-2001'])
             );
     }
 

@@ -303,6 +303,10 @@ const filterEntities = ref([...(props.entityFilter?.selected || [])]);
 const resolvedEntityIds = () => filterEntities.value.includes('all')
     ? entityFilterOptions.value.map(o => o.id)
     : filterEntities.value;
+const ticketKeyFilterOptions = computed(() => props.ticketKeyOptions || []);
+const ticketKeyCompanyIdByValue = computed(() => new Map(
+    ticketKeyFilterOptions.value.map(option => [String(option.value), Number(option.company_id)])
+));
 
 const filterOptions = [
     { value: 'all', label: 'All' },
@@ -556,8 +560,28 @@ const handleEntityFilterChange = (value) => {
         next = next.filter(v => v !== 'all'); // picked a specific entity → drop "All"
     }
     filterEntities.value = next.map(v => (v === 'all' ? 'all' : parseInt(v, 10))).filter(v => v === 'all' || v);
+
+    // Ticket keys are entity-owned. Remove only keys that no longer belong to
+    // the selected entities so a hidden, incompatible key cannot empty the list.
+    const selectedEntityIds = new Set(resolvedEntityIds().map(Number));
+    filterTicketKeys.value = filterTicketKeys.value.filter((key) => {
+        const companyId = ticketKeyCompanyIdByValue.value.get(String(key));
+        return companyId && selectedEntityIds.has(companyId);
+    });
+
     applyFilter();
 };
+
+watch(() => props.entityFilter?.selected, (selected) => {
+    const confirmedIds = (selected || []).map(Number).filter(Boolean);
+    const currentIds = resolvedEntityIds().map(Number).filter(Boolean);
+    const sameSelection = confirmedIds.length === currentIds.length
+        && confirmedIds.every(id => currentIds.includes(id));
+
+    if (!sameSelection) {
+        filterEntities.value = confirmedIds;
+    }
+}, { deep: true });
 
 const handleSubCategoryFilterChange = (value) => {
     filterSubCategory.value = value ?? '';
@@ -1951,7 +1975,7 @@ const requesterTabs = computed(() => {
                                 <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Ticket #</label>
                                 <MultiAutocomplete
                                     :model-value="filterTicketKeys"
-                                    :options="ticketKeyOptions"
+                                    :options="ticketKeyFilterOptions"
                                     label-key="label"
                                     value-key="value"
                                     placeholder="Ticket #..."

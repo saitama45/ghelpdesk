@@ -109,11 +109,17 @@ class TicketController extends Controller
         $ticketKeyQuery->setEagerLoads([]);
         $ticketKeyOptions = $ticketKeyQuery
             ->whereNotNull('ticket_key')
+            ->select(['ticket_key', 'company_id'])
+            ->distinct()
             ->orderBy('ticket_key')
-            ->pluck('ticket_key')
-            ->filter()
-            ->unique()
-            ->map(fn ($key) => ['value' => $key, 'label' => $key])
+            ->get()
+            ->filter(fn (Ticket $ticket) => filled($ticket->ticket_key))
+            ->unique('ticket_key')
+            ->map(fn (Ticket $ticket) => [
+                'value' => $ticket->ticket_key,
+                'label' => $ticket->ticket_key,
+                'company_id' => (int) $ticket->company_id,
+            ])
             ->values();
 
         $requesterQuery = clone $baseQuery;
