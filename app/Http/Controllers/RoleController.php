@@ -45,6 +45,26 @@ class RoleController extends Controller
         ]);
     }
 
+    public function editorData(Request $request, Role $role)
+    {
+        abort_unless($request->user()->can('roles.edit'), 403);
+
+        $role->load('permissions:id,name', 'companies:id,name');
+
+        return response()->json([
+            'role' => $role,
+            'permissions' => RoleService::getPermissionsByCategory(),
+            'companies' => Company::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name']),
+            'dynamic_forms' => \App\Models\FormDefinition::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['name', 'slug']),
+        ]);
+    }
+
     public function store(Request $request)
     {
         $request->validate([

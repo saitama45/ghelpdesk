@@ -126,9 +126,12 @@ Route::middleware('auth')->group(function () {
 
     Route::get('users/template', [UserController::class, 'template'])->name('users.template')->middleware('can:users.create');
     Route::post('users/import', [UserController::class, 'import'])->name('users.import')->middleware('can:users.create');
+    Route::get('users/form-options', [UserController::class, 'formOptions'])->name('users.form-options');
+    Route::get('users/{user}/details', [UserController::class, 'details'])->name('users.details');
     Route::resource('users', UserController::class);
     Route::put('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
     
+    Route::get('roles/{role}/editor-data', [RoleController::class, 'editorData'])->name('roles.editor-data');
     Route::resource('roles', RoleController::class)->except(['show', 'create', 'edit']);
     Route::post('companies/switch', [CompanyController::class, 'switch'])->name('companies.switch');
     Route::resource('companies', CompanyController::class)->except(['show', 'create', 'edit']);

@@ -1,13 +1,13 @@
 <script setup>
 import { Head, Link, useForm, router } from '@inertiajs/vue3';
-import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { ref, reactive, computed, onMounted, watch, defineAsyncComponent } from 'vue';
 import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
-import HierarchySelector from '@/Components/HierarchySelector.vue';
-import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
-import RoleFormModal from '@/Components/Roles/RoleFormModal.vue';
+const HierarchySelector = defineAsyncComponent(() => import('@/Components/HierarchySelector.vue'));
+const MultiAutocomplete = defineAsyncComponent(() => import('@/Components/MultiAutocomplete.vue'));
+const RoleFormModal = defineAsyncComponent(() => import('@/Components/Roles/RoleFormModal.vue'));
 import { roleLandingPageOptions } from '@/Components/Roles/roleLandingPageOptions';
 import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
@@ -17,13 +17,7 @@ import { usePermission } from '@/Composables/usePermission';
 
 const props = defineProps({
     users: Object,
-    roles: Array,
-    stores: Array,
-    managers: Array,
-    permissions: Object,
-    companies: Array,
-    dynamicForms: Array,
-    departmentTree: Array,
+    roles: { type: Array, default: () => [] },
     filters: Object,
 });
 
@@ -35,6 +29,12 @@ const showImportModal = ref(false);
 const editingUser = ref(null);
 const resetPasswordUser = ref(null);
 const selectedUserStores = ref([]);
+const formOptions = reactive({ stores: [], managers: [], departmentTree: [] });
+const formOptionsLoaded = ref(false);
+const formOptionsLoading = ref(false);
+const userFormLoading = ref(false);
+const storesModalLoading = ref(false);
+const userDetailsCache = new Map();
 const filterStatus = ref(props.filters?.status || '');
 const filterRole = ref(props.filters?.role || '');
 const { confirm } = useConfirm();
@@ -82,8 +82,8 @@ const submitImport = async () => {
     }
 };
 
-const allStoreIds = computed(() => props.stores.map(s => s.id));
-const departmentOptions = computed(() => props.departmentTree || []);
+const allStoreIds = computed(() => formOptions.stores.map(s => s.id));
+const departmentOptions = computed(() => formOptions.departmentTree);
 const landingPageOptions = roleLandingPageOptions;
 
 const flattenNodes = (nodes, level = 0) => {
@@ -162,7 +162,7 @@ const toggleAllStores = (form) => {
 const pagination = usePagination(props.users, 'users.index', () => ({
     status: filterStatus.value,
     role: filterRole.value,
-}));
+}), { only: ['users', 'filters'] });
 
 onMounted(() => {
     pagination.search.value = props.filters?.search || '';
@@ -171,7 +171,7 @@ onMounted(() => {
 
 watch(() => props.users, (newUsers) => {
     pagination.updateData(newUsers);
-}, { deep: true });
+});
 
 watch([filterStatus, filterRole], () => {
     pagination.currentPage.value = 1;
@@ -212,11 +212,66 @@ const passwordForm = useForm({
     password: '',
 });
 
+const loadFormOptions = async () => {
+    if (formOptionsLoaded.value) return;
+    if (formOptionsLoading.value) {
+        while (formOptionsLoading.value) {
+            await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        return;
+    }
+
+    formOptionsLoading.value = true;
+    try {
+        const { data } = await axios.get(route('users.form-options', undefined, false));
+        formOptions.stores = data.stores || [];
+        formOptions.managers = data.managers || [];
+        formOptions.departmentTree = data.department_tree || [];
+        formOptionsLoaded.value = true;
+    } catch (error) {
+        showError(error.response?.data?.message || 'Unable to load user form options.');
+        throw error;
+    } finally {
+        formOptionsLoading.value = false;
+    }
+};
+
+const loadUserDetails = async (userId) => {
+    if (userDetailsCache.has(userId)) return userDetailsCache.get(userId);
+
+    const request = axios
+        .get(route('users.details', userId, false))
+        .then(({ data }) => data.user);
+    userDetailsCache.set(userId, request);
+
+    try {
+        const details = await request;
+        userDetailsCache.set(userId, details);
+        return details;
+    } catch (error) {
+        userDetailsCache.delete(userId);
+        throw error;
+    }
+};
+
+const openCreateUserModal = async () => {
+    showCreateModal.value = true;
+    userFormLoading.value = true;
+    try {
+        await loadFormOptions();
+    } catch (error) {
+        showCreateModal.value = false;
+    } finally {
+        userFormLoading.value = false;
+    }
+};
+
 const createUser = () => {
     post(route('users.store'), createForm.data(), {
         onSuccess: () => {
             showCreateModal.value = false;
             createForm.reset();
+            formOptionsLoaded.value = false;
         },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred'
@@ -225,7 +280,7 @@ const createUser = () => {
     });
 };
 
-const editUser = (user) => {
+const editUser = async (user) => {
     editingUser.value = user;
     editForm.name = user.name;
     editForm.email = user.email;
@@ -236,10 +291,23 @@ const editUser = (user) => {
     editForm.date_hired = user.date_hired ? String(user.date_hired).substring(0, 10) : '';
     editForm.is_active = user.google_id && !user.is_active && !(user.roles?.length) ? true : !!user.is_active;
     editForm.is_manager = !!user.is_manager;
-    editForm.store_ids = user.stores?.map(s => s.id) || [];
-    editForm.manager_ids = user.managers?.map(m => m.id) || [];
+    editForm.store_ids = [];
+    editForm.manager_ids = [];
     editForm.notify_user_approval = true;
     showEditModal.value = true;
+    userFormLoading.value = true;
+
+    try {
+        const [, details] = await Promise.all([loadFormOptions(), loadUserDetails(user.id)]);
+        editingUser.value = { ...user, ...details };
+        editForm.store_ids = details.store_ids || [];
+        editForm.manager_ids = details.manager_ids || [];
+    } catch (error) {
+        showError(error.response?.data?.message || 'Unable to load user details.');
+        showEditModal.value = false;
+    } finally {
+        userFormLoading.value = false;
+    }
 };
 
 const updateUser = () => {
@@ -247,6 +315,8 @@ const updateUser = () => {
         onSuccess: () => {
             showEditModal.value = false;
             editForm.reset();
+            userDetailsCache.delete(editingUser.value.id);
+            formOptionsLoaded.value = false;
             editingUser.value = null;
         },
         onError: (errors) => {
@@ -279,9 +349,19 @@ const resetPassword = (user) => {
     showPasswordModal.value = true;
 };
 
-const viewAssignedStores = (user) => {
-    selectedUserStores.value = user.stores || [];
+const viewAssignedStores = async (user) => {
+    selectedUserStores.value = [];
     showStoresModal.value = true;
+    storesModalLoading.value = true;
+    try {
+        const details = await loadUserDetails(user.id);
+        selectedUserStores.value = details.stores || [];
+    } catch (error) {
+        showError(error.response?.data?.message || 'Unable to load assigned stores.');
+        showStoresModal.value = false;
+    } finally {
+        storesModalLoading.value = false;
+    }
 };
 
 const updatePassword = () => {
@@ -301,6 +381,11 @@ const updatePassword = () => {
 // Role Edit Modal
 const showRoleModal = ref(false);
 const editingRole = ref(null);
+const roleEditorLoading = ref(false);
+const roleEditorPermissions = ref({});
+const roleEditorCompanies = ref([]);
+const roleEditorDynamicForms = ref([]);
+const roleEditorCache = new Map();
 const rolePermissionSearch = ref('');
 const activeRoleTab = ref('');
 
@@ -316,10 +401,23 @@ const roleForm = reactive({
     notify_on_user_registration: false,
 });
 
-const openRoleEditModal = (userRole) => {
+const openRoleEditModal = async (userRole) => {
     if (!userRole) return;
-    const fullRole = props.roles.find(r => r.id === userRole.id);
-    if (!fullRole) return;
+    editingRole.value = userRole;
+    showRoleModal.value = true;
+    roleEditorLoading.value = true;
+
+    try {
+        let payload = roleEditorCache.get(userRole.id);
+        if (!payload) {
+            const response = await axios.get(route('roles.editor-data', userRole.id, false));
+            payload = response.data;
+            roleEditorCache.set(userRole.id, payload);
+        }
+        const fullRole = payload.role;
+        roleEditorPermissions.value = payload.permissions || {};
+        roleEditorCompanies.value = payload.companies || [];
+        roleEditorDynamicForms.value = payload.dynamic_forms || [];
     editingRole.value = fullRole;
     roleForm.name = fullRole.name;
     roleForm.landing_page = fullRole.landing_page || 'dashboard';
@@ -331,7 +429,13 @@ const openRoleEditModal = (userRole) => {
     roleForm.notify_on_urgent_ticket = !!fullRole.notify_on_urgent_ticket;
     roleForm.notify_on_user_registration = !!fullRole.notify_on_user_registration;
     rolePermissionSearch.value = '';
-    showRoleModal.value = true;
+    } catch (error) {
+        showError(error.response?.data?.message || 'Unable to load role permissions.');
+        showRoleModal.value = false;
+        editingRole.value = null;
+    } finally {
+        roleEditorLoading.value = false;
+    }
 };
 
 const closeRoleModal = () => {
@@ -346,7 +450,10 @@ const submitRoleForm = () => {
         return;
     }
     put(`/roles/${editingRole.value.id}`, roleForm, {
-        onSuccess: () => closeRoleModal(),
+        onSuccess: () => {
+            roleEditorCache.delete(editingRole.value.id);
+            closeRoleModal();
+        },
         onError: (errors) => {
             const errorMessage = Object.values(errors).flat().join(', ') || 'An error occurred';
             showError(errorMessage);
@@ -356,7 +463,7 @@ const submitRoleForm = () => {
 
 const rolePermissionGroups = computed(() => {
     const servicesCategories = ['Tickets', 'Queue', 'Task Board', 'Pos_requests', 'Sap_requests'];
-    (props.dynamicForms || []).forEach(f => servicesCategories.push(f.name));
+    roleEditorDynamicForms.value.forEach(f => servicesCategories.push(f.name));
     return [
         { name: 'Dashboard', categories: ['Dashboard'] },
         { name: 'Project Tracker', categories: ['Projects'] },
@@ -374,7 +481,7 @@ const rolePermissionGroups = computed(() => {
 const groupedRolePermissions = computed(() => {
     const search = rolePermissionSearch.value.toLowerCase();
     const result = [];
-    const availableCategories = Object.keys(props.permissions || {});
+    const availableCategories = Object.keys(roleEditorPermissions.value);
     const mappedKeys = new Set();
 
     rolePermissionGroups.value.forEach(group => {
@@ -383,7 +490,7 @@ const groupedRolePermissions = computed(() => {
             const normalizedCatName = catName.toLowerCase().replace(/[^a-z0-9]/g, '');
             const actualKey = availableCategories.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === normalizedCatName);
             if (actualKey && !mappedKeys.has(actualKey)) {
-                const perms = props.permissions[actualKey];
+                const perms = roleEditorPermissions.value[actualKey];
                 if (perms) {
                     let filteredPerms = perms.filter(p => p.name.toLowerCase().includes(search));
                     if (group.name === 'Inventory' && actualKey === 'Reports') {
@@ -408,7 +515,7 @@ const groupedRolePermissions = computed(() => {
     const otherCategories = [];
     availableCategories.forEach(catName => {
         if (!mappedKeys.has(catName)) {
-            const perms = props.permissions[catName];
+            const perms = roleEditorPermissions.value[catName];
             if (perms) {
                 const filteredPerms = perms.filter(p => p.name.toLowerCase().includes(search));
                 if (filteredPerms.length > 0) {
@@ -447,7 +554,7 @@ const toggleRoleGroup = (group) => {
     }
 };
 
-const getAllRolePermissionNames = () => Object.values(props.permissions || {}).flat().map(p => p.name);
+const getAllRolePermissionNames = () => Object.values(roleEditorPermissions.value).flat().map(p => p.name);
 
 const areAllRolePermissionsSelected = computed(() => {
     const allNames = getAllRolePermissionNames();
@@ -475,9 +582,9 @@ const isRoleCategorySelected = (permissionsList) => {
 };
 
 const toggleAllRoleCompanies = () => {
-    roleForm.companies = roleForm.companies.length === props.companies.length
+    roleForm.companies = roleForm.companies.length === roleEditorCompanies.value.length
         ? []
-        : props.companies.map(c => c.id);
+        : roleEditorCompanies.value.map(c => c.id);
 };
 
 const sortRolePermissions = (permissions) => {
@@ -554,7 +661,7 @@ const sortRolePermissions = (permissions) => {
                     </button>
                     <button
                         v-if="hasPermission('users.create')"
-                        @click="showCreateModal = true"
+                        @click="openCreateUserModal"
                         class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 text-sm font-medium shadow-sm whitespace-nowrap"
                     >
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -616,14 +723,14 @@ const sortRolePermissions = (permissions) => {
                         </td>
                         <td class="px-6 py-4">
                             <button 
-                                v-if="user.stores?.length > 0"
+                                v-if="user.stores_count > 0"
                                 @click="viewAssignedStores(user)"
                                 class="text-blue-600 hover:text-blue-800 text-xs font-medium flex items-center"
                             >
                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                                 </svg>
-                                View {{ user.stores.length }} assigned Store{{ user.stores.length > 1 ? 's' : '' }}
+                                View {{ user.stores_count }} assigned Store{{ user.stores_count > 1 ? 's' : '' }}
                             </button>
                             <span v-else class="text-xs text-gray-400 italic dark:text-gray-400">No Stores</span>
                         </td>
@@ -679,6 +786,10 @@ const sortRolePermissions = (permissions) => {
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showCreateModal = false"></div>
                 <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
+                    <div v-if="userFormLoading" class="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-white/90 text-sm font-semibold text-gray-600 dark:bg-gray-800/90 dark:text-gray-300">
+                        <span class="mb-3 h-7 w-7 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></span>
+                        Loading form options...
+                    </div>
                     <div class="flex justify-between items-center mb-6">
                         <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Create New User</h3>
                         <button @click="showCreateModal = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
@@ -753,7 +864,7 @@ const sortRolePermissions = (permissions) => {
                             </div>
                             <MultiAutocomplete
                                 v-model="createForm.store_ids"
-                                :options="stores"
+                                :options="formOptions.stores"
                                 label-key="name"
                                 value-key="id"
                                 placeholder="Assign stores..."
@@ -774,7 +885,7 @@ const sortRolePermissions = (permissions) => {
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Reports To</label>
                             <MultiAutocomplete
                                 v-model="createForm.manager_ids"
-                                :options="managers"
+                                :options="formOptions.managers"
                                 label-key="name"
                                 value-key="id"
                                 placeholder="Select managers..."
@@ -795,6 +906,10 @@ const sortRolePermissions = (permissions) => {
             <div class="flex items-center justify-center min-h-screen px-4 py-6">
                 <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showEditModal = false"></div>
                 <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
+                    <div v-if="userFormLoading" class="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-white/90 text-sm font-semibold text-gray-600 dark:bg-gray-800/90 dark:text-gray-300">
+                        <span class="mb-3 h-7 w-7 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></span>
+                        Loading user details...
+                    </div>
                     <div class="flex justify-between items-center mb-6">
                         <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Edit User</h3>
                         <button @click="showEditModal = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
@@ -865,7 +980,7 @@ const sortRolePermissions = (permissions) => {
                             </div>
                             <MultiAutocomplete
                                 v-model="editForm.store_ids"
-                                :options="stores"
+                                :options="formOptions.stores"
                                 label-key="name"
                                 value-key="id"
                                 placeholder="Assign stores..."
@@ -896,7 +1011,7 @@ const sortRolePermissions = (permissions) => {
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Reports To</label>
                             <MultiAutocomplete
                                 v-model="editForm.manager_ids"
-                                :options="managers"
+                                :options="formOptions.managers"
                                 label-key="name"
                                 value-key="id"
                                 placeholder="Select managers..."
@@ -983,7 +1098,11 @@ const sortRolePermissions = (permissions) => {
                     </div>
                     
                     <div class="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-                        <div v-if="selectedUserStores.length > 0" class="grid grid-cols-1 gap-3">
+                        <div v-if="storesModalLoading" class="flex justify-center py-10 text-sm font-semibold text-gray-500">
+                            <span class="mr-3 h-5 w-5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></span>
+                            Loading assigned stores...
+                        </div>
+                        <div v-else-if="selectedUserStores.length > 0" class="grid grid-cols-1 gap-3">
                             <div v-for="store in selectedUserStores" :key="store.id" 
                                  class="flex items-center p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-blue-50 hover:border-blue-200 transition-all group dark:bg-gray-900/50 dark:border-gray-700"
                             >
@@ -1088,241 +1207,16 @@ const sortRolePermissions = (permissions) => {
 
         <RoleFormModal
             :show="showRoleModal"
+            :loading="roleEditorLoading"
             :title="`Edit Role: ${editingRole?.name || ''}`"
             submit-label="Update Role"
             :form="roleForm"
-            :permissions="permissions"
-            :companies="companies"
-            :dynamic-forms="dynamicForms"
+            :permissions="roleEditorPermissions"
+            :companies="roleEditorCompanies"
+            :dynamic-forms="roleEditorDynamicForms"
             :landing-page-options="landingPageOptions"
             @close="closeRoleModal"
             @submit="submitRoleForm"
         />
-
-        <!-- Legacy inline role modal kept inactive; RoleFormModal is the shared source. -->
-        <div v-if="false && showRoleModal" class="fixed inset-0 z-50 overflow-y-auto">
-            <div class="flex items-center justify-center min-h-screen px-4 py-6">
-                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="closeRoleModal"></div>
-                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Edit Role: {{ editingRole?.name }}</h3>
-                        <button @click="closeRoleModal" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
-
-                    <form @submit.prevent="submitRoleForm" class="space-y-6">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Role Name</label>
-                                <input v-model="roleForm.name" type="text" required
-                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Default Landing Page</label>
-                                <select v-model="roleForm.landing_page"
-                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
-                                    <option value="dashboard">Dashboard</option>
-                                    <option value="tickets.index">Tickets</option>
-                                    <option value="pos-requests.index">POS Requests</option>
-                                    <option value="sap-requests.index">SAP Requests</option>
-                                    <option value="assets.index">Assets</option>
-                                    <option value="stock-ins.index">Stock In</option>
-                                    <option value="stock-transfers.index">Stock Transfer</option>
-                                    <option value="reports.inventory">Inventory Report</option>
-                                    <option value="attendance.index">DTR (Attendance)</option>
-                                    <option value="attendance.logs">Attendance Logs</option>
-                                    <option value="schedules.index">Scheduling</option>
-                                    <option value="presence.index">Presence</option>
-                                    <option value="kb-articles.index">KB Articles</option>
-                                    <option value="npc-statuses.index">NPC Status</option>
-                                    <option value="payments.index">Payments & SOA</option>
-                                    <option value="accounting-documents.index">Accounting Documents</option>
-                                    <option value="mall-hookups.index">Mall Hookup</option>
-                                    <option value="reports.store-health">Store Health Report</option>
-                                    <option value="companies.index">Companies</option>
-                                    <option value="departments.index">Departments</option>
-                                    <option value="clusters.index">Clusters</option>
-                                    <option value="stores.index">Stores</option>
-                                    <option value="vendors.index">Vendors</option>
-                                    <option value="categories.index">Categories</option>
-                                    <option value="sub-categories.index">Sub-Categories</option>
-                                    <option value="items.index">Items</option>
-                                    <option value="request-types.index">Request Types</option>
-                                    <option value="form-builder.index">Form Builder</option>
-                                    <option value="users.index">Users</option>
-                                    <option value="roles.index">Roles & Permissions</option>
-                                    <option value="settings.index">System Settings</option>
-                                    <option value="canned-messages.index">Canned Messages</option>
-                                    <option value="profile.edit">My Profile</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="flex flex-col justify-center p-4 bg-blue-50 rounded-xl border border-blue-100">
-                                <label class="flex items-center space-x-3 cursor-pointer">
-                                    <div class="relative">
-                                        <input type="checkbox" v-model="roleForm.is_assignable" class="sr-only peer">
-                                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 dark:bg-gray-700"></div>
-                                    </div>
-                                    <span class="text-sm font-bold text-blue-900">Assignable to Tickets</span>
-                                </label>
-                                <p class="text-[10px] text-blue-600 mt-1 uppercase font-bold italic">Users with this role appear in "Assignee" list.</p>
-                            </div>
-
-                            <div class="p-4 bg-gray-50 rounded-xl border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
-                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 dark:text-gray-400">Email Notifications</h4>
-                                <div class="space-y-3">
-                                    <label class="flex items-center justify-between cursor-pointer group">
-                                        <span class="text-sm font-medium text-gray-700 group-hover:text-blue-600 transition-colors dark:text-gray-300">On Ticket Creation</span>
-                                        <div class="relative">
-                                            <input type="checkbox" v-model="roleForm.notify_on_ticket_create" class="sr-only peer">
-                                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 dark:bg-gray-700"></div>
-                                        </div>
-                                    </label>
-                                    <label class="flex items-center justify-between cursor-pointer group">
-                                        <span class="text-sm font-medium text-gray-700 group-hover:text-blue-600 transition-colors dark:text-gray-300">When Assigned</span>
-                                        <div class="relative">
-                                            <input type="checkbox" v-model="roleForm.notify_on_ticket_assign" class="sr-only peer">
-                                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 dark:bg-gray-700"></div>
-                                        </div>
-                                    </label>
-                                    <label class="flex items-center justify-between cursor-pointer group">
-                                        <span class="text-sm font-medium text-gray-700 group-hover:text-red-600 transition-colors flex items-center gap-1.5 dark:text-gray-300">
-                                            On Urgent Ticket
-                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-red-100 text-red-700 border border-red-200">P1</span>
-                                        </span>
-                                        <div class="relative">
-                                            <input type="checkbox" v-model="roleForm.notify_on_urgent_ticket" class="sr-only peer">
-                                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500 dark:bg-gray-700"></div>
-                                        </div>
-                                    </label>
-                                    <label class="flex items-center justify-between cursor-pointer group">
-                                        <span class="text-sm font-medium text-gray-700 group-hover:text-emerald-600 transition-colors dark:text-gray-300">On User Registration</span>
-                                        <div class="relative">
-                                            <input type="checkbox" v-model="roleForm.notify_on_user_registration" class="sr-only peer">
-                                            <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 dark:bg-gray-700"></div>
-                                        </div>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div class="md:col-span-1">
-                                <div class="flex items-center justify-between mb-2">
-                                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Companies</label>
-                                    <button type="button" @click="toggleAllRoleCompanies" class="text-[10px] font-black text-blue-600 uppercase hover:text-blue-800">
-                                        {{ roleForm.companies.length === companies.length ? 'Unselect All' : 'Select All' }}
-                                    </button>
-                                </div>
-                                <div class="space-y-2 max-h-64 overflow-y-auto border border-gray-200 rounded-xl p-4 bg-white shadow-inner custom-scrollbar dark:bg-gray-800 dark:border-gray-700">
-                                    <label v-for="company in companies" :key="company.id" class="flex items-center group cursor-pointer">
-                                        <input type="checkbox" :value="company.id" v-model="roleForm.companies"
-                                               class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 group-hover:border-blue-400 transition-colors dark:border-gray-600">
-                                        <span class="ml-2 text-sm text-gray-700 group-hover:text-blue-600 transition-colors dark:text-gray-300">{{ company.name }}</span>
-                                    </label>
-                                </div>
-                            </div>
-
-                            <div class="md:col-span-2">
-                                <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
-                                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">Permissions</label>
-                                    <div class="flex items-center space-x-3">
-                                        <div class="relative flex-1 sm:flex-none">
-                                            <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                                                <svg class="h-3.5 w-3.5 text-gray-400 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                                </svg>
-                                            </div>
-                                            <input v-model="rolePermissionSearch" type="text" placeholder="Search permissions..."
-                                                   class="pl-8 pr-3 py-1.5 text-xs border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 w-full sm:w-64 shadow-sm dark:border-gray-600">
-                                        </div>
-                                        <button type="button" @click="toggleAllRolePermissions" class="text-[10px] font-black text-blue-600 uppercase hover:text-blue-800 whitespace-nowrap px-2 py-1 bg-blue-50 rounded-md transition-colors">
-                                            {{ areAllRolePermissionsSelected ? 'Unselect All' : 'Select All' }}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- Tab Navigation -->
-                                <div class="flex overflow-x-auto custom-scrollbar border-b border-gray-200 mb-4 pb-1 dark:border-gray-700">
-                                    <button
-                                        v-for="group in groupedRolePermissions"
-                                        :key="group.name"
-                                        type="button"
-                                        @click="activeRoleTab = group.name"
-                                        :class="[
-                                            'px-4 py-2 text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all border-b-2 -mb-[2px]',
-                                            activeRoleTab === group.name
-                                                ? 'border-blue-600 text-blue-600'
-                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                                        ]"
-                                    >
-                                        {{ group.name }}
-                                        <span v-if="rolePermissionSearch" class="ml-1 px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px]">
-                                            {{ group.categories.reduce((acc, cat) => acc + cat.permissions.length, 0) }}
-                                        </span>
-                                    </button>
-                                </div>
-
-                                <!-- Tab Content -->
-                                <div class="space-y-6 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                                    <div v-for="group in groupedRolePermissions" :key="group.name">
-                                        <div v-if="activeRoleTab === group.name" class="space-y-4">
-                                            <div class="flex items-center justify-between">
-                                                <h3 class="text-xs font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">{{ group.name }} Overview</h3>
-                                                <button type="button" @click="toggleRoleGroup(group)" class="text-[10px] font-black text-blue-600 uppercase hover:text-blue-800 bg-blue-50 px-2 py-1 rounded transition-colors">
-                                                    {{ isRoleGroupSelected(group) ? 'Clear All in Group' : 'Select All in Group' }}
-                                                </button>
-                                            </div>
-                                            <div class="grid grid-cols-1 gap-4">
-                                                <div v-for="categoryData in group.categories" :key="categoryData.name" class="bg-gray-50 rounded-xl p-4 border border-gray-100 dark:bg-gray-900/50 dark:border-gray-700">
-                                                    <div class="flex items-center justify-between mb-3 border-b border-gray-200 pb-2 dark:border-gray-700">
-                                                        <h4 class="text-xs font-black text-gray-900 uppercase tracking-widest dark:text-gray-100">{{ categoryData.name.replace(/_/g, ' ') }}</h4>
-                                                        <button type="button" @click="toggleRoleCategory(categoryData.name, categoryData.permissions)" class="text-[10px] font-bold text-blue-600 uppercase hover:text-blue-800">
-                                                            {{ isRoleCategorySelected(categoryData.permissions) ? 'Clear' : 'All' }}
-                                                        </button>
-                                                    </div>
-                                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                                        <label v-for="permission in sortRolePermissions(categoryData.permissions)" :key="permission.id" class="flex items-center group cursor-pointer p-2 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-gray-200 shadow-sm sm:shadow-none dark:hover:bg-gray-700">
-                                                            <input type="checkbox" :value="permission.name" v-model="roleForm.permissions"
-                                                                   class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 group-hover:border-blue-400 transition-colors dark:border-gray-600">
-                                                            <span class="ml-2 text-sm text-gray-700 group-hover:text-blue-600 transition-colors truncate dark:text-gray-300" :title="permission.name">{{ permission.name.split('.')[1] }}</span>
-                                                        </label>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div v-if="groupedRolePermissions.length === 0" class="text-center py-12">
-                                        <div class="bg-gray-50 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 dark:bg-gray-900/50">
-                                            <svg class="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                            </svg>
-                                        </div>
-                                        <p class="text-sm text-gray-500 font-medium dark:text-gray-300">No permissions found matching "{{ rolePermissionSearch }}"</p>
-                                        <button type="button" @click="rolePermissionSearch = ''" class="mt-2 text-xs font-bold text-blue-600 uppercase hover:text-blue-800">Clear search</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
-                            <button type="button" @click="closeRoleModal"
-                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
-                                Cancel
-                            </button>
-                            <button type="submit"
-                                    class="px-6 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 shadow-md transition-all">
-                                Update Role
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
     </AppLayout>
 </template>

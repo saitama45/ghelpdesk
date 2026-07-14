@@ -3,6 +3,10 @@
         <div class="flex items-center justify-center min-h-screen px-4 py-6">
             <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="$emit('close')"></div>
             <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
+                <div v-if="loading" class="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-white/90 text-sm font-semibold text-gray-600 dark:bg-gray-800/90 dark:text-gray-300">
+                    <span class="mb-3 h-7 w-7 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></span>
+                    Loading role permissions...
+                </div>
                 <div class="flex justify-between items-center mb-6">
                     <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">{{ title }}</h3>
                     <button @click="$emit('close')" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
@@ -206,6 +210,7 @@ import { computed, ref, watch } from 'vue'
 
 const props = defineProps({
     show: Boolean,
+    loading: Boolean,
     title: {
         type: String,
         default: 'Create Role'

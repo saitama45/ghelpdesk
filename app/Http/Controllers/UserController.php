@@ -3,11 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Mail\GoogleRegistrationApproved;
-use App\Models\Company;
 use App\Models\DepartmentNode;
 use App\Models\Store;
 use App\Models\User;
-use App\Http\Services\RoleService;
 use App\Services\OrganizationReferenceService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -40,15 +38,17 @@ class UserController extends Controller
 
     public function index(Request $request)
     {
-        $query = User::with([
-            'roles:id,name',
-            'stores:id,name,code',
-            'managers:id,name',
-            'creator:id,name,email',
-            'updater:id,name,email',
-            'departmentReference:id,name',
-            'departmentNode:id,name',
-        ]);
+        $query = User::query()
+            ->select([
+                'id', 'name', 'email', 'department', 'org_path', 'department_id',
+                'department_node_id', 'position', 'date_hired', 'is_active',
+                'is_manager', 'google_id',
+            ])
+            ->with([
+                'roles:id,name',
+                'managers:id,name',
+            ])
+            ->withCount('stores');
         
         if ($request->filled('search')) {
             $query->where(function($q) use ($request) {
@@ -81,26 +81,71 @@ class UserController extends Controller
             }
         }
 
-        $users = $query->paginate($request->get('per_page', 10))->withQueryString();
-        $roles = Role::with('permissions:id,name', 'companies:id,name')->get();
-        $stores = \App\Models\Store::where('is_active', true)->orderBy('name')->get(['id', 'name']);
-        $managers = User::where('is_manager', true)->where('is_active', true)->orderBy('name')->get(['id', 'name']);
-        $permissions = RoleService::getPermissionsByCategory();
-        $companies = Company::where('is_active', true)->select('id', 'name')->get();
-
+        $perPage = max(10, min(100, $request->integer('per_page', 10)));
+        $users = $query->orderBy('name')->paginate($perPage)->withQueryString();
         return Inertia::render('Users/Index', [
             'users' => $users,
-            'roles' => $roles,
-            'stores' => $stores,
-            'managers' => $managers,
-            'permissions' => $permissions,
-            'companies' => $companies,
-            'dynamicForms' => \App\Models\FormDefinition::where('is_active', true)->get(['name', 'slug']),
-            'departmentTree' => $this->organizationReferences->tree(activeOnly: true),
+            'roles' => fn () => Role::query()->orderBy('name')->get(['id', 'name']),
             'filters' => [
                 'search' => $request->input('search', ''),
                 'status' => $request->input('status', ''),
                 'role' => $request->input('role', ''),
+            ],
+        ]);
+    }
+
+    public function formOptions(Request $request)
+    {
+        abort_unless(
+            $request->user()->can('users.create') || $request->user()->can('users.edit'),
+            403
+        );
+
+        return response()->json([
+            'stores' => Store::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn (Store $store) => ['id' => $store->id, 'name' => $store->name]),
+            'managers' => User::query()
+                ->where('is_manager', true)
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name']),
+            'department_tree' => $this->organizationReferences->tree(activeOnly: true),
+        ]);
+    }
+
+    public function details(Request $request, User $user)
+    {
+        abort_unless(
+            $request->user()->can('users.view') || $request->user()->can('users.edit'),
+            403
+        );
+
+        $user->load([
+            'stores:id,name,code',
+            'managers:id,name',
+            'creator:id,name,email',
+            'updater:id,name,email',
+        ]);
+
+        return response()->json([
+            'user' => [
+                'id' => $user->id,
+                'store_ids' => $user->stores->pluck('id')->values(),
+                'manager_ids' => $user->managers->pluck('id')->values(),
+                'stores' => $user->stores->map(fn (Store $store) => [
+                    'id' => $store->id,
+                    'name' => $store->name,
+                    'code' => $store->code,
+                ])->values(),
+                'creator' => $user->creator,
+                'updater' => $user->updater,
+                'created_by' => $user->created_by,
+                'updated_by' => $user->updated_by,
+                'created_at' => $user->created_at,
+                'updated_at' => $user->updated_at,
             ],
         ]);
     }

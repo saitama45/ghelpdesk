@@ -49,6 +49,7 @@ export function usePagination(initialData = {}, routeName = '', extraParams = {}
         router.get(searchUrl, params, {
             preserveState: true,
             preserveScroll: true,
+            ...(options.only ? { only: options.only } : {}),
             onSuccess: (page) => {
                 let responseData = null
 
