@@ -262,6 +262,8 @@ Route::middleware('auth')->group(function () {
     Route::get('schedules/complete-schedules', [\App\Http\Controllers\ScheduleController::class, 'completeSchedules'])->name('schedules.complete-schedules');
     Route::get('schedules/duplicates', [\App\Http\Controllers\ScheduleController::class, 'duplicates'])->name('schedules.duplicates');
     Route::delete('schedules/duplicates', [\App\Http\Controllers\ScheduleController::class, 'destroyDuplicates'])->name('schedules.duplicates.destroy');
+    Route::post('schedules/recurring/preview', [\App\Http\Controllers\ScheduleController::class, 'previewRecurring'])->name('schedules.recurring.preview');
+    Route::post('schedules/recurring', [\App\Http\Controllers\ScheduleController::class, 'storeRecurring'])->name('schedules.recurring.store');
     Route::post('schedules/{schedule}/actual-times', [\App\Http\Controllers\ScheduleController::class, 'updateActualTimes'])->name('schedules.actual-times.update');
     Route::post('schedules/{schedule}/actual-time-requests', [\App\Http\Controllers\ScheduleController::class, 'storeActualTimeRequest'])->name('schedules.actual-time-requests.store');
     Route::post('schedules/{schedule}/change-requests', [\App\Http\Controllers\ScheduleController::class, 'storeChangeRequest'])->name('schedules.change-requests.store');

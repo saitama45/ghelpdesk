@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Mail\ScheduleChangeRequestNotification;
+use App\Services\RecurringSchedulePlannerService;
 use Illuminate\Support\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -33,9 +34,11 @@ class ScheduleController extends Controller implements HasMiddleware
 {
     private const REQUEST_TYPE_SCHEDULE_CHANGE = 'schedule_change';
     private const REQUEST_TYPE_ACTUAL_TIME_ADJUSTMENT = 'actual_time_adjustment';
+    private const REQUEST_TYPE_RECURRING_REPLACEMENT = RecurringSchedulePlannerService::REQUEST_TYPE_RECURRING_REPLACEMENT;
 
     public function __construct(
-        private \App\Services\OrganizationReferenceService $organizationReferences
+        private \App\Services\OrganizationReferenceService $organizationReferences,
+        private RecurringSchedulePlannerService $recurringSchedulePlanner
     ) {}
 
     private function buildActualTimesByDate($logs): array
@@ -71,7 +74,7 @@ class ScheduleController extends Controller implements HasMiddleware
     {
         return [
             new Middleware('can:schedules.view', only: ['index', 'reportData', 'missingSchedules', 'completeSchedules']),
-            new Middleware('can:schedules.create', only: ['store', 'import']),
+            new Middleware('can:schedules.create', only: ['store', 'import', 'previewRecurring', 'storeRecurring']),
             new Middleware('can:schedules.edit', only: ['update']),
             new Middleware('can:schedules.approve', only: ['approveChangeRequest', 'rejectChangeRequest']),
             new Middleware('can:schedules.delete', only: ['destroy', 'duplicates', 'destroyDuplicates']),
@@ -158,6 +161,7 @@ class ScheduleController extends Controller implements HasMiddleware
         
         $logsBySchedule = $attendanceLogs->groupBy('schedule_id');
         $editableUserIds = $this->editableScheduleUserIds($request->user());
+        $creatableUserIds = $this->creatableScheduleUserIds($request->user());
         $scheduleChangeRequests = $this->scheduleChangeRequestRows($request->user());
         $canDirectEditSchedules = $request->user()->can('schedules.edit');
 
@@ -274,6 +278,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'activeDepartments' => $activeDepartments,
             'hierarchicalDepartments' => $this->organizationReferences->tree(),
             'editableUserIds' => $editableUserIds,
+            'creatableUserIds' => $creatableUserIds,
             'scheduleChangeRequests' => $scheduleChangeRequests,
             'pivotYears'     => $selectedYears,
             'availableYears' => $availableYears,
@@ -350,6 +355,42 @@ class ScheduleController extends Controller implements HasMiddleware
         }
 
         return redirect()->back()->with('success', 'Schedule created successfully');
+    }
+
+    public function previewRecurring(Request $request)
+    {
+        $payload = $this->validateRecurringPayload($request);
+        $this->authorizeRecurringUsers($request, $payload['user_ids']);
+        $approverIdsByUser = $this->recurringManagerApproverIdsByUser($payload['user_ids']);
+
+        return response()->json(
+            $this->recurringSchedulePlanner->preview($payload, $approverIdsByUser)
+        );
+    }
+
+    public function storeRecurring(Request $request)
+    {
+        $payload = $this->validateRecurringPayload($request, true);
+        $this->authorizeRecurringUsers($request, $payload['user_ids']);
+        $approverIdsByUser = $this->recurringManagerApproverIdsByUser($payload['user_ids']);
+        $counts = $this->recurringSchedulePlanner->save(
+            $payload,
+            $approverIdsByUser,
+            (int) $request->user()->id
+        );
+        $requestIds = $counts['request_ids'] ?? [];
+        unset($counts['request_ids']);
+
+        ScheduleChangeRequest::query()
+            ->whereIn('id', $requestIds)
+            ->with(['schedule.user', 'schedule.scheduleStores.store', 'schedule.scheduleStores.ticket', 'requester'])
+            ->get()
+            ->each(fn (ScheduleChangeRequest $changeRequest) => $this->notifyScheduleChangeApprovers($changeRequest));
+
+        return response()->json([
+            'message' => "Schedule plan saved: {$counts['created']} created, {$counts['pending_approval']} replacements awaiting manager approval, {$counts['protected']} protected, {$counts['excluded']} excluded.",
+            'counts' => $counts,
+        ]);
     }
 
     public function update(Request $request, Schedule $schedule)
@@ -512,7 +553,12 @@ class ScheduleController extends Controller implements HasMiddleware
         ]);
 
         DB::transaction(function () use ($request, $scheduleChangeRequest) {
-            if ($scheduleChangeRequest->request_type === self::REQUEST_TYPE_ACTUAL_TIME_ADJUSTMENT) {
+            if ($scheduleChangeRequest->request_type === self::REQUEST_TYPE_RECURRING_REPLACEMENT) {
+                $this->recurringSchedulePlanner->approveReplacementRequest(
+                    $scheduleChangeRequest,
+                    (int) auth()->id()
+                );
+            } elseif ($scheduleChangeRequest->request_type === self::REQUEST_TYPE_ACTUAL_TIME_ADJUSTMENT) {
                 $this->applyActualTimeAdjustment(
                     $scheduleChangeRequest->requested_payload,
                     $scheduleChangeRequest->schedule,
@@ -2693,6 +2739,10 @@ class ScheduleController extends Controller implements HasMiddleware
 
     private function authorizeScheduleChangeApprover(ScheduleChangeRequest $scheduleChangeRequest): void
     {
+        if ($scheduleChangeRequest->request_type === self::REQUEST_TYPE_RECURRING_REPLACEMENT) {
+            abort_unless(auth()->user()?->is_manager, 403, 'Only managers can decide planned schedule replacements.');
+        }
+
         $assignedApproverIds = collect($scheduleChangeRequest->assigned_approver_ids ?? [])
             ->map(fn ($id) => (int) $id);
 
@@ -2844,7 +2894,8 @@ class ScheduleController extends Controller implements HasMiddleware
                 'updated_at' => $changeRequest->updated_at?->toIso8601String(),
                 'can_approve' => $changeRequest->status === 'pending'
                     && collect($changeRequest->assigned_approver_ids ?? [])->map(fn ($id) => (int) $id)->contains((int) auth()->id())
-                    && auth()->user()?->can('schedules.approve'),
+                    && auth()->user()?->can('schedules.approve')
+                    && ($changeRequest->request_type !== self::REQUEST_TYPE_RECURRING_REPLACEMENT || auth()->user()?->is_manager),
                 'can_cancel' => $changeRequest->status === 'pending'
                     && (int) $changeRequest->requester_id === (int) auth()->id(),
             ];
@@ -2865,6 +2916,64 @@ class ScheduleController extends Controller implements HasMiddleware
         })->values()->all();
 
         return $payload;
+    }
+
+    private function recurringManagerApproverIdsByUser(array $userIds): array
+    {
+        return User::query()
+            ->whereIn('id', collect($userIds)->map(fn ($id) => (int) $id)->unique()->values())
+            ->get()
+            ->mapWithKeys(function (User $user) {
+                $managerIds = User::query()
+                    ->whereIn('id', $this->resolveScheduleChangeApproverIds($user))
+                    ->where('is_manager', true)
+                    ->pluck('id')
+                    ->map(fn ($id) => (int) $id)
+                    ->values()
+                    ->all();
+
+                return [(int) $user->id => $managerIds];
+            })
+            ->all();
+    }
+
+    private function validateRecurringPayload(Request $request, bool $includeExclusions = false): array
+    {
+        if (! $request->filled('period_type')) {
+            $request->merge(['period_type' => $request->filled('year') ? 'year' : 'month']);
+        }
+
+        $rules = [
+            'period_type' => 'required|string|in:month,year',
+            'month' => ['nullable', 'required_if:period_type,month', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
+            'year' => 'nullable|required_if:period_type,year|integer|between:2020,2100',
+            'user_ids' => 'required|array|min:1|max:100',
+            'user_ids.*' => 'required|integer|distinct|exists:users,id',
+            'rules' => 'required|array|min:1|max:7',
+            'rules.*.weekdays' => 'required|array|min:1|max:7',
+            'rules.*.weekdays.*' => 'required|integer|between:1,7|distinct',
+            'rules.*.status' => 'required|string|in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday,N/A',
+            'rules.*.store_id' => 'nullable|integer|exists:stores,id',
+            'rules.*.start_time' => 'nullable|date_format:H:i',
+            'rules.*.end_time' => 'nullable|date_format:H:i',
+            'rules.*.grace_period_minutes' => 'nullable|integer|min:0|max:480',
+            'rules.*.remarks' => 'nullable|string|max:1000',
+        ];
+
+        if ($includeExclusions) {
+            $rules['excluded_keys'] = 'sometimes|array|max:40000';
+            $rules['excluded_keys.*'] = ['string', 'regex:/^\d+\|\d{4}-\d{2}-\d{2}$/'];
+        }
+
+        return $request->validate($rules);
+    }
+
+    private function authorizeRecurringUsers(Request $request, array $userIds): void
+    {
+        $allowed = array_flip($this->creatableScheduleUserIds($request->user()));
+        $hasUnauthorizedUser = collect($userIds)->contains(fn ($id) => ! isset($allowed[(int) $id]));
+
+        abort_if($hasUnauthorizedUser, 403, 'You can only plan schedules for users under your org chart level.');
     }
 
     private function creatableScheduleUserIds(User $user): array

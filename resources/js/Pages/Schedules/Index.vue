@@ -99,6 +99,15 @@
 
                             <button
                                 v-if="hasPermission('schedules.create')"
+                                @click="showRecurringPlanner = true"
+                                class="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-lg text-xs font-bold hover:bg-indigo-100 hover:border-indigo-200 transition-all duration-200 whitespace-nowrap dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-500/20"
+                            >
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3M5 11h14M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm4 10 2 2 4-4"/></svg>
+                                <span>Plan Month</span>
+                            </button>
+
+                            <button
+                                v-if="hasPermission('schedules.create')"
                                 @click="openCreateModal"
                                 class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-md shadow-blue-200 hover:bg-blue-700 hover:shadow-blue-300 transform active:scale-95 transition-all duration-200 whitespace-nowrap"
                             >
@@ -1105,6 +1114,16 @@
             </div>
         </div>
 
+        <RecurringSchedulePlanner
+            v-if="showRecurringPlanner"
+            :users="recurringPlannerUsers"
+            :stores="stores || []"
+            :initial-month="recurringPlannerMonth"
+            :current-user-id="authUser?.id"
+            @close="showRecurringPlanner = false"
+            @saved="handleRecurringPlanSaved"
+        />
+
         <!-- Create/Edit Modal -->
         <div v-if="showModal" class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex min-h-screen items-center justify-center px-4 py-8">
@@ -1398,6 +1417,7 @@ import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import { router, usePage, useRemember, Link } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import Calendar from '@/Components/Calendar.vue'
+import RecurringSchedulePlanner from '@/Pages/Schedules/Partials/RecurringSchedulePlanner.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
 import HierarchySelector from '@/Components/HierarchySelector.vue'
 import { useToast } from '@/Composables/useToast'
@@ -1414,6 +1434,7 @@ const props = defineProps({
     activeDepartments: Array,
     hierarchicalDepartments: Array,
     editableUserIds: Array,
+    creatableUserIds: Array,
     scheduleChangeRequests: Array,
     pivotYears: Array,
     availableYears: Array,
@@ -1642,6 +1663,12 @@ const reportTitle = computed(() => {
 })
 const currentView = useRemember('calendar', 'schedules.currentView')
 const visibleRange = useRemember(initialRange, 'schedules.visibleRange')
+const showRecurringPlanner = ref(false)
+const recurringPlannerMonth = computed(() => String(visibleRange.value?.start || initialRange.start).slice(0, 7))
+const recurringPlannerUsers = computed(() => {
+    const allowed = new Set((props.creatableUserIds ?? []).map(Number))
+    return (props.users ?? []).filter(user => allowed.has(Number(user.id)) && !user.is_vacant)
+})
 const scheduleChangeRequests = computed(() => props.scheduleChangeRequests ?? [])
 const pendingRequestCount = computed(() => scheduleChangeRequests.value.filter(request => request.status === 'pending').length)
 const showScheduleRequestDecisionModal = ref(false)
@@ -2136,6 +2163,12 @@ const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
 const { post, put, destroy } = useErrorHandler()
 const { hasPermission } = usePermission()
+
+const handleRecurringPlanSaved = (result) => {
+    showRecurringPlanner.value = false
+    showSuccess(result?.message || 'Monthly schedule plan saved successfully.')
+    router.reload({ preserveScroll: true })
+}
 
 const exportPdf = () => {
     let params = {};
@@ -2966,9 +2999,12 @@ const requestStatusClass = (status) => {
 }
 
 const isActualTimeRequest = (request) => request?.request_type === 'actual_time_adjustment'
+const isRecurringReplacementRequest = (request) => request?.request_type === 'recurring_plan_replacement'
 
 const requestTypeLabel = (request) => {
-    return isActualTimeRequest(request) ? 'Actual Time' : 'Schedule Change'
+    if (isActualTimeRequest(request)) return 'Actual Time'
+    if (isRecurringReplacementRequest(request)) return 'Planned Replacement'
+    return 'Schedule Change'
 }
 
 const formatActualRequestValue = (value, clear = false) => {
