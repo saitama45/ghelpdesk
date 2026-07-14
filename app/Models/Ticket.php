@@ -81,12 +81,14 @@ class Ticket extends Model
 
     public function parent()
     {
-        return $this->belongsTo(Ticket::class, 'parent_id');
+        return $this->belongsTo(Ticket::class, 'parent_id')
+            ->withoutGlobalScope(ActiveEntityScope::class);
     }
 
     public function children()
     {
-        return $this->hasMany(Ticket::class, 'parent_id');
+        return $this->hasMany(Ticket::class, 'parent_id')
+            ->withoutGlobalScope(ActiveEntityScope::class);
     }
 
     public function scheduleStore()

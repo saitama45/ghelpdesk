@@ -1583,6 +1583,9 @@ const hiddenStoreCountForLine = (stores, key) => {
 const childRequesterName = (child) => child.reporter?.name || child.sender_name || 'External User';
 const childRequesterEmail = (child) => child.reporter?.email || child.sender_email || '';
 const childItemName = (child) => child.item?.name || child.category?.name || child.sub_category?.name || 'No item selected';
+const ticketResponsibilityLabel = (ticket) => ticket?.vendor?.name
+    ? `Vendor - ${ticket.vendor.name}`
+    : ticket?.assignee?.name || 'Unassigned';
 const childLocationName = (child) => {
     const company = child.company?.name || '';
     const store = child.store?.name || '';
@@ -2768,9 +2771,9 @@ const linkify = (text) => {
                                         <div class="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Item</div>
                                         <div class="mt-0.5 font-bold text-gray-700 dark:text-gray-300">{{ childItemName(child) }}</div>
                                     </div>
-                                    <div v-if="child.assignee" class="rounded-lg border border-white bg-white px-3 py-2 dark:bg-gray-800">
-                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Assignee</div>
-                                        <div class="mt-0.5 font-bold text-gray-700 dark:text-gray-300">{{ child.assignee.name }}</div>
+                                    <div class="rounded-lg border border-white bg-white px-3 py-2 dark:bg-gray-800">
+                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ child.vendor ? 'Vendor' : 'Assignee' }}</div>
+                                        <div class="mt-0.5 font-bold text-gray-700 dark:text-gray-300">{{ ticketResponsibilityLabel(child) }}</div>
                                     </div>
                                     <div class="rounded-lg border border-white bg-white px-3 py-2 dark:bg-gray-800">
                                         <div class="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">Created</div>
@@ -2868,6 +2871,9 @@ const linkify = (text) => {
                                             <div class="flex flex-col">
                                                 <span class="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-0.5">Originating Parent Ticket</span>
                                                 <h4 class="text-sm font-bold text-gray-900 leading-tight dark:text-gray-100">{{ ticket.parent.title }}</h4>
+                                                <span class="mt-1 text-[10px] font-semibold text-purple-600 dark:text-purple-300">
+                                                    {{ getStatusLabel(ticket.parent.status) }} · {{ ticketResponsibilityLabel(ticket.parent) }}
+                                                </span>
                                             </div>
                                             <span class="px-2.5 py-1 rounded-lg text-xs font-black bg-purple-100 text-purple-700 border border-purple-200">
                                                 {{ ticket.parent.ticket_key }}

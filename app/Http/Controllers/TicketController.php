@@ -185,10 +185,13 @@ class TicketController extends Controller
             'item.subCategory:id,name',
             'slaMetric',
             'survey:ticket_id,rating,feedback',
-            'parent:id,ticket_key,title',
+            'parent' => function ($q) {
+                $q->select('id', 'ticket_key', 'title', 'status', 'assignee_id', 'vendor_id')
+                    ->with(['assignee:id,name,profile_photo', 'vendor:id,name']);
+            },
             'children' => function($q) {
-                $q->select('id', 'parent_id', 'ticket_key', 'title', 'assignee_id', 'status')
-                  ->with('assignee:id,name,profile_photo');
+                $q->select('id', 'parent_id', 'ticket_key', 'title', 'assignee_id', 'vendor_id', 'status')
+                    ->with(['assignee:id,name,profile_photo', 'vendor:id,name']);
             }
         ])
             ->whereNull('deleted_at');
@@ -943,6 +946,7 @@ class TicketController extends Controller
             'schedule',
             'reporter:id,name,email,profile_photo',
             'assignee:id,name,email,profile_photo',
+            'vendor:id,name,email,contact_person',
             'company:id,name',
             'store:id,name,code',
             'category:id,name',
@@ -971,10 +975,12 @@ class TicketController extends Controller
             'attachments', 
             'reporter', 
             'assignee', 
+            'vendor',
             'company',
             'store',
             'item',
-            'parent',
+            'parent.assignee:id,name,email,profile_photo',
+            'parent.vendor:id,name,email,contact_person',
             'scheduleStore.schedule',
             'scheduleStore.store',
             'slaMetric',

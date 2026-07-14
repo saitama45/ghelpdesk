@@ -8,6 +8,8 @@ use App\Models\DepartmentNode;
 use App\Models\Role;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Models\Vendor;
+use App\Support\CompanyContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
@@ -413,6 +415,82 @@ class TicketIndexSummaryTest extends TestCase
                 ->has('tickets.data', 1)
                 ->where('tickets.data.0.id', $cbtlTicket->id)
                 ->where('ticketKeyOptions', fn ($options) => collect($options)->pluck('value')->all() === ['CBTL-2001'])
+            );
+    }
+
+    public function test_cross_entity_ticket_family_relations_remain_visible_on_index_and_edit_pages(): void
+    {
+        $tgi = Company::create(['name' => 'The Table Group', 'code' => 'TGI', 'is_active' => true]);
+        $cbtl = Company::create(['name' => 'Coffee Bean and Tea Leaf', 'code' => 'CBTL', 'is_active' => true]);
+        $vendor = Vendor::create([
+            'code' => 'VENDOR-1',
+            'name' => 'Service Vendor',
+            'vendor_type' => 'Service Provider',
+            'email' => 'vendor@example.test',
+            'is_active' => true,
+        ]);
+
+        Permission::findOrCreate('tickets.filter_entity', 'web');
+        $role = Role::create(['name' => 'Cross-entity family viewer', 'guard_name' => 'web']);
+        $role->companies()->attach([$tgi->id, $cbtl->id]);
+        $role->givePermissionTo('tickets.filter_entity');
+
+        $viewer = User::factory()->create(['company_id' => $tgi->id]);
+        $viewer->assignRole($role);
+
+        $parent = $this->ticket($cbtl, [
+            'ticket_key' => 'CBTL-1473',
+            'title' => 'Parent ticket',
+            'status' => 'waiting_service_provider',
+        ]);
+        $child = $this->ticket($cbtl, [
+            'ticket_key' => 'CBTL-1475',
+            'title' => 'Vendor Escalation: Parent ticket',
+            'parent_id' => $parent->id,
+            'vendor_id' => $vendor->id,
+        ]);
+
+        $session = [CompanyContext::SESSION_KEY => $tgi->id];
+
+        $this->actingAs($viewer)
+            ->withSession($session)
+            ->get(route('tickets.index', [
+                'status' => ['all'],
+                'skip_default_department' => true,
+                'ticket_scope' => 'all',
+                'entity_ids' => [$cbtl->id],
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tickets.data', function ($tickets) use ($parent, $child, $vendor) {
+                    $byKey = collect($tickets)->keyBy('ticket_key');
+                    $parentRow = $byKey->get($parent->ticket_key);
+                    $childRow = $byKey->get($child->ticket_key);
+
+                    return data_get($childRow, 'parent.ticket_key') === $parent->ticket_key
+                        && data_get($parentRow, 'children.0.ticket_key') === $child->ticket_key
+                        && data_get($parentRow, 'children.0.vendor.id') === $vendor->id;
+                })
+            );
+
+        $this->actingAs($viewer)
+            ->withSession($session)
+            ->get(route('tickets.edit', $child))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Tickets/Edit')
+                ->where('ticket.parent.ticket_key', $parent->ticket_key)
+                ->where('ticket.vendor.id', $vendor->id)
+            );
+
+        $this->actingAs($viewer)
+            ->withSession($session)
+            ->get(route('tickets.edit', $parent))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Tickets/Edit')
+                ->where('ticket.children.0.ticket_key', $child->ticket_key)
+                ->where('ticket.children.0.vendor.id', $vendor->id)
             );
     }
 

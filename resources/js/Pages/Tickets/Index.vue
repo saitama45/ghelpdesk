@@ -1434,6 +1434,11 @@ const getReporterLabel = (ticket) => {
     return 'Unknown';
 };
 
+const getTicketResponsibilityLabel = (ticket) => {
+    if (ticket?.vendor?.name) return `Vendor - ${ticket.vendor.name}`;
+    return ticket?.assignee?.name || 'Unassigned';
+};
+
 const hasBreachedSla = (ticket) => {
     return Boolean(ticket.sla_metric && (ticket.sla_metric.is_response_breached || ticket.sla_metric.is_resolution_breached));
 };
@@ -2421,11 +2426,22 @@ const requesterTabs = computed(() => {
                                     </div>
                                 </div>
 
-                                <div v-if="ticket.parent" class="rounded-xl border border-indigo-200 bg-indigo-50 p-3 dark:border-indigo-400/30 dark:bg-indigo-500/15">
+                                <Link
+                                    v-if="ticket.parent"
+                                    :href="route('tickets.edit', ticket.parent.id)"
+                                    @click.stop
+                                    class="block rounded-xl border border-indigo-200 bg-indigo-50 p-3 transition-colors hover:border-indigo-400 hover:bg-indigo-100 dark:border-indigo-400/30 dark:bg-indigo-500/15 dark:hover:bg-indigo-500/25"
+                                >
                                     <div class="mb-1 text-[10px] font-black uppercase tracking-[0.22em] text-indigo-700 dark:text-indigo-200">Parent Ticket</div>
-                                    <div class="text-xs font-bold text-indigo-900 dark:text-indigo-100">{{ ticket.parent.ticket_key }}</div>
+                                    <div class="flex items-start justify-between gap-2">
+                                        <div class="text-xs font-bold text-indigo-900 dark:text-indigo-100">{{ ticket.parent.ticket_key }}</div>
+                                        <span class="shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold capitalize" :class="getStatusColor(ticket.parent.status)">
+                                            {{ getStatusLabel(ticket.parent.status) }}
+                                        </span>
+                                    </div>
                                     <div class="mt-1 break-words text-xs leading-5 text-indigo-900 dark:text-indigo-100">{{ ticket.parent.title }}</div>
-                                </div>
+                                    <div class="mt-1.5 text-[10px] font-semibold text-indigo-700 dark:text-indigo-200">{{ getTicketResponsibilityLabel(ticket.parent) }}</div>
+                                </Link>
 
                                 <div @click.stop="openRequesterTicketsModal(ticket)" class="rounded-xl border border-slate-300 bg-white p-3 cursor-pointer hover:bg-slate-50 transition-colors dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800" title="View Requester's Tickets">
                                     <div class="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-black flex justify-between items-center dark:text-slate-300">
@@ -2448,15 +2464,24 @@ const requesterTabs = computed(() => {
                                 <div v-if="ticket.children?.length" class="rounded-xl border border-blue-300 bg-white p-3 dark:border-blue-400/30 dark:bg-slate-900">
                                     <div class="mb-2 text-[10px] font-black uppercase tracking-[0.22em] text-black dark:text-slate-300">Child Tickets</div>
                                     <div class="space-y-2">
-                                        <div v-for="child in ticket.children" :key="child.id" class="flex items-start justify-between gap-3 text-xs">
+                                        <Link
+                                            v-for="child in ticket.children"
+                                            :key="child.id"
+                                            :href="route('tickets.edit', child.id)"
+                                            @click.stop
+                                            class="flex items-start justify-between gap-3 rounded-lg p-1.5 text-xs transition-colors hover:bg-blue-50 dark:hover:bg-blue-500/15"
+                                        >
                                             <div class="min-w-0">
                                                 <div class="font-bold text-black dark:text-slate-100">{{ child.ticket_key }}</div>
                                                 <div class="break-words text-black dark:text-slate-200">{{ child.title }}</div>
                                             </div>
-                                            <div class="shrink-0 text-right text-[11px] text-black dark:text-slate-300">
-                                                {{ child.assignee?.name || 'Unassigned' }}
+                                            <div class="flex shrink-0 flex-col items-end gap-1 text-right text-[10px] text-black dark:text-slate-300">
+                                                <span class="rounded-full border px-2 py-0.5 font-bold capitalize" :class="getStatusColor(child.status)">
+                                                    {{ getStatusLabel(child.status) }}
+                                                </span>
+                                                <span>{{ getTicketResponsibilityLabel(child) }}</span>
                                             </div>
-                                        </div>
+                                        </Link>
                                     </div>
                                 </div>
                             </div>
