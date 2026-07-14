@@ -361,10 +361,17 @@ class ScheduleController extends Controller implements HasMiddleware
     {
         $payload = $this->validateRecurringPayload($request);
         $this->authorizeRecurringUsers($request, $payload['user_ids']);
-        $approverIdsByUser = $this->recurringManagerApproverIdsByUser($payload['user_ids']);
+        $actorIsManager = (bool) $request->user()->is_manager;
+        $approverIdsByUser = $actorIsManager
+            ? []
+            : $this->recurringManagerApproverIdsByUser($payload['user_ids']);
 
         return response()->json(
-            $this->recurringSchedulePlanner->preview($payload, $approverIdsByUser)
+            $this->recurringSchedulePlanner->preview(
+                $payload,
+                $approverIdsByUser,
+                $actorIsManager
+            )
         );
     }
 
@@ -372,11 +379,15 @@ class ScheduleController extends Controller implements HasMiddleware
     {
         $payload = $this->validateRecurringPayload($request, true);
         $this->authorizeRecurringUsers($request, $payload['user_ids']);
-        $approverIdsByUser = $this->recurringManagerApproverIdsByUser($payload['user_ids']);
+        $actorIsManager = (bool) $request->user()->is_manager;
+        $approverIdsByUser = $actorIsManager
+            ? []
+            : $this->recurringManagerApproverIdsByUser($payload['user_ids']);
         $counts = $this->recurringSchedulePlanner->save(
             $payload,
             $approverIdsByUser,
-            (int) $request->user()->id
+            (int) $request->user()->id,
+            $actorIsManager
         );
         $requestIds = $counts['request_ids'] ?? [];
         unset($counts['request_ids']);
@@ -388,7 +399,7 @@ class ScheduleController extends Controller implements HasMiddleware
             ->each(fn (ScheduleChangeRequest $changeRequest) => $this->notifyScheduleChangeApprovers($changeRequest));
 
         return response()->json([
-            'message' => "Schedule plan saved: {$counts['created']} created, {$counts['pending_approval']} replacements awaiting manager approval, {$counts['protected']} protected, {$counts['excluded']} excluded.",
+            'message' => "Schedule plan saved: {$counts['created']} created, {$counts['replaced']} replaced, {$counts['pending_approval']} replacements awaiting manager approval, {$counts['protected']} protected, {$counts['excluded']} excluded.",
             'counts' => $counts,
         ]);
     }

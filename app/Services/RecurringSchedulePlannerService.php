@@ -20,17 +20,17 @@ class RecurringSchedulePlannerService
 
     private const LOCATION_OPTIONAL_STATUSES = ['SL', 'VL', 'Restday', 'Holiday', 'Offset', 'N/A'];
 
-    public function preview(array $payload, array $approverIdsByUser): array
+    public function preview(array $payload, array $approverIdsByUser, bool $actorIsManager): array
     {
-        return $this->buildPlan($payload, $approverIdsByUser, false);
+        return $this->buildPlan($payload, $approverIdsByUser, $actorIsManager, false);
     }
 
-    public function save(array $payload, array $approverIdsByUser, int $actorId): array
+    public function save(array $payload, array $approverIdsByUser, int $actorId, bool $actorIsManager): array
     {
-        return DB::transaction(function () use ($payload, $approverIdsByUser, $actorId) {
-            $plan = $this->buildPlan($payload, $approverIdsByUser, true);
+        return DB::transaction(function () use ($payload, $approverIdsByUser, $actorId, $actorIsManager) {
+            $plan = $this->buildPlan($payload, $approverIdsByUser, $actorIsManager, true);
             $excludedKeys = collect($payload['excluded_keys'] ?? [])->map(fn ($key) => (string) $key)->flip();
-            $counts = ['created' => 0, 'pending_approval' => 0, 'protected' => 0, 'excluded' => 0];
+            $counts = ['created' => 0, 'replaced' => 0, 'pending_approval' => 0, 'protected' => 0, 'excluded' => 0];
             $requestIds = [];
 
             foreach ($plan['entries'] as $entry) {
@@ -52,11 +52,16 @@ class RecurringSchedulePlannerService
                     )->id;
                     $counts['pending_approval']++;
                     continue;
-                } else {
-                    $counts['created']++;
+                }
+
+                if ($entry['action'] === 'replace') {
+                    $this->replaceSchedules($entry, $actorId);
+                    $counts['replaced']++;
+                    continue;
                 }
 
                 $this->createSchedule($entry, $actorId);
+                $counts['created']++;
             }
 
             $counts['request_ids'] = $requestIds;
@@ -107,7 +112,7 @@ class RecurringSchedulePlannerService
         }
     }
 
-    private function buildPlan(array $payload, array $approverIdsByUser, bool $lock): array
+    private function buildPlan(array $payload, array $approverIdsByUser, bool $actorIsManager, bool $lock): array
     {
         [$periodStart, $periodEnd] = $this->periodBounds($payload);
         $rulesByWeekday = $this->normalizeRules($payload['rules']);
@@ -174,6 +179,7 @@ class RecurringSchedulePlannerService
                 [$action, $reason] = $this->classify(
                     $conflicts,
                     ! empty($approverIdsByUser[(int) $user->id] ?? []),
+                    $actorIsManager,
                     $attendanceScheduleIds,
                     $pendingRequestScheduleIds
                 );
@@ -224,6 +230,7 @@ class RecurringSchedulePlannerService
             'counts' => [
                 'total' => count($entries),
                 'create' => $entryCollection->where('action', 'create')->count(),
+                'replace' => $entryCollection->where('action', 'replace')->count(),
                 'approval' => $entryCollection->where('action', 'approval')->count(),
                 'protected' => $entryCollection->where('action', 'protected')->count(),
             ],
@@ -310,14 +317,10 @@ class RecurringSchedulePlannerService
         return $schedule->start_time->lte($dayEnd) && $schedule->end_time->gte($dayStart);
     }
 
-    private function classify(Collection $conflicts, bool $hasManagerApprover, Collection $attendanceIds, Collection $pendingRequestIds): array
+    private function classify(Collection $conflicts, bool $hasManagerApprover, bool $actorIsManager, Collection $attendanceIds, Collection $pendingRequestIds): array
     {
         if ($conflicts->isEmpty()) {
             return ['create', null];
-        }
-
-        if (! $hasManagerApprover) {
-            return ['protected', 'No eligible manager is available to approve this replacement.'];
         }
 
         if ($conflicts->contains(fn ($schedule) => $attendanceIds->has((int) $schedule->id))) {
@@ -336,7 +339,24 @@ class RecurringSchedulePlannerService
             return ['protected', 'This legacy schedule spans multiple dates and must be edited manually.'];
         }
 
+        if ($actorIsManager) {
+            return ['replace', null];
+        }
+
+        if (! $hasManagerApprover) {
+            return ['protected', 'No eligible manager is available to approve this replacement.'];
+        }
+
         return ['approval', null];
+    }
+
+    private function replaceSchedules(array $entry, int $actorId): void
+    {
+        $this->createSchedule($entry, $actorId);
+
+        foreach ($entry['existing_schedule_ids'] as $scheduleId) {
+            $this->removeScheduleDate((int) $scheduleId, $entry['date']);
+        }
     }
 
     private function candidateTimes(string $date, array $rule): array

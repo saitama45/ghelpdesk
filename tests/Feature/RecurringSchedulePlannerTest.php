@@ -73,9 +73,10 @@ class RecurringSchedulePlannerTest extends TestCase
             ->assertJsonCount(104, 'entries');
     }
 
-    public function test_preview_distinguishes_manager_approval_and_protected_dates(): void
+    public function test_manager_preview_distinguishes_direct_replacements_and_protected_dates(): void
     {
         [$manager, $employees] = $this->managerWithEmployees(1);
+        $manager->revokePermissionTo('schedules.approve');
         $employee = $employees->first();
         $store = $this->store();
         $replaceable = $this->schedule($employee, $store, '2026-06-01');
@@ -96,20 +97,22 @@ class RecurringSchedulePlannerTest extends TestCase
         ]);
 
         $response->assertOk()
-            ->assertJsonPath('counts.approval', 1)
+            ->assertJsonPath('counts.replace', 1)
+            ->assertJsonPath('counts.approval', 0)
             ->assertJsonPath('counts.protected', 1)
             ->assertJsonPath('counts.create', 3);
 
         $entries = collect($response->json('entries'))->keyBy('date');
-        $this->assertSame('approval', $entries['2026-06-01']['action']);
+        $this->assertSame('replace', $entries['2026-06-01']['action']);
         $this->assertSame('protected', $entries['2026-06-08']['action']);
         $this->assertStringContainsString('Attendance', $entries['2026-06-08']['protected_reason']);
         $this->assertSame($replaceable->id, $entries['2026-06-01']['existing_schedule_ids'][0]);
     }
 
-    public function test_save_keeps_existing_schedule_until_manager_approves_replacement(): void
+    public function test_manager_save_replaces_existing_schedule_without_an_approval_request(): void
     {
         [$manager, $employees] = $this->managerWithEmployees(1);
+        $manager->revokePermissionTo('schedules.approve');
         $employee = $employees->first();
         $store = $this->store();
         $replaceable = $this->schedule($employee, $store, '2026-06-01', 'WFH');
@@ -131,15 +134,52 @@ class RecurringSchedulePlannerTest extends TestCase
         ]);
 
         $response->assertOk()
-            ->assertJsonPath('counts.pending_approval', 1)
+            ->assertJsonPath('counts.replaced', 1)
+            ->assertJsonPath('counts.pending_approval', 0)
             ->assertJsonPath('counts.protected', 1)
             ->assertJsonPath('counts.excluded', 1)
             ->assertJsonPath('counts.created', 2);
 
-        $this->assertDatabaseHas('schedules', ['id' => $replaceable->id, 'status' => 'WFH']);
-        $this->assertDatabaseMissing('schedules', ['user_id' => $employee->id, 'status' => 'On-site', 'start_time' => '2026-06-01 07:00:00']);
+        $this->assertDatabaseMissing('schedules', ['id' => $replaceable->id]);
+        $this->assertDatabaseHas('schedules', ['user_id' => $employee->id, 'status' => 'On-site', 'start_time' => '2026-06-01 07:00:00']);
         $this->assertDatabaseHas('schedules', ['id' => $attended->id, 'status' => 'WFH']);
         $this->assertDatabaseMissing('schedules', ['user_id' => $employee->id, 'start_time' => '2026-06-15 07:00:00']);
+        $this->assertDatabaseCount('schedule_change_requests', 0);
+    }
+
+    public function test_non_manager_replacement_stays_pending_until_a_manager_approves_it(): void
+    {
+        [$manager, $employees] = $this->managerWithEmployees(1);
+        $employee = $employees->first();
+        $employee->givePermissionTo('schedules.create');
+        $store = $this->store();
+        $replaceable = $this->schedule($employee, $store, '2026-06-01', 'WFH');
+
+        $payload = [
+            'month' => '2026-06',
+            'user_ids' => [$employee->id],
+            'rules' => [$this->rule([1], 'On-site', $store->id)],
+            'excluded_keys' => collect(['2026-06-08', '2026-06-15', '2026-06-22', '2026-06-29'])
+                ->map(fn (string $date) => $employee->id.'|'.$date)
+                ->all(),
+        ];
+
+        $this->actingAs($employee)
+            ->postJson(route('schedules.recurring.preview'), $payload)
+            ->assertOk()
+            ->assertJsonPath('counts.replace', 0)
+            ->assertJsonPath('counts.approval', 1);
+
+        $response = $this->actingAs($employee)->postJson(route('schedules.recurring.store'), $payload);
+
+        $response->assertOk()
+            ->assertJsonPath('counts.replaced', 0)
+            ->assertJsonPath('counts.pending_approval', 1)
+            ->assertJsonPath('counts.created', 0)
+            ->assertJsonPath('counts.excluded', 4);
+
+        $this->assertDatabaseHas('schedules', ['id' => $replaceable->id, 'status' => 'WFH']);
+        $this->assertDatabaseMissing('schedules', ['user_id' => $employee->id, 'status' => 'On-site', 'start_time' => '2026-06-01 07:00:00']);
 
         $changeRequest = ScheduleChangeRequest::where('request_type', 'recurring_plan_replacement')->sole();
         $this->assertSame('pending', $changeRequest->status);
