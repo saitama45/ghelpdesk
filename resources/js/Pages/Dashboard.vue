@@ -129,8 +129,10 @@ const pipelineData = () => ({
     pipeline_type: pipelineType.value || undefined,
 });
 
-const fetchTab = (tab) => {
-    if (loaded[tab]) return;
+const ALWAYS_REFRESH_TABS = new Set(['charts', 'health', 'overview']);
+
+const fetchTab = (tab, force = false) => {
+    if (loaded[tab] && !force) return;
     tabLoading.value = true;
     router.reload({
         only: TAB_PROPS[tab],
@@ -167,7 +169,7 @@ const changePipelineType = (nextType) => {
 
 const switchTab = (tab) => {
     activeTab.value = tab;
-    if (!loaded[tab]) fetchTab(tab);
+    fetchTab(tab, ALWAYS_REFRESH_TABS.has(tab));
 };
 
 const applyFilters = () => {
@@ -528,6 +530,7 @@ const showLeaderboardModal = ref(false);
 const showChartTicketsModal = ref(false);
 const chartTicketsLoading = ref(false);
 const chartTickets = ref([]);
+const chartTicketTotal = ref(0);
 const chartTicketSelection = ref({ bucket: 'all', concern_type: null, title: '' });
 const selectedSurveyTicket = ref(null);
 
@@ -570,6 +573,7 @@ const openChartTickets = async (bucket, concernType = null) => {
         title: `${concernType ? concernType + ' - ' : ''}${bucket === 'all' ? 'Open & Closed' : (bucket === 'closed' ? 'Closed' : 'Open')} Tickets`,
     };
     chartTickets.value = [];
+    chartTicketTotal.value = 0;
     showChartTicketsModal.value = true;
     chartTicketsLoading.value = true;
     try {
@@ -577,6 +581,7 @@ const openChartTickets = async (bucket, concernType = null) => {
             params: chartTicketParams(bucket, concernType),
         });
         chartTickets.value = response.data.tickets || [];
+        chartTicketTotal.value = Number(response.data.count ?? chartTickets.value.length);
     } catch (error) {
         console.error('Unable to load chart tickets', error);
     } finally {
@@ -2406,7 +2411,11 @@ const exportChartTickets = () => {
             <div class="flex items-start justify-between gap-4 border-b border-gray-200 pb-4 dark:border-gray-700">
                 <div>
                     <h2 class="text-xl font-black text-gray-900 dark:text-gray-100">{{ chartTicketSelection.title }}</h2>
-                    <p class="mt-1 text-xs text-gray-500">Matches the current dashboard filters.</p>
+                    <p class="mt-1 text-xs text-gray-500">
+                        Matches the current dashboard filters.
+                        <span class="font-black text-gray-700 dark:text-gray-200">Total: {{ chartTicketTotal.toLocaleString() }} tickets.</span>
+                        <span v-if="chartTickets.length < chartTicketTotal"> Showing {{ chartTickets.length.toLocaleString() }} in this list.</span>
+                    </p>
                 </div>
                 <div class="flex gap-2">
                     <button v-if="chartTickets.length" @click="exportChartTickets" class="rounded-lg bg-green-600 px-3 py-2 text-xs font-black uppercase text-white hover:bg-green-700">Export Excel</button>

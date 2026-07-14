@@ -37,6 +37,18 @@ class DashboardOverviewTallyTest extends TestCase
         $this->ticket($company, $store, 'waiting_client_feedback');
         $this->ticket($company, $store, 'resolved');
         $this->ticket($company, $store, 'closed');
+        // A legacy value must remain visible and count as non-terminal everywhere,
+        // even though new ticket validation only accepts the canonical statuses.
+        $this->ticket($company, $store, 'waiting');
+
+        // Inactive-store and child tickets are outside the shared dashboard universe.
+        $inactiveStore = Store::create([
+            'code' => 'TAL-X', 'name' => 'Inactive Tally Store', 'sector' => 1, 'area' => 'A',
+            'brand' => 'B', 'class' => 'Regular', 'is_active' => false, 'company_id' => $company->id,
+        ]);
+        $this->ticket($company, $inactiveStore, 'open');
+        $child = $this->ticket($company, $store, 'open');
+        $child->forceFill(['parent_id' => Ticket::where('store_id', $store->id)->firstOrFail()->id])->save();
 
         $response = $this
             ->actingAs($viewer)
@@ -44,7 +56,7 @@ class DashboardOverviewTallyTest extends TestCase
             ->withHeaders([
                 'X-Inertia' => 'true',
                 'X-Inertia-Partial-Component' => 'Dashboard',
-                'X-Inertia-Partial-Data' => 'stats,openTicketsList,closedTicketsList',
+                'X-Inertia-Partial-Data' => 'stats,openTicketsList,closedTicketsList,ticketCharts,storeHealth,kanbanReport',
                 'X-Inertia-Version' => app(\App\Http\Middleware\HandleInertiaRequests::class)->version(request()),
             ])
             ->get(route('dashboard', [
@@ -55,16 +67,28 @@ class DashboardOverviewTallyTest extends TestCase
         $response->assertOk();
 
         $stats = $response->json('props.stats');
+        $charts = $response->json('props.ticketCharts.overall');
+        $ticketFlow = $response->json('props.kanbanReport.totals.sub_unit');
+        $storeHealthOpen = collect($response->json('props.storeHealth.entityHealth'))->sum('open_tickets')
+            + collect($response->json('props.storeHealth.office.entityHealth'))->sum('open_tickets');
 
-        // 5 non-terminal statuses are "open"; resolved + closed are "closed".
-        $this->assertSame(5, $stats['open']);
+        // 5 current non-terminal statuses plus one legacy status are "open";
+        // resolved + closed are "closed".
+        $this->assertSame(6, $stats['open']);
         $this->assertSame(2, $stats['closed']);
-        $this->assertSame(7, $stats['total']);
+        $this->assertSame(8, $stats['total']);
         // The partition is exact — nothing falls through the cracks.
         $this->assertSame($stats['total'], $stats['open'] + $stats['closed']);
+        $this->assertSame($stats['open'], $charts['open']);
+        $this->assertSame($stats['closed'], $charts['closed']);
+        $this->assertSame($stats['total'], $charts['open'] + $charts['closed']);
+        $this->assertSame($stats['open'], $storeHealthOpen);
+        $this->assertSame($stats['total'], $ticketFlow['all']);
+        $this->assertSame($stats['open'], $ticketFlow['backlogs'] + $ticketFlow['in_progress']);
+        $this->assertSame($stats['closed'], $ticketFlow['resolved'] + $ticketFlow['closed']);
 
         // The drill-through lists mirror the tile counts.
-        $this->assertCount(5, $response->json('props.openTicketsList'));
+        $this->assertCount(6, $response->json('props.openTicketsList'));
         $this->assertCount(2, $response->json('props.closedTicketsList'));
     }
 

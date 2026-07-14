@@ -8,6 +8,7 @@ use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class DashboardChartTicketDetailTest extends TestCase
@@ -29,6 +30,7 @@ class DashboardChartTicketDetailTest extends TestCase
             ->getJson(route('dashboard.chart-tickets', ['bucket' => 'open', 'concern_type' => 'Incident']))
             ->assertOk()
             ->assertJsonPath('count', 1)
+            ->assertJsonPath('shown_count', 1)
             ->assertJsonPath('tickets.0.id', $openIncident->id)
             ->assertJsonPath('tickets.0.concern_type', 'Incident');
     }
@@ -57,7 +59,50 @@ class DashboardChartTicketDetailTest extends TestCase
         $this->actingAs($viewer)
             ->getJson(route('dashboard.chart-tickets', ['bucket' => 'all', 'concern_type' => 'Incident']))
             ->assertOk()
-            ->assertJsonPath('count', 2);
+            ->assertJsonPath('count', 2)
+            ->assertJsonPath('shown_count', 2);
+    }
+
+    public function test_chart_ticket_endpoint_reports_the_full_total_when_the_list_is_capped(): void
+    {
+        $company = Company::create(['name' => 'Large Company', 'code' => 'LARGE', 'is_active' => true]);
+        $viewer = User::factory()->create(['company_id' => $company->id]);
+        $store = Store::create([
+            'code' => 'LARGE-1',
+            'name' => 'Large Store',
+            'sector' => 1,
+            'area' => 'A',
+            'brand' => 'B',
+            'class' => 'Regular',
+            'is_active' => true,
+            'company_id' => $company->id,
+        ]);
+        $now = now();
+
+        collect(range(1, 2001))->chunk(500)->each(function ($numbers) use ($company, $store, $now) {
+            Ticket::insert($numbers->map(fn ($number) => [
+                'id' => (string) Str::uuid(),
+                'ticket_key' => 'CHART-'.$number,
+                'title' => 'Large chart ticket '.$number,
+                'description' => 'Modal total regression fixture.',
+                'type' => 'task',
+                'status' => 'open',
+                'priority' => 'medium',
+                'severity' => 'minor',
+                'company_id' => $company->id,
+                'store_id' => $store->id,
+                'is_deleted' => false,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])->all());
+        });
+
+        $this->actingAs($viewer)
+            ->getJson(route('dashboard.chart-tickets', ['bucket' => 'open']))
+            ->assertOk()
+            ->assertJsonPath('count', 2001)
+            ->assertJsonPath('shown_count', 2000)
+            ->assertJsonCount(2000, 'tickets');
     }
 
     private function ticket(Company $company, Item $item, string $status): Ticket

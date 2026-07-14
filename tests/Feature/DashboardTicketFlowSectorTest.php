@@ -8,8 +8,11 @@ use App\Models\DepartmentNode;
 use App\Models\Role;
 use App\Models\Store;
 use App\Models\Ticket;
+use App\Models\TicketSurvey;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class DashboardTicketFlowSectorTest extends TestCase
@@ -96,6 +99,65 @@ class DashboardTicketFlowSectorTest extends TestCase
 
         $this->assertSame(1, $report['totals']['sub_unit']['all']);
         $this->assertSame([$ownTicket->id], collect($groups['sector_1']['columns']['backlogs']['tickets'])->pluck('id')->all());
+    }
+
+    public function test_ticket_flow_board_loads_surveys_in_sql_server_safe_chunks(): void
+    {
+        $company = $this->company();
+        $viewer = $this->viewer($company);
+        $store = $this->store('S301', 1, $company->id);
+        $now = now();
+        $ticketIds = collect(range(1, 2101))->map(fn () => (string) Str::uuid());
+
+        $ticketIds->chunk(500)->each(function ($ids) use ($company, $store, $now) {
+            Ticket::insert($ids->map(fn ($id) => [
+                'id' => $id,
+                'ticket_key' => 'TF-'.Str::upper(Str::random(12)),
+                'title' => 'Bulk dashboard ticket',
+                'description' => 'Survey chunking regression fixture.',
+                'type' => 'task',
+                'status' => 'open',
+                'priority' => 'medium',
+                'severity' => 'minor',
+                'company_id' => $company->id,
+                'store_id' => $store->id,
+                'is_deleted' => false,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])->all());
+        });
+
+        TicketSurvey::create([
+            'ticket_id' => $ticketIds->first(),
+            'rating' => 4,
+            'feedback' => 'First survey',
+        ]);
+        TicketSurvey::create([
+            'ticket_id' => $ticketIds->last(),
+            'rating' => 2,
+            'feedback' => 'Last survey',
+        ]);
+
+        $surveyBindingCounts = [];
+        DB::listen(function ($query) use (&$surveyBindingCounts) {
+            if (str_contains($query->sql, 'ticket_surveys')) {
+                $surveyBindingCounts[] = count($query->bindings);
+            }
+        });
+
+        $props = $this->dashboardProps($viewer);
+        $report = $props['kanbanReport'];
+        $tickets = collect($report['groups']['sub_unit'])
+            ->flatMap(fn ($group) => collect($group['columns'])->flatMap(fn ($column) => $column['tickets']))
+            ->keyBy('id');
+
+        $this->assertSame(2101, $report['totals']['sub_unit']['all']);
+        $this->assertCount(2101, $tickets);
+        $this->assertSame(['rating' => 4, 'feedback' => 'First survey'], $tickets[$ticketIds->first()]['survey']);
+        $this->assertSame(['rating' => 2, 'feedback' => 'Last survey'], $tickets[$ticketIds->last()]['survey']);
+        $this->assertGreaterThan(1, count($surveyBindingCounts));
+        $this->assertNotEmpty($surveyBindingCounts);
+        $this->assertLessThanOrEqual(1000, max($surveyBindingCounts));
     }
 
     private function dashboardProps(User $user, array $query = []): array

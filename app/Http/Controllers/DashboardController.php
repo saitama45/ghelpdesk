@@ -161,7 +161,10 @@ class DashboardController extends Controller
 
     public function chartTickets(Request $request)
     {
-        $tickets = $this->dashboardChartTicketQuery($request)
+        $query = $this->dashboardChartTicketQuery($request);
+        $total = (clone $query)->count();
+
+        $tickets = $query
             ->with(['assignee:id,name', 'company:id,name', 'store:id,name,code', 'item:id,name,concern_type'])
             ->latest('created_at')
             ->limit(2000)
@@ -178,7 +181,11 @@ class DashboardController extends Controller
                 'created_at' => $ticket->created_at?->format('Y-m-d H:i:s'),
             ]);
 
-        return response()->json(['tickets' => $tickets, 'count' => $tickets->count()]);
+        return response()->json([
+            'tickets' => $tickets,
+            'count' => $total,
+            'shown_count' => $tickets->count(),
+        ]);
     }
 
     public function exportChartTickets(Request $request)
@@ -423,7 +430,9 @@ class DashboardController extends Controller
      */
     private function applyEntityScope($query, $companyIds)
     {
-        return $query->whereHas('store', fn ($s) => $s->whereIn('company_id', $companyIds));
+        return $query->whereHas('store', fn ($s) => $s
+            ->whereIn('company_id', $companyIds)
+            ->where('is_active', true));
     }
 
     /**
@@ -472,6 +481,7 @@ class DashboardController extends Controller
         // own "Per Corporate Office" grouping instead of rolling up under a brand.
         $officeStores = Store::query()
             ->where('class', 'Office')
+            ->where('is_active', true)
             ->whereIn('company_id', $effectiveCompanyIds)
             ->orderBy('name')
             ->get(['id', 'name', 'code']);
@@ -489,7 +499,9 @@ class DashboardController extends Controller
         $brandChartRows = $brandCompanies
             ->map(function ($company) use ($brandChartQuery) {
                 $row = (clone $brandChartQuery)
-                    ->whereHas('store', fn ($s) => $s->where('company_id', $company->id)->where('class', '!=', 'Office'))
+                    ->whereHas('store', fn ($s) => $s
+                        ->where('company_id', $company->id)
+                        ->where('class', '!=', 'Office'))
                     ->selectRaw(
                         "SUM(CASE WHEN status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as open_count, " .
                         "SUM(CASE WHEN status IN ('resolved', 'closed') THEN 1 ELSE 0 END) as closed_count"
@@ -619,9 +631,11 @@ class DashboardController extends Controller
         $kanbanStatusToColumn = collect($kanbanColumns)
             ->flatMap(fn ($column) => collect($column['statuses'])->mapWithKeys(fn ($status) => [$status => $column['key']]))
             ->all();
-        $kanbanStatuses = array_keys($kanbanStatusToColumn);
-
-        $kanbanBaseQuery = (clone $filteredQuery)->whereIn('status', $kanbanStatuses);
+        // Use the complete dashboard ticket universe. The status-to-column map
+        // handles every current status, while the mapper's Backlogs fallback keeps
+        // legacy/unexpected non-terminal statuses visible instead of silently
+        // dropping them from the board total.
+        $kanbanBaseQuery = clone $filteredQuery;
 
         $selectedDepartmentNodeId = $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null;
         $kanbanSectorContext = $this->resolveKanbanSectorContext(
@@ -675,19 +689,26 @@ class DashboardController extends Controller
         $userKanbanQuery = $applyAssigneeKanbanFilters(clone $kanbanBaseQuery);
 
         $mapKanbanTickets = function ($query, bool $useSectorGrouping = false) use ($kanbanStatusToColumn, $kanbanDepartmentGrouping, $kanbanSectorContext) {
-            return $query
-            ->with([
-                'assignee:id,name,org_path,department_node_id',
-                'company:id,name',
-                'store:id,code,name,sector',
-                'item:id,priority',
-                'parent:id,ticket_key',
-                'survey:ticket_id,rating,feedback',
-            ])
-            ->select('id', 'ticket_key', 'title', 'status', 'priority', 'created_at', 'updated_at', 'assignee_id', 'company_id', 'store_id', 'item_id', 'parent_id')
-            ->latest('updated_at')
-            ->get()
-            ->filter(function ($ticket) use ($useSectorGrouping, $kanbanSectorContext) {
+            $tickets = $query
+                ->with([
+                    'assignee:id,name,org_path,department_node_id',
+                    'company:id,name',
+                    'store:id,code,name,sector',
+                    'item:id,priority',
+                    'parent:id,ticket_key',
+                ])
+                ->select('id', 'ticket_key', 'title', 'status', 'priority', 'created_at', 'updated_at', 'assignee_id', 'company_id', 'store_id', 'item_id', 'parent_id')
+                ->latest('updated_at')
+                ->get();
+
+            // SQL Server accepts at most 2,100 bound parameters. Loading this
+            // per-ticket relationship for the entire board in one query exceeds
+            // that limit as soon as the dashboard contains enough tickets.
+            $tickets->chunk(1000)->each(
+                fn ($ticketChunk) => $ticketChunk->load('survey:ticket_id,rating,feedback')
+            );
+
+            return $tickets->filter(function ($ticket) use ($useSectorGrouping, $kanbanSectorContext) {
                 if (!$useSectorGrouping) {
                     return true;
                 }

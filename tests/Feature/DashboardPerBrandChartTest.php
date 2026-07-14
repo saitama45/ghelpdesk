@@ -40,6 +40,7 @@ class DashboardPerBrandChartTest extends TestCase
         // Each brand OWNS a store; the chart counts tickets sitting on that store,
         // regardless of the ticket's stamped company (store ownership).
         $alphaStore = $this->store($activeCompany, 'ALP-1');
+        $alphaInactiveStore = $this->store($activeCompany, 'ALP-X', 'Regular', false);
         $betaStore = $this->store($secondaryCompany, 'BET-1');
         $this->store($emptyCompany, 'GAM-1');
         $inactiveStore = $this->store($inactiveCompany, 'INA-1');
@@ -47,6 +48,8 @@ class DashboardPerBrandChartTest extends TestCase
 
         $this->ticket($alphaStore, 'open');
         $this->ticket($alphaStore, 'resolved');
+        // Inactive stores are excluded from every dashboard tally.
+        $this->ticket($alphaInactiveStore, 'open');
         $this->ticket($betaStore, 'closed');
         // Out-of-period ticket on Beta's store — excluded by the year filter below.
         $this->ticket($betaStore, 'open')->forceFill([
@@ -101,7 +104,7 @@ class DashboardPerBrandChartTest extends TestCase
         ]);
     }
 
-    private function store(Company $company, string $code): Store
+    private function store(Company $company, string $code, string $class = 'Regular', bool $active = true): Store
     {
         return Store::create([
             'code' => $code,
@@ -109,8 +112,8 @@ class DashboardPerBrandChartTest extends TestCase
             'sector' => 1,
             'area' => 'Test Area',
             'brand' => 'Test Brand',
-            'class' => 'Regular',
-            'is_active' => true,
+            'class' => $class,
+            'is_active' => $active,
             'company_id' => $company->id,
         ]);
     }
