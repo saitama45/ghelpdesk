@@ -9,6 +9,7 @@ class FormRecord extends Model
     protected $fillable = [
         'form_definition_id',
         'request_type_id',
+        'submission_token',
         'ticket_id',
         'data',
         'status',

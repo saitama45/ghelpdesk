@@ -10,6 +10,7 @@ use App\Models\Ticket;
 use App\Models\User;
 use App\Mail\DynamicFormApprovalReminder;
 use App\Services\DynamicForms\Contracts\FormServiceContract;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -23,9 +24,23 @@ class DefaultFormService implements FormServiceContract
     {
         $request->validate([
             'request_type_id' => 'nullable|exists:request_types,id',
+            'submission_token' => 'nullable|uuid',
             'form_data' => 'nullable|array',
             'items' => 'nullable|array',
         ]);
+
+        $submissionToken = $request->input('submission_token');
+        $createdBy = $request->attributes->get('created_by', Auth::id());
+        if ($submissionToken) {
+            $existing = FormRecord::where('submission_token', $submissionToken)
+                ->where('form_definition_id', $formDefinition->id)
+                ->where('created_by', $createdBy)
+                ->first();
+
+            if ($existing) {
+                return $existing;
+            }
+        }
 
         $requestType = null;
         if ($request->filled('request_type_id')) {
@@ -55,20 +70,59 @@ class DefaultFormService implements FormServiceContract
         $status = $approvalLevels > 0 ? 'Open' : 'Approved';
         $currentLevel = $approvalLevels > 0 ? 1 : 0;
 
-        $record = FormRecord::create([
-            'form_definition_id' => $formDefinition->id,
-            'request_type_id' => $request->request_type_id,
-            'data' => $saveData,
-            'status' => $status,
-            'current_approval_level' => $currentLevel,
-            'created_by' => $request->attributes->get('created_by', Auth::id()),
-        ]);
+        try {
+            return DB::transaction(function () use (
+                $formDefinition,
+                $request,
+                $saveData,
+                $status,
+                $currentLevel,
+                $submissionToken,
+                $createdBy
+            ) {
+                if ($submissionToken) {
+                    $existing = FormRecord::where('submission_token', $submissionToken)
+                        ->where('form_definition_id', $formDefinition->id)
+                        ->where('created_by', $createdBy)
+                        ->first();
 
-        if ($record->status === 'Approved') {
-            $this->processApprovedRequest($formDefinition, $record);
+                    if ($existing) {
+                        return $existing;
+                    }
+                }
+
+                $record = FormRecord::create([
+                    'form_definition_id' => $formDefinition->id,
+                    'request_type_id' => $request->request_type_id,
+                    'submission_token' => $submissionToken,
+                    'data' => $saveData,
+                    'status' => $status,
+                    'current_approval_level' => $currentLevel,
+                    'created_by' => $createdBy,
+                ]);
+
+                if ($record->status === 'Approved') {
+                    $this->processApprovedRequest($formDefinition, $record);
+                }
+
+                return $record;
+            });
+        } catch (QueryException $exception) {
+            // A concurrent retry can race past the lookup but lose against the
+            // unique index. Once the winning request commits, return its record.
+            $existing = $submissionToken
+                ? FormRecord::where('submission_token', $submissionToken)
+                    ->where('form_definition_id', $formDefinition->id)
+                    ->where('created_by', $createdBy)
+                    ->first()
+                : null;
+
+            if ($existing) {
+                return $existing;
+            }
+
+            throw $exception;
         }
-
-        return $record;
     }
 
     public function update(Request $request, FormDefinition $formDefinition, FormRecord $record): FormRecord

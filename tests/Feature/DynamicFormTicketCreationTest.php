@@ -11,6 +11,7 @@ use App\Models\Ticket;
 use App\Models\User;
 use App\Services\DynamicForms\DefaultFormService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class DynamicFormTicketCreationTest extends TestCase
@@ -59,6 +60,72 @@ class DynamicFormTicketCreationTest extends TestCase
         $this->assertEquals('open', $ticket->status);
         $this->assertStringContainsString('TCOMP-', $ticket->ticket_key);
         $this->assertStringContainsString('Immediate ticket please', $ticket->description);
+    }
+
+    public function test_replaying_the_same_submission_token_reuses_the_original_record_and_ticket(): void
+    {
+        $company = Company::create(['name' => 'Test Company', 'code' => 'TCOMP', 'is_active' => true]);
+        $user = User::factory()->create(['company_id' => $company->id]);
+        $formDefinition = FormDefinition::create([
+            'name' => 'Idempotent Form',
+            'slug' => 'idempotent-form',
+            'workflow_type' => 'approval',
+            'approval_levels' => 0,
+            'is_active' => true,
+        ]);
+        $submissionToken = (string) Str::uuid();
+
+        $this->actingAs($user);
+        $service = app(DefaultFormService::class);
+        $first = $service->store(new \Illuminate\Http\Request([
+            'submission_token' => $submissionToken,
+            'form_data' => ['reason' => 'Create this once'],
+        ]), $formDefinition);
+        $replay = $service->store(new \Illuminate\Http\Request([
+            'submission_token' => $submissionToken,
+            'form_data' => ['reason' => 'Create this once'],
+        ]), $formDefinition);
+
+        $this->assertSame($first->id, $replay->id);
+        $this->assertSame($first->ticket_id, $replay->ticket_id);
+        $this->assertFalse($replay->wasRecentlyCreated);
+        $this->assertSame(1, FormRecord::count());
+        $this->assertSame(1, Ticket::count());
+    }
+
+    public function test_ticket_creation_failure_rolls_back_the_dynamic_form_record(): void
+    {
+        $company = Company::create(['name' => 'Test Company', 'code' => 'TCOMP', 'is_active' => true]);
+        $user = User::factory()->create(['company_id' => $company->id]);
+        $formDefinition = FormDefinition::create([
+            'name' => 'Transactional Form',
+            'slug' => 'transactional-form',
+            'workflow_type' => 'approval',
+            'approval_levels' => 0,
+            'is_active' => true,
+        ]);
+        $service = new class extends DefaultFormService
+        {
+            public function processApprovedRequest(FormDefinition $formDefinition, FormRecord $record): void
+            {
+                throw new \RuntimeException('Simulated ticket failure');
+            }
+        };
+
+        $this->actingAs($user);
+
+        try {
+            $service->store(new \Illuminate\Http\Request([
+                'submission_token' => (string) Str::uuid(),
+                'form_data' => ['reason' => 'Must roll back'],
+            ]), $formDefinition);
+            $this->fail('Expected ticket creation to fail.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('Simulated ticket failure', $exception->getMessage());
+        }
+
+        $this->assertSame(0, FormRecord::count());
+        $this->assertSame(0, Ticket::count());
     }
 
     public function test_completing_sequential_approvals_creates_ticket_at_final_stage(): void

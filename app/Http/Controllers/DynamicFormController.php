@@ -121,7 +121,7 @@ class DynamicFormController extends Controller
         $service = $this->serviceFactory->make($slug);
         $record = $service->store($request, $formDefinition);
 
-        if (method_exists($service, 'notifyCurrentApprovers')) {
+        if ($record->wasRecentlyCreated && method_exists($service, 'notifyCurrentApprovers')) {
             $service->notifyCurrentApprovers($formDefinition, $record);
         }
 

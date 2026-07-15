@@ -69,9 +69,27 @@ const defaultFormTileTitle = computed(() => {
 // Use Inertia useForm for better error handling and file uploads
 const dynamicForm = useForm({
     request_type_id: null,
+    submission_token: null,
     form_data: {},
     items: [],
 })
+
+const makeSubmissionToken = () => {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+
+    const bytes = new Uint8Array(16)
+    if (globalThis.crypto?.getRandomValues) {
+        globalThis.crypto.getRandomValues(bytes)
+    } else {
+        for (let index = 0; index < bytes.length; index++) {
+            bytes[index] = Math.floor(Math.random() * 256)
+        }
+    }
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
 
 // Determine which schema to use
 const effectiveSchema = computed(() => {
@@ -116,6 +134,7 @@ const initForm = (record = null, preFill = null) => {
     })
     
     dynamicForm.request_type_id = record ? record.request_type_id : (selectedRequestType.value?.id || null)
+    dynamicForm.submission_token = record ? null : makeSubmissionToken()
     dynamicForm.form_data = initialFormData
     
     const sourceItems = record?.data?.items || preFill?.items
@@ -234,6 +253,7 @@ const validateForm = () => {
 }
 
 const submitForm = () => {
+    if (dynamicForm.processing) return
     if (!validateForm()) return
 
     const url = isEditing.value 
@@ -719,9 +739,10 @@ const getStageDisplay = (record) => {
                                     class="flex-1 px-6 py-3 text-sm font-bold text-gray-600 bg-gray-100 rounded-2xl hover:bg-gray-200 transition-all duration-300 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                                 Cancel
                             </button>
-                            <button type="submit" 
-                                    class="flex-[2] px-6 py-3 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-700 shadow-lg hover:shadow-indigo-200 transform hover:-translate-y-0.5 transition-all duration-300">
-                                {{ isEditing ? 'Update Submission' : 'Submit Request' }}
+                            <button type="submit"
+                                    :disabled="dynamicForm.processing"
+                                    class="flex-[2] px-6 py-3 bg-indigo-600 text-white text-sm font-black rounded-2xl hover:bg-indigo-700 shadow-lg hover:shadow-indigo-200 transform hover:-translate-y-0.5 transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0">
+                                {{ dynamicForm.processing ? (isEditing ? 'Updating...' : 'Submitting...') : (isEditing ? 'Update Submission' : 'Submit Request') }}
                             </button>
                         </div>
                     </form>
