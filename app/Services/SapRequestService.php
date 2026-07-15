@@ -7,6 +7,7 @@ use App\Models\RequestType;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Mail\SapRequestNotification;
+use App\Support\CfeTicketStore;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
@@ -189,6 +190,8 @@ class SapRequestService
 
     public function processApprovedRequest(SapRequest $sapRequest): void
     {
+        $ticketStore = CfeTicketStore::resolve();
+
         // ticket_key is left for TicketObserver to derive so it follows the same
         // store-owning-company rule as every other channel. SAP requests are
         // entity-level (no store), so the observer resolves the ticket's own
@@ -239,7 +242,8 @@ class SapRequestService
             'reporter_id'  => $sapRequest->user_id,
             'sender_name'  => $sapRequest->user ? $sapRequest->user->name : $sapRequest->requester_name,
             'sender_email' => $sapRequest->user ? $sapRequest->user->email : $sapRequest->requester_email,
-            'company_id'   => $sapRequest->company_id,
+            'company_id'   => $ticketStore->company_id,
+            'store_id'     => $ticketStore->id,
             'type'         => 'task',
             'created_at'   => now('Asia/Manila'),
         ]);

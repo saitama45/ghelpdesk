@@ -7,6 +7,8 @@ use App\Models\FormDefinition;
 use App\Models\FormRecordApproval;
 use App\Models\FormRecord;
 use App\Models\RequestType;
+use App\Models\Scopes\ActiveEntityScope;
+use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\DynamicForms\DefaultFormService;
@@ -17,6 +19,31 @@ use Tests\TestCase;
 class DynamicFormTicketCreationTest extends TestCase
 {
     use RefreshDatabase;
+
+    private Company $ticketCompany;
+
+    private Store $ticketStore;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->ticketCompany = Company::create([
+            'name' => 'TGI',
+            'code' => 'TGI',
+            'is_active' => true,
+        ]);
+        $this->ticketStore = Store::create([
+            'code' => 'CFE I',
+            'name' => 'CFE I',
+            'sector' => 1,
+            'area' => 'Corporate',
+            'brand' => 'TGI',
+            'class' => 'Office',
+            'is_active' => true,
+            'company_id' => $this->ticketCompany->id,
+        ]);
+    }
 
     public function test_creating_dynamic_form_with_zero_approvals_immediately_creates_ticket(): void
     {
@@ -54,19 +81,20 @@ class DynamicFormTicketCreationTest extends TestCase
         $this->assertEquals('Approved', $record->status);
         $this->assertNotNull($record->ticket_id);
 
-        $ticket = Ticket::find($record->ticket_id);
+        $ticket = Ticket::withoutGlobalScope(ActiveEntityScope::class)->find($record->ticket_id);
         $this->assertNotNull($ticket);
-        $this->assertEquals($company->id, $ticket->company_id);
+        $this->assertEquals($this->ticketCompany->id, $ticket->company_id);
+        $this->assertEquals($this->ticketStore->id, $ticket->store_id);
         $this->assertEquals('open', $ticket->status);
-        $this->assertStringContainsString('TCOMP-', $ticket->ticket_key);
+        $this->assertStringContainsString('TGI-', $ticket->ticket_key);
         $this->assertStringContainsString('Immediate ticket please', $ticket->description);
     }
 
-    public function test_dynamic_form_resolves_company_stored_as_display_name(): void
+    public function test_dynamic_form_uses_cfe_store_when_form_selects_another_company(): void
     {
         $company = Company::create([
-            'name' => 'The Table Group, Inc. (TGI)',
-            'code' => 'TGI',
+            'name' => 'Selected Company',
+            'code' => 'SELECTED',
             'is_active' => true,
         ]);
         $user = User::factory()->create(['company_id' => null]);
@@ -80,16 +108,17 @@ class DynamicFormTicketCreationTest extends TestCase
 
         $this->actingAs($user);
         $record = app(DefaultFormService::class)->store(new \Illuminate\Http\Request([
-            'form_data' => ['company' => 'The Table Group, Inc. (TGI)'],
+            'form_data' => ['company' => $company->name],
         ]), $formDefinition);
 
-        $ticket = Ticket::findOrFail($record->ticket_id);
+        $ticket = Ticket::withoutGlobalScope(ActiveEntityScope::class)->findOrFail($record->ticket_id);
 
-        $this->assertSame($company->id, $ticket->company_id);
+        $this->assertSame($this->ticketCompany->id, $ticket->company_id);
+        $this->assertSame($this->ticketStore->id, $ticket->store_id);
         $this->assertStringStartsWith('TGI-', $ticket->ticket_key);
     }
 
-    public function test_ticket_uses_external_key_when_no_company_can_be_resolved(): void
+    public function test_companyless_dynamic_form_still_uses_cfe_store_and_tgi_key(): void
     {
         $user = User::factory()->create(['company_id' => null]);
         $formDefinition = FormDefinition::create([
@@ -106,9 +135,29 @@ class DynamicFormTicketCreationTest extends TestCase
             $formDefinition
         );
 
-        $ticket = Ticket::findOrFail($record->ticket_id);
+        $ticket = Ticket::withoutGlobalScope(ActiveEntityScope::class)->findOrFail($record->ticket_id);
 
-        $this->assertNull($ticket->company_id);
+        $this->assertSame($this->ticketCompany->id, $ticket->company_id);
+        $this->assertSame($this->ticketStore->id, $ticket->store_id);
+        $this->assertStringStartsWith('TGI-', $ticket->ticket_key);
+    }
+
+    public function test_touching_legacy_ticket_with_null_key_repairs_it(): void
+    {
+        $user = User::factory()->create(['company_id' => null]);
+        $ticket = Ticket::withoutEvents(fn () => Ticket::create([
+            'title' => 'Legacy ticket without a key',
+            'description' => 'Created before ticket key safeguards existed.',
+            'reporter_id' => $user->id,
+            'company_id' => null,
+        ]));
+
+        $this->assertNull($ticket->ticket_key);
+
+        $ticket->updated_at = $ticket->updated_at->copy()->addSecond();
+        $ticket->save();
+        $ticket->refresh();
+
         $this->assertStringStartsWith('EXT-', $ticket->ticket_key);
     }
 
@@ -140,7 +189,7 @@ class DynamicFormTicketCreationTest extends TestCase
         $this->assertSame($first->ticket_id, $replay->ticket_id);
         $this->assertFalse($replay->wasRecentlyCreated);
         $this->assertSame(1, FormRecord::count());
-        $this->assertSame(1, Ticket::count());
+        $this->assertSame(1, Ticket::withoutGlobalScope(ActiveEntityScope::class)->count());
     }
 
     public function test_ticket_creation_failure_rolls_back_the_dynamic_form_record(): void
@@ -175,7 +224,7 @@ class DynamicFormTicketCreationTest extends TestCase
         }
 
         $this->assertSame(0, FormRecord::count());
-        $this->assertSame(0, Ticket::count());
+        $this->assertSame(0, Ticket::withoutGlobalScope(ActiveEntityScope::class)->count());
     }
 
     public function test_completing_sequential_approvals_creates_ticket_at_final_stage(): void
@@ -243,10 +292,11 @@ class DynamicFormTicketCreationTest extends TestCase
         $this->assertEquals('Approved', $record->status);
         $this->assertNotNull($record->ticket_id);
 
-        $ticket = Ticket::find($record->ticket_id);
+        $ticket = Ticket::withoutGlobalScope(ActiveEntityScope::class)->find($record->ticket_id);
         $this->assertNotNull($ticket);
-        $this->assertEquals($company->id, $ticket->company_id);
-        $this->assertStringContainsString('TCOMP-', $ticket->ticket_key);
+        $this->assertEquals($this->ticketCompany->id, $ticket->company_id);
+        $this->assertEquals($this->ticketStore->id, $ticket->store_id);
+        $this->assertStringContainsString('TGI-', $ticket->ticket_key);
         $this->assertStringContainsString('Approve me twice', $ticket->description);
         $this->assertStringContainsString('Stage 1 Approved by: ' . $approver1->name, $ticket->description);
         $this->assertStringContainsString('Stage 2 Approved by: ' . $approver2->name, $ticket->description);
@@ -286,7 +336,7 @@ class DynamicFormTicketCreationTest extends TestCase
 
         $record->refresh();
         $this->assertEquals($firstTicketId, $record->ticket_id);
-        $this->assertEquals(1, Ticket::count());
+        $this->assertEquals(1, Ticket::withoutGlobalScope(ActiveEntityScope::class)->count());
     }
 
     public function test_nested_array_values_do_not_break_ticket_description_creation(): void
@@ -320,7 +370,7 @@ class DynamicFormTicketCreationTest extends TestCase
             ],
         ]), $formDefinition);
 
-        $ticket = Ticket::find($record->ticket_id);
+        $ticket = Ticket::withoutGlobalScope(ActiveEntityScope::class)->find($record->ticket_id);
 
         $this->assertNotNull($ticket);
         $this->assertStringContainsString('Nested Payload', $ticket->description);
@@ -375,7 +425,7 @@ class DynamicFormTicketCreationTest extends TestCase
         $record->refresh();
         $this->assertEquals('Approved', $record->status);
         $this->assertNotNull($record->ticket_id);
-        $this->assertEquals(1, Ticket::count());
+        $this->assertEquals(1, Ticket::withoutGlobalScope(ActiveEntityScope::class)->count());
     }
 
     public function test_copying_zero_approval_dynamic_record_creates_ticket(): void
@@ -409,7 +459,7 @@ class DynamicFormTicketCreationTest extends TestCase
         $this->assertNotNull($record);
         $this->assertEquals('Approved', $record->status);
         $this->assertNotNull($record->ticket_id);
-        $this->assertEquals(1, Ticket::count());
+        $this->assertEquals(1, Ticket::withoutGlobalScope(ActiveEntityScope::class)->count());
     }
 
     public function test_repair_command_finalizes_supplied_stuck_record_and_creates_ticket(): void
@@ -459,6 +509,6 @@ class DynamicFormTicketCreationTest extends TestCase
         $this->assertEquals('Approved', $record->status);
         $this->assertEquals(0, $record->current_approval_level);
         $this->assertNotNull($record->ticket_id);
-        $this->assertEquals(1, Ticket::count());
+        $this->assertEquals(1, Ticket::withoutGlobalScope(ActiveEntityScope::class)->count());
     }
 }

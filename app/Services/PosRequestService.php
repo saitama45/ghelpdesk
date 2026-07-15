@@ -7,6 +7,7 @@ use App\Models\RequestType;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Mail\PosRequestNotification;
+use App\Support\CfeTicketStore;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -250,6 +251,8 @@ class PosRequestService
             // Dangling ticket_id (ticket hard-deleted) — fall through and regenerate.
         }
 
+        $ticketStore = CfeTicketStore::resolve();
+
         // Build Detailed Description from Line Items
         $storeCodes = in_array('all', $posRequest->stores_covered) 
             ? 'All Stores' 
@@ -335,7 +338,8 @@ class PosRequestService
             'reporter_id' => $posRequest->user_id,
             'sender_name' => $posRequest->user ? $posRequest->user->name : $posRequest->requester_name,
             'sender_email' => $posRequest->user ? $posRequest->user->email : $posRequest->requester_email,
-            'company_id' => $posRequest->company_id,
+            'company_id' => $ticketStore->company_id,
+            'store_id' => $ticketStore->id,
             'type' => 'feature',
             'created_at' => now('Asia/Manila'),
         ]);

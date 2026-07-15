@@ -6,6 +6,7 @@ use App\Mail\PosRequestNotification;
 use App\Mail\SapRequestNotification;
 use App\Models\Company;
 use App\Models\RequestType;
+use App\Models\Store;
 use App\Models\User;
 use App\Services\PosRequestService;
 use App\Services\SapRequestService;
@@ -24,6 +25,18 @@ class RequestApproverNotificationTest extends TestCase
         parent::setUp();
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        $tgi = Company::create(['name' => 'TGI', 'code' => 'TGI', 'is_active' => true]);
+        Store::create([
+            'code' => 'CFE I',
+            'name' => 'CFE I',
+            'sector' => 1,
+            'area' => 'Corporate',
+            'brand' => 'TGI',
+            'class' => 'Office',
+            'is_active' => true,
+            'company_id' => $tgi->id,
+        ]);
     }
 
     public function test_pos_creation_notifies_current_level_approver_and_existing_recipients(): void

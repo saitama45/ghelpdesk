@@ -51,6 +51,15 @@ class TicketObserver
      */
     public function updating(Ticket $ticket): void
     {
+        // Repair legacy tickets that were inserted before every creation path
+        // guaranteed a key. Any ordinary save/touch now assigns the next safe
+        // entity key, or EXT-* when the ticket has no resolvable company.
+        if (!$ticket->ticket_key) {
+            $ticket->ticket_key = $this->nextTicketKey($this->keyCompanyCode($ticket) ?? 'EXT');
+
+            return;
+        }
+
         // The key follows the STORE's owning company, so regenerate when either the
         // store or the (fallback) company changes — but only if the resolved prefix
         // actually differs, so we don't renumber the ticket needlessly.

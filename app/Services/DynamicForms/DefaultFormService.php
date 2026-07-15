@@ -10,6 +10,7 @@ use App\Models\Ticket;
 use App\Models\User;
 use App\Mail\DynamicFormApprovalReminder;
 use App\Services\DynamicForms\Contracts\FormServiceContract;
+use App\Support\CfeTicketStore;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -547,13 +548,8 @@ class DefaultFormService implements FormServiceContract
         }
 
         $creator = User::with('company')->find($record->created_by);
-        $company = $this->resolveRecordCompany($record);
-
-        if (!$company && $creator) {
-            $company = $creator->company;
-        }
-        
-        $companyId = $company ? $company->id : null;
+        $ticketStore = CfeTicketStore::resolve();
+        $company = $ticketStore->company;
 
         // ticket_key is left for TicketObserver to derive so it follows the same
         // store-owning-company rule as every other channel. Dynamic-form records are
@@ -653,65 +649,13 @@ class DefaultFormService implements FormServiceContract
             'reporter_id'  => $record->created_by,
             'sender_name'  => $creator ? $creator->name : null,
             'sender_email' => $creator ? $creator->email : null,
-            'company_id'   => $companyId,
+            'company_id'   => $ticketStore->company_id,
+            'store_id'     => $ticketStore->id,
             'type'         => 'task',
             'created_at'   => now('Asia/Manila'),
         ]);
 
         $record->update(['ticket_id' => $ticket->id]);
-    }
-
-    /**
-     * Resolve the entity selected by a dynamic form.
-     *
-     * Older forms commonly stored the company option as its display name instead
-     * of a company_id. Matching that value here prevents company-less tickets and
-     * lets TicketObserver assign the correct entity-prefixed ticket key.
-     */
-    private function resolveRecordCompany(FormRecord $record): ?\App\Models\Company
-    {
-        $formData = $record->data ?? [];
-        $companyId = $formData['company_id'] ?? null;
-
-        if ($companyId && ($company = \App\Models\Company::find($companyId))) {
-            return $company;
-        }
-
-        foreach (['company', 'company_name', 'entity', 'entity_name'] as $key) {
-            $value = $formData[$key] ?? null;
-
-            if (!is_scalar($value) || trim((string) $value) === '') {
-                continue;
-            }
-
-            $value = trim((string) $value);
-            $company = \App\Models\Company::query()
-                ->where('name', $value)
-                ->orWhere('code', $value)
-                ->first();
-
-            if ($company) {
-                return $company;
-            }
-
-            $normalizedValue = $this->normalizeCompanyReference($value);
-            $company = \App\Models\Company::all(['id', 'name', 'code'])
-                ->first(fn ($candidate) =>
-                    $this->normalizeCompanyReference($candidate->name) === $normalizedValue
-                    || $this->normalizeCompanyReference($candidate->code) === $normalizedValue
-                );
-
-            if ($company) {
-                return $company;
-            }
-        }
-
-        return null;
-    }
-
-    private function normalizeCompanyReference(?string $value): string
-    {
-        return strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $value));
     }
 
     /**
