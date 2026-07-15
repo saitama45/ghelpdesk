@@ -426,6 +426,43 @@ class EmailTicketThreadingTest extends TestCase
         ]);
     }
 
+    public function test_reply_carrying_a_retired_ticket_key_matches_the_renumbered_ticket(): void
+    {
+        // Ticket is created via email under the default TBG company -> TBG-1.
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<cctv-root@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'REQUESTING FOR CCTV FOOTAGE',
+            body: 'Please assist us with the store request for CCTV footage for the investigation.',
+        ));
+
+        $ticket = Ticket::firstOrFail();
+        $this->assertSame('TBG-1', $ticket->ticket_key);
+
+        // A staff member moves it to another company — it is renumbered and the
+        // old key TBG-1 is remembered as an alias.
+        $nono = Company::create(['name' => "Nono's", 'code' => 'NONO', 'is_active' => true]);
+        $ticket->update(['company_id' => $nono->id]);
+        $this->assertSame('NONO-1', $ticket->fresh()->ticket_key);
+        $this->assertDatabaseHas('ticket_key_aliases', ['ticket_key' => 'TBG-1']);
+
+        // The customer replies to the ORIGINAL thread, whose subject still says
+        // [TBG-1], and without any threading headers. It must land on the same
+        // (now renumbered) ticket, not create a new one.
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<cctv-reply@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Re: [TBG-1] REQUESTING FOR CCTV FOOTAGE',
+            body: 'Following up on the CCTV footage request, adding the exact time window needed.',
+        ));
+
+        $this->assertSame(1, Ticket::count());
+        $this->assertDatabaseHas('ticket_comments', [
+            'ticket_id' => $ticket->id,
+            'message_id' => 'cctv-reply@example.test',
+        ]);
+    }
+
     public function test_closed_ticket_older_than_three_days_creates_new_ticket(): void
     {
         // 1. Create a ticket and mark it closed, with updated_at set to 4 days ago

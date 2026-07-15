@@ -160,6 +160,14 @@ class Ticket extends Model
         return $this->hasMany(TicketHistory::class);
     }
 
+    /**
+     * Retired ticket_key values this ticket used to carry (after a renumber).
+     */
+    public function keyAliases()
+    {
+        return $this->hasMany(TicketKeyAlias::class);
+    }
+
     public function attachments()
     {
         return $this->hasMany(TicketAttachment::class);

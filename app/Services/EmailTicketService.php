@@ -415,7 +415,11 @@ class EmailTicketService
 
         // 2. Fallback: Check subject for Ticket Key (e.g., [TBG-123] or #TBG-123).
         if (preg_match('/\b([A-Z0-9]+-\d+)\b/i', $subject, $matches)) {
-            $existingTicket = Ticket::where('ticket_key', strtoupper($matches[1]))->first();
+            $subjectKey = strtoupper($matches[1]);
+            // Resolve the live key first; fall back to a retired key (alias) so a
+            // reply still carrying an old key after a renumber lands on the same ticket.
+            $existingTicket = Ticket::where('ticket_key', $subjectKey)->first()
+                ?? $this->findTicketByKeyAlias($subjectKey);
 
             if ($existingTicket && $existingTicket->status === 'closed' && $existingTicket->updated_at->addDays(3)->isPast()) {
                 Log::info("EmailTicketService: Matched closed ticket {$existingTicket->ticket_key} via subject key, but it was closed more than 3 days ago. Bypassing to create a new ticket.");
@@ -462,6 +466,25 @@ class EmailTicketService
         }
 
         return null;
+    }
+
+    /**
+     * Resolve a ticket by a retired ticket_key (see ticket_key_aliases). Guarded so
+     * inbound mail keeps working before the aliases migration has run.
+     */
+    protected function findTicketByKeyAlias(string $ticketKey): ?Ticket
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('ticket_key_aliases')) {
+            return null;
+        }
+
+        $ticketId = \App\Models\TicketKeyAlias::where('ticket_key', $ticketKey)->value('ticket_id');
+
+        if (! $ticketId) {
+            return null;
+        }
+
+        return Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)->find($ticketId);
     }
 
     protected function findTicketByMessageIds(array $messageIds): ?Ticket

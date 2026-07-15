@@ -139,6 +139,58 @@ class TicketKeyTest extends TestCase
         $this->assertSame('SC-1', $ticket->fresh()->ticket_key);
     }
 
+    public function test_renumbering_a_ticket_records_the_old_key_as_an_alias()
+    {
+        $tgi = Company::create(['name' => 'TGI', 'code' => 'TGI', 'is_active' => true]);
+        $nono = Company::create(['name' => "Nono's", 'code' => 'NONO', 'is_active' => true]);
+
+        $ticket = Ticket::create([
+            'title' => 'CCTV footage request',
+            'description' => 'x',
+            'type' => 'task',
+            'status' => 'open',
+            'priority' => 'medium',
+            'severity' => 'minor',
+            'company_id' => $tgi->id,
+        ]);
+        $this->assertSame('TGI-1', $ticket->ticket_key);
+
+        // Move it to another company — the key follows the company code.
+        $ticket->update(['company_id' => $nono->id]);
+        $this->assertSame('NONO-1', $ticket->fresh()->ticket_key);
+
+        // The old key is remembered against the same ticket.
+        $this->assertDatabaseHas('ticket_key_aliases', [
+            'ticket_key' => 'TGI-1',
+            'ticket_id' => $ticket->id,
+        ]);
+    }
+
+    public function test_a_retired_key_number_is_not_reissued_to_a_new_ticket()
+    {
+        $tgi = Company::create(['name' => 'TGI', 'code' => 'TGI', 'is_active' => true]);
+        $nono = Company::create(['name' => "Nono's", 'code' => 'NONO', 'is_active' => true]);
+
+        $ticket = Ticket::create([
+            'title' => 'First', 'description' => 'x', 'type' => 'task',
+            'status' => 'open', 'priority' => 'medium', 'severity' => 'minor',
+            'company_id' => $tgi->id,
+        ]);
+        $this->assertSame('TGI-1', $ticket->ticket_key);
+
+        // Renumber it away from TGI, freeing TGI-1 from the live tickets table.
+        $ticket->update(['company_id' => $nono->id]);
+        $this->assertSame('NONO-1', $ticket->fresh()->ticket_key);
+
+        // A brand new TGI ticket must skip the retired number, not reuse it.
+        $next = Ticket::create([
+            'title' => 'Second', 'description' => 'x', 'type' => 'task',
+            'status' => 'open', 'priority' => 'medium', 'severity' => 'minor',
+            'company_id' => $tgi->id,
+        ]);
+        $this->assertSame('TGI-2', $next->ticket_key);
+    }
+
     private function store(Company $company): Store
     {
         return Store::create([

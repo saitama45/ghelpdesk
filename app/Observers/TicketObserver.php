@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\Ticket;
+use App\Models\TicketKeyAlias;
 use App\Models\TicketSlaMetric;
 use App\Models\Company;
 use App\Models\Store;
@@ -87,33 +88,93 @@ class TicketObserver
 
     private function nextTicketKey(string $prefix): string
     {
+        // The next number is one past the highest ever used for this prefix —
+        // across live/trashed tickets AND retired keys (aliases), so a number that
+        // was renumbered away is never handed back out to a different ticket.
+        $maxNumber = $this->maxKeyNumberForPrefix('tickets', 'ticket_key', $prefix);
+
+        if (self::ticketKeyAliasesTableExists()) {
+            $maxNumber = max(
+                $maxNumber,
+                $this->maxKeyNumberForPrefix('ticket_key_aliases', 'ticket_key', $prefix)
+            );
+        }
+
+        return "{$prefix}-" . ($maxNumber + 1);
+    }
+
+    /**
+     * Highest numeric suffix of "{$prefix}-N" keys in the given table/column.
+     * Uses a raw table query so it spans every row (soft-deleted included) and
+     * ignores Eloquent global scopes — keys must be unique across all entities.
+     */
+    private function maxKeyNumberForPrefix(string $table, string $column, string $prefix): int
+    {
         if (DB::connection()->getDriverName() === 'sqlsrv') {
-            $maxNumber = Ticket::withTrashed()
-                ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
-                ->where('ticket_key', 'LIKE', "{$prefix}-%")
+            return (int) DB::table($table)
+                ->where($column, 'LIKE', "{$prefix}-%")
                 ->selectRaw(
-                    'MAX(TRY_CAST(SUBSTRING(ticket_key, LEN(?) + 2, LEN(ticket_key)) AS INT)) as max_num',
+                    "MAX(TRY_CAST(SUBSTRING({$column}, LEN(?) + 2, LEN({$column})) AS INT)) as max_num",
                     [$prefix]
                 )
                 ->value('max_num');
-
-            return "{$prefix}-" . (($maxNumber ?? 0) + 1);
         }
 
         $pattern = '/^' . preg_quote($prefix, '/') . '-(\d+)$/';
 
-        $maxNumber = Ticket::withTrashed()
-            ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
-            ->where('ticket_key', 'LIKE', "{$prefix}-%")
-            ->pluck('ticket_key')
-            ->map(function ($ticketKey) use ($pattern) {
-                return preg_match($pattern, (string) $ticketKey, $matches)
+        return (int) (DB::table($table)
+            ->where($column, 'LIKE', "{$prefix}-%")
+            ->pluck($column)
+            ->map(function ($key) use ($pattern) {
+                return preg_match($pattern, (string) $key, $matches)
                     ? (int) $matches[1]
                     : 0;
             })
-            ->max() ?? 0;
+            ->max() ?? 0);
+    }
 
-        return "{$prefix}-" . ($maxNumber + 1);
+    private static ?bool $hasKeyAliases = null;
+
+    private static function ticketKeyAliasesTableExists(): bool
+    {
+        if (self::$hasKeyAliases === null) {
+            self::$hasKeyAliases = \Illuminate\Support\Facades\Schema::hasTable('ticket_key_aliases');
+        }
+
+        return self::$hasKeyAliases;
+    }
+
+    /**
+     * When a ticket is renumbered (Company/Store change), remember the key it used
+     * to carry so old email threads and links still resolve to it.
+     */
+    private function recordPreviousKeyAlias(Ticket $ticket): void
+    {
+        if (! self::ticketKeyAliasesTableExists()) {
+            return;
+        }
+
+        $oldKey = (string) $ticket->getOriginal('ticket_key');
+
+        if ($oldKey === '' || $oldKey === (string) $ticket->ticket_key) {
+            return;
+        }
+
+        // Don't alias a key that some other ticket is currently using — the live
+        // ticket owns that key, so an alias would only muddy the lookup.
+        $keyIsLive = Ticket::withTrashed()
+            ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->where('ticket_key', $oldKey)
+            ->exists();
+
+        if ($keyIsLive) {
+            return;
+        }
+
+        TicketKeyAlias::updateOrCreate(
+            ['ticket_key' => $oldKey],
+            ['ticket_id' => $ticket->id]
+        );
     }
 
     /**
@@ -140,6 +201,11 @@ class TicketObserver
      */
     public function updated(Ticket $ticket): void
     {
+        // Preserve the retired key whenever a Company/Store change renumbered it.
+        if ($ticket->wasChanged('ticket_key')) {
+            $this->recordPreviousKeyAlias($ticket);
+        }
+
         $metric = $ticket->slaMetric;
         $assignee = $ticket->assignee_id ? User::find($ticket->assignee_id) : null;
         $subUnit = $assignee?->org_path;
