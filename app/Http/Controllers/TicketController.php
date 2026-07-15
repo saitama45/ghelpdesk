@@ -213,9 +213,9 @@ class TicketController extends Controller
 
         $filterOptions = $this->ticketIndexFilterOptions(clone $query);
 
-        // Snapshot before any filters — used for dept stat box counts so they are never
-        // distorted by the user's current status/date/search selection.
-        $deptStatsBase = clone $query;
+        // Snapshot before ordinary filters. Monitoring cards describe the whole
+        // accessible queue and must not collapse when the table uses another filter.
+        $summaryStatsBase = clone $query;
 
         // Apply status filters — User role defaults to 'all' so they see all their own tickets
         $normalizeFilterValues = function ($value) {
@@ -272,17 +272,7 @@ class TicketController extends Controller
         $requestedDeptId = $request->filled('department_id') ? (int) $request->department_id : null;
         $filterDeptId  = $requestedDeptId;
         $filterNodeId  = $request->filled('department_node_id') ? (int) $request->department_node_id : null;
-        // Whether the user explicitly picked a department vs. the automatic default
-        // scope (own department). Explicit picks filter by the ticket's department
-        // field; the default scope keeps the triage view (own dept + unassigned).
-        $explicitDeptFilter = $request->filled('department_id');
-        $skipDefaultDepartmentScope = $request->boolean('skip_default_department')
-            || $ticketKeys->isNotEmpty();
         $assignedDepartmentOnly = $request->boolean('assigned_department_only');
-
-        if (!$skipDefaultDepartmentScope && !$filterDeptId && !$filterNodeId) {
-            $filterDeptId = auth()->user()->department_id ? (int) auth()->user()->department_id : null;
-        }
 
         // Apply Assignee filter
         $assigneeFilters = $normalizeFilterValues($request->input('assignee_id'));
@@ -351,8 +341,6 @@ class TicketController extends Controller
             });
         }
 
-        $queryBeforeDept = clone $query;
-
         // Apply Department / Team filter
         if ($filterNodeId) {
             $descendantIds = \App\Models\DepartmentNode::getAllDescendantIds($filterNodeId);
@@ -368,7 +356,7 @@ class TicketController extends Controller
         } elseif ($filterDeptId) {
             if ($assignedDepartmentOnly) {
                 $query->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId));
-            } elseif ($explicitDeptFilter) {
+            } else {
                 // User explicitly picked a department: filter by the ticket's own
                 // department field (matched to the selected department's name), not
                 // the assignee's — stops unrelated unassigned tickets leaking in.
@@ -381,17 +369,10 @@ class TicketController extends Controller
                     // filter never silently matches everything.
                     $query->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId));
                 }
-            } else {
-                // Automatic default scope (viewer's own department): keep the triage
-                // view that also surfaces unassigned tickets for pick-up.
-                $query->where(function ($departmentQuery) use ($filterDeptId) {
-                    $departmentQuery->whereHas('assignee', fn($q) => $q->where('department_id', $filterDeptId))
-                        ->orWhereNull('assignee_id');
-                });
             }
         }
 
-        $summaryQuery = clone $query;
+        $summaryQuery = clone $summaryStatsBase;
         $summaryStats = [
             'new' => (clone $summaryQuery)
                 ->where('status', 'open')
@@ -400,6 +381,18 @@ class TicketController extends Controller
                 ->whereNull('item_id')
                 ->whereNull('assignee_id')
                 ->count(),
+            'open' => (clone $summaryQuery)->where('status', 'open')->count(),
+            'waiting' => (clone $summaryQuery)
+                ->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])
+                ->count(),
+            'urgent' => (clone $summaryQuery)
+                ->where(function ($q) {
+                    $q->where('priority', 'urgent')
+                        ->orWhereHas('item', fn($itemQuery) => $itemQuery->where('priority', 'Urgent'));
+                })
+                ->where('status', '!=', 'closed')
+                ->count(),
+            'closed' => (clone $summaryQuery)->where('status', 'closed')->count(),
             'unassigned' => (clone $summaryQuery)->whereNull('assignee_id')->count(),
             'breached' => (clone $summaryQuery)
                 ->whereHas('slaMetric', function ($slaQuery) {
@@ -429,17 +422,16 @@ class TicketController extends Controller
         ];
 
         // Per-department stat breakdown for SO / CS tabs
-        $nodes = \App\Models\DepartmentNode::whereIn('code', ['SO', 'CS'])->get()->keyBy('code');
+        $nodes = \App\Models\DepartmentNode::whereRaw('UPPER(code) IN (?, ?)', ['SO', 'CS'])
+            ->get()
+            ->keyBy(fn($node) => strtoupper(trim((string) $node->code)));
         $summaryStatsByDept = [];
         foreach ($nodes as $code => $node) {
-            $base = clone $queryBeforeDept;
             $descendantIds = \App\Models\DepartmentNode::getAllDescendantIds($node->id);
             $nodeIds = array_merge([$node->id], $descendantIds);
-            
-            $base->whereHas('assignee', fn($q) => $q->whereIn('department_node_id', $nodeIds));
 
             // Unfiltered dept base — not affected by the current status/date/search selection
-            $deptStatBase = clone $deptStatsBase;
+            $deptStatBase = clone $summaryStatsBase;
             $deptStatBase->whereHas('assignee', fn($q) => $q->whereIn('department_node_id', $nodeIds));
 
             $now  = now();
@@ -449,17 +441,17 @@ class TicketController extends Controller
                 'id'   => $node->id,
                 'name' => $node->name,
                 'stats' => [
-                    'new' => (clone $base)
+                    'new' => (clone $deptStatBase)
                         ->where('status', 'open')
                         ->whereNull('category_id')
                         ->whereNull('sub_category_id')
                         ->whereNull('item_id')
                         ->count(),
                     'open' => (clone $deptStatBase)->where('status', 'open')->count(),
-                    'breached' => (clone $base)->whereHas('slaMetric', fn($q) =>
+                    'breached' => (clone $deptStatBase)->whereHas('slaMetric', fn($q) =>
                         $q->where('is_response_breached', true)->orWhere('is_resolution_breached', true)
                     )->count(),
-                    'due_soon' => (clone $base)->whereHas('slaMetric', function ($q) use ($now, $soon) {
+                    'due_soon' => (clone $deptStatBase)->whereHas('slaMetric', function ($q) use ($now, $soon) {
                         $q->where(function ($sq) use ($now, $soon) {
                             $sq->whereNotNull('response_target_at')
                                ->whereNull('first_response_at')
@@ -472,7 +464,7 @@ class TicketController extends Controller
                                ->whereBetween('resolution_target_at', [$now, $soon]);
                         });
                     })->count(),
-                    'in_progress' => (clone $base)->where('status', 'in_progress')->count(),
+                    'in_progress' => (clone $deptStatBase)->where('status', 'in_progress')->count(),
                     'total'       => (clone $deptStatBase)->count(),
                     'waiting'     => (clone $deptStatBase)
                         ->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])
@@ -559,9 +551,6 @@ class TicketController extends Controller
             'filters' => [
                 'status' => $statusFilters->all(),
                 'search' => $request->search,
-                // Only echo an explicitly requested department. Returning the
-                // inferred default made the next request reinterpret it as an
-                // explicit tickets.department filter and changed the result set.
                 'department_id' => $requestedDeptId,
                 'department_node_id' => $filterNodeId,
                 'assigned_department_only' => $assignedDepartmentOnly,

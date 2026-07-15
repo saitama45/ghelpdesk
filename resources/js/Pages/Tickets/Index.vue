@@ -125,13 +125,23 @@ onMounted(() => {
         if (savedFiltersStr) {
             try {
                 const savedFilters = JSON.parse(savedFiltersStr);
-                const { entity_ids, ticket_keys, ...currentParams } = ticketFilterParams();
+                const {
+                    entity_ids,
+                    ticket_keys,
+                    department_node_id,
+                    assigned_department_only,
+                    ...currentParams
+                } = ticketFilterParams();
                 
                 // Entity selection is never restored from storage (resets each visit).
                 delete savedFilters.entity_ids;
                 // Ticket deep links and the removed general search are never restored.
                 delete savedFilters.ticket_keys;
                 delete savedFilters.search;
+                // SO/CS is navigation state, not a preference. A normal Tickets
+                // visit must always return to the All Departments tab.
+                delete savedFilters.department_node_id;
+                delete savedFilters.assigned_department_only;
                 if (JSON.stringify(savedFilters) !== JSON.stringify(currentParams)) {
                     if (savedFilters.status !== undefined) filterStatus.value = savedFilters.status;
                     if (savedFilters.department_node_id !== undefined) filterNodeId.value = savedFilters.department_node_id;
@@ -156,7 +166,13 @@ onMounted(() => {
     } else {
         const params = ticketFilterParams();
         if (!filterTicketKeys.value.length) {
-            const { entity_ids, ticket_keys, ...persistedParams } = params;
+            const {
+                entity_ids,
+                ticket_keys,
+                department_node_id,
+                assigned_department_only,
+                ...persistedParams
+            } = params;
             localStorage.setItem('ghelpdesk_ticket_filters', JSON.stringify(persistedParams));
         }
     }
@@ -512,7 +528,14 @@ const applyFilter = () => {
     // Entity/Company selection is intentionally NOT persisted — each visit
     // resets to the active sidebar entity (server-seeded default).
     if (!filterTicketKeys.value.length) {
-        const { entity_ids, ticket_keys, search, ...persistedParams } = params;
+        const {
+            entity_ids,
+            ticket_keys,
+            search,
+            department_node_id,
+            assigned_department_only,
+            ...persistedParams
+        } = params;
         localStorage.setItem('ghelpdesk_ticket_filters', JSON.stringify(persistedParams));
     }
 
@@ -661,7 +684,17 @@ const clearFilters = () => {
     filterTicketKeys.value = [];
     filterRequesterKeys.value = [];
     pagination.search.value = '';
-    applyFilter();
+    localStorage.removeItem('ghelpdesk_ticket_filters');
+
+    router.get(route('tickets.index'), {
+        status: defaultStatusFilters(),
+        dashboard_filter: 'all',
+        ticket_scope: defaultTicketScope,
+        skip_default_department: true,
+    }, {
+        preserveState: false,
+        preserveScroll: false,
+    });
 };
 
 watch(() => props.tickets, (newTickets) => {
@@ -880,7 +913,9 @@ const initialStatDeptTab = () => {
     return matchingCode || 'all';
 };
 
-const statDeptTab = ref(initialStatDeptTab())
+// Keep the highlighted tab derived from current server props. A ref initialized
+// once becomes stale when an Inertia request preserves this component instance.
+const statDeptTab = computed(initialStatDeptTab)
 
 const deptTabs = computed(() => [
     { key: 'all', label: 'All' },
@@ -911,7 +946,6 @@ const selectDeptTab = (tabKey) => {
 
     const deptId = props.summaryStatsByDept?.[tabKey]?.id;
     if (!deptId) {
-        statDeptTab.value = tabKey;
         return;
     }
 
@@ -1586,6 +1620,66 @@ const summaryCards = computed(() => {
             accentClass: 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]',
         },
         {
+            key: 'open',
+            filterKey: 'open',
+            label: 'Open',
+            value: stats.open ?? 0,
+            hint: 'All open tickets',
+            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+            valueClass: 'text-white',
+            labelClass: 'text-emerald-300',
+            hintClass: 'text-slate-400',
+            accentClass: 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]',
+        },
+        {
+            key: 'waiting',
+            filterKey: 'waiting',
+            label: 'Waiting',
+            value: stats.waiting ?? 0,
+            hint: 'Awaiting service provider or client feedback',
+            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+            valueClass: 'text-white',
+            labelClass: 'text-amber-400',
+            hintClass: 'text-slate-400',
+            accentClass: 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]',
+        },
+        {
+            key: 'urgent',
+            filterKey: 'urgent',
+            label: 'Urgent (P1)',
+            value: stats.urgent ?? 0,
+            hint: 'Critical priority tickets',
+            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+            valueClass: 'text-white',
+            labelClass: 'text-red-400',
+            hintClass: 'text-slate-400',
+            accentClass: 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]',
+        },
+        {
+            key: 'closed',
+            filterKey: 'closed',
+            label: 'Closed',
+            value: stats.closed ?? 0,
+            hint: 'Closed tickets',
+            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+            valueClass: 'text-white',
+            labelClass: 'text-slate-300',
+            hintClass: 'text-slate-400',
+            accentClass: 'bg-slate-400',
+        },
+        {
+            key: 'in_progress',
+            filterKey: 'in_progress',
+            label: 'In Progress',
+            value: stats.in_progress ?? 0,
+            hint: 'Actively being worked on',
+            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
+            valueClass: 'text-white',
+            labelClass: 'text-emerald-400',
+            hintClass: 'text-slate-400',
+            accentClass: 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]',
+        },
+        {
             key: 'unassigned',
             filterKey: 'unassigned',
             label: 'Unassigned',
@@ -1620,18 +1714,6 @@ const summaryCards = computed(() => {
             labelClass: 'text-amber-400',
             hintClass: 'text-slate-400',
             accentClass: 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]',
-        },
-        {
-            key: 'in_progress',
-            filterKey: 'in_progress',
-            label: 'In Progress',
-            value: stats.in_progress ?? 0,
-            hint: 'Actively being worked on',
-            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-            valueClass: 'text-white',
-            labelClass: 'text-emerald-400',
-            hintClass: 'text-slate-400',
-            accentClass: 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]',
         },
     ];
 });

@@ -45,6 +45,22 @@ class TicketIndexSummaryTest extends TestCase
         $newTicket = $this->ticket($company, ['title' => 'New visible ticket']);
         $this->ticket($company, ['title' => 'Assigned open ticket', 'assignee_id' => $assignedUser->id]);
         $this->ticket($company, ['title' => 'Unassigned in progress ticket', 'status' => 'in_progress']);
+        $this->ticket($company, [
+            'title' => 'Assigned waiting ticket',
+            'status' => 'waiting_service_provider',
+            'assignee_id' => $assignedUser->id,
+        ]);
+        $this->ticket($company, [
+            'title' => 'Assigned urgent ticket',
+            'status' => 'resolved',
+            'priority' => 'urgent',
+            'assignee_id' => $assignedUser->id,
+        ]);
+        $this->ticket($company, [
+            'title' => 'Assigned closed ticket',
+            'status' => 'closed',
+            'assignee_id' => $assignedUser->id,
+        ]);
 
         $this->actingAs($user)
             ->get(route('tickets.index', ['dashboard_filter' => 'new']))
@@ -52,7 +68,14 @@ class TicketIndexSummaryTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Tickets/Index')
                 ->where('summaryStats.new', 1)
-                ->where('summaryStats.unassigned', 1)
+                ->where('summaryStats.open', 2)
+                ->where('summaryStats.waiting', 1)
+                ->where('summaryStats.urgent', 1)
+                ->where('summaryStats.closed', 1)
+                ->where('summaryStats.in_progress', 1)
+                ->where('summaryStats.unassigned', 2)
+                ->where('summaryStats.breached', 0)
+                ->where('summaryStats.due_soon', 0)
                 ->where('filters.dashboard_filter', 'new')
                 ->has('tickets.data', 1)
                 ->where('tickets.data.0.id', $newTicket->id)
@@ -82,7 +105,7 @@ class TicketIndexSummaryTest extends TestCase
         $csNode = DepartmentNode::create([
             'department_id' => $department->id,
             'name' => 'Corporate Services',
-            'code' => 'CS',
+            'code' => 'cs',
             'is_active' => true,
         ]);
 
@@ -299,12 +322,26 @@ class TicketIndexSummaryTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Tickets/Index')
                 ->where('filters.ticket_scope', 'all')
+                ->where('summaryStats.new', 2)
                 ->has('tickets.data', 2)
                 ->where('tickets.data', fn ($tickets) => collect($tickets)
                     ->pluck('id')
                     ->sort()
                     ->values()
                     ->all() === collect([$parent->id, $child->id])->sort()->values()->all())
+            );
+
+        $this->actingAs($viewer)
+            ->get(route('tickets.index', [
+                'status' => ['all'],
+                'ticket_scope' => 'parents',
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('filters.ticket_scope', 'parents')
+                ->where('summaryStats.new', 1)
+                ->has('tickets.data', 1)
+                ->where('tickets.data.0.id', $parent->id)
             );
     }
 
@@ -346,6 +383,8 @@ class TicketIndexSummaryTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Tickets/Index')
                 ->where('filters.requester_keys', $requesterKeys)
+                // Counts ignore requester filters but remain inside the viewer's entity.
+                ->where('summaryStats.open', 3)
                 ->has('tickets.data', 2)
                 ->where('tickets.data', fn ($tickets) => collect($tickets)
                     ->pluck('id')
@@ -579,25 +618,27 @@ class TicketIndexSummaryTest extends TestCase
             );
     }
 
-    public function test_automatic_department_scope_is_not_returned_as_an_explicit_filter(): void
+    public function test_default_ticket_index_spans_all_accessible_departments(): void
     {
         $company = Company::create(['name' => 'Test Company', 'code' => 'TC', 'is_active' => true]);
-        $department = Department::create(['name' => 'Support', 'is_active' => true]);
-        $viewer = User::factory()->create(['company_id' => $company->id, 'department_id' => $department->id]);
-        $assignee = User::factory()->create(['company_id' => $company->id, 'department_id' => $department->id]);
+        $viewerDepartment = Department::create(['name' => 'Support', 'is_active' => true]);
+        $otherDepartment = Department::create(['name' => 'Operations', 'is_active' => true]);
+        $viewer = User::factory()->create(['company_id' => $company->id, 'department_id' => $viewerDepartment->id]);
+        $otherAssignee = User::factory()->create(['company_id' => $company->id, 'department_id' => $otherDepartment->id]);
 
         $assigned = $this->ticket($company, [
             'ticket_key' => 'AUTO-1001',
-            'title' => 'Scope marker',
-            'assignee_id' => $assignee->id,
+            'title' => 'Other department scope marker',
+            'assignee_id' => $otherAssignee->id,
             'department' => null,
         ]);
 
         $this->actingAs($viewer)
-            ->get(route('tickets.index', ['search' => 'Scope marker']))
+            ->get(route('tickets.index', ['search' => 'Other department scope marker']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('filters.department_id', null)
+                ->where('filters.department_node_id', null)
                 ->has('tickets.data', 1)
                 ->where('tickets.data.0.id', $assigned->id)
             );
