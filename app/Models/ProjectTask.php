@@ -36,6 +36,8 @@ class ProjectTask extends Model
         'dependencies',
         'comments',
         'order',
+        'created_by',
+        'updated_by',
     ];
 
     protected $casts = [
@@ -44,6 +46,8 @@ class ProjectTask extends Model
         'milestone_order' => 'integer',
         'assigned_to' => 'integer',
         'support_by' => 'integer',
+        'created_by' => 'integer',
+        'updated_by' => 'integer',
         'start_date' => 'date:Y-m-d',
         'end_date' => 'date:Y-m-d',
         'original_end_date' => 'date:Y-m-d',
@@ -88,5 +92,24 @@ class ProjectTask extends Model
     public function assets(): HasMany
     {
         return $this->hasMany(ProjectAsset::class, 'project_task_id');
+    }
+
+    /**
+     * Whether $user may edit THIS row.
+     *
+     * Project managers (see Project::isManagedBy) may edit every row; everyone
+     * else may only edit the activity / sub-task assigned to them.
+     */
+    public function isEditableBy(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if ($this->project && $this->project->isManagedBy($user)) {
+            return true;
+        }
+
+        return $this->assigned_to !== null && (int) $this->assigned_to === (int) $user->id;
     }
 }

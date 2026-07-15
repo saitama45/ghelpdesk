@@ -28,7 +28,20 @@ const props = defineProps({
     users: Array,
     projectTemplates: Array,
     taskListTargets: Object,
+    // Project managers (creator/admin) may edit every row and all structure.
+    canManage: { type: Boolean, default: false },
+    // The viewer's user id — non-managers may only edit rows assigned to them.
+    currentUserId: { type: [Number, String], default: null },
 });
+
+// A non-manager may only edit the activity / sub-task assigned to them; managers
+// may edit anything. Structural actions (add/delete/reorder/templates) are
+// manager-only and gated on props.canManage directly.
+const canEditTask = (task) => {
+    if (props.canManage) return true;
+    if (!props.currentUserId || !task) return false;
+    return Number(task.assigned_to) === Number(props.currentUserId);
+};
 
 const { success, info, error } = useToast();
 const { confirm: confirmAction } = useConfirm();
@@ -139,6 +152,7 @@ const projectTeamMembers = computed(() => {
 });
 
 const applyActivityTemplates = () => {
+    if (!props.canManage) return;
     if (!props.projectTemplates || props.projectTemplates.length === 0) {
         info('No activity templates available for this project class.');
         return;
@@ -282,6 +296,7 @@ const getNextMilestoneOrder = () => {
 };
 
 const openMilestoneForm = () => {
+    if (!props.canManage) return;
     isEditing.value = false;
     editingTaskId.value = null;
     formMode.value = 'milestone';
@@ -294,6 +309,7 @@ const openMilestoneForm = () => {
 };
 
 const openActivityForm = (category) => {
+    if (!props.canManage) return;
     isEditing.value = false;
     editingTaskId.value = null;
     formMode.value = 'activity';
@@ -307,6 +323,7 @@ const openActivityForm = (category) => {
 };
 
 const openSubTaskForm = (task) => {
+    if (!props.canManage) return;
     isEditing.value = false;
     editingTaskId.value = null;
     formMode.value = 'subtask';
@@ -324,6 +341,7 @@ const openSubTaskForm = (task) => {
 };
 
 const editTask = (task) => {
+    if (!canEditTask(task)) return;
     isEditing.value = true;
     editingTaskId.value = task.id;
     formMode.value = task.parent_task_id ? 'subtask' : 'activity';
@@ -369,6 +387,7 @@ const updateTaskField = async (task, field, value) => {
 };
 
 const deleteTask = async (taskId) => {
+    if (!props.canManage) return;
     const ok = await confirmAction({
         title: 'Delete Task',
         message: 'Are you sure you want to permanently delete this task? This cannot be undone.',
@@ -387,6 +406,7 @@ const deleteTask = async (taskId) => {
 };
 
 const deleteMilestone = async (category, tasks = []) => {
+    if (!props.canManage) return;
     const rowCount = visibleTaskCount(tasks);
     const ok = await confirmAction({
         title: 'Delete Milestone',
@@ -654,15 +674,18 @@ const persistTaskOrder = async () => {
 };
 
 const handleTaskDragStart = (task) => {
+    if (!props.canManage) return; // reordering is a manager-only action
     draggedTaskId.value = task.id;
 };
 
 const handleTaskDragOver = (task) => {
+    if (!props.canManage) return;
     if (!draggedTaskId.value || draggedTaskId.value === task.id) return;
     dragOverTaskId.value = task.id;
 };
 
 const handleTaskDrop = (targetTask) => {
+    if (!props.canManage) return;
     if (!draggedTaskId.value || draggedTaskId.value === targetTask.id) {
         draggedTaskId.value = null;
         dragOverTaskId.value = null;
@@ -742,7 +765,13 @@ const isWeekend = (date) => {
             </div>
 
             <div class="flex items-center space-x-2">
-                <button @click="applyActivityTemplates" 
+                <span v-if="!canManage"
+                      class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-200"
+                      title="Only the project owner can change the plan. You can edit the rows assigned to you.">
+                    <PencilSquareIcon class="w-4 h-4" />
+                    You can edit only your assigned rows
+                </span>
+                <button v-if="canManage" @click="applyActivityTemplates"
                         class="inline-flex items-center px-4 py-2 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 text-sm font-bold rounded-lg shadow-sm transition-all transform active:scale-95 disabled:opacity-50 dark:border-indigo-400/30 dark:bg-slate-900 dark:text-indigo-200 dark:hover:bg-indigo-500/15"
                         :disabled="isApplyingTemplates"
                 >
@@ -752,7 +781,8 @@ const isWeekend = (date) => {
                 <button @click="showFilters = !showFilters" class="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors dark:text-slate-300 dark:hover:bg-indigo-500/15 dark:hover:text-indigo-200">
                     <FunnelIcon class="w-5 h-5" />
                 </button>
-                <button 
+                <button
+                    v-if="canManage"
                     @click="openMilestoneForm"
                     class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg shadow-sm transition-all transform active:scale-95"
                 >
@@ -895,7 +925,7 @@ const isWeekend = (date) => {
                                     <span class="text-[11px] font-black text-slate-600 uppercase tracking-wider dark:text-slate-100">{{ category }}</span>
                                     <span class="ml-2 px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[9px] font-bold dark:bg-slate-700 dark:text-slate-200">{{ visibleTaskCount(tasks) }}</span>
                                 </div>
-                                <div class="flex items-center gap-1.5">
+                                <div v-if="canManage" class="flex items-center gap-1.5">
                                     <button type="button"
                                             @click.stop="openActivityForm(category)"
                                             class="inline-flex items-center px-2.5 py-1 bg-white border border-indigo-100 text-[10px] font-black text-indigo-700 uppercase tracking-wider rounded-md hover:bg-indigo-50 transition-colors dark:border-indigo-400/30 dark:bg-slate-900 dark:text-indigo-200 dark:hover:bg-indigo-500/15">
@@ -920,9 +950,10 @@ const isWeekend = (date) => {
                                  @drop.prevent="handleTaskDrop(row.task)"
                                  :class="[
                                      dragOverTaskId === row.task.id ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-200 dark:bg-indigo-500/10 dark:ring-indigo-400/30' : '',
-                                    row.isSubTask ? 'min-h-[3rem]' : 'min-h-[3.5rem]'
+                                    row.isSubTask ? 'min-h-[3rem]' : 'min-h-[3.5rem]',
+                                    canEditTask(row.task) ? 'cursor-pointer' : 'cursor-default'
                                  ]"
-                                  class="flex border-b border-slate-100 hover:bg-indigo-50/10 group transition-colors cursor-pointer relative z-10 dark:border-slate-800 dark:hover:bg-indigo-500/5">
+                                  class="flex border-b border-slate-100 hover:bg-indigo-50/10 group transition-colors relative z-10 dark:border-slate-800 dark:hover:bg-indigo-500/5">
                                 
                                 <!-- Left Task Info (Sticky) -->
                                 <div class="sticky left-0 z-30 w-[480px] flex items-center border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-800 dark:shadow-black/20"
@@ -934,7 +965,7 @@ const isWeekend = (date) => {
                                                 <CheckCircleIcon v-if="row.task.status === 'Done'" class="w-3.5 h-3.5 text-emerald-600" />
                                             </div>
                                         </div>
-                                        <div class="flex items-center self-stretch" @click.stop>
+                                        <div v-if="canManage" class="flex items-center self-stretch" @click.stop>
                                             <button type="button"
                                                     draggable="true"
                                                     @dragstart="handleTaskDragStart(row.task)"
@@ -976,7 +1007,7 @@ const isWeekend = (date) => {
                                                 {{ row.task.status }}
                                             </span>
                                         </div>
-                                        <div class="flex items-center">
+                                        <div v-if="canManage" class="flex items-center">
                                             <button v-if="!row.isSubTask"
                                                     @click.stop="openSubTaskForm(row.task)"
                                                     class="p-1 text-indigo-400 hover:text-indigo-700 transition-colors opacity-40 group-hover:opacity-100 flex-shrink-0"

@@ -119,10 +119,10 @@ class ProjectTaskListIntegrationTest extends TestCase
 
     public function test_gantt_updates_sync_linked_checklist_item_fields(): void
     {
-        $project = $this->createProject();
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
         $this->createProjectTeamTargets($project, ['DS']);
         $task = $this->createProjectTask($project, 'Install POS', ['category' => 'POS']);
-        $user = User::factory()->create();
 
         $this->actingAs($user)->post(route('projects.task-board', $project));
 
@@ -150,14 +150,14 @@ class ProjectTaskListIntegrationTest extends TestCase
 
     public function test_deleting_parent_project_activity_removes_linked_checklist_items_from_monthly_cards(): void
     {
-        $project = $this->createProject();
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
         $this->createProjectTeamTargets($project, ['DS']);
         $parentTask = $this->createProjectTask($project, 'Install POS', ['category' => 'POS']);
         $subTask = $this->createProjectTask($project, 'Configure menu', [
             'parent_task_id' => $parentTask->id,
             'category' => 'POS',
         ]);
-        $user = User::factory()->create();
 
         $this->actingAs($user)->post(route('projects.task-board', $project));
 
@@ -171,7 +171,8 @@ class ProjectTaskListIntegrationTest extends TestCase
 
     public function test_deleting_project_milestone_removes_linked_checklist_items_from_monthly_cards(): void
     {
-        $project = $this->createProject();
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
         $this->createProjectTeamTargets($project, ['DS']);
         $parentTask = $this->createProjectTask($project, 'Install POS', [
             'category' => 'POS',
@@ -186,7 +187,6 @@ class ProjectTaskListIntegrationTest extends TestCase
             'category' => 'Network',
             'milestone_order' => 2,
         ]);
-        $user = User::factory()->create();
 
         $this->actingAs($user)->post(route('projects.task-board', $project));
 
@@ -202,7 +202,7 @@ class ProjectTaskListIntegrationTest extends TestCase
         $this->assertSame(1, TaskCard::where('project_id', $project->id)->count());
     }
 
-    private function createProject(string $storeName = 'Test Store'): Project
+    private function createProject(string $storeName = 'Test Store', ?User $owner = null): Project
     {
         $store = Store::create([
             'code' => strtoupper(substr(md5($storeName), 0, 8)),
@@ -221,6 +221,7 @@ class ProjectTaskListIntegrationTest extends TestCase
             'status' => 'Planning',
             'board_month' => 5,
             'board_year' => 2026,
+            'created_by' => $owner?->id,
         ]);
     }
 

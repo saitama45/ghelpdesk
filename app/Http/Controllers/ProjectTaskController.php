@@ -21,6 +21,10 @@ class ProjectTaskController extends Controller
 
     public function applyTemplates(Request $request, Project $project)
     {
+        // Applying a template rewrites the milestone/activity structure — a
+        // management action. Only the owner/admin may do it.
+        abort_unless($project->isManagedBy($request->user()), 403, 'You do not have permission to modify this project.');
+
         $request->validate([
             'project_template_id' => 'required|exists:project_templates,id',
         ]);
@@ -32,7 +36,9 @@ class ProjectTaskController extends Controller
             return redirect()->back()->with('info', 'The selected template has no activities.');
         }
 
-        [$addedCount, $reorderedCount] = DB::transaction(function () use ($project, $activities) {
+        $actorId = $request->user()->id;
+
+        [$addedCount, $reorderedCount] = DB::transaction(function () use ($project, $activities, $actorId) {
             $addedCount = 0;
             $reorderedCount = 0;
             $projectTasksByTemplateActivity = [];
@@ -63,6 +69,8 @@ class ProjectTaskController extends Controller
                         'status' => 'Pending',
                         'progress' => 0,
                         'order' => $activity->order,
+                        'created_by' => $actorId,
+                        'updated_by' => $actorId,
                     ]);
                     $addedCount++;
                 } elseif ((int) $task->order !== (int) $activity->order || (int) $task->milestone_order !== (int) $activity->milestone_order) {
@@ -106,6 +114,8 @@ class ProjectTaskController extends Controller
                         'status' => 'Pending',
                         'progress' => 0,
                         'order' => $activity->order,
+                        'created_by' => $actorId,
+                        'updated_by' => $actorId,
                     ]);
                     $addedCount++;
                 } elseif ((int) $task->order !== (int) $activity->order || (int) $task->milestone_order !== (int) $activity->milestone_order) {
@@ -184,6 +194,10 @@ class ProjectTaskController extends Controller
             'order' => 'nullable|integer',
         ]);
 
+        // Adding new milestones / activities / sub-tasks is a management action.
+        $project = Project::findOrFail($validated['project_id']);
+        abort_unless($project->isManagedBy($request->user()), 403, 'You do not have permission to add tasks to this project.');
+
         // Convert empty strings to null for database foreign keys
         $validated['parent_task_id'] = ($validated['parent_task_id'] ?? null) ?: null;
         $validated['support_by'] = ($validated['support_by'] ?? null) ?: null;
@@ -244,6 +258,9 @@ class ProjectTaskController extends Controller
             $validated['external_assignment'] = null;
         }
 
+        $validated['created_by'] = $request->user()->id;
+        $validated['updated_by'] = $request->user()->id;
+
         $task = ProjectTask::create($validated);
         $this->projectTaskBoards->syncProject($task->project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
         $this->projectTaskBoards->syncLinkedBoardItemsFromProject($task->project);
@@ -263,6 +280,10 @@ class ProjectTaskController extends Controller
 
     public function update(Request $request, ProjectTask $projects_task)
     {
+        // A project manager may edit any row; everyone else only the activity /
+        // sub-task assigned to them.
+        abort_unless($projects_task->isEditableBy($request->user()), 403, 'You can only edit rows assigned to you.');
+
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'category' => 'sometimes|nullable|string|max:255',
@@ -333,6 +354,8 @@ class ProjectTaskController extends Controller
         $oldProgress = (int) $projects_task->progress;
         $oldAssignee = $projects_task->assigned_to;
 
+        $validated['updated_by'] = $request->user()->id;
+
         $projects_task->update($validated);
         $this->projectTaskBoards->syncProject($projects_task->project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
         $this->projectTaskBoards->syncLinkedBoardItemsFromProject($projects_task->project);
@@ -382,6 +405,10 @@ class ProjectTaskController extends Controller
     public function destroy(Request $request, ProjectTask $projects_task)
     {
         $project = $projects_task->project;
+
+        // Deleting a row (and its sub-tasks) is a management action.
+        abort_unless($project && $project->isManagedBy($request->user()), 403, 'You do not have permission to delete tasks in this project.');
+
         $taskIds = $projects_task->subTasks()->pluck('id')->push($projects_task->id);
         $this->projectTaskBoards->archiveProjectTaskCards($taskIds, $request->user());
         $this->projectTaskBoards->removeBoardItemsForProjectTasks($taskIds);
@@ -398,6 +425,8 @@ class ProjectTaskController extends Controller
 
     public function destroyMilestone(Request $request, Project $project)
     {
+        abort_unless($project->isManagedBy($request->user()), 403, 'You do not have permission to delete milestones in this project.');
+
         $validated = $request->validate([
             'category' => 'required|string|max:255',
         ]);
@@ -458,6 +487,19 @@ class ProjectTaskController extends Controller
             'tasks.*.milestone_order' => 'nullable|integer|min:0',
             'tasks.*.order' => 'nullable|integer|min:0',
         ]);
+
+        // Reordering / bulk timeline edits span the whole plan — a management action.
+        // Every task in the batch must belong to a project the user manages.
+        $projects = ProjectTask::whereIn('id', collect($validated['tasks'])->pluck('id'))
+            ->with('project')
+            ->get()
+            ->pluck('project')
+            ->filter()
+            ->unique('id');
+
+        foreach ($projects as $project) {
+            abort_unless($project->isManagedBy($request->user()), 403, 'You do not have permission to reorder tasks in this project.');
+        }
 
         $progressChanges = [];
 

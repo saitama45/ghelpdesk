@@ -160,7 +160,8 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_applying_nested_template_creates_project_parent_and_sub_task(): void
     {
-        $project = $this->createProject();
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
         $template = ProjectTemplate::create([
             'name' => 'Nested NSO',
             'project_type' => 'NSO',
@@ -185,8 +186,6 @@ class ProjectActivitySubTaskTest extends TestCase
             'default_duration_days' => 1,
             'order' => 1,
         ]);
-
-        $user = User::factory()->create();
 
         $this->actingAs($user)
             ->post(route('projects.apply-templates', $project), [
@@ -218,7 +217,8 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_reapplying_template_refreshes_project_activity_sort_order(): void
     {
-        $project = $this->createProject();
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
         $template = ProjectTemplate::create([
             'name' => 'Sorted NSO',
             'project_type' => 'NSO',
@@ -249,8 +249,6 @@ class ProjectActivitySubTaskTest extends TestCase
             'default_duration_days' => 1,
             'order' => 1,
         ]);
-
-        $user = User::factory()->create();
 
         $this->actingAs($user)
             ->post(route('projects.apply-templates', $project), [
@@ -285,7 +283,8 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_applying_template_preserves_milestone_order_when_activity_orders_tie(): void
     {
-        $project = $this->createProject();
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
         $template = ProjectTemplate::create([
             'name' => 'Tied Milestone Orders',
             'project_type' => 'NSO',
@@ -309,8 +308,6 @@ class ProjectActivitySubTaskTest extends TestCase
             'default_duration_days' => 1,
             'order' => 1,
         ]);
-
-        $user = User::factory()->create();
 
         $this->actingAs($user)
             ->post(route('projects.apply-templates', $project), [
@@ -343,7 +340,8 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_deleting_project_milestone_deletes_all_category_tasks_and_sub_tasks(): void
     {
-        $project = $this->createProject();
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
 
         $posTask = ProjectTask::create([
             'project_id' => $project->id,
@@ -376,7 +374,7 @@ class ProjectActivitySubTaskTest extends TestCase
             'order' => 1,
         ]);
 
-        $this->actingAs(User::factory()->create())
+        $this->actingAs($user)
             ->delete(route('projects.milestones.destroy', $project), [
                 'category' => 'POS',
             ])
@@ -392,8 +390,9 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_sub_task_parent_must_belong_to_same_project(): void
     {
-        $firstProject = $this->createProject('First Store');
-        $secondProject = $this->createProject('Second Store');
+        $user = User::factory()->create();
+        $firstProject = $this->createProject('First Store', $user);
+        $secondProject = $this->createProject('Second Store', $user);
 
         $parentTask = ProjectTask::create([
             'project_id' => $firstProject->id,
@@ -404,7 +403,7 @@ class ProjectActivitySubTaskTest extends TestCase
             'order' => 1,
         ]);
 
-        $this->actingAs(User::factory()->create())
+        $this->actingAs($user)
             ->from(route('projects.show', $secondProject))
             ->post(route('projects-tasks.store'), [
                 'project_id' => $secondProject->id,
@@ -419,7 +418,8 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_deleting_parent_project_activity_deletes_sub_tasks(): void
     {
-        $project = $this->createProject();
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
 
         $parentTask = ProjectTask::create([
             'project_id' => $project->id,
@@ -440,7 +440,7 @@ class ProjectActivitySubTaskTest extends TestCase
             'order' => 1,
         ]);
 
-        $this->actingAs(User::factory()->create())
+        $this->actingAs($user)
             ->delete(route('projects-tasks.destroy', $parentTask))
             ->assertRedirect();
 
@@ -448,7 +448,7 @@ class ProjectActivitySubTaskTest extends TestCase
         $this->assertSoftDeleted('project_tasks', ['id' => $subTask->id]);
     }
 
-    private function createProject(string $storeName = 'Test Store'): Project
+    private function createProject(string $storeName = 'Test Store', ?User $owner = null): Project
     {
         $store = Store::create([
             'code' => strtoupper(substr(md5($storeName), 0, 8)),
@@ -465,6 +465,8 @@ class ProjectActivitySubTaskTest extends TestCase
             'store_id' => $store->id,
             'name' => $storeName . ' Project',
             'status' => 'Planning',
+            // The creator owns the project and may manage its full structure.
+            'created_by' => $owner?->id,
         ]);
     }
 }

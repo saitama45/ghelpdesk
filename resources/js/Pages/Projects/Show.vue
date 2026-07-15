@@ -41,7 +41,10 @@ const props = defineProps({
     boardYears: Array,
     availableBoards: { type: Array, default: () => [] },
     taskListTargets: Object,
-    project_templates: Array
+    project_templates: Array,
+    // Whether the viewer may manage the whole project (edit every row, apply
+    // templates, add/delete/reorder). Non-managers may only edit their own rows.
+    canManageProject: { type: Boolean, default: false },
 });
 
 const formatDate = (dateString) => {
@@ -782,8 +785,8 @@ const getStatusColor = (status) => {
                             </div>
                             <div class="flex items-center gap-4">
                                 <h1 class="text-3xl font-black text-gray-900 tracking-tight dark:text-gray-100">{{ project.name }}</h1>
-                                <button 
-                                    v-if="hasPermission('projects.edit')" 
+                                <button
+                                    v-if="hasPermission('projects.edit') && canManageProject"
                                     @click="openEditModal"
                                     class="p-2 rounded-lg bg-gray-50 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-gray-100 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700"
                                     title="Edit Project Details"
@@ -916,14 +919,14 @@ const getStatusColor = (status) => {
                                         {{ member.team_category }}
                                     </span>
                                 </div>
-                                <button @click.stop="showManageTeamModal = true" class="w-full mt-4 py-2 border-2 border-dashed border-gray-300 rounded-md text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors dark:text-gray-300 dark:border-gray-600">
+                                <button v-if="canManageProject" @click.stop="showManageTeamModal = true" class="w-full mt-4 py-2 border-2 border-dashed border-gray-300 rounded-md text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors dark:text-gray-300 dark:border-gray-600">
                                     Manage Team
                                 </button>
                             </div>
                         </div>
 
                         <!-- Attach Existing Board (only when no task board linked yet and boards are available) -->
-                        <div v-if="!project.task_board && availableBoards.length > 0 && hasPermission('projects.edit')" class="rounded-lg border-2 border-dashed border-gray-200 p-5 dark:border-gray-700">
+                        <div v-if="!project.task_board && availableBoards.length > 0 && hasPermission('projects.edit') && canManageProject" class="rounded-lg border-2 border-dashed border-gray-200 p-5 dark:border-gray-700">
                             <h3 class="mb-1 text-sm font-bold text-gray-700 dark:text-gray-300">Link Existing Board</h3>
                             <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">Attach a manual task board to this project and import its cards as project tasks.</p>
                             <button
@@ -945,6 +948,8 @@ const getStatusColor = (status) => {
                         :users="users"
                         :projectTemplates="project_templates"
                         :taskListTargets="taskListTargets"
+                        :canManage="canManageProject"
+                        :currentUserId="currentUser?.id"
                     />
                 </div>
 

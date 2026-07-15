@@ -163,6 +163,9 @@ class ProjectController extends Controller
         $boardId = $validated['board_id'] ?? null;
         unset($validated['board_id']);
 
+        $validated['created_by'] = $request->user()->id;
+        $validated['updated_by'] = $request->user()->id;
+
         $project = Project::create($validated);
         $project->recalculateStatus();
 
@@ -205,6 +208,10 @@ class ProjectController extends Controller
 
         return Inertia::render('Projects/Show', [
             'project'        => $project,
+            // Whether the viewer may manage the whole project (edit every row,
+            // apply templates, add/delete/reorder). Non-managers may only edit
+            // the activity / sub-task rows assigned to them.
+            'canManageProject' => $project->isManagedBy(auth()->user()),
             'projectTypes'   => Project::projectTypes(),
             'users'          => User::active()->orderBy('name')->get(['id', 'name', 'department', 'org_path']),
             'stores'         => Store::orderBy('name')->get(['id', 'name']),
@@ -223,6 +230,11 @@ class ProjectController extends Controller
 
     public function update(Request $request, Project $project)
     {
+        // Editing project-level details is a management action — only the project
+        // owner (or an admin) may do it. On legacy ownerless projects the first
+        // editor claims ownership.
+        abort_unless($project->isManagedBy($request->user()), 403, 'You do not have permission to edit this project.');
+
         $isStoreOpening = $request->input('project_type', $project->project_type) === 'Store Opening';
 
         $validated = $request->validate([
@@ -243,6 +255,8 @@ class ProjectController extends Controller
             'remarks'        => 'nullable|string',
         ]);
 
+        $validated['updated_by'] = $request->user()->id;
+
         $project->update($validated);
         $project->recalculateStatus();
 
@@ -255,10 +269,15 @@ class ProjectController extends Controller
 
     public function duplicate(Project $project)
     {
-        DB::transaction(function () use ($project) {
+        $actorId = auth()->id();
+
+        DB::transaction(function () use ($project, $actorId) {
             $newProject = $project->replicate(['id', 'created_at', 'updated_at']);
             $newProject->name = 'Copy of ' . $project->name;
             $newProject->status = 'Planning';
+            // The user duplicating the project owns the copy.
+            $newProject->created_by = $actorId;
+            $newProject->updated_by = $actorId;
             $newProject->save();
 
             // Load tasks with their sub-tasks
@@ -270,6 +289,8 @@ class ProjectController extends Controller
                 $newParent->status = 'Pending';
                 $newParent->progress = 0;
                 $newParent->assigned_to = null;
+                $newParent->created_by = $actorId;
+                $newParent->updated_by = $actorId;
                 $newParent->save();
 
                 foreach ($parentTask->subTasks as $subTask) {
@@ -279,6 +300,8 @@ class ProjectController extends Controller
                     $newSub->status = 'Pending';
                     $newSub->progress = 0;
                     $newSub->assigned_to = null;
+                    $newSub->created_by = $actorId;
+                    $newSub->updated_by = $actorId;
                     $newSub->save();
                 }
             }

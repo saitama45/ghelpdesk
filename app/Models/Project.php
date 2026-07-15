@@ -55,11 +55,15 @@ class Project extends Model
         'board_month',
         'board_year',
         'remarks',
+        'created_by',
+        'updated_by',
     ];
 
     protected $casts = [
         'store_id'   => 'integer',
         'subject_id' => 'integer',
+        'created_by' => 'integer',
+        'updated_by' => 'integer',
         'turn_over_date' => 'date',
         'training_date'  => 'date',
         'testing_date'   => 'date',
@@ -73,6 +77,47 @@ class Project extends Model
     public function store(): BelongsTo
     {
         return $this->belongsTo(Store::class);
+    }
+
+    /** The user who created (owns) this project. */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** The user who last updated this project. */
+    public function updater(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    /**
+     * Whether $user may manage the WHOLE project — edit project details and every
+     * milestone / activity / sub-task, apply templates, add/delete/reorder rows.
+     *
+     * Grants full access to exactly two parties:
+     *  - the project creator (created_by),
+     *  - super-admins: the Admin / Solutions Admin roles, which the seeder grants
+     *    every permission. (We deliberately do NOT key this off projects.delete —
+     *    that permission is handed to many operational roles, so using it would let
+     *    non-creators edit every project, defeating the restriction.)
+     *
+     * Everyone else — including users who hold projects.edit/projects.delete — is
+     * limited to the rows assigned to them (see ProjectTask::isEditableBy) and is
+     * read-only for the rest. Projects created before ownership tracking are
+     * backfilled to their team lead; any that remain ownerless are admin-only.
+     */
+    public function isManagedBy(?User $user): bool
+    {
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->hasAnyRole(['Admin', 'Solutions Admin'])) {
+            return true;
+        }
+
+        return $this->created_by !== null && (int) $this->created_by === (int) $user->id;
     }
 
     /** Polymorphic subject for non-store project types (Vendor, Department, etc.) */
