@@ -82,7 +82,7 @@ class TicketIndexSummaryTest extends TestCase
             );
     }
 
-    public function test_so_and_cs_summary_boxes_count_only_tickets_assigned_to_department_users(): void
+    public function test_department_node_quick_filter_only_returns_assigned_department_tickets(): void
     {
         $company = Company::create([
             'name' => 'Test Company',
@@ -102,13 +102,6 @@ class TicketIndexSummaryTest extends TestCase
             'is_active' => true,
         ]);
 
-        $csNode = DepartmentNode::create([
-            'department_id' => $department->id,
-            'name' => 'Corporate Services',
-            'code' => 'cs',
-            'is_active' => true,
-        ]);
-
         $viewer = User::factory()->create([
             'company_id' => $company->id,
             'department_id' => $department->id,
@@ -119,12 +112,6 @@ class TicketIndexSummaryTest extends TestCase
             'company_id' => $company->id,
             'department_id' => $department->id,
             'department_node_id' => $soNode->id,
-        ]);
-
-        $csUser = User::factory()->create([
-            'company_id' => $company->id,
-            'department_id' => $department->id,
-            'department_node_id' => $csNode->id,
         ]);
 
         $soUrgent = $this->ticket($company, [
@@ -150,12 +137,6 @@ class TicketIndexSummaryTest extends TestCase
         ]);
 
         $this->ticket($company, [
-            'title' => 'CS urgent',
-            'status' => 'in_progress',
-            'priority' => 'urgent',
-            'assignee_id' => $csUser->id,
-        ]);
-        $this->ticket($company, [
             'title' => 'Unassigned urgent should not count',
             'priority' => 'urgent',
             'assignee_id' => null,
@@ -165,25 +146,6 @@ class TicketIndexSummaryTest extends TestCase
             'status' => 'waiting_client_feedback',
             'assignee_id' => null,
         ]);
-
-        $this->actingAs($viewer)
-            ->get(route('tickets.index', ['status' => ['all'], 'skip_default_department' => true]))
-            ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page
-                ->component('Tickets/Index')
-                ->where('summaryStatsByDept.SO.stats.new', 1)
-                ->where('summaryStatsByDept.SO.stats.open', 1)
-                ->where('summaryStatsByDept.SO.stats.total', 4)
-                ->where('summaryStatsByDept.SO.stats.waiting', 1)
-                ->where('summaryStatsByDept.SO.stats.urgent', 1)
-                ->where('summaryStatsByDept.SO.stats.closed', 1)
-                ->where('summaryStatsByDept.CS.stats.new', 0)
-                ->where('summaryStatsByDept.CS.stats.open', 0)
-                ->where('summaryStatsByDept.CS.stats.total', 1)
-                ->where('summaryStatsByDept.CS.stats.waiting', 0)
-                ->where('summaryStatsByDept.CS.stats.urgent', 1)
-                ->where('summaryStatsByDept.CS.stats.closed', 0)
-            );
 
         $this->actingAs($viewer)
             ->get(route('tickets.index', [

@@ -421,66 +421,6 @@ class TicketController extends Controller
             'in_progress' => (clone $summaryQuery)->where('status', 'in_progress')->count(),
         ];
 
-        // Per-department stat breakdown for SO / CS tabs
-        $nodes = \App\Models\DepartmentNode::whereRaw('UPPER(code) IN (?, ?)', ['SO', 'CS'])
-            ->get()
-            ->keyBy(fn($node) => strtoupper(trim((string) $node->code)));
-        $summaryStatsByDept = [];
-        foreach ($nodes as $code => $node) {
-            $descendantIds = \App\Models\DepartmentNode::getAllDescendantIds($node->id);
-            $nodeIds = array_merge([$node->id], $descendantIds);
-
-            // Unfiltered dept base — not affected by the current status/date/search selection
-            $deptStatBase = clone $summaryStatsBase;
-            $deptStatBase->whereHas('assignee', fn($q) => $q->whereIn('department_node_id', $nodeIds));
-
-            $now  = now();
-            $soon = $now->copy()->addHour();
-
-            $summaryStatsByDept[$code] = [
-                'id'   => $node->id,
-                'name' => $node->name,
-                'stats' => [
-                    'new' => (clone $deptStatBase)
-                        ->where('status', 'open')
-                        ->whereNull('category_id')
-                        ->whereNull('sub_category_id')
-                        ->whereNull('item_id')
-                        ->count(),
-                    'open' => (clone $deptStatBase)->where('status', 'open')->count(),
-                    'breached' => (clone $deptStatBase)->whereHas('slaMetric', fn($q) =>
-                        $q->where('is_response_breached', true)->orWhere('is_resolution_breached', true)
-                    )->count(),
-                    'due_soon' => (clone $deptStatBase)->whereHas('slaMetric', function ($q) use ($now, $soon) {
-                        $q->where(function ($sq) use ($now, $soon) {
-                            $sq->whereNotNull('response_target_at')
-                               ->whereNull('first_response_at')
-                               ->where('is_response_breached', false)
-                               ->whereBetween('response_target_at', [$now, $soon]);
-                        })->orWhere(function ($sq) use ($now, $soon) {
-                            $sq->whereNotNull('resolution_target_at')
-                               ->whereNull('resolved_at')
-                               ->where('is_resolution_breached', false)
-                               ->whereBetween('resolution_target_at', [$now, $soon]);
-                        });
-                    })->count(),
-                    'in_progress' => (clone $deptStatBase)->where('status', 'in_progress')->count(),
-                    'total'       => (clone $deptStatBase)->count(),
-                    'waiting'     => (clone $deptStatBase)
-                        ->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])
-                        ->count(),
-                    'urgent'      => (clone $deptStatBase)
-                        ->where(function ($q) {
-                            $q->where('priority', 'urgent')
-                              ->orWhereHas('item', fn($iq) => $iq->where('priority', 'Urgent'));
-                        })
-                        ->where('status', '!=', 'closed')
-                        ->count(),
-                    'closed'      => (clone $deptStatBase)->where('status', 'closed')->count(),
-                ],
-            ];
-        }
-
         match ($request->input('dashboard_filter')) {
             'new' => $query->where('status', 'open')
                 ->whereNull('category_id')
@@ -545,7 +485,6 @@ class TicketController extends Controller
             'departmentReferences' => $this->organizationReferences->tree(activeOnly: true),
             'hierarchicalDepartments' => $this->organizationReferences->tree(),
             'summaryStats' => $summaryStats,
-            'summaryStatsByDept' => $summaryStatsByDept,
             'ticketKeyOptions' => $filterOptions['ticketKeyOptions'],
             'requesterOptions' => $filterOptions['requesterOptions'],
             'filters' => [

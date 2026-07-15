@@ -28,7 +28,6 @@ const props = defineProps({
     departmentReferences: { type: Array, default: () => [] },
     hierarchicalDepartments: Array,
     summaryStats: Object,
-    summaryStatsByDept: { type: Object, default: () => ({}) },
     entityFilter: { type: Object, default: () => ({ enabled: false, options: [], selected: [] }) },
     ticketKeyOptions: { type: Array, default: () => [] },
     requesterOptions: { type: Array, default: () => [] },
@@ -901,64 +900,6 @@ watch(defaultCompanyId, (newId) => {
 const selectedIds = ref([])
 const activeDashboardFilter = ref(props.filters?.dashboard_filter || 'all')
 
-// ── SO / CS Dept Stat Tabs ────────────────────────────────────────────────
-const DEPT_TAB_CODES = ['SO', 'CS']
-
-const initialStatDeptTab = () => {
-    const selectedNodeId = props.filters?.department_node_id;
-    const matchingCode = DEPT_TAB_CODES.find(code =>
-        String(props.summaryStatsByDept?.[code]?.id ?? '') === String(selectedNodeId ?? '')
-    );
-
-    return matchingCode || 'all';
-};
-
-// Keep the highlighted tab derived from current server props. A ref initialized
-// once becomes stale when an Inertia request preserves this component instance.
-const statDeptTab = computed(initialStatDeptTab)
-
-const deptTabs = computed(() => [
-    { key: 'all', label: 'All' },
-    ...DEPT_TAB_CODES.map(code => ({
-        key: code,
-        label: props.summaryStatsByDept?.[code]?.name ?? code,
-    })),
-])
-
-const EMPTY_STATS = { new: 0, open: 0, unassigned: 0, breached: 0, due_soon: 0, in_progress: 0, total: 0, waiting: 0, urgent: 0, closed: 0 }
-
-const activeStats = computed(() =>
-    statDeptTab.value === 'all'
-        ? (props.summaryStats ?? {})
-        : (props.summaryStatsByDept?.[statDeptTab.value]?.stats ?? EMPTY_STATS)
-)
-
-const selectDeptTab = (tabKey) => {
-    if (tabKey === 'all') {
-        router.get(route('tickets.index'), {
-            status: ['all'],
-            dashboard_filter: 'all',
-            skip_default_department: true,
-            ticket_scope: filterTicketScope.value,
-        }, { preserveScroll: false });
-        return;
-    }
-
-    const deptId = props.summaryStatsByDept?.[tabKey]?.id;
-    if (!deptId) {
-        return;
-    }
-
-    router.get(route('tickets.index'), {
-        status: ['all'],
-        department_node_id: deptId,
-        dashboard_filter: 'all',
-        skip_default_department: true,
-        assigned_department_only: 1,
-        ticket_scope: filterTicketScope.value,
-    }, { preserveScroll: false });
-};
-
 const allSelected = computed(() =>
     displayedTickets.value.length > 0 &&
     displayedTickets.value.every(t => selectedIds.value.includes(t.id))
@@ -1559,52 +1500,7 @@ const isNewTicket = (ticket) => {
 };
 
 const summaryCards = computed(() => {
-    const stats = activeStats.value || {};
-
-    if (statDeptTab.value !== 'all') {
-        return [
-            {
-                key: 'new', filterKey: 'new', label: 'New',
-                value: stats.new ?? 0,
-                hint: 'Open, uncategorized, and assigned',
-                shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-                valueClass: 'text-white', labelClass: 'text-blue-300', hintClass: 'text-slate-400',
-                accentClass: 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]',
-            },
-            {
-                key: 'open', filterKey: 'open', label: 'Open',
-                value: stats.open ?? 0,
-                hint: 'Assigned open tickets',
-                shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-                valueClass: 'text-white', labelClass: 'text-emerald-300', hintClass: 'text-slate-400',
-                accentClass: 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]',
-            },
-            {
-                key: 'waiting', filterKey: 'waiting', label: 'Waiting',
-                value: stats.waiting ?? 0,
-                hint: 'Awaiting service provider or client feedback',
-                shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-                valueClass: 'text-white', labelClass: 'text-amber-400', hintClass: 'text-slate-400',
-                accentClass: 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]',
-            },
-            {
-                key: 'urgent', filterKey: 'urgent', label: 'Urgent (P1)',
-                value: stats.urgent ?? 0,
-                hint: 'Critical priority tickets',
-                shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-                valueClass: 'text-white', labelClass: 'text-red-400', hintClass: 'text-slate-400',
-                accentClass: 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]',
-            },
-            {
-                key: 'closed', filterKey: 'closed', label: 'Closed',
-                value: stats.closed ?? 0,
-                hint: 'Resolved and closed tickets',
-                shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-                valueClass: 'text-white', labelClass: 'text-slate-300', hintClass: 'text-slate-400',
-                accentClass: 'bg-slate-400',
-            },
-        ];
-    }
+    const stats = props.summaryStats || {};
 
     return [
         {
@@ -1739,29 +1635,7 @@ const getDashboardFilterLabel = (filterKey) => {
     }
 };
 
-const DEPT_UNFILTERED_KEYS = ['waiting', 'urgent', 'closed'];
-
 const toggleDashboardFilter = (filterKey) => {
-    if (statDeptTab.value !== 'all') {
-        const deptId = props.summaryStatsByDept?.[statDeptTab.value]?.id;
-        if (deptId) {
-            const isActive = activeDashboardFilter.value === filterKey;
-            const params = {
-                department_node_id: deptId,
-                dashboard_filter: isActive ? 'all' : filterKey,
-                skip_default_department: true,
-                assigned_department_only: 1,
-                ticket_scope: filterTicketScope.value,
-            };
-            // These boxes count against an unfiltered base (no default status=open),
-            // so pass status=all to prevent the backend from pre-excluding statuses.
-            if (!isActive && DEPT_UNFILTERED_KEYS.includes(filterKey)) {
-                params.status = ['all'];
-            }
-            router.get(route('tickets.index'), params, { preserveScroll: false });
-            return;
-        }
-    }
     const isClearing = activeDashboardFilter.value === filterKey;
     activeDashboardFilter.value = isClearing ? 'all' : filterKey;
     // A quick filter is an alternate status view. Do not intersect e.g.
@@ -2020,39 +1894,8 @@ const requesterTabs = computed(() => {
                         </div>
                     </div>
 
-                    <!-- Department view selector + stat cards -->
+                    <!-- Queue stat cards -->
                     <div class="space-y-2.5">
-                        <!-- Dept tabs — 3 equal cards -->
-                        <div class="grid grid-cols-3 gap-2">
-                            <button
-                                v-for="tab in deptTabs"
-                                :key="tab.key"
-                                type="button"
-                                @click="selectDeptTab(tab.key)"
-                                class="relative flex items-center gap-2 overflow-hidden rounded-xl border px-3 py-2 text-left transition-all duration-300 focus:outline-none"
-                                :class="statDeptTab === tab.key
-                                    ? 'border-white/20 bg-white/10 shadow-md shadow-black/20 ring-1 ring-white/10'
-                                    : 'border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/15'"
-                            >
-                                <!-- Colored left accent dot -->
-                                <span class="h-1.5 w-1.5 shrink-0 rounded-full transition-all"
-                                    :class="statDeptTab === tab.key
-                                        ? (tab.key === 'CS' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)]')
-                                        : 'bg-white/20'"
-                                ></span>
-                                <div class="min-w-0">
-                                    <div class="text-[9px] font-bold uppercase tracking-widest leading-none"
-                                        :class="statDeptTab === tab.key ? 'text-slate-300' : 'text-slate-500'">
-                                        {{ tab.key === 'all' ? 'All Departments' : tab.key }}
-                                    </div>
-                                    <div class="mt-0.5 truncate text-sm font-light leading-tight text-white">
-                                        {{ tab.label }}
-                                    </div>
-                                </div>
-                            </button>
-                        </div>
-
-                        <!-- Stat cards for the active dept -->
                         <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
                             <button
                                 v-for="card in summaryCards"
