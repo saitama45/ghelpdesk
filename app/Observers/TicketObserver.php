@@ -78,7 +78,10 @@ class TicketObserver
             }
         }
 
-        return $ticket->company_id ? Company::find($ticket->company_id)?->code : null;
+        // SQL Server unique indexes allow only one NULL value. Always return a
+        // stable fallback prefix so an unresolved company can never produce a
+        // second NULL ticket_key and block ticket creation system-wide.
+        return $ticket->company_id ? (Company::find($ticket->company_id)?->code ?: 'EXT') : 'EXT';
     }
 
     private function keyHasPrefix(?string $ticketKey, string $code): bool

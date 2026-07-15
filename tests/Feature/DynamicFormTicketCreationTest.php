@@ -62,6 +62,56 @@ class DynamicFormTicketCreationTest extends TestCase
         $this->assertStringContainsString('Immediate ticket please', $ticket->description);
     }
 
+    public function test_dynamic_form_resolves_company_stored_as_display_name(): void
+    {
+        $company = Company::create([
+            'name' => 'The Table Group, Inc. (TGI)',
+            'code' => 'TGI',
+            'is_active' => true,
+        ]);
+        $user = User::factory()->create(['company_id' => null]);
+        $formDefinition = FormDefinition::create([
+            'name' => 'TGI Work Tools',
+            'slug' => 'tgi-work-tools',
+            'workflow_type' => 'approval',
+            'approval_levels' => 0,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user);
+        $record = app(DefaultFormService::class)->store(new \Illuminate\Http\Request([
+            'form_data' => ['company' => 'The Table Group, Inc. (TGI)'],
+        ]), $formDefinition);
+
+        $ticket = Ticket::findOrFail($record->ticket_id);
+
+        $this->assertSame($company->id, $ticket->company_id);
+        $this->assertStringStartsWith('TGI-', $ticket->ticket_key);
+    }
+
+    public function test_ticket_uses_external_key_when_no_company_can_be_resolved(): void
+    {
+        $user = User::factory()->create(['company_id' => null]);
+        $formDefinition = FormDefinition::create([
+            'name' => 'Companyless Form',
+            'slug' => 'companyless-form',
+            'workflow_type' => 'approval',
+            'approval_levels' => 0,
+            'is_active' => true,
+        ]);
+
+        $this->actingAs($user);
+        $record = app(DefaultFormService::class)->store(
+            new \Illuminate\Http\Request(['form_data' => ['reason' => 'No entity']]),
+            $formDefinition
+        );
+
+        $ticket = Ticket::findOrFail($record->ticket_id);
+
+        $this->assertNull($ticket->company_id);
+        $this->assertStringStartsWith('EXT-', $ticket->ticket_key);
+    }
+
     public function test_replaying_the_same_submission_token_reuses_the_original_record_and_ticket(): void
     {
         $company = Company::create(['name' => 'Test Company', 'code' => 'TCOMP', 'is_active' => true]);

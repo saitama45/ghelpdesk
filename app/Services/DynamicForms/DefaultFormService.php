@@ -547,13 +547,8 @@ class DefaultFormService implements FormServiceContract
         }
 
         $creator = User::with('company')->find($record->created_by);
-        $company = null;
-        
-        // Try getting company from record data first
-        $companyId = $record->data['company_id'] ?? null;
-        if ($companyId) {
-            $company = \App\Models\Company::find($companyId);
-        }
+        $company = $this->resolveRecordCompany($record);
+
         if (!$company && $creator) {
             $company = $creator->company;
         }
@@ -664,6 +659,59 @@ class DefaultFormService implements FormServiceContract
         ]);
 
         $record->update(['ticket_id' => $ticket->id]);
+    }
+
+    /**
+     * Resolve the entity selected by a dynamic form.
+     *
+     * Older forms commonly stored the company option as its display name instead
+     * of a company_id. Matching that value here prevents company-less tickets and
+     * lets TicketObserver assign the correct entity-prefixed ticket key.
+     */
+    private function resolveRecordCompany(FormRecord $record): ?\App\Models\Company
+    {
+        $formData = $record->data ?? [];
+        $companyId = $formData['company_id'] ?? null;
+
+        if ($companyId && ($company = \App\Models\Company::find($companyId))) {
+            return $company;
+        }
+
+        foreach (['company', 'company_name', 'entity', 'entity_name'] as $key) {
+            $value = $formData[$key] ?? null;
+
+            if (!is_scalar($value) || trim((string) $value) === '') {
+                continue;
+            }
+
+            $value = trim((string) $value);
+            $company = \App\Models\Company::query()
+                ->where('name', $value)
+                ->orWhere('code', $value)
+                ->first();
+
+            if ($company) {
+                return $company;
+            }
+
+            $normalizedValue = $this->normalizeCompanyReference($value);
+            $company = \App\Models\Company::all(['id', 'name', 'code'])
+                ->first(fn ($candidate) =>
+                    $this->normalizeCompanyReference($candidate->name) === $normalizedValue
+                    || $this->normalizeCompanyReference($candidate->code) === $normalizedValue
+                );
+
+            if ($company) {
+                return $company;
+            }
+        }
+
+        return null;
+    }
+
+    private function normalizeCompanyReference(?string $value): string
+    {
+        return strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $value));
     }
 
     /**
