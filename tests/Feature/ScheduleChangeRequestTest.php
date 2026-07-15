@@ -6,6 +6,7 @@ use App\Mail\ScheduleChangeRequestNotification;
 use App\Models\AttendanceLog;
 use App\Models\Schedule;
 use App\Models\ScheduleChangeRequest;
+use App\Models\ScheduleStore;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\User;
@@ -195,10 +196,16 @@ class ScheduleChangeRequestTest extends TestCase
         $manager = User::factory()->create(['is_manager' => true]);
         $schedule = $this->createSchedule($manager);
 
-        AttendanceLog::create([
+        $originalLog = AttendanceLog::create([
             'user_id' => $manager->id,
             'schedule_id' => $schedule->id,
             'type' => 'time_in',
+            'photo_path' => 'attendance/test/manager-time-in.png',
+            'latitude' => 14.5995,
+            'longitude' => 120.9842,
+            'location_accuracy' => 8.5,
+            'device_info' => 'Original mobile device',
+            'ip_address' => '192.0.2.10',
             'log_time' => '2026-05-10 07:15:00',
         ]);
 
@@ -211,12 +218,20 @@ class ScheduleChangeRequestTest extends TestCase
             ->assertRedirect()
             ->assertSessionHasNoErrors();
 
-        $this->assertSame(1, AttendanceLog::where('type', 'time_in')->whereNotNull('voided_at')->count());
+        $this->assertSame(0, AttendanceLog::where('type', 'time_in')->whereNotNull('voided_at')->count());
+        $this->assertSame(1, AttendanceLog::where('type', 'time_in')->count());
         $this->assertDatabaseHas('attendance_logs', [
+            'id' => $originalLog->id,
             'user_id' => $manager->id,
             'schedule_id' => $schedule->id,
             'type' => 'time_in',
             'log_time' => '2026-05-10 08:00:00',
+            'photo_path' => 'attendance/test/manager-time-in.png',
+            'latitude' => 14.5995,
+            'longitude' => 120.9842,
+            'location_accuracy' => 8.5,
+            'device_info' => 'Original mobile device',
+            'ip_address' => '192.0.2.10',
             'voided_at' => null,
         ]);
         $this->assertDatabaseHas('attendance_logs', [
@@ -226,6 +241,7 @@ class ScheduleChangeRequestTest extends TestCase
             'log_time' => '2026-05-10 17:30:00',
             'voided_at' => null,
         ]);
+        $this->assertSame($manager->id, $schedule->fresh()->updated_by);
     }
 
     public function test_manager_subordinate_actual_time_adjustment_requires_approval(): void
@@ -304,6 +320,7 @@ class ScheduleChangeRequestTest extends TestCase
             'user_id' => $user->id,
             'schedule_id' => $schedule->id,
             'type' => 'time_in',
+            'photo_path' => 'attendance/test/member-time-in.png',
             'log_time' => '2026-05-10 08:00:00',
         ]);
 
@@ -346,10 +363,18 @@ class ScheduleChangeRequestTest extends TestCase
         $this->assertDatabaseHas('attendance_logs', [
             'user_id' => $user->id,
             'schedule_id' => $schedule->id,
+            'type' => 'time_in',
+            'photo_path' => 'attendance/test/member-time-in.png',
+            'voided_at' => null,
+        ]);
+        $this->assertDatabaseHas('attendance_logs', [
+            'user_id' => $user->id,
+            'schedule_id' => $schedule->id,
             'type' => 'time_out',
             'log_time' => '2026-05-10 17:30:00',
             'voided_at' => null,
         ]);
+        $this->assertSame($manager->id, $schedule->fresh()->updated_by);
     }
 
     public function test_repeated_actual_time_request_updates_same_pending_request(): void
@@ -524,6 +549,106 @@ class ScheduleChangeRequestTest extends TestCase
             'time in log at May 10, 2026 07:15 AM',
             $response->baseResponse->getSession()->get('errors')->first('stores')
         );
+    }
+
+    public function test_scoped_schedule_edit_keeps_existing_actual_times_on_the_edited_schedule(): void
+    {
+        Permission::firstOrCreate(['name' => 'schedules.view']);
+
+        $manager = User::factory()->create(['is_manager' => true]);
+        $manager->givePermissionTo(['schedules.edit', 'schedules.view']);
+        $store = Store::create([
+            'code' => 'SPLIT-001',
+            'name' => 'Split Schedule Store',
+            'sector' => 1,
+            'area' => 'Metro Manila',
+            'brand' => 'GHelpdesk',
+            'class' => 'Regular',
+            'is_active' => true,
+        ]);
+        $schedule = Schedule::create([
+            'user_id' => $manager->id,
+            'created_by' => $manager->id,
+            'updated_by' => $manager->id,
+            'status' => 'WFH',
+            'start_time' => '2026-05-10 08:00:00',
+            'end_time' => '2026-05-11 17:00:00',
+        ]);
+        $editedStore = ScheduleStore::create([
+            'schedule_id' => $schedule->id,
+            'store_id' => $store->id,
+            'start_time' => '2026-05-10 08:00:00',
+            'end_time' => '2026-05-10 17:00:00',
+            'grace_period_minutes' => 30,
+        ]);
+        ScheduleStore::create([
+            'schedule_id' => $schedule->id,
+            'store_id' => $store->id,
+            'start_time' => '2026-05-11 08:00:00',
+            'end_time' => '2026-05-11 17:00:00',
+            'grace_period_minutes' => 30,
+        ]);
+
+        foreach ([
+            ['type' => 'time_in', 'log_time' => '2026-05-10 08:00:00'],
+            ['type' => 'time_out', 'log_time' => '2026-05-10 17:00:00'],
+        ] as $log) {
+            AttendanceLog::create([
+                'user_id' => $manager->id,
+                'schedule_id' => $schedule->id,
+                'schedule_store_id' => $editedStore->id,
+                'type' => $log['type'],
+                'photo_path' => 'attendance/test/'.$log['type'].'.png',
+                'log_time' => $log['log_time'],
+            ]);
+        }
+
+        $this->actingAs($manager)
+            ->put(route('schedules.update', $schedule), [
+                'user_id' => $manager->id,
+                'status' => 'WFH',
+                'stores' => [[
+                    'id' => $editedStore->id,
+                    'store_id' => $store->id,
+                    'ticket_id' => null,
+                    'start_time' => '2026-05-10T08:00',
+                    'end_time' => '2026-05-10T18:00',
+                    'grace_period_minutes' => 30,
+                    'remarks' => 'Extended shift',
+                ]],
+                'scope_date' => '2026-05-10',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $editedScheduleId = (int) $editedStore->fresh()->schedule_id;
+        $this->assertNotSame((int) $schedule->id, $editedScheduleId);
+        $this->assertSame(
+            [$editedScheduleId],
+            AttendanceLog::where('schedule_store_id', $editedStore->id)
+                ->pluck('schedule_id')
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all()
+        );
+
+        $this->actingAs($manager)
+            ->get(route('schedules.index', [
+                'start' => '2026-05-10',
+                'end' => '2026-05-11',
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('schedules', function ($schedules) use ($editedScheduleId) {
+                    $editedSchedule = collect($schedules)->firstWhere('id', $editedScheduleId);
+
+                    return data_get($editedSchedule, 'actual_time_in') !== null
+                        && data_get($editedSchedule, 'actual_time_out') !== null
+                        && data_get($editedSchedule, 'schedule_stores.0.actual_time_in') !== null
+                        && data_get($editedSchedule, 'schedule_stores.0.actual_time_out') !== null;
+                })
+            );
     }
 
     private function createSchedule(User $user): Schedule

@@ -165,6 +165,57 @@ class AttendanceLogsPageTest extends TestCase
             );
     }
 
+    public function test_logs_page_uses_voided_adjustment_photo_for_existing_manual_log(): void
+    {
+        $manager = User::factory()->create(['is_manager' => true]);
+        $manager->givePermissionTo('attendance.logs');
+        $employee = User::factory()->create();
+        $store = $this->createStore('REG-030', 'Adjusted Store', 'Regular');
+        [$schedule, $scheduleStore] = $this->createSchedule(
+            $employee,
+            $store,
+            '2026-07-10 08:00:00',
+            '2026-07-10 17:00:00'
+        );
+
+        AttendanceLog::create([
+            'user_id' => $employee->id,
+            'schedule_id' => $schedule->id,
+            'schedule_store_id' => $scheduleStore->id,
+            'type' => 'time_in',
+            'photo_path' => 'attendance/test/original-time-in.png',
+            'latitude' => 14.5995,
+            'longitude' => 120.9842,
+            'log_time' => Carbon::parse('2026-07-10 07:58:00', 'Asia/Manila'),
+            'voided_at' => Carbon::parse('2026-07-10 09:00:00', 'Asia/Manila'),
+            'voided_by' => $manager->id,
+            'void_reason' => 'Schedule actual time adjustment',
+        ]);
+
+        AttendanceLog::create([
+            'user_id' => $employee->id,
+            'schedule_id' => $schedule->id,
+            'schedule_store_id' => $scheduleStore->id,
+            'type' => 'time_in',
+            'log_time' => Carbon::parse('2026-07-10 08:00:00', 'Asia/Manila'),
+            'device_info' => 'Manual schedule actual-time adjustment',
+        ]);
+
+        $this->actingAs($manager)
+            ->get(route('attendance.logs', [
+                'date_from' => '2026-07-10',
+                'date_to' => '2026-07-10',
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('sessions.data', 1)
+                ->where('sessions.data.0.time_in.photo_path', null)
+                ->where('sessions.data.0.time_in.original_photo_path', 'attendance/test/original-time-in.png')
+                ->where('sessions.data.0.time_in.latitude', 14.5995)
+                ->where('sessions.data.0.time_in.longitude', 120.9842)
+            );
+    }
+
     private function createStore(string $code, string $name, string $class, bool $isActive = true): Store
     {
         return Store::create([

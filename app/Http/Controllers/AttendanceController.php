@@ -132,7 +132,9 @@ class AttendanceController extends Controller implements HasMiddleware
             $query->whereHas('user', fn ($q) => $q->where('name', 'like', '%'.$request->search.'%'));
         }
 
-        $sessions = $this->buildAttendanceSessions($query->get(), $dateFrom, $dateTo);
+        $logs = $query->get();
+        $adjustedEventFallbacks = $this->buildAdjustedEventFallbacks($logs, $windowStart, $windowEnd);
+        $sessions = $this->buildAttendanceSessions($logs, $dateFrom, $dateTo, $adjustedEventFallbacks);
         $officeAttendanceSummary = $this->buildOfficeAttendanceSummary($sessions);
 
         if ($request->filled('store_id')) {
@@ -177,8 +179,9 @@ class AttendanceController extends Controller implements HasMiddleware
         ]);
     }
 
-    private function buildAttendanceSessions($logs, string $dateFrom, string $dateTo)
+    private function buildAttendanceSessions($logs, string $dateFrom, string $dateTo, $adjustedEventFallbacks = null)
     {
+        $adjustedEventFallbacks ??= collect();
         $groupedLogs = $logs->groupBy(function (AttendanceLog $log) {
             if ($log->schedule_store_id) {
                 return 'user:'.$log->user_id.':schedule_store:'.$log->schedule_store_id;
@@ -218,7 +221,8 @@ class AttendanceController extends Controller implements HasMiddleware
                 $sessionDate,
                 $anchor,
                 $timeIn,
-                $timeOut
+                $timeOut,
+                $adjustedEventFallbacks
             ));
 
             // Preserve an out-of-order Time Out as an explicit incomplete row.
@@ -234,7 +238,8 @@ class AttendanceController extends Controller implements HasMiddleware
                         $orphanDate,
                         $orphanTimeOut,
                         null,
-                        $orphanTimeOut
+                        $orphanTimeOut,
+                        $adjustedEventFallbacks
                     ));
                 }
             }
@@ -255,7 +260,8 @@ class AttendanceController extends Controller implements HasMiddleware
         string $sessionDate,
         AttendanceLog $anchor,
         ?AttendanceLog $timeIn,
-        ?AttendanceLog $timeOut
+        ?AttendanceLog $timeOut,
+        $adjustedEventFallbacks
     ): array {
         $store = $anchor->scheduleStore?->store ?? $anchor->schedule?->store;
         $sortAt = ($timeIn?->log_time ?? $timeOut?->log_time ?? $anchor->log_time)->toIso8601String();
@@ -274,13 +280,13 @@ class AttendanceController extends Controller implements HasMiddleware
                 'code' => $store->code,
                 'class' => $store->class,
             ] : null,
-            'time_in' => $this->attendanceEventPayload($timeIn),
-            'time_out' => $this->attendanceEventPayload($timeOut),
+            'time_in' => $this->attendanceEventPayload($timeIn, $adjustedEventFallbacks->get($timeIn?->id)),
+            'time_out' => $this->attendanceEventPayload($timeOut, $adjustedEventFallbacks->get($timeOut?->id)),
             '_sort_at' => $sortAt,
         ];
     }
 
-    private function attendanceEventPayload(?AttendanceLog $log): ?array
+    private function attendanceEventPayload(?AttendanceLog $log, ?array $originalCapture = null): ?array
     {
         if (! $log) {
             return null;
@@ -290,9 +296,62 @@ class AttendanceController extends Controller implements HasMiddleware
             'id' => $log->id,
             'log_time' => $log->log_time->toIso8601String(),
             'photo_path' => $log->photo_path,
-            'latitude' => $log->latitude !== null ? (float) $log->latitude : null,
-            'longitude' => $log->longitude !== null ? (float) $log->longitude : null,
+            'original_photo_path' => $originalCapture['photo_path'] ?? null,
+            'latitude' => $log->latitude !== null
+                ? (float) $log->latitude
+                : ($originalCapture['latitude'] ?? null),
+            'longitude' => $log->longitude !== null
+                ? (float) $log->longitude
+                : ($originalCapture['longitude'] ?? null),
         ];
+    }
+
+    private function buildAdjustedEventFallbacks($logs, Carbon $windowStart, Carbon $windowEnd)
+    {
+        $manualLogs = $logs
+            ->filter(fn (AttendanceLog $log) => (! $log->photo_path || $log->latitude === null || $log->longitude === null)
+                && $log->device_info === 'Manual schedule actual-time adjustment'
+                && $log->schedule_id)
+            ->values();
+
+        if ($manualLogs->isEmpty()) {
+            return collect();
+        }
+
+        $historicalLogs = AttendanceLog::query()
+            ->whereNotNull('voided_at')
+            ->where('void_reason', 'Schedule actual time adjustment')
+            ->where(function ($query) {
+                $query->whereNotNull('photo_path')
+                    ->orWhere(function ($locationQuery) {
+                        $locationQuery->whereNotNull('latitude')->whereNotNull('longitude');
+                    });
+            })
+            ->whereIn('user_id', $manualLogs->pluck('user_id')->unique())
+            ->whereIn('schedule_id', $manualLogs->pluck('schedule_id')->unique())
+            ->whereBetween('log_time', [$windowStart, $windowEnd])
+            ->orderByDesc('voided_at')
+            ->get();
+
+        return $manualLogs->mapWithKeys(function (AttendanceLog $manualLog) use ($historicalLogs) {
+            $candidates = $historicalLogs->filter(fn (AttendanceLog $historicalLog) =>
+                (int) $historicalLog->user_id === (int) $manualLog->user_id
+                && (int) $historicalLog->schedule_id === (int) $manualLog->schedule_id
+                && $historicalLog->type === $manualLog->type
+                && $historicalLog->log_time->toDateString() === $manualLog->log_time->toDateString()
+            );
+
+            $matchingStore = $candidates->first(fn (AttendanceLog $historicalLog) =>
+                (int) ($historicalLog->schedule_store_id ?? 0) === (int) ($manualLog->schedule_store_id ?? 0)
+            );
+            $originalLog = $matchingStore ?? $candidates->first();
+
+            return $originalLog ? [$manualLog->id => [
+                'photo_path' => $originalLog->photo_path,
+                'latitude' => $originalLog->latitude !== null ? (float) $originalLog->latitude : null,
+                'longitude' => $originalLog->longitude !== null ? (float) $originalLog->longitude : null,
+            ]] : [];
+        });
     }
 
     private function buildOfficeAttendanceSummary($sessions): array

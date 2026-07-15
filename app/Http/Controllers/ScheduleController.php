@@ -730,12 +730,15 @@ class ScheduleController extends Controller implements HasMiddleware
         $payload = $this->validateActualTimePayload($payload, $schedule);
 
         DB::transaction(function () use ($payload, $schedule, $updaterId) {
+            $adjustmentApplied = false;
+
             foreach ([
                 'time_in' => ['value' => 'actual_time_in', 'clear' => 'clear_time_in', 'order' => 'asc'],
                 'time_out' => ['value' => 'actual_time_out', 'clear' => 'clear_time_out', 'order' => 'desc'],
             ] as $type => $fields) {
                 $hasNewValue = !empty($payload[$fields['value']]);
                 $shouldClear = (bool) ($payload[$fields['clear']] ?? false);
+                $existingLog = null;
 
                 if (!$hasNewValue && !$shouldClear) {
                     continue;
@@ -748,11 +751,33 @@ class ScheduleController extends Controller implements HasMiddleware
                         ->first();
 
                     if ($existingLog && $existingLog->log_time->equalTo(Carbon::parse($payload[$fields['value']]))) {
-                        // Value is unchanged: keep the existing log (and its photo) untouched.
+                        // Value is unchanged: keep the complete captured record untouched.
                         continue;
                     }
+
+                    if ($existingLog) {
+                        // A correction changes only the timestamp. Keep the original
+                        // selfie, coordinates, capture metadata, device, IP, and ID.
+                        $existingLog->update([
+                            'log_time' => Carbon::parse($payload[$fields['value']]),
+                        ]);
+                    } else {
+                        AttendanceLog::create([
+                            'user_id' => $schedule->user_id,
+                            'schedule_id' => $schedule->id,
+                            'schedule_store_id' => $payload['schedule_store_id'] ?? null,
+                            'type' => $type,
+                            'log_time' => Carbon::parse($payload[$fields['value']]),
+                            'device_info' => 'Manual schedule actual-time adjustment',
+                            'ip_address' => request()?->ip(),
+                        ]);
+                    }
+
+                    $adjustmentApplied = true;
+                    continue;
                 }
 
+                // Explicit Clear is the only adjustment that removes an active event.
                 $this->actualTimeLogsForPayload($schedule, $payload)
                     ->where('type', $type)
                     ->update([
@@ -760,18 +785,11 @@ class ScheduleController extends Controller implements HasMiddleware
                         'voided_by' => $updaterId,
                         'void_reason' => 'Schedule actual time adjustment',
                     ]);
+                $adjustmentApplied = true;
+            }
 
-                if ($hasNewValue) {
-                    AttendanceLog::create([
-                        'user_id' => $schedule->user_id,
-                        'schedule_id' => $schedule->id,
-                        'schedule_store_id' => $payload['schedule_store_id'] ?? null,
-                        'type' => $type,
-                        'log_time' => Carbon::parse($payload[$fields['value']]),
-                        'device_info' => 'Manual schedule actual-time adjustment',
-                        'ip_address' => request()?->ip(),
-                    ]);
-                }
+            if ($adjustmentApplied) {
+                $schedule->update(['updated_by' => $updaterId]);
             }
         });
     }
@@ -1467,9 +1485,36 @@ class ScheduleController extends Controller implements HasMiddleware
         ]);
 
         $existingRows = $this->scopedScheduleStoreRows($schedule, $scopeDate);
+        $this->moveScopedAttendanceLogs($schedule, $newSchedule, $existingRows);
 
         $this->syncScheduleStoreRows($newSchedule, $existingRows, $entries);
         $this->refreshScheduleBounds($schedule);
+    }
+
+    private function moveScopedAttendanceLogs(Schedule $sourceSchedule, Schedule $targetSchedule, $scheduleStores): void
+    {
+        if ($scheduleStores->isEmpty()) {
+            return;
+        }
+
+        $scheduleStoreIds = $scheduleStores->pluck('id')->map(fn ($id) => (int) $id)->values();
+
+        AttendanceLog::query()
+            ->where('schedule_id', $sourceSchedule->id)
+            ->where(function ($query) use ($scheduleStoreIds, $scheduleStores) {
+                $query->whereIn('schedule_store_id', $scheduleStoreIds)
+                    ->orWhere(function ($legacyQuery) use ($scheduleStores) {
+                        $legacyQuery->whereNull('schedule_store_id')
+                            ->where(function ($windowQuery) use ($scheduleStores) {
+                                foreach ($scheduleStores as $scheduleStore) {
+                                    $windowStart = $scheduleStore->start_time->copy()
+                                        ->subMinutes((int) ($scheduleStore->grace_period_minutes ?? 30));
+                                    $windowQuery->orWhereBetween('log_time', [$windowStart, $scheduleStore->end_time]);
+                                }
+                            });
+                    });
+            })
+            ->update(['schedule_id' => $targetSchedule->id]);
     }
 
     private function scopedScheduleStoreRows(Schedule $schedule, string $scopeDate)

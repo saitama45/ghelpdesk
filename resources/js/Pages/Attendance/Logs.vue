@@ -240,6 +240,8 @@ const isNextDayTimeOut = (session) => {
     return !!session.time_out && eventDateKey(session.time_out) !== session.date
 }
 
+const getEventPhotoPath = (event) => event?.photo_path || event?.original_photo_path || null
+
 // Preview Modal State
 const isPreviewOpen = ref(false);
 const previewImage = ref(null);
@@ -543,20 +545,20 @@ const stopDrag = () => {
                                 <button
                                     type="button"
                                     class="group relative h-12 w-12 shrink-0 rounded-lg"
-                                    :class="session.time_in.photo_path ? 'cursor-pointer' : 'cursor-default'"
-                                    :disabled="!session.time_in.photo_path"
-                                    @click="openPreview(session.time_in.photo_path)"
+                                    :class="getEventPhotoPath(session.time_in) ? 'cursor-pointer' : 'cursor-default'"
+                                    :disabled="!getEventPhotoPath(session.time_in)"
+                                    @click="openPreview(getEventPhotoPath(session.time_in))"
                                 >
                                     <img
-                                        v-if="session.time_in.photo_path"
-                                        :src="'/serve-storage/' + session.time_in.photo_path"
+                                        v-if="getEventPhotoPath(session.time_in)"
+                                        :src="'/serve-storage/' + getEventPhotoPath(session.time_in)"
                                         class="h-12 w-12 rounded-lg border border-gray-200 object-cover shadow-sm transition-transform group-hover:scale-105 dark:border-gray-700"
                                         alt="Time In selfie"
                                     />
                                     <span v-else class="flex h-12 w-12 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-900/50" title="No Time In selfie">
                                         <UserCircleIcon class="h-8 w-8 text-gray-300 dark:text-gray-600" />
                                     </span>
-                                    <span v-if="session.time_in.photo_path" class="absolute inset-0 flex items-center justify-center rounded-lg bg-black/20 opacity-0 transition-opacity group-hover:opacity-100">
+                                    <span v-if="getEventPhotoPath(session.time_in)" class="absolute inset-0 flex items-center justify-center rounded-lg bg-black/20 opacity-0 transition-opacity group-hover:opacity-100">
                                         <MagnifyingGlassPlusIcon class="h-5 w-5 text-white" />
                                     </span>
                                 </button>
@@ -583,20 +585,20 @@ const stopDrag = () => {
                                 <button
                                     type="button"
                                     class="group relative h-12 w-12 shrink-0 rounded-lg"
-                                    :class="session.time_out.photo_path ? 'cursor-pointer' : 'cursor-default'"
-                                    :disabled="!session.time_out.photo_path"
-                                    @click="openPreview(session.time_out.photo_path)"
+                                    :class="getEventPhotoPath(session.time_out) ? 'cursor-pointer' : 'cursor-default'"
+                                    :disabled="!getEventPhotoPath(session.time_out)"
+                                    @click="openPreview(getEventPhotoPath(session.time_out))"
                                 >
                                     <img
-                                        v-if="session.time_out.photo_path"
-                                        :src="'/serve-storage/' + session.time_out.photo_path"
+                                        v-if="getEventPhotoPath(session.time_out)"
+                                        :src="'/serve-storage/' + getEventPhotoPath(session.time_out)"
                                         class="h-12 w-12 rounded-lg border border-gray-200 object-cover shadow-sm transition-transform group-hover:scale-105 dark:border-gray-700"
                                         alt="Time Out selfie"
                                     />
                                     <span v-else class="flex h-12 w-12 items-center justify-center rounded-lg border border-gray-200 bg-gray-100 dark:border-gray-700 dark:bg-gray-900/50" title="No Time Out selfie">
                                         <UserCircleIcon class="h-8 w-8 text-gray-300 dark:text-gray-600" />
                                     </span>
-                                    <span v-if="session.time_out.photo_path" class="absolute inset-0 flex items-center justify-center rounded-lg bg-black/20 opacity-0 transition-opacity group-hover:opacity-100">
+                                    <span v-if="getEventPhotoPath(session.time_out)" class="absolute inset-0 flex items-center justify-center rounded-lg bg-black/20 opacity-0 transition-opacity group-hover:opacity-100">
                                         <MagnifyingGlassPlusIcon class="h-5 w-5 text-white" />
                                     </span>
                                 </button>

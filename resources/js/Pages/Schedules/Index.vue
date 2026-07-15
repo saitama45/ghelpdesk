@@ -2660,6 +2660,8 @@ const actualTimeFieldsForEntry = (actualTimes, dateKey, pendingRequest = null, s
         actual_time_out: actualTimes.actual_time_out,
         actual_time_in_input: actualTimeInInput,
         actual_time_out_input: actualTimeOutInput,
+        original_actual_time_in_input: actualTimeInInput,
+        original_actual_time_out_input: actualTimeOutInput,
         clear_time_in: usePendingValues ? Boolean(pendingPayload.clear_time_in) : false,
         clear_time_out: usePendingValues ? Boolean(pendingPayload.clear_time_out) : false,
         actual_time_pending_request: pendingRequest,
@@ -2898,11 +2900,14 @@ const submitActualTimeAdjustment = (entry) => {
         return
     }
 
+    const timeInChanged = entry.actual_time_in_input !== entry.original_actual_time_in_input
+    const timeOutChanged = entry.actual_time_out_input !== entry.original_actual_time_out_input
+
     const payload = {
         schedule_store_id: entry.id || null,
         schedule_date: entry.schedule_date || form.scope_date || getManilaDateKey(entry.start_time),
-        actual_time_in: entry.clear_time_in ? null : (entry.actual_time_in_input || null),
-        actual_time_out: entry.clear_time_out ? null : (entry.actual_time_out_input || null),
+        actual_time_in: entry.clear_time_in || !timeInChanged ? null : (entry.actual_time_in_input || null),
+        actual_time_out: entry.clear_time_out || !timeOutChanged ? null : (entry.actual_time_out_input || null),
         clear_time_in: Boolean(entry.clear_time_in),
         clear_time_out: Boolean(entry.clear_time_out),
         requester_remarks: form.requester_remarks,
