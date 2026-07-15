@@ -372,6 +372,36 @@ class NpcStatusTest extends TestCase
             ->assertJsonCount(count(NpcStatus::WORKFLOW_STEPS), 'company.npc_status.workflow_steps');
     }
 
+    public function test_company_lookup_returns_full_record_for_requested_historical_year(): void
+    {
+        $this->travelTo('2026-07-01');
+
+        $user = User::factory()->create();
+        $user->givePermissionTo('npc_status.view');
+        $company = $this->company();
+        $currentStatus = $this->npcStatus([
+            'company_id' => $company->id,
+            'register_email' => 'current@example.com',
+        ]);
+        $historicalStatus = $this->npcStatus([
+            'company_id' => $company->id,
+            'year' => 2025,
+            'validity_from' => '2025-01-01',
+            'validity_to' => '2025-12-31',
+            'register_email' => 'historical@example.com',
+        ]);
+
+        $this->actingAs($user)
+            ->getJson(route('npc-statuses.companies.show', [$company, 'year' => 2025]))
+            ->assertOk()
+            ->assertJsonPath('company.npc_status.id', $historicalStatus->id)
+            ->assertJsonPath('company.npc_status.year', 2025)
+            ->assertJsonPath('company.npc_status.account.register_email', 'historical@example.com')
+            ->assertJsonMissingPath('company.npc_status.unexpected')
+            ->assertJsonPath('company.workflow_history.0.id', $currentStatus->id)
+            ->assertJsonCount(count(NpcStatus::WORKFLOW_STEPS), 'company.npc_status.workflow_steps');
+    }
+
     public function test_existing_renewal_cannot_be_moved_to_another_year(): void
     {
         $user = User::factory()->create();
@@ -692,6 +722,7 @@ class NpcStatusTest extends TestCase
         $this->actingAs($admin)->post(route('npc-statuses.attachments.store', $npcStatus), [
             'type' => NpcStatusAttachment::TYPE_CCTV_SEAL,
             'validity_from' => '2026-01-01',
+            'store_id' => $store->id,
             'file' => UploadedFile::fake()->create('cctv.pdf', 100, 'application/pdf'),
         ])->assertSessionHasNoErrors();
 
@@ -707,6 +738,143 @@ class NpcStatusTest extends TestCase
         ]);
 
         \Illuminate\Support\Facades\Notification::assertSentTo($admin, \App\Notifications\ActivityNotification::class);
+    }
+
+    public function test_cctv_seals_are_uploaded_and_downloaded_per_assigned_store(): void
+    {
+        $admin = User::factory()->create();
+        $admin->givePermissionTo('npc_status.edit');
+        $storeUser = User::factory()->create();
+        $storeUser->givePermissionTo('npc_status.download');
+        $npcStatus = $this->npcStatus();
+        $firstStore = $this->store(['name' => 'First CCTV Store']);
+        $secondStore = $this->store(['name' => 'Second CCTV Store']);
+        $storeUser->stores()->attach([$firstStore->id, $secondStore->id]);
+        $npcStatus->stores()->syncWithPivotValues([$firstStore->id, $secondStore->id], ['year' => 2026]);
+
+        foreach ([
+            [$firstStore, 'first-cctv.pdf'],
+            [$secondStore, 'second-cctv.pdf'],
+        ] as [$store, $fileName]) {
+            $this->actingAs($admin)
+                ->post(route('npc-statuses.attachments.store', $npcStatus), [
+                    'type' => NpcStatusAttachment::TYPE_CCTV_SEAL,
+                    'validity_from' => '2026-01-01',
+                    'store_id' => $store->id,
+                    'file' => UploadedFile::fake()->create($fileName, 100, 'application/pdf'),
+                ])
+                ->assertSessionHasNoErrors();
+        }
+
+        foreach ([
+            [NpcStatusAttachment::TYPE_DPO_SEAL, 'shared-dpo-seal.pdf'],
+            [NpcStatusAttachment::TYPE_DPO_REGISTRATION, 'shared-dpo-registration.pdf'],
+        ] as [$type, $fileName]) {
+            $this->actingAs($admin)
+                ->post(route('npc-statuses.attachments.store', $npcStatus), [
+                    'type' => $type,
+                    'validity_from' => '2026-01-01',
+                    'file' => UploadedFile::fake()->create($fileName, 100, 'application/pdf'),
+                ])
+                ->assertSessionHasNoErrors();
+        }
+
+        $this->assertDatabaseHas('npc_status_attachments', [
+            'npc_status_id' => $npcStatus->id,
+            'store_id' => $firstStore->id,
+            'type' => NpcStatusAttachment::TYPE_CCTV_SEAL,
+            'file_name' => 'first-cctv.pdf',
+        ]);
+        $this->assertDatabaseHas('npc_status_attachments', [
+            'npc_status_id' => $npcStatus->id,
+            'store_id' => $secondStore->id,
+            'type' => NpcStatusAttachment::TYPE_CCTV_SEAL,
+            'file_name' => 'second-cctv.pdf',
+        ]);
+
+        $this->actingAs($storeUser)
+            ->get(route('npc-statuses.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('storeSeals', function ($stores) use ($firstStore, $secondStore) {
+                    $rows = collect($stores)->keyBy('store_id');
+                    $firstSeals = collect(data_get($rows->get($firstStore->id), 'years.0.seals'));
+                    $secondSeals = collect(data_get($rows->get($secondStore->id), 'years.0.seals'));
+                    $firstCctv = $firstSeals->firstWhere('type', NpcStatusAttachment::TYPE_CCTV_SEAL);
+                    $secondCctv = $secondSeals->firstWhere('type', NpcStatusAttachment::TYPE_CCTV_SEAL);
+
+                    return data_get($firstCctv, 'name') === 'first-cctv.pdf'
+                        && data_get($secondCctv, 'name') === 'second-cctv.pdf'
+                        && data_get($firstSeals->firstWhere('type', NpcStatusAttachment::TYPE_DPO_SEAL), 'name') === 'shared-dpo-seal.pdf'
+                        && data_get($secondSeals->firstWhere('type', NpcStatusAttachment::TYPE_DPO_SEAL), 'name') === 'shared-dpo-seal.pdf'
+                        && data_get($firstSeals->firstWhere('type', NpcStatusAttachment::TYPE_DPO_REGISTRATION), 'name') === 'shared-dpo-registration.pdf'
+                        && data_get($secondSeals->firstWhere('type', NpcStatusAttachment::TYPE_DPO_REGISTRATION), 'name') === 'shared-dpo-registration.pdf';
+                })
+            );
+
+        $this->actingAs($storeUser)
+            ->get(route('npc-statuses.stores.seal.download', [$npcStatus, $firstStore, NpcStatusAttachment::TYPE_CCTV_SEAL]))
+            ->assertDownload('first-cctv.pdf');
+        $this->actingAs($storeUser)
+            ->get(route('npc-statuses.stores.seal.download', [$npcStatus, $secondStore, NpcStatusAttachment::TYPE_CCTV_SEAL]))
+            ->assertDownload('second-cctv.pdf');
+        $this->actingAs($storeUser)
+            ->get(route('npc-statuses.stores.seal.download', [$npcStatus, $firstStore, NpcStatusAttachment::TYPE_DPO_SEAL]))
+            ->assertDownload('shared-dpo-seal.pdf');
+        $this->actingAs($storeUser)
+            ->get(route('npc-statuses.stores.seal.download', [$npcStatus, $secondStore, NpcStatusAttachment::TYPE_DPO_SEAL]))
+            ->assertDownload('shared-dpo-seal.pdf');
+    }
+
+    public function test_cctv_seal_upload_requires_a_store_assigned_to_the_npc_record(): void
+    {
+        $admin = User::factory()->create();
+        $admin->givePermissionTo('npc_status.edit');
+        $npcStatus = $this->npcStatus();
+        $unassignedStore = $this->store();
+
+        $this->actingAs($admin)
+            ->postJson(route('npc-statuses.attachments.store', $npcStatus), [
+                'type' => NpcStatusAttachment::TYPE_CCTV_SEAL,
+                'validity_from' => '2026-01-01',
+                'store_id' => $unassignedStore->id,
+                'file' => UploadedFile::fake()->create('wrong-store.pdf', 100, 'application/pdf'),
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('store_id');
+    }
+
+    public function test_legacy_shared_cctv_seal_is_not_exposed_to_store_users(): void
+    {
+        $storeUser = User::factory()->create();
+        $storeUser->givePermissionTo('npc_status.download');
+        $npcStatus = $this->npcStatus();
+        $store = $this->store();
+        $storeUser->stores()->attach($store->id);
+        $npcStatus->stores()->syncWithPivotValues([$store->id], ['year' => 2026]);
+        $npcStatus->attachments()->create([
+            'store_id' => null,
+            'type' => NpcStatusAttachment::TYPE_CCTV_SEAL,
+            'validity_from' => '2026-01-01',
+            'file_path' => 'npc-statuses/legacy-shared-cctv.pdf',
+            'file_name' => 'legacy-shared-cctv.pdf',
+        ]);
+
+        $this->actingAs($storeUser)
+            ->get(route('npc-statuses.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('storeSeals.0.years.0.seals', function ($seals) {
+                    $cctv = collect($seals)->firstWhere('type', NpcStatusAttachment::TYPE_CCTV_SEAL);
+
+                    return data_get($cctv, 'available') === false
+                        && data_get($cctv, 'name') === null;
+                })
+            );
+
+        $this->actingAs($storeUser)
+            ->get(route('npc-statuses.stores.seal.download', [$npcStatus, $store, NpcStatusAttachment::TYPE_CCTV_SEAL]))
+            ->assertNotFound();
     }
 
     public function test_download_does_not_mark_store_checked_until_admin_confirms(): void

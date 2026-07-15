@@ -42,6 +42,7 @@
                         <div class="mb-2 text-xs font-black uppercase tracking-wider text-gray-600 dark:text-gray-300">{{ seal.label }}</div>
 
                         <template v-if="seal.available">
+                            <div v-if="seal.name" class="mb-2 truncate text-[11px] font-bold text-blue-600" :title="seal.name">{{ seal.name }}</div>
                             <button
                                 type="button"
                                 :disabled="isDownloading(store, yearRow, seal)"

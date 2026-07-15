@@ -356,23 +356,8 @@
                                 <span v-if="modalNpcStatus" class="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">{{ modalNpcStatus.workflow_progress ?? workflowProgress }}%</span>
                             </div>
 
-                            <!-- Finalized or permission-restricted workflow -->
-                            <div v-if="isModalReadOnly" class="space-y-2">
-                                <div v-for="(step, i) in historicalWorkflowSteps" :key="step.key" class="flex items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-                                    <span class="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full" :class="step.is_done ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'">
-                                        <svg v-if="step.is_done" class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
-                                    </span>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="text-sm font-bold" :class="step.is_done ? 'text-gray-900 dark:text-gray-100' : 'text-gray-500'">Step {{ i + 1 }}: {{ step.label }}</div>
-                                        <div v-if="step.completed_at" class="text-xs text-gray-500">Completed: {{ formatDate(step.completed_at) }}</div>
-                                        <div v-if="step.remarks" class="mt-1 text-xs italic text-gray-600 dark:text-gray-300">{{ step.remarks }}</div>
-                                    </div>
-                                </div>
-                                <p v-if="!historicalWorkflowSteps.length" class="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm font-semibold text-gray-500 dark:bg-gray-900/50 dark:border-gray-700">No workflow record for {{ effectiveModalYear }}.</p>
-                            </div>
-
-                            <!-- Editable current or historical workflow -->
-                            <div v-else>
+                            <!-- Full workflow remains tabbed for both editable and read-only records. -->
+                            <div>
                                 <div v-if="isLoadingCompany" class="rounded-lg border border-dashed border-blue-200 bg-blue-50 p-6 text-center text-sm font-semibold text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
                                     Checking for an existing application workflow...
                                 </div>
@@ -380,6 +365,10 @@
                                     Save the validity dates above first to start the workflow.
                                 </div>
                                 <div v-else class="space-y-3">
+                                    <div v-if="isModalReadOnly" class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs font-bold text-blue-700 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-300">
+                                        This workflow is read-only. All completed step tabs and their saved details remain available to view.
+                                    </div>
+
                                     <!-- Step tabs (a later tab stays disabled until the prior step is done) -->
                                     <div class="flex flex-wrap gap-1.5">
                                         <button
@@ -617,9 +606,9 @@
 
                                             <!-- Seals to release -->
                                             <div>
-                                                <div class="mb-2 text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Seals to Release (entity-wide) <span class="text-red-500">*</span></div>
-                                                <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                                    <div v-for="sealType in sealTypes" :key="sealType.type" :data-invalid="isFieldInvalid('seal.' + sealType.type) || null" class="rounded-lg border bg-white p-3 dark:bg-gray-800" :class="isFieldInvalid('seal.' + sealType.type) ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-200 dark:border-gray-700'">
+                                                <div class="mb-2 text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Entity-wide Seals to Release <span class="text-red-500">*</span></div>
+                                                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                                    <div v-for="sealType in entitySealTypes" :key="sealType.type" :data-invalid="isFieldInvalid('seal.' + sealType.type) || null" class="rounded-lg border bg-white p-3 dark:bg-gray-800" :class="isFieldInvalid('seal.' + sealType.type) ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-200 dark:border-gray-700'">
                                                         <div class="mb-2 text-xs font-black uppercase tracking-wider text-gray-600 dark:text-gray-300">{{ sealType.label }}</div>
                                                         <template v-if="currentSeal(sealType.type)">
                                                             <a v-if="canEditNpcStatus" :href="currentSeal(sealType.type).url" class="block truncate text-xs font-bold text-blue-600 hover:underline">{{ currentSeal(sealType.type).name || 'Download' }}</a>
@@ -658,14 +647,42 @@
                                                 </div>
                                             </div>
 
-                                            <p v-if="canEditSelectedRecord && !step5Valid" class="rounded-md bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Upload all 3 seals and assign at least one store, then Save, before you can mark Step 5 as done.</p>
+                                            <!-- One CCTV seal per selected store assignment -->
+                                            <div :data-invalid="isFieldInvalid('seal.cctv_seal') || null" class="rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800">
+                                                <div class="text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">CCTV Seal per Assigned Store <span class="text-red-500">*</span></div>
+                                                <p class="mt-1 text-[11px] font-semibold text-gray-500 dark:text-gray-400">Each store receives and downloads only its own CCTV Seal. Selecting a file saves the current store assignments automatically.</p>
+                                                <div v-if="!selectedStoreOptions.length" class="mt-3 text-xs font-semibold text-gray-400">Assign at least one store first.</div>
+                                                <div v-else class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                                    <div v-for="store in selectedStoreOptions" :key="'cctv-' + store.id" class="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                                                        <div class="text-xs font-black text-gray-800 dark:text-gray-100">{{ store.name }}</div>
+                                                        <div class="mb-2 font-mono text-[10px] text-gray-500">{{ store.code }}</div>
+                                                        <template v-if="exactCctvSealForStore(store.id)">
+                                                            <a :href="exactCctvSealForStore(store.id).url" class="block truncate text-xs font-bold text-blue-600 hover:underline">{{ exactCctvSealForStore(store.id).name || 'Download' }}</a>
+                                                            <button v-if="canEditSelectedRecord" type="button" @click="deleteSeal(exactCctvSealForStore(store.id))" class="mt-1 text-[11px] font-black text-red-600 hover:text-red-800">Remove</button>
+                                                        </template>
+                                                        <template v-else>
+                                                            <input
+                                                                v-if="canEditSelectedRecord"
+                                                                :key="fileInputKey + '-cctv-' + store.id"
+                                                                type="file"
+                                                                accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.bmp,.heic,.heif"
+                                                                class="mt-2 w-full text-xs text-gray-500 file:mr-2 file:rounded-full file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-blue-700 dark:text-gray-300"
+                                                                @change="uploadSeal('cctv_seal', $event, store.id)"
+                                                            >
+                                                            <span v-else class="text-[11px] font-bold text-amber-600">Not uploaded</span>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <p v-if="canEditSelectedRecord && !step5Valid" class="rounded-md bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">Upload both entity-wide seals, assign at least one store, and upload one CCTV Seal for every assigned store before marking Step 5 as done.</p>
                                         </div>
 
                                         <!-- Step 6 expansion — Store/Office Downloads & Confirmation -->
                                         <div v-if="i === 5 && stepEnabled(5)" class="mt-4 space-y-5 rounded-lg border border-blue-100 bg-blue-50/40 p-4 dark:border-blue-900/40 dark:bg-blue-900/10">
                                             <div v-if="receiptGrid.length">
                                                 <div class="mb-2 text-[11px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">Store Downloads &amp; Confirmation</div>
-                                                <p class="mb-2 text-[11px] font-semibold text-gray-500 dark:text-gray-400">Each seal can be confirmed only after the store downloads it and uploads its proof of use.</p>
+                                                <p class="mb-2 text-[11px] font-semibold text-gray-500 dark:text-gray-400">DPO Seal and DPO Registration are shared with every assigned store. CCTV Seal remains unique per store. Each file can be confirmed only after that store downloads it and uploads proof of use.</p>
                                                 <div class="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
                                                     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                                         <thead class="bg-gray-50 dark:bg-gray-900/50">
@@ -684,6 +701,7 @@
                                                                     <div class="text-[10px] font-semibold" :class="row.seals[sealType.type]?.downloaded_at ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400'">
                                                                         {{ row.seals[sealType.type]?.downloaded_at ? 'Downloaded ' + formatDateTime(row.seals[sealType.type].downloaded_at) : 'Not downloaded' }}
                                                                     </div>
+                                                                    <div v-if="row.seals[sealType.type]?.name" class="mt-0.5 max-w-[160px] truncate text-[10px] font-bold text-blue-600" :title="row.seals[sealType.type].name">{{ row.seals[sealType.type].name }}</div>
                                                                     <div class="mt-1">
                                                                         <template v-if="row.seals[sealType.type]?.proof">
                                                                             <a :href="row.seals[sealType.type].proof.url" class="block max-w-[160px] truncate text-[11px] font-bold text-blue-600 hover:underline">{{ row.seals[sealType.type].proof.name || 'View proof' }}</a>
@@ -814,6 +832,7 @@ const sealTypes = [
     { type: 'dpo_registration', label: 'DPO Registration' },
     { type: 'cctv_seal', label: 'CCTV Seal' },
 ]
+const entitySealTypes = sealTypes.filter((seal) => seal.type !== 'cctv_seal')
 
 const currentYear = computed(() => props.currentYear || new Date().getFullYear())
 const adminSection = ref(props.defaultNpcSection)
@@ -1147,8 +1166,11 @@ const step4InvalidKeys = () => {
 const step5InvalidKeys = () => {
     const keys = []
     const seals = modalNpcStatus.value?.seals || {}
-    sealTypes.forEach((seal) => { if (!seals[seal.type]?.available) keys.push(`seal.${seal.type}`) })
+    entitySealTypes.forEach((seal) => { if (!seals[seal.type]?.available) keys.push(`seal.${seal.type}`) })
     if (!selectedStoreIds.value.length) keys.push('stores')
+    selectedStoreIds.value.forEach((storeId) => {
+        if (!cctvSealForStore(storeId)) keys.push('seal.cctv_seal')
+    })
     return keys
 }
 
@@ -1241,8 +1263,16 @@ const effectiveModalYear = computed(() => modalYear.value ?? currentYear.value)
 const isHistoricalYear = computed(() => effectiveModalYear.value !== currentYear.value)
 
 const modalNpcStatus = computed(() => {
-    if (!isHistoricalYear.value) return selectedCompany.value?.npc_status ?? null
-    return (selectedCompany.value?.workflow_history || []).find((r) => r.year === effectiveModalYear.value) ?? null
+    const fullRecord = selectedCompany.value?.npc_status
+    if (Number(fullRecord?.year) === Number(effectiveModalYear.value)) {
+        return fullRecord
+    }
+
+    // The company detail endpoint returns the selected year as npc_status with
+    // every tab's data. workflow_history is intentionally lightweight, so use
+    // it only while switching years before that full response has arrived.
+    return (selectedCompany.value?.workflow_history || [])
+        .find((record) => Number(record.year) === Number(effectiveModalYear.value)) ?? null
 })
 // Most recent record from an earlier year — the source for renewal pre-fill.
 const priorRecord = computed(() => {
@@ -1269,10 +1299,6 @@ const isModalReadOnly = computed(() => (
 const canSaveSelectedRecord = computed(() => (
     modalNpcStatus.value ? canEditSelectedRecord.value : canEditValidity.value
 ))
-
-const historicalWorkflowSteps = computed(() => {
-    return modalNpcStatus.value ? workflowStepsFrom(modalNpcStatus.value.workflow_steps || []) : []
-})
 
 const workflowProgress = computed(() => {
     if (!workflowForm.value.length) return 0
@@ -1697,8 +1723,11 @@ const saveModalChanges = async () => {
 }
 
 const currentSeal = (type) => modalNpcStatus.value?.attachments?.[type]?.[0] || null
+const exactCctvSealForStore = (storeId) => (modalNpcStatus.value?.attachments?.cctv_seal || [])
+    .find((attachment) => String(attachment.store_id || '') === String(storeId)) || null
+const cctvSealForStore = (storeId) => exactCctvSealForStore(storeId)
 
-const uploadSeal = async (type, event) => {
+const uploadSeal = async (type, event, storeId = null) => {
     if (!canEditSelectedRecord.value) return
     const file = event.target.files?.[0]
     if (!file) return
@@ -1708,10 +1737,18 @@ const uploadSeal = async (type, event) => {
         return
     }
     try {
+        if (type === 'cctv_seal' && storeId) {
+            const assignmentResponse = await axios.put(route('npc-statuses.stores.update', record.id), {
+                store_ids: [...selectedStoreIds.value],
+            }, { headers: { Accept: 'application/json' } })
+            replaceCompanyInPage(assignmentResponse.data.company)
+        }
+
         const formData = new FormData()
         formData.append('type', type)
         formData.append('validity_from', statusForm.validity_from || `${currentYear.value}-01-01`)
         formData.append('file', file)
+        if (storeId) formData.append('store_id', storeId)
         const { data } = await axios.post(route('npc-statuses.attachments.store', record.id), formData, {
             headers: { Accept: 'application/json' },
         })
@@ -1844,6 +1881,10 @@ const deleteRecord = async (company) => {
 const isStoreSelected = (store) => {
     return selectedStoreIds.value.some((storeId) => String(storeId) === String(store.id))
 }
+
+const selectedStoreOptions = computed(() => storeOptions.value
+    .filter(isStoreSelected)
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))))
 
 const isStoreAssignedElsewhere = (store) => {
     const assignedRecordId = store.assigned_npc_status_id

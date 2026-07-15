@@ -208,11 +208,11 @@ class NpcStatusController extends Controller implements HasMiddleware
 
     public function showCompany(Request $request, Company $company)
     {
-        $year = (int) now()->year;
+        $currentYear = (int) now()->year;
         $validated = $request->validate([
             'year' => 'nullable|integer|min:2000|max:2100',
         ]);
-        $requestedYear = (int) ($validated['year'] ?? $year);
+        $requestedYear = (int) ($validated['year'] ?? $currentYear);
         $user = $request->user();
         abort_unless(
             $user->can('npc_status.view') || $user->can('npc_status.edit') || $user->can('npc_status.download'),
@@ -225,7 +225,7 @@ class NpcStatusController extends Controller implements HasMiddleware
         if ($restrictedStoreIds !== null) {
             abort_unless(
                 $company->npcStatuses()
-                    ->where('year', $year)
+                    ->where('year', $requestedYear)
                     ->whereHas('stores', fn ($query) => $query->whereIn('stores.id', $restrictedStoreIds))
                     ->exists(),
                 404
@@ -234,7 +234,7 @@ class NpcStatusController extends Controller implements HasMiddleware
 
         $npcStatus = NpcStatus::query()
             ->where('company_id', $company->id)
-            ->where('year', $year)
+            ->where('year', $requestedYear)
             ->first();
 
         if ($npcStatus) {
@@ -242,7 +242,7 @@ class NpcStatusController extends Controller implements HasMiddleware
         }
 
         return response()->json([
-            'company' => $this->freshCompanyRow($company->id, $year, $restrictedStoreIds),
+            'company' => $this->freshCompanyRow($company->id, $requestedYear, $restrictedStoreIds),
             'stores' => $this->storeOptions($requestedYear, $restrictedStoreIds),
         ]);
     }
@@ -468,6 +468,12 @@ class NpcStatusController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'type' => ['required', Rule::in(NpcStatusAttachment::TYPES)],
             'validity_from' => 'required|date',
+            'store_id' => [
+                Rule::requiredIf(fn () => $request->input('type') === NpcStatusAttachment::TYPE_CCTV_SEAL),
+                'nullable',
+                'integer',
+                'exists:stores,id',
+            ],
             'file' => self::UPLOAD_FILE_RULE . self::MAX_ATTACHMENT_KILOBYTES,
         ]);
 
@@ -477,14 +483,27 @@ class NpcStatusController extends Controller implements HasMiddleware
             ]);
         }
 
+        $storeId = $validated['type'] === NpcStatusAttachment::TYPE_CCTV_SEAL
+            ? (int) $validated['store_id']
+            : null;
+
+        if ($storeId && ! $npcStatus->stores()->whereKey($storeId)->exists()) {
+            throw ValidationException::withMessages([
+                'store_id' => 'The CCTV Seal can only be uploaded for a store assigned to this NPC record.',
+            ]);
+        }
+
         $duplicate = $npcStatus->attachments()
             ->where('type', $validated['type'])
+            ->where('store_id', $storeId)
             ->whereYear('validity_from', Carbon::parse($validated['validity_from'])->year)
             ->exists();
 
         if ($duplicate) {
             throw ValidationException::withMessages([
-                'file' => 'An attachment is already uploaded for this DPO type and validity year.',
+                'file' => $storeId
+                    ? 'A CCTV Seal is already uploaded for this store and validity year.'
+                    : 'An attachment is already uploaded for this DPO type and validity year.',
             ]);
         }
 
@@ -493,7 +512,8 @@ class NpcStatusController extends Controller implements HasMiddleware
             $validated['type'],
             $validated['validity_from'],
             $request->file('file'),
-            $request->user()->id
+            $request->user()->id,
+            $storeId
         );
 
         if ($request->expectsJson()) {
@@ -514,8 +534,14 @@ class NpcStatusController extends Controller implements HasMiddleware
         $companyId = $npcStatus->company_id;
         $year = $npcStatus->year;
 
-        $this->deleteAttachmentPath($attachment->file_path);
+        $filePath = $attachment->file_path;
         $attachment->delete();
+
+        // Backfilled legacy CCTV rows can intentionally reference the same
+        // stored file. Keep it until the final store-specific row is removed.
+        if (! NpcStatusAttachment::where('file_path', $filePath)->exists()) {
+            $this->deleteAttachmentPath($filePath);
+        }
         $this->syncLatestLegacyAttachmentColumns($npcStatus, $type);
 
         if ($request->expectsJson()) {
@@ -885,10 +911,21 @@ class NpcStatusController extends Controller implements HasMiddleware
         return $hasPrior ? 'Renewal' : 'New';
     }
 
-    private function storeStatusAttachment(NpcStatus $npcStatus, string $type, string $validityFrom, UploadedFile $file, int $userId): NpcStatusAttachment
+    private function storeStatusAttachment(
+        NpcStatus $npcStatus,
+        string $type,
+        string $validityFrom,
+        UploadedFile $file,
+        int $userId,
+        ?int $storeId = null
+    ): NpcStatusAttachment
     {
         $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-        $label = $type === NpcStatusAttachment::TYPE_DPO_SEAL ? 'seal' : 'registration';
+        $label = match ($type) {
+            NpcStatusAttachment::TYPE_DPO_SEAL => 'seal',
+            NpcStatusAttachment::TYPE_CCTV_SEAL => 'cctv-seal',
+            default => 'registration',
+        };
         $fileName = "{$label}-" . Str::uuid() . ($extension ? ".{$extension}" : '');
         $path = $file->storeAs(
             "npc-statuses/{$npcStatus->year}/{$npcStatus->company_id}",
@@ -897,6 +934,7 @@ class NpcStatusController extends Controller implements HasMiddleware
         );
 
         $attachment = $npcStatus->attachments()->create([
+            'store_id' => $storeId,
             'type' => $type,
             'validity_from' => $validityFrom,
             'file_path' => str_replace('\\', '/', $path),
@@ -913,6 +951,10 @@ class NpcStatusController extends Controller implements HasMiddleware
 
     private function syncLegacyAttachmentColumns(NpcStatus $npcStatus, NpcStatusAttachment $attachment): void
     {
+        if ($attachment->type === NpcStatusAttachment::TYPE_CCTV_SEAL) {
+            return;
+        }
+
         $prefix = $attachment->type === NpcStatusAttachment::TYPE_DPO_SEAL ? 'dpo_seal' : 'dpo_registration';
 
         $npcStatus->forceFill([
@@ -925,6 +967,10 @@ class NpcStatusController extends Controller implements HasMiddleware
 
     private function syncLatestLegacyAttachmentColumns(NpcStatus $npcStatus, string $type): void
     {
+        if ($type === NpcStatusAttachment::TYPE_CCTV_SEAL) {
+            return;
+        }
+
         $latest = $npcStatus->attachments()
             ->where('type', $type)
             ->latest('validity_from')
@@ -1192,7 +1238,10 @@ class NpcStatusController extends Controller implements HasMiddleware
                 foreach (NpcStatusAttachment::SEAL_TYPES as $type) {
                     $receipt = $storeReceipts->firstWhere('seal_type', $type);
                     $proof = $storeProofs->firstWhere('seal_type', $type);
+                    $attachment = $this->latestAttachmentPayloadForStore($npcStatus, $type, (int) $store->id);
                     $seals[$type] = [
+                        'available' => (bool) $attachment,
+                        'name' => $attachment['name'] ?? null,
                         'downloaded_at' => $receipt?->downloaded_at?->toIso8601String(),
                         'confirmed_at' => $receipt?->confirmed_at?->toIso8601String(),
                         'proof' => $proof ? [
@@ -1236,6 +1285,7 @@ class NpcStatusController extends Controller implements HasMiddleware
             ->sortByDesc(fn (NpcStatusAttachment $attachment) => $attachment->validity_from?->format('Y-m-d') . $attachment->created_at?->timestamp)
             ->map(fn (NpcStatusAttachment $attachment) => [
                 'id' => $attachment->id,
+                'store_id' => $attachment->store_id,
                 'type' => $attachment->type,
                 'validity_from' => $attachment->validity_from?->format('Y-m-d'),
                 'name' => $attachment->file_name,
@@ -1251,6 +1301,17 @@ class NpcStatusController extends Controller implements HasMiddleware
     private function latestAttachmentPayload(NpcStatus $npcStatus, string $type): ?array
     {
         return $this->attachmentsPayload($npcStatus, $type, $npcStatus->year)[0] ?? null;
+    }
+
+    private function latestAttachmentPayloadForStore(NpcStatus $npcStatus, string $type, int $storeId): ?array
+    {
+        $attachments = collect($this->attachmentsPayload($npcStatus, $type, $npcStatus->year));
+
+        if ($type !== NpcStatusAttachment::TYPE_CCTV_SEAL) {
+            return $attachments->first(fn (array $attachment) => empty($attachment['store_id']));
+        }
+
+        return $attachments->first(fn (array $attachment) => (int) ($attachment['store_id'] ?? 0) === $storeId);
     }
 
     private function companyAttachmentHistoryPayload(Company $company): array
@@ -1474,13 +1535,15 @@ class NpcStatusController extends Controller implements HasMiddleware
         abort_unless($user->stores()->whereKey($store->id)->exists(), 403);
         abort_unless($npcStatus->stores()->whereKey($store->id)->exists(), 404);
 
-        // A status record is scoped to a single year, so the latest attachment
-        // of this type is the seal for that year.
-        $attachment = $npcStatus->attachments()
+        // CCTV seals are store-specific. Other seal types remain entity-wide.
+        $attachmentQuery = $npcStatus->attachments()
             ->where('type', $type)
             ->latest('validity_from')
-            ->latest('created_at')
-            ->first();
+            ->latest('created_at');
+
+        $attachment = $type === NpcStatusAttachment::TYPE_CCTV_SEAL
+            ? (clone $attachmentQuery)->where('store_id', $store->id)->first()
+            : $attachmentQuery->whereNull('store_id')->first();
 
         abort_if(!$attachment, 404, 'This seal is not available yet.');
 
@@ -1686,7 +1749,7 @@ class NpcStatusController extends Controller implements HasMiddleware
                 ->filter(fn (NpcStatus $status) => $status->stores->contains('id', $store->id))
                 ->map(function (NpcStatus $status) use ($store, $receipts, $proofs) {
                     $seals = collect(NpcStatusAttachment::SEAL_TYPES)->map(function (string $type) use ($status, $store, $receipts, $proofs) {
-                        $attachment = $this->attachmentsPayload($status, $type, $status->year)[0] ?? null;
+                        $attachment = $this->latestAttachmentPayloadForStore($status, $type, (int) $store->id);
                         // SQL Server may hydrate BIGINT foreign keys as numeric
                         // strings while related model keys are integers.
                         $receipt = $receipts->first(fn (NpcSealReceipt $r) => (string) $r->npc_status_id === (string) $status->id

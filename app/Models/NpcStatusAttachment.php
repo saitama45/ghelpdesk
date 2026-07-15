@@ -32,6 +32,7 @@ class NpcStatusAttachment extends Model
 
     protected $fillable = [
         'npc_status_id',
+        'store_id',
         'type',
         'validity_from',
         'file_path',
@@ -43,6 +44,7 @@ class NpcStatusAttachment extends Model
 
     protected $casts = [
         'validity_from' => 'date:Y-m-d',
+        'store_id' => 'integer',
         'file_size' => 'integer',
         'uploaded_by' => 'integer',
     ];
@@ -55,5 +57,10 @@ class NpcStatusAttachment extends Model
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    public function store(): BelongsTo
+    {
+        return $this->belongsTo(Store::class);
     }
 }
