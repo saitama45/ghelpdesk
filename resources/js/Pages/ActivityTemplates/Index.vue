@@ -96,6 +96,14 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end space-x-1">
+                                    <a
+                                        :href="route('activity-templates.export', template.id)"
+                                        class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-100 hover:text-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+                                        title="Export Template"
+                                    >
+                                        <ArrowDownTrayIcon class="w-4 h-4" />
+                                        <span>Export</span>
+                                    </a>
                                     <button 
                                         v-if="hasPermission('activity_templates.edit')"
                                         @click="editTemplate(template)" 

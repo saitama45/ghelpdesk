@@ -69,6 +69,59 @@ class ActivityTemplateImportTest extends TestCase
         $this->assertSame('$D$2:$D$1000', $dataSheet->getCell('E2')->getDataValidation()->getFormula1());
     }
 
+    public function test_view_authorized_user_can_export_one_existing_template_with_its_hierarchy(): void
+    {
+        $template = ProjectTemplate::create([
+            'name' => 'NSO Export Example',
+            'project_type' => 'NSO',
+            'store_class' => 'Regular',
+        ]);
+        $parent = $template->activities()->create([
+            'activity' => 'Prepare site',
+            'milestone' => 'Preparation',
+            'milestone_order' => 1,
+            'qty' => 1,
+            'default_duration_days' => 2,
+            'order' => 1.1,
+        ]);
+        $child = $template->activities()->create([
+            'parent_activity_template_id' => $parent->id,
+            'activity' => 'Confirm readiness',
+            'milestone' => 'Preparation',
+            'milestone_order' => 1,
+            'qty' => 1,
+            'default_duration_days' => 1,
+            'order' => 1.2,
+        ]);
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('activity-templates.export', $template))
+            ->assertForbidden();
+
+        $response = $this->actingAs($this->userWithPermission('activity_templates.view'))
+            ->get(route('activity-templates.export', $template))
+            ->assertOk()
+            ->assertHeader('content-disposition', 'attachment; filename="nso-export-example.xlsx"');
+
+        $path = $this->temporaryPath('.xlsx');
+        file_put_contents($path, $response->streamedContent());
+        $spreadsheet = IOFactory::load($path);
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $this->assertSame($this->headers(), $sheet->rangeToArray('A1:P1')[0]);
+        $this->assertSame('hidden', $spreadsheet->getSheetByName('Lists')->getSheetState());
+        foreach (['B2', 'C2', 'E2', 'M2', 'N2'] as $cell) {
+            $this->assertSame('list', $sheet->getCell($cell)->getDataValidation()->getType(), "Exported {$cell} should contain a dropdown.");
+            $this->assertTrue($sheet->getCell($cell)->getDataValidation()->getShowDropDown(), "Exported {$cell} should show its dropdown arrow.");
+        }
+        $this->assertSame('ACT-'.$parent->id, $sheet->getCell('D2')->getValue());
+        $this->assertNull($sheet->getCell('E2')->getValue());
+        $this->assertSame('Prepare site', $sheet->getCell('F2')->getValue());
+        $this->assertSame('ACT-'.$child->id, $sheet->getCell('D3')->getValue());
+        $this->assertSame('ACT-'.$parent->id, $sheet->getCell('E3')->getValue());
+        $this->assertSame(1.2, (float) $sheet->getCell('P3')->getValue());
+    }
+
     public function test_import_creates_multiple_templates_and_preserves_sub_task_hierarchy(): void
     {
         $user = $this->userWithCreatePermission();
@@ -129,8 +182,13 @@ class ActivityTemplateImportTest extends TestCase
 
     private function userWithCreatePermission(): User
     {
+        return $this->userWithPermission('activity_templates.create');
+    }
+
+    private function userWithPermission(string $permissionName): User
+    {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
-        $permission = Permission::findOrCreate('activity_templates.create', 'web');
+        $permission = Permission::findOrCreate($permissionName, 'web');
         $user = User::factory()->create();
         $user->givePermissionTo($permission);
 

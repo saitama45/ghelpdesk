@@ -12,6 +12,7 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
@@ -28,7 +29,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('can:activity_templates.view', only: ['index']),
+            new Middleware('can:activity_templates.view', only: ['index', 'export']),
             new Middleware('can:activity_templates.create', only: ['store', 'template', 'import']),
             new Middleware('can:activity_templates.edit', only: ['update']),
             new Middleware('can:activity_templates.delete', only: ['destroy']),
@@ -88,37 +89,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         $instructions->getColumnDimension('A')->setWidth(110);
         $instructions->getStyle('A1')->getFont()->setBold(true)->setSize(14);
 
-        $listsSheet = $spreadsheet->createSheet(2);
-        $listsSheet->setTitle('Lists');
-        $listsSheet->setSheetState(Worksheet::SHEETSTATE_HIDDEN);
-
-        $projectTypes = collect(ReferenceOption::valuesOfType('project_type'));
-        if ($projectTypes->isEmpty()) {
-            $projectTypes = collect(['NSO']);
-        }
-
-        $storeClasses = collect(ReferenceOption::valuesOfType('store_class'));
-        if ($storeClasses->isEmpty()) {
-            $storeClasses = collect(['Regular', 'Kitchen', 'Both']);
-        }
-
-        $departmentOptions = collect($this->departmentOptions());
-        $departments = $departmentOptions->pluck('name')->filter()->unique()->values();
-        $subUnits = $departmentOptions->pluck('sub_units')->flatten()->filter()->unique()->sort()->values();
-
-        $listColumns = [
-            'A' => ['Project Types', $projectTypes],
-            'B' => ['Store Classes', $storeClasses],
-            'C' => ['Departments', $departments],
-            'D' => ['Sub Units', $subUnits],
-        ];
-
-        foreach ($listColumns as $column => [$heading, $values]) {
-            $listsSheet->setCellValue("{$column}1", $heading);
-            foreach ($values as $index => $value) {
-                $listsSheet->setCellValue($column.($index + 2), $value);
-            }
-        }
+        [$projectTypes, $storeClasses, $departments, $subUnits] = $this->addImportListSheet($spreadsheet, 2);
 
         $headers = $this->importHeaders();
         $sheet->fromArray($headers, null, 'A1');
@@ -141,11 +112,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($columnIndex))->setAutoSize(true);
         }
 
-        $this->applyImportListValidation($sheet, 'B', 'A', $projectTypes->count());
-        $this->applyImportListValidation($sheet, 'C', 'B', $storeClasses->count());
-        $this->applyImportRangeListValidation($sheet, 'E', 'D');
-        $this->applyImportListValidation($sheet, 'M', 'C', $departments->count(), true);
-        $this->applyImportListValidation($sheet, 'N', 'D', $subUnits->count(), true);
+        $this->applyImportDropdowns($sheet, $projectTypes, $storeClasses, $departments, $subUnits);
 
         $spreadsheet->setActiveSheetIndex(0);
         $writer = new Xlsx($spreadsheet);
@@ -292,6 +259,71 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'imported_templates' => $importedTemplates,
             'skipped_templates' => $skippedTemplates,
             'errors' => $errors,
+        ]);
+    }
+
+    public function export(ProjectTemplate $activity_template)
+    {
+        $activity_template->load('activities');
+
+        $spreadsheet = new Spreadsheet;
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Activity Template');
+        [$projectTypes, $storeClasses, $departments, $subUnits] = $this->addImportListSheet($spreadsheet, 1, $activity_template);
+        $headers = $this->importHeaders();
+        $sheet->fromArray($headers, null, 'A1');
+
+        $rows = $activity_template->activities->map(function (ActivityTemplate $activity) use ($activity_template) {
+            return [
+                $activity_template->name,
+                $activity_template->project_type,
+                $activity_template->store_class,
+                'ACT-'.$activity->id,
+                $activity->parent_activity_template_id ? 'ACT-'.$activity->parent_activity_template_id : null,
+                $activity->activity,
+                $activity->milestone,
+                $activity->milestone_order,
+                $activity->asset_item,
+                $activity->model_specs,
+                $activity->qty,
+                $activity->responsible,
+                $activity->department,
+                $activity->sub_unit,
+                $activity->default_duration_days,
+                $activity->order,
+            ];
+        })->all();
+
+        if ($rows !== []) {
+            $sheet->fromArray($rows, null, 'A2');
+            $sheet->getStyle('P2:P'.(count($rows) + 1))->getNumberFormat()->setFormatCode('0.0#');
+        }
+
+        $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->freezePane('A2');
+        $sheet->setAutoFilter("A1:{$lastColumn}1");
+        $sheet->getStyle("A1:{$lastColumn}1")->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '059669']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+        ]);
+
+        foreach (range(1, count($headers)) as $columnIndex) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($columnIndex))->setAutoSize(true);
+        }
+
+        $this->applyImportDropdowns($sheet, $projectTypes, $storeClasses, $departments, $subUnits);
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $filename = (Str::slug($activity_template->name) ?: 'activity-template').'.xlsx';
+        $writer = new Xlsx($spreadsheet);
+
+        return response()->stream(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control' => 'max-age=0',
         ]);
     }
 
@@ -677,6 +709,76 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         }
 
         return [$activities, $errors];
+    }
+
+    private function addImportListSheet(
+        Spreadsheet $spreadsheet,
+        int $sheetIndex,
+        ?ProjectTemplate $projectTemplate = null
+    ): array {
+        $listsSheet = $spreadsheet->createSheet($sheetIndex);
+        $listsSheet->setTitle('Lists');
+        $listsSheet->setSheetState(Worksheet::SHEETSTATE_HIDDEN);
+
+        $projectTypes = collect(ReferenceOption::valuesOfType('project_type'));
+        if ($projectTypes->isEmpty()) {
+            $projectTypes->push('NSO');
+        }
+        if ($projectTemplate) {
+            $projectTypes->push($projectTemplate->project_type);
+        }
+        $projectTypes = $projectTypes->filter()->unique()->values();
+
+        $storeClasses = collect(ReferenceOption::valuesOfType('store_class'));
+        if ($storeClasses->isEmpty()) {
+            $storeClasses = collect(['Regular', 'Kitchen', 'Both']);
+        }
+        if ($projectTemplate) {
+            $storeClasses->push($projectTemplate->store_class);
+        }
+        $storeClasses = $storeClasses->filter()->unique()->values();
+
+        $departmentOptions = collect($this->departmentOptions());
+        $departments = $departmentOptions->pluck('name');
+        $subUnits = $departmentOptions->pluck('sub_units')->flatten();
+
+        if ($projectTemplate) {
+            $departments = $departments->merge($projectTemplate->activities->pluck('department'));
+            $subUnits = $subUnits->merge($projectTemplate->activities->pluck('sub_unit'));
+        }
+
+        $departments = $departments->filter()->unique()->sort()->values();
+        $subUnits = $subUnits->filter()->unique()->sort()->values();
+
+        $listColumns = [
+            'A' => ['Project Types', $projectTypes],
+            'B' => ['Store Classes', $storeClasses],
+            'C' => ['Departments', $departments],
+            'D' => ['Sub Units', $subUnits],
+        ];
+
+        foreach ($listColumns as $column => [$heading, $values]) {
+            $listsSheet->setCellValue("{$column}1", $heading);
+            foreach ($values as $index => $value) {
+                $listsSheet->setCellValue($column.($index + 2), $value);
+            }
+        }
+
+        return [$projectTypes, $storeClasses, $departments, $subUnits];
+    }
+
+    private function applyImportDropdowns(
+        Worksheet $sheet,
+        $projectTypes,
+        $storeClasses,
+        $departments,
+        $subUnits
+    ): void {
+        $this->applyImportListValidation($sheet, 'B', 'A', $projectTypes->count());
+        $this->applyImportListValidation($sheet, 'C', 'B', $storeClasses->count());
+        $this->applyImportRangeListValidation($sheet, 'E', 'D');
+        $this->applyImportListValidation($sheet, 'M', 'C', $departments->count(), true);
+        $this->applyImportListValidation($sheet, 'N', 'D', $subUnits->count(), true);
     }
 
     private function applyImportListValidation(

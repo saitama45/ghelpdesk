@@ -256,6 +256,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('vendors', \App\Http\Controllers\VendorController::class)->except(['show', 'create', 'edit']);
     Route::get('activity-templates/template', [\App\Http\Controllers\ActivityTemplateController::class, 'template'])->name('activity-templates.template');
     Route::post('activity-templates/import', [\App\Http\Controllers\ActivityTemplateController::class, 'import'])->name('activity-templates.import');
+    Route::get('activity-templates/{activity_template}/export', [\App\Http\Controllers\ActivityTemplateController::class, 'export'])->name('activity-templates.export');
     Route::resource('activity-templates', \App\Http\Controllers\ActivityTemplateController::class)->except(['show', 'create', 'edit']);
     Route::post('reference-options', [\App\Http\Controllers\ReferenceOptionController::class, 'store'])->name('reference-options.store');
     Route::put('reference-options/{referenceOption}', [\App\Http\Controllers\ReferenceOptionController::class, 'update'])->name('reference-options.update');
