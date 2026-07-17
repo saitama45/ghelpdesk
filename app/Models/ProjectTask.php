@@ -53,7 +53,7 @@ class ProjectTask extends Model
         'original_end_date' => 'date:Y-m-d',
         'dependencies' => 'array',
         'progress' => 'integer',
-        'order' => 'integer',
+        'order' => 'float',
     ];
 
     public function project(): BelongsTo

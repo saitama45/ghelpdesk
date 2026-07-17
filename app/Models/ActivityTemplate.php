@@ -30,7 +30,7 @@ class ActivityTemplate extends Model
         'parent_activity_template_id' => 'integer',
         'default_duration_days' => 'integer',
         'milestone_order' => 'integer',
-        'order' => 'integer',
+        'order' => 'float',
         'qty' => 'integer',
     ];
 

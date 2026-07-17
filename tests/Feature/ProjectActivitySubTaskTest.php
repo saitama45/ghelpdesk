@@ -76,6 +76,61 @@ class ProjectActivitySubTaskTest extends TestCase
         $this->assertSame('DS', $child->sub_unit);
     }
 
+    public function test_activity_template_order_accepts_decimals_from_one_and_applies_them_to_project_tasks(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->post(route('activity-templates.store'), [
+                'name' => 'Decimal Order Template',
+                'project_type' => 'NSO',
+                'store_class' => 'Regular',
+                'activities' => [[
+                    'client_key' => 'activity-1',
+                    'parent_client_key' => null,
+                    'activity' => 'First decimal activity',
+                    'milestone' => 'General',
+                    'qty' => 1,
+                    'default_duration_days' => 1,
+                    'order' => 1.1,
+                ]],
+            ])
+            ->assertRedirect();
+
+        $activity = ActivityTemplate::where('activity', 'First decimal activity')->firstOrFail();
+        $this->assertSame(1.1, $activity->order);
+
+        $project = $this->createProject('Decimal Order Store', $user);
+
+        $this->actingAs($user)
+            ->post(route('projects.apply-templates', $project), [
+                'project_template_id' => $activity->project_template_id,
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(
+            1.1,
+            ProjectTask::where('project_id', $project->id)->where('name', 'First decimal activity')->firstOrFail()->order
+        );
+
+        $this->actingAs($user)
+            ->post(route('activity-templates.store'), [
+                'name' => 'Invalid Order Template',
+                'project_type' => 'NSO',
+                'store_class' => 'Regular',
+                'activities' => [[
+                    'client_key' => 'activity-1',
+                    'parent_client_key' => null,
+                    'activity' => 'Invalid order activity',
+                    'milestone' => 'General',
+                    'qty' => 1,
+                    'default_duration_days' => 1,
+                    'order' => 0.9,
+                ]],
+            ])
+            ->assertSessionHasErrors('activities.0.order');
+    }
+
     public function test_activity_template_update_keeps_nested_sub_tasks(): void
     {
         $template = ProjectTemplate::create([
@@ -275,9 +330,9 @@ class ProjectActivitySubTaskTest extends TestCase
             ->assertRedirect()
             ->assertSessionHas('success', 'Reapplied "Sorted NSO" template sort order successfully.');
 
-        $this->assertSame(3, $firstTask->refresh()->order);
-        $this->assertSame(1, $secondTask->refresh()->order);
-        $this->assertSame(2, $childTask->refresh()->order);
+        $this->assertSame(3.0, $firstTask->refresh()->order);
+        $this->assertSame(1.0, $secondTask->refresh()->order);
+        $this->assertSame(2.0, $childTask->refresh()->order);
         $this->assertSame(3, ProjectTask::where('project_id', $project->id)->count());
     }
 

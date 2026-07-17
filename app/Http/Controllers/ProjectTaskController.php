@@ -73,7 +73,7 @@ class ProjectTaskController extends Controller
                         'updated_by' => $actorId,
                     ]);
                     $addedCount++;
-                } elseif ((int) $task->order !== (int) $activity->order || (int) $task->milestone_order !== (int) $activity->milestone_order) {
+                } elseif ((float) $task->order !== (float) $activity->order || (int) $task->milestone_order !== (int) $activity->milestone_order) {
                     $task->update([
                         'milestone_order' => $activity->milestone_order,
                         'order' => $activity->order,
@@ -118,7 +118,7 @@ class ProjectTaskController extends Controller
                         'updated_by' => $actorId,
                     ]);
                     $addedCount++;
-                } elseif ((int) $task->order !== (int) $activity->order || (int) $task->milestone_order !== (int) $activity->milestone_order) {
+                } elseif ((float) $task->order !== (float) $activity->order || (int) $task->milestone_order !== (int) $activity->milestone_order) {
                     $task->update([
                         'milestone_order' => $activity->milestone_order,
                         'order' => $activity->order,
@@ -191,7 +191,7 @@ class ProjectTaskController extends Controller
             'progress' => 'integer|min:0|max:100',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
-            'order' => 'nullable|integer',
+            'order' => 'nullable|numeric',
         ]);
 
         // Adding new milestones / activities / sub-tasks is a management action.
@@ -295,7 +295,7 @@ class ProjectTaskController extends Controller
             'end_date' => 'nullable|date',
             'assigned_to' => 'nullable',
             'support_by' => 'nullable',
-            'order' => 'sometimes|integer',
+            'order' => 'sometimes|numeric',
         ]);
 
         if (array_key_exists('parent_task_id', $validated)) {
@@ -485,7 +485,7 @@ class ProjectTaskController extends Controller
             'tasks.*.end_date' => 'nullable|date',
             'tasks.*.progress' => 'nullable|integer|min:0|max:100',
             'tasks.*.milestone_order' => 'nullable|integer|min:0',
-            'tasks.*.order' => 'nullable|integer|min:0',
+            'tasks.*.order' => 'nullable|numeric|min:0',
         ]);
 
         // Reordering / bulk timeline edits span the whole plan — a management action.

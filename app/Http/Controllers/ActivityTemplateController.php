@@ -11,7 +11,17 @@ use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Throwable;
 
 class ActivityTemplateController extends Controller implements HasMiddleware
 {
@@ -19,7 +29,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
     {
         return [
             new Middleware('can:activity_templates.view', only: ['index']),
-            new Middleware('can:activity_templates.create', only: ['store']),
+            new Middleware('can:activity_templates.create', only: ['store', 'template', 'import']),
             new Middleware('can:activity_templates.edit', only: ['update']),
             new Middleware('can:activity_templates.delete', only: ['destroy']),
         ];
@@ -58,6 +68,232 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         ]);
     }
 
+    public function template()
+    {
+        $spreadsheet = new Spreadsheet;
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Activity Templates');
+
+        $instructions = $spreadsheet->createSheet(1);
+        $instructions->setTitle('Instructions');
+        $instructions->fromArray([
+            ['Activity Template Import Instructions'],
+            ['1. Keep the column headers unchanged.'],
+            ['2. Repeat Template Name, Project Type, and Store Class on every activity row.'],
+            ['3. Row Key must be unique within a template. Use Parent Row Key for a sub-task.'],
+            ['4. Only one sub-task level is supported; a sub-task cannot be another row\'s parent.'],
+            ['5. Existing templates with the same name, project type, and store class are skipped.'],
+            ['6. Remove the example rows before importing your own data.'],
+        ], null, 'A1');
+        $instructions->getColumnDimension('A')->setWidth(110);
+        $instructions->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+
+        $listsSheet = $spreadsheet->createSheet(2);
+        $listsSheet->setTitle('Lists');
+        $listsSheet->setSheetState(Worksheet::SHEETSTATE_HIDDEN);
+
+        $projectTypes = collect(ReferenceOption::valuesOfType('project_type'));
+        if ($projectTypes->isEmpty()) {
+            $projectTypes = collect(['NSO']);
+        }
+
+        $storeClasses = collect(ReferenceOption::valuesOfType('store_class'));
+        if ($storeClasses->isEmpty()) {
+            $storeClasses = collect(['Regular', 'Kitchen', 'Both']);
+        }
+
+        $departmentOptions = collect($this->departmentOptions());
+        $departments = $departmentOptions->pluck('name')->filter()->unique()->values();
+        $subUnits = $departmentOptions->pluck('sub_units')->flatten()->filter()->unique()->sort()->values();
+
+        $listColumns = [
+            'A' => ['Project Types', $projectTypes],
+            'B' => ['Store Classes', $storeClasses],
+            'C' => ['Departments', $departments],
+            'D' => ['Sub Units', $subUnits],
+        ];
+
+        foreach ($listColumns as $column => [$heading, $values]) {
+            $listsSheet->setCellValue("{$column}1", $heading);
+            foreach ($values as $index => $value) {
+                $listsSheet->setCellValue($column.($index + 2), $value);
+            }
+        }
+
+        $headers = $this->importHeaders();
+        $sheet->fromArray($headers, null, 'A1');
+        $sheet->fromArray([
+            ['New Store Opening', $projectTypes->first(), $storeClasses->first(), 'ACT-1', null, 'Prepare site', 'Preparation', 1, null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 2, 1],
+            ['New Store Opening', $projectTypes->first(), $storeClasses->first(), 'SUB-1', 'ACT-1', 'Confirm site readiness', 'Preparation', 1, null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 1, 1],
+        ], null, 'A2');
+
+        $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->freezePane('A2');
+        $sheet->setAutoFilter("A1:{$lastColumn}1");
+        $sheet->getStyle("A1:{$lastColumn}1")->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '2563EB']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+        ]);
+        $sheet->getStyle("A1:{$lastColumn}1000")->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
+
+        foreach (range(1, count($headers)) as $columnIndex) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($columnIndex))->setAutoSize(true);
+        }
+
+        $this->applyImportListValidation($sheet, 'B', 'A', $projectTypes->count());
+        $this->applyImportListValidation($sheet, 'C', 'B', $storeClasses->count());
+        $this->applyImportListValidation($sheet, 'M', 'C', $departments->count(), true);
+        $this->applyImportListValidation($sheet, 'N', 'D', $subUnits->count(), true);
+
+        $spreadsheet->setActiveSheetIndex(0);
+        $writer = new Xlsx($spreadsheet);
+
+        return response()->stream(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="activity-templates-import-template.xlsx"',
+            'Cache-Control' => 'max-age=0',
+        ]);
+    }
+
+    public function import(Request $request)
+    {
+        $request->validate(['file' => 'required|file|mimes:xlsx|max:5120']);
+
+        try {
+            $spreadsheet = IOFactory::load($request->file('file')->getRealPath());
+        } catch (Throwable $exception) {
+            return response()->json([
+                'message' => 'The uploaded Excel workbook could not be read.',
+                'errors' => ['file' => ['The uploaded Excel workbook could not be read.']],
+            ], 422);
+        }
+
+        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+        $headerRow = array_shift($rows) ?? [];
+        $headerIndexes = [];
+
+        foreach ($headerRow as $index => $header) {
+            $headerIndexes[$this->normalizeImportValue($header)] = $index;
+        }
+
+        $missingHeaders = collect($this->importHeaders())
+            ->reject(fn (string $header) => array_key_exists($this->normalizeImportValue($header), $headerIndexes))
+            ->values()
+            ->all();
+
+        if ($missingHeaders !== []) {
+            return response()->json([
+                'message' => 'The workbook is missing required columns.',
+                'errors' => ['file' => ['Missing columns: '.implode(', ', $missingHeaders)]],
+            ], 422);
+        }
+
+        $groups = [];
+        $errors = [];
+
+        foreach ($rows as $rowIndex => $row) {
+            $excelRow = $rowIndex + 2;
+
+            if (collect($row)->every(fn ($value) => blank($value))) {
+                continue;
+            }
+
+            $data = [];
+            foreach ($this->importHeaders() as $header) {
+                $value = $row[$headerIndexes[$this->normalizeImportValue($header)]] ?? null;
+                $data[$header] = is_string($value) ? trim($value) : $value;
+            }
+
+            $identityValidator = Validator::make($data, [
+                'Template Name' => 'required|string|max:255',
+                'Project Type' => 'required|string|max:100',
+                'Store Class' => 'required|string|max:100',
+            ]);
+
+            if ($identityValidator->fails()) {
+                foreach ($identityValidator->errors()->all() as $message) {
+                    $errors[] = "Row {$excelRow}: {$message}";
+                }
+                continue;
+            }
+
+            $identity = $this->importIdentity(
+                $data['Template Name'],
+                $data['Project Type'],
+                $data['Store Class']
+            );
+            $groups[$identity]['name'] = $data['Template Name'];
+            $groups[$identity]['project_type'] = $data['Project Type'];
+            $groups[$identity]['store_class'] = $data['Store Class'];
+            $groups[$identity]['rows'][] = ['excel_row' => $excelRow, 'data' => $data];
+        }
+
+        if ($groups === [] && $errors === []) {
+            return response()->json([
+                'message' => 'The workbook does not contain any activity rows.',
+                'errors' => ['file' => ['Add at least one activity row before importing the workbook.']],
+            ], 422);
+        }
+
+        $existingIdentities = ProjectTemplate::query()
+            ->get(['name', 'project_type', 'store_class'])
+            ->mapWithKeys(fn (ProjectTemplate $template) => [
+                $this->importIdentity($template->name, $template->project_type, $template->store_class) => true,
+            ])
+            ->all();
+
+        $importedTemplates = 0;
+        $skippedTemplates = 0;
+
+        foreach ($groups as $identity => $group) {
+            $label = "{$group['name']} ({$group['project_type']} / {$group['store_class']})";
+
+            if (isset($existingIdentities[$identity])) {
+                $skippedTemplates++;
+                $errors[] = "{$label}: skipped because this template already exists.";
+                continue;
+            }
+
+            [$activities, $groupErrors] = $this->validateImportActivities($group['rows']);
+
+            if ($groupErrors !== []) {
+                $skippedTemplates++;
+                foreach ($groupErrors as $message) {
+                    $errors[] = "{$label}: {$message}";
+                }
+                continue;
+            }
+
+            try {
+                DB::transaction(function () use ($group, $activities) {
+                    $projectTemplate = ProjectTemplate::create([
+                        'name' => $group['name'],
+                        'project_type' => $group['project_type'],
+                        'store_class' => $group['store_class'],
+                    ]);
+
+                    $this->persistActivities($projectTemplate, $activities);
+                });
+
+                $existingIdentities[$identity] = true;
+                $importedTemplates++;
+            } catch (Throwable $exception) {
+                report($exception);
+                $skippedTemplates++;
+                $errors[] = "{$label}: import failed and no rows were saved.";
+            }
+        }
+
+        return response()->json([
+            'imported_templates' => $importedTemplates,
+            'skipped_templates' => $skippedTemplates,
+            'errors' => $errors,
+        ]);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -78,7 +314,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'activities.*.department' => 'nullable|string|max:255',
             'activities.*.sub_unit' => 'nullable|string|max:255',
             'activities.*.default_duration_days' => 'required|integer|min:1',
-            'activities.*.order' => 'required|integer|min:0',
+            'activities.*.order' => 'required|numeric|min:1',
         ]);
 
         DB::transaction(function () use ($validated) {
@@ -118,7 +354,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'activities.*.department' => 'nullable|string|max:255',
             'activities.*.sub_unit' => 'nullable|string|max:255',
             'activities.*.default_duration_days' => 'required|integer|min:1',
-            'activities.*.order' => 'required|integer|min:0',
+            'activities.*.order' => 'required|numeric|min:1',
         ]);
 
         DB::transaction(function () use ($validated, $activity_template) {
@@ -297,6 +533,174 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         }
 
         return $projectTemplate->activities()->create($attributes);
+    }
+
+    private function importHeaders(): array
+    {
+        return [
+            'Template Name',
+            'Project Type',
+            'Store Class',
+            'Row Key',
+            'Parent Row Key',
+            'Activity',
+            'Milestone',
+            'Milestone Order',
+            'Asset Item',
+            'Model Specs',
+            'Quantity',
+            'Responsible',
+            'Department',
+            'Sub Unit',
+            'Duration Days',
+            'Order',
+        ];
+    }
+
+    private function normalizeImportValue(mixed $value): string
+    {
+        return mb_strtolower(trim((string) $value));
+    }
+
+    private function importIdentity(mixed $name, mixed $projectType, mixed $storeClass): string
+    {
+        return implode('|', [
+            $this->normalizeImportValue($name),
+            $this->normalizeImportValue($projectType),
+            $this->normalizeImportValue($storeClass),
+        ]);
+    }
+
+    private function validateImportActivities(array $rows): array
+    {
+        $activities = [];
+        $errors = [];
+        $rowKeys = [];
+
+        foreach ($rows as $row) {
+            $data = $row['data'];
+            $excelRow = $row['excel_row'];
+            $activity = [
+                'client_key' => $data['Row Key'],
+                'parent_client_key' => blank($data['Parent Row Key']) ? null : $data['Parent Row Key'],
+                'activity' => $data['Activity'],
+                'milestone' => blank($data['Milestone']) ? 'General' : $data['Milestone'],
+                'milestone_order' => blank($data['Milestone Order']) ? null : $data['Milestone Order'],
+                'asset_item' => blank($data['Asset Item']) ? null : $data['Asset Item'],
+                'model_specs' => blank($data['Model Specs']) ? null : $data['Model Specs'],
+                'qty' => $data['Quantity'],
+                'responsible' => blank($data['Responsible']) ? null : $data['Responsible'],
+                'department' => blank($data['Department']) ? null : $data['Department'],
+                'sub_unit' => blank($data['Sub Unit']) ? null : $data['Sub Unit'],
+                'default_duration_days' => $data['Duration Days'],
+                'order' => $data['Order'],
+            ];
+
+            $validator = Validator::make($activity, [
+                'client_key' => 'required|string|max:255',
+                'parent_client_key' => 'nullable|string|max:255',
+                'activity' => 'required|string|max:255',
+                'milestone' => 'nullable|string|max:255',
+                'milestone_order' => 'nullable|integer|min:0',
+                'asset_item' => 'nullable|string|max:255',
+                'model_specs' => 'nullable|string|max:255',
+                'qty' => 'required|integer|min:1',
+                'responsible' => 'nullable|string|max:255',
+                'department' => 'nullable|string|max:255',
+                'sub_unit' => 'nullable|string|max:255',
+                'default_duration_days' => 'required|integer|min:1',
+                'order' => 'required|numeric|min:1',
+            ], [], [
+                'client_key' => 'Row Key',
+                'parent_client_key' => 'Parent Row Key',
+                'activity' => 'Activity',
+                'milestone' => 'Milestone',
+                'milestone_order' => 'Milestone Order',
+                'asset_item' => 'Asset Item',
+                'model_specs' => 'Model Specs',
+                'qty' => 'Quantity',
+                'responsible' => 'Responsible',
+                'department' => 'Department',
+                'sub_unit' => 'Sub Unit',
+                'default_duration_days' => 'Duration Days',
+                'order' => 'Order',
+            ]);
+
+            if ($validator->fails()) {
+                foreach ($validator->errors()->all() as $message) {
+                    $errors[] = "row {$excelRow}: {$message}";
+                }
+                continue;
+            }
+
+            $normalizedKey = $this->normalizeImportValue($activity['client_key']);
+            if (isset($rowKeys[$normalizedKey])) {
+                $errors[] = "row {$excelRow}: Row Key '{$activity['client_key']}' is duplicated (first used on row {$rowKeys[$normalizedKey]}).";
+                continue;
+            }
+
+            $rowKeys[$normalizedKey] = $excelRow;
+            $activity['client_key'] = $normalizedKey;
+            $activity['parent_client_key'] = $activity['parent_client_key'] === null
+                ? null
+                : $this->normalizeImportValue($activity['parent_client_key']);
+            $activities[] = $activity;
+        }
+
+        if ($errors !== []) {
+            return [$activities, $errors];
+        }
+
+        $activitiesByKey = collect($activities)->keyBy('client_key');
+
+        foreach ($activities as $index => $activity) {
+            $parentKey = $activity['parent_client_key'];
+            if ($parentKey === null) {
+                continue;
+            }
+
+            if ($parentKey === $activity['client_key']) {
+                $errors[] = "row {$rows[$index]['excel_row']}: Parent Row Key cannot reference the same row.";
+                continue;
+            }
+
+            $parent = $activitiesByKey->get($parentKey);
+            if (! $parent) {
+                $errors[] = "row {$rows[$index]['excel_row']}: Parent Row Key '{$rows[$index]['data']['Parent Row Key']}' was not found in this template.";
+                continue;
+            }
+
+            if ($parent['parent_client_key'] !== null) {
+                $errors[] = "row {$rows[$index]['excel_row']}: only one sub-task level is supported.";
+            }
+        }
+
+        return [$activities, $errors];
+    }
+
+    private function applyImportListValidation(
+        Worksheet $sheet,
+        string $targetColumn,
+        string $listColumn,
+        int $valueCount,
+        bool $allowBlank = false
+    ): void {
+        if ($valueCount < 1) {
+            return;
+        }
+
+        $validation = new DataValidation;
+        $validation->setType(DataValidation::TYPE_LIST)
+            ->setErrorStyle(DataValidation::STYLE_STOP)
+            ->setAllowBlank($allowBlank)
+            ->setShowDropDown(false)
+            ->setShowErrorMessage(true)
+            ->setErrorTitle('Invalid value')
+            ->setError('Select a value from the list.')
+            ->setFormula1(sprintf('Lists!$%1$s$2:$%1$s$%2$d', $listColumn, $valueCount + 1))
+            ->setSqref("{$targetColumn}2:{$targetColumn}1000");
+
+        $sheet->setDataValidation("{$targetColumn}2:{$targetColumn}1000", $validation);
     }
 
     private function departmentOptions(): array

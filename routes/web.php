@@ -254,6 +254,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('stores/{store}/blueprints/{blueprint}', [\App\Http\Controllers\StoreController::class, 'destroyBlueprint'])->name('stores.blueprints.destroy');
     Route::resource('stores', \App\Http\Controllers\StoreController::class)->except(['show', 'create', 'edit']);
     Route::resource('vendors', \App\Http\Controllers\VendorController::class)->except(['show', 'create', 'edit']);
+    Route::get('activity-templates/template', [\App\Http\Controllers\ActivityTemplateController::class, 'template'])->name('activity-templates.template');
+    Route::post('activity-templates/import', [\App\Http\Controllers\ActivityTemplateController::class, 'import'])->name('activity-templates.import');
     Route::resource('activity-templates', \App\Http\Controllers\ActivityTemplateController::class)->except(['show', 'create', 'edit']);
     Route::post('reference-options', [\App\Http\Controllers\ReferenceOptionController::class, 'store'])->name('reference-options.store');
     Route::put('reference-options/{referenceOption}', [\App\Http\Controllers\ReferenceOptionController::class, 'update'])->name('reference-options.update');

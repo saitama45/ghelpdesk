@@ -29,6 +29,14 @@
                                     {{ cls.label }}
                                 </button>
                             </nav>
+                            <button
+                                v-if="hasPermission('activity_templates.create')"
+                                @click="openImportModal"
+                                class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
+                            >
+                                <ArrowUpTrayIcon class="w-4 h-4" />
+                                <span>Import Excel</span>
+                            </button>
                             <button 
                                 v-if="hasPermission('activity_templates.create')"
                                 @click="openCreateModal" 
@@ -259,7 +267,7 @@
                                                         </div>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="act.order" type="number" class="w-full text-xs border-gray-200 rounded p-1 font-mono font-bold text-gray-400 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-400 dark:border-gray-700 dark:bg-gray-900">
+                                                        <input v-model="act.order" type="number" min="1" step="0.1" @keydown.backspace="preventLastDigitBackspace" @input="ensureNumericValue(act, 'order', $event)" class="w-full text-xs border-gray-200 rounded p-1 font-mono font-bold text-gray-400 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-400 dark:border-gray-700 dark:bg-gray-900">
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <input 
@@ -285,10 +293,10 @@
                                                         </select>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="act.qty" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
+                                                        <input v-model="act.qty" type="number" min="1" @keydown.backspace="preventLastDigitBackspace" @input="ensureNumericValue(act, 'qty', $event)" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="act.default_duration_days" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
+                                                        <input v-model="act.default_duration_days" type="number" min="1" @keydown.backspace="preventLastDigitBackspace" @input="ensureNumericValue(act, 'default_duration_days', $event)" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
                                                         <span v-if="subTasksFor(act).length" class="block mt-0.5 text-[9px] font-black text-blue-400 uppercase tracking-wider">Σ {{ subTaskLeadTimeSum(act) }} days</span>
                                                     </td>
                                                     <td class="px-2 py-2">
@@ -329,7 +337,7 @@
                                                         </div>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="subTask.order" type="number" class="w-full text-xs border-gray-200 rounded p-1 font-mono font-bold text-gray-400 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-400 dark:border-gray-700 dark:bg-gray-900">
+                                                        <input v-model="subTask.order" type="number" min="1" step="0.1" @keydown.backspace="preventLastDigitBackspace" @input="ensureNumericValue(subTask, 'order', $event)" class="w-full text-xs border-gray-200 rounded p-1 font-mono font-bold text-gray-400 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-400 dark:border-gray-700 dark:bg-gray-900">
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <div class="flex items-center gap-2 pl-6">
@@ -361,10 +369,10 @@
                                                         </select>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="subTask.qty" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
+                                                        <input v-model="subTask.qty" type="number" min="1" @keydown.backspace="preventLastDigitBackspace" @input="ensureNumericValue(subTask, 'qty', $event)" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="subTask.default_duration_days" type="number" min="1" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
+                                                        <input v-model="subTask.default_duration_days" type="number" min="1" @keydown.backspace="preventLastDigitBackspace" @input="ensureNumericValue(subTask, 'default_duration_days', $event)" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <div class="flex justify-center">
@@ -404,6 +412,82 @@
                 <ChevronUpIcon class="w-5 h-5" />
             </button>
         </Modal>
+
+        <Modal :show="showImportModal" @close="closeImportModal" maxWidth="2xl">
+            <div class="p-6">
+                <div class="flex items-start justify-between border-b border-gray-200 pb-4 dark:border-gray-700">
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Import Activity Templates</h3>
+                        <p class="mt-1 text-sm text-gray-500 dark:text-gray-300">Create multiple project templates from one Excel workbook.</p>
+                    </div>
+                    <button type="button" @click="closeImportModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                        <XMarkIcon class="h-6 w-6" />
+                    </button>
+                </div>
+
+                <div class="mt-6 space-y-5">
+                    <div class="rounded-lg border border-blue-100 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/40">
+                        <h4 class="text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">Instructions</h4>
+                        <ul class="mt-2 list-disc space-y-1 pl-5 text-xs text-blue-700 dark:text-blue-300">
+                            <li>Download and use the Excel template so the column mapping remains valid.</li>
+                            <li>Repeat the template details on each activity row and use row keys to link sub-tasks.</li>
+                            <li>Existing templates with the same name, project type, and store class will be skipped.</li>
+                            <li>Valid template groups import even when another group contains errors.</li>
+                        </ul>
+                        <a
+                            :href="route('activity-templates.template')"
+                            class="mt-4 inline-flex items-center gap-2 text-xs font-black text-blue-700 underline hover:text-blue-800 dark:text-blue-300"
+                        >
+                            <ArrowDownTrayIcon class="h-4 w-4" />
+                            Download Excel Template
+                        </a>
+                    </div>
+
+                    <label class="block">
+                        <span class="sr-only">Choose Excel file</span>
+                        <input
+                            ref="importFileInput"
+                            type="file"
+                            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            @change="handleImportFileChange"
+                            class="block w-full cursor-pointer text-sm text-gray-500 file:mr-4 file:rounded-full file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100 dark:text-gray-300"
+                        >
+                    </label>
+
+                    <div
+                        v-if="importResults"
+                        class="rounded-lg p-4"
+                        :class="importResults.errors.length ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-green-50 dark:bg-green-950/30'"
+                    >
+                        <p class="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                            Imported {{ importResults.imported_templates }} template(s); skipped {{ importResults.skipped_templates }} template(s).
+                        </p>
+                        <div v-if="importResults.errors.length" class="mt-3">
+                            <p class="text-xs font-black uppercase text-amber-700 dark:text-amber-300">Import details</p>
+                            <ul class="mt-1 max-h-48 list-disc space-y-1 overflow-y-auto pl-5 text-xs text-amber-700 dark:text-amber-300">
+                                <li v-for="(error, index) in importResults.errors" :key="index">{{ error }}</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end gap-3 border-t border-gray-200 pt-5 dark:border-gray-700">
+                    <button type="button" @click="closeImportModal" class="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600">
+                        Close
+                    </button>
+                    <button
+                        type="button"
+                        @click="submitImport"
+                        :disabled="!selectedImportFile || importing"
+                        class="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        <span v-if="importing" class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                        <ArrowUpTrayIcon v-else class="h-4 w-4" />
+                        {{ importing ? 'Importing...' : 'Start Import' }}
+                    </button>
+                </div>
+            </div>
+        </Modal>
     </AppLayout>
 </template>
 
@@ -434,6 +518,8 @@ import {
     BuildingOfficeIcon,
     EllipsisVerticalIcon,
     ChevronUpIcon,
+    ArrowUpTrayIcon,
+    ArrowDownTrayIcon,
 } from '@heroicons/vue/24/outline'
 
 const props = defineProps({
@@ -552,9 +638,14 @@ const filterByClass = (className) => {
 }
 
 const showModal = ref(false)
+const showImportModal = ref(false)
 const isEditing = ref(false)
 const currentTemplate = ref(null)
 const activityInputs = ref([])
+const importFileInput = ref(null)
+const selectedImportFile = ref(null)
+const importing = ref(false)
+const importResults = ref(null)
 let clientKeySequence = 1
 
 
@@ -603,6 +694,51 @@ const openCreateModal = () => {
     form.activities = [createActivityRow()]
 
     showModal.value = true
+}
+
+const openImportModal = () => {
+    selectedImportFile.value = null
+    importResults.value = null
+    if (importFileInput.value) importFileInput.value.value = ''
+    showImportModal.value = true
+}
+
+const closeImportModal = () => {
+    if (importing.value) return
+    showImportModal.value = false
+    selectedImportFile.value = null
+    if (importFileInput.value) importFileInput.value.value = ''
+}
+
+const handleImportFileChange = (event) => {
+    selectedImportFile.value = event.target.files?.[0] || null
+    importResults.value = null
+}
+
+const submitImport = async () => {
+    if (!selectedImportFile.value || importing.value) return
+
+    importing.value = true
+    importResults.value = null
+    const payload = new FormData()
+    payload.append('file', selectedImportFile.value)
+
+    try {
+        const { data } = await window.axios.post(route('activity-templates.import'), payload, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        })
+        importResults.value = data
+
+        if (data.imported_templates > 0) {
+            showSuccess(`Imported ${data.imported_templates} activity template(s) successfully`)
+            router.reload({ only: ['templates'], preserveScroll: true })
+        }
+    } catch (error) {
+        const validationMessage = error.response?.data?.errors?.file?.[0]
+        showError(validationMessage || error.response?.data?.message || 'Activity template import failed')
+    } finally {
+        importing.value = false
+    }
 }
 
 const editTemplate = (template) => {
@@ -868,6 +1004,22 @@ watch(
 const handleSubTaskDepartmentChange = (subTask) => {
     if (!subUnitsForDepartment(subTask.department).includes(subTask.sub_unit)) {
         subTask.sub_unit = ''
+    }
+}
+
+const preventLastDigitBackspace = (event) => {
+    if (String(event.currentTarget.value).length <= 1) {
+        event.preventDefault()
+    }
+}
+
+const ensureNumericValue = (activity, field, event) => {
+    const value = event.currentTarget.value
+    const isInvalidOrder = field === 'order' && (!Number.isFinite(Number(value)) || Number(value) < 1)
+
+    if (value === '' || isInvalidOrder) {
+        event.currentTarget.value = '1'
+        activity[field] = 1
     }
 }
 
