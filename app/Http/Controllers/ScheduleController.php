@@ -2537,19 +2537,27 @@ class ScheduleController extends Controller implements HasMiddleware
             ->where('end_time', '>=', $rangeStart)
             ->get(['id', 'user_id', 'status', 'start_time', 'end_time']);
 
-        $scheduleIds = $schedules->pluck('id')->filter()->values();
-        $attendanceLogs = collect();
+        // Punches are matched per user/date, not per schedule: a day is often
+        // covered by several schedule rows (an On-site row plus a WFH row, a
+        // re-issued shift), and a punch only ever attaches to one of them. Asking
+        // each schedule for its own logs made every sibling report the day as
+        // missing even though the user had clearly timed in.
+        $loggedTypesByUserDate = [];
 
-        foreach ($scheduleIds->chunk(1000) as $scheduleIdChunk) {
-            $attendanceLogs = $attendanceLogs->concat(
-                AttendanceLog::whereIn('schedule_id', $scheduleIdChunk->all())
-                    ->notVoided()
-                    ->orderBy('log_time')
-                    ->get(['schedule_id', 'type', 'log_time'])
-            );
+        foreach ($userIds->chunk(1000) as $userIdChunk) {
+            AttendanceLog::whereIn('user_id', $userIdChunk->all())
+                ->notVoided()
+                ->whereBetween('log_time', [$rangeStart, $rangeEnd])
+                ->get(['user_id', 'type', 'log_time'])
+                ->each(function ($log) use (&$loggedTypesByUserDate) {
+                    $dateStr = $log->log_time?->copy()->timezone('Asia/Manila')->toDateString();
+
+                    if ($dateStr !== null) {
+                        $loggedTypesByUserDate[$log->user_id][$dateStr][$log->type] = true;
+                    }
+                });
         }
 
-        $logsBySchedule = $attendanceLogs->groupBy('schedule_id');
         $userScheduledDates = [];
         $userMissingLocationEntries = [];
         $userMissingActualTimeInEntries = [];
@@ -2559,10 +2567,7 @@ class ScheduleController extends Controller implements HasMiddleware
         foreach ($schedules as $s) {
             $sStart = $s->start_time->copy()->timezone('Asia/Manila');
             $sEnd = $s->end_time->copy()->timezone('Asia/Manila');
-            $scheduleLogsByDate = $logsBySchedule
-                ->get($s->id, collect())
-                ->groupBy(fn ($log) => $log->log_time?->copy()->timezone('Asia/Manila')->toDateString());
-            
+
             $curr = $sStart->copy();
             while ($curr->toDateString() <= $sEnd->toDateString()) {
                 $dateStr = $curr->toDateString();
@@ -2570,13 +2575,13 @@ class ScheduleController extends Controller implements HasMiddleware
                     $userScheduledDates[$s->user_id][$dateStr] = true;
 
                     if (!in_array($s->status, $actualTimeOptionalStatuses, true)) {
-                        $dailyLogs = $scheduleLogsByDate->get($dateStr, collect());
+                        $dailyLogs = $loggedTypesByUserDate[$s->user_id][$dateStr] ?? [];
 
-                        if (!$dailyLogs->contains(fn ($log) => $log->type === 'time_in')) {
+                        if (!isset($dailyLogs['time_in'])) {
                             $userMissingActualTimeInEntries[$s->user_id][$dateStr][$s->status] = true;
                         }
 
-                        if (!$dailyLogs->contains(fn ($log) => $log->type === 'time_out')) {
+                        if (!isset($dailyLogs['time_out'])) {
                             $userMissingActualTimeOutEntries[$s->user_id][$dateStr][$s->status] = true;
                         }
                     }

@@ -160,17 +160,11 @@ class NotificationController extends Controller
             ->where('end_time', '>=', $rangeStart)
             ->get(['id', 'user_id', 'status', 'start_time', 'end_time']);
 
-        $logsBySchedule = AttendanceLog::whereIn('schedule_id', $schedules->pluck('id')->filter()->values())
-            ->notVoided()
-            ->get(['schedule_id', 'type', 'log_time'])
-            ->groupBy('schedule_id');
-
         // Statuses where physical attendance (time in/out) is not expected.
         $optionalStatuses = ['SL', 'VL', 'Restday', 'Holiday', 'N/A'];
 
         $scheduledTodayUserIds = [];
-        $missingTimeIn = [];   // keyed "userId|date" to dedupe overlapping schedules
-        $missingTimeOut = [];
+        $expectedPunchDates = [];   // keyed "userId|date" to dedupe overlapping schedules
 
         foreach ($schedules as $s) {
             $sStartStr = $s->start_time->copy()->timezone($tz)->toDateString();
@@ -184,25 +178,49 @@ class NotificationController extends Controller
                 continue;
             }
 
-            $logsByDate = $logsBySchedule->get($s->id, collect())
-                ->groupBy(fn ($log) => $log->log_time?->copy()->timezone($tz)->toDateString());
-
             foreach ([$yesterdayStr, $todayStr] as $dateStr) {
                 if ($dateStr < $sStartStr || $dateStr > $sEndStr) {
                     continue;
                 }
 
-                $daily = $logsByDate->get($dateStr, collect());
-                $key = $s->user_id . '|' . $dateStr;
+                $expectedPunchDates[$s->user_id . '|' . $dateStr] = true;
+            }
+        }
 
-                if (!$daily->contains(fn ($log) => $log->type === 'time_in')) {
-                    $missingTimeIn[$key] = true;
-                }
+        // Punches are matched per user/date, not per schedule: a day is often
+        // covered by several schedule rows (an On-site row plus a WFH row, a
+        // re-issued shift), and a punch only ever attaches to one of them. Asking
+        // each schedule for its own logs made every sibling report the day as
+        // missing even though the user had clearly timed in.
+        $loggedTypes = [];
 
-                // Time-out is only expected once the day is over (yesterday).
-                if ($dateStr === $yesterdayStr && !$daily->contains(fn ($log) => $log->type === 'time_out')) {
-                    $missingTimeOut[$key] = true;
-                }
+        if (!empty($expectedPunchDates)) {
+            AttendanceLog::whereIn('user_id', $scopeUserIds)
+                ->notVoided()
+                ->whereBetween('log_time', [$rangeStart, $rangeEnd])
+                ->get(['user_id', 'type', 'log_time'])
+                ->each(function ($log) use (&$loggedTypes, $tz) {
+                    $dateStr = $log->log_time?->copy()->timezone($tz)->toDateString();
+
+                    if ($dateStr !== null) {
+                        $loggedTypes[$log->user_id . '|' . $dateStr][$log->type] = true;
+                    }
+                });
+        }
+
+        $missingTimeIn = [];
+        $missingTimeOut = [];
+
+        foreach (array_keys($expectedPunchDates) as $key) {
+            [, $dateStr] = explode('|', $key, 2);
+
+            if (!isset($loggedTypes[$key]['time_in'])) {
+                $missingTimeIn[$key] = true;
+            }
+
+            // Time-out is only expected once the day is over (yesterday).
+            if ($dateStr === $yesterdayStr && !isset($loggedTypes[$key]['time_out'])) {
+                $missingTimeOut[$key] = true;
             }
         }
 

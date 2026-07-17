@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AttendanceLog;
 use App\Models\Schedule;
 use App\Models\Ticket;
 use App\Models\User;
@@ -65,6 +66,41 @@ class NotificationSummaryTest extends TestCase
         $this->assertSame('No time-out yesterday: Bob Lee.', $reminders['missing_time_out']['message']);
         $this->assertSame(1, $reminders['missing_time_out']['count']);
         $this->assertStringNotContainsString($outsider->name, $response->getContent());
+    }
+
+    public function test_punch_on_one_of_several_same_day_schedules_clears_the_reminder(): void
+    {
+        $user = User::factory()->create(['name' => 'Dana Dee']);
+
+        // Yesterday is covered by two schedule rows; the punches attach to only
+        // one of them, which is all the user can do — the sibling must not
+        // report the day as missing.
+        $onSite = $this->schedule($user, '2026-07-05 08:00:00', '2026-07-05 17:00:00', 'On-site');
+        $this->schedule($user, '2026-07-05 08:00:00', '2026-07-05 17:00:00', 'WFH');
+
+        $this->attendanceLog($user, $onSite, 'time_in', '2026-07-05 08:04:00');
+        $this->attendanceLog($user, $onSite, 'time_out', '2026-07-05 17:22:00');
+
+        $reminders = collect(
+            $this->actingAs($user)->getJson(route('notifications.summary'))->assertOk()->json('reminders')
+        )->keyBy('type');
+
+        $this->assertArrayNotHasKey('missing_time_in', $reminders);
+        $this->assertArrayNotHasKey('missing_time_out', $reminders);
+    }
+
+    public function test_voided_punches_still_count_as_missing(): void
+    {
+        $user = User::factory()->create(['name' => 'Dana Dee']);
+
+        $schedule = $this->schedule($user, '2026-07-05 08:00:00', '2026-07-05 17:00:00', 'On-site');
+        $this->attendanceLog($user, $schedule, 'time_in', '2026-07-05 08:04:00', voided: true);
+
+        $reminders = collect(
+            $this->actingAs($user)->getJson(route('notifications.summary'))->assertOk()->json('reminders')
+        )->keyBy('type');
+
+        $this->assertSame('No time-in: Dana Dee (Yesterday).', $reminders['missing_time_in']['message']);
     }
 
     public function test_inactive_and_vacant_subordinates_are_excluded_from_reminders(): void
@@ -159,6 +195,22 @@ class NotificationSummaryTest extends TestCase
             'status' => $status,
             'start_time' => $start,
             'end_time' => $end,
+        ]);
+    }
+
+    private function attendanceLog(
+        User $user,
+        Schedule $schedule,
+        string $type,
+        string $logTime,
+        bool $voided = false
+    ): AttendanceLog {
+        return AttendanceLog::create([
+            'user_id' => $user->id,
+            'schedule_id' => $schedule->id,
+            'type' => $type,
+            'log_time' => Carbon::parse($logTime, 'Asia/Manila'),
+            'voided_at' => $voided ? $this->now : null,
         ]);
     }
 

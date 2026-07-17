@@ -127,23 +127,27 @@ onMounted(() => {
                 const {
                     entity_ids,
                     ticket_keys,
+                    department_id,
                     department_node_id,
                     assigned_department_only,
                     ...currentParams
                 } = ticketFilterParams();
-                
+
                 // Entity selection is never restored from storage (resets each visit).
                 delete savedFilters.entity_ids;
                 // Ticket deep links and the removed general search are never restored.
                 delete savedFilters.ticket_keys;
                 delete savedFilters.search;
-                // SO/CS is navigation state, not a preference. A normal Tickets
-                // visit must always return to the All Departments tab.
+                // The Department selection is navigation state, not a preference.
+                // A normal Tickets visit must always return to the All Departments
+                // tab. department_id must be stripped like department_node_id:
+                // replaying it would filter the results server-side while the
+                // Department control still displays "All Departments / Teams".
+                delete savedFilters.department_id;
                 delete savedFilters.department_node_id;
                 delete savedFilters.assigned_department_only;
                 if (JSON.stringify(savedFilters) !== JSON.stringify(currentParams)) {
                     if (savedFilters.status !== undefined) filterStatus.value = savedFilters.status;
-                    if (savedFilters.department_node_id !== undefined) filterNodeId.value = savedFilters.department_node_id;
                     if (savedFilters.assignee_id !== undefined) filterAssignee.value = savedFilters.assignee_id;
                     if (savedFilters.store_id !== undefined) filterStore.value = savedFilters.store_id;
                     if (savedFilters.vendor_id !== undefined) filterVendor.value = normalizeFilterValues(savedFilters.vendor_id, [], normalizeVendorFilterValue);
@@ -168,6 +172,7 @@ onMounted(() => {
             const {
                 entity_ids,
                 ticket_keys,
+                department_id,
                 department_node_id,
                 assigned_department_only,
                 ...persistedParams
@@ -525,12 +530,14 @@ const applyFilter = () => {
     };
 
     // Entity/Company selection is intentionally NOT persisted — each visit
-    // resets to the active sidebar entity (server-seeded default).
+    // resets to the active sidebar entity (server-seeded default). The same
+    // goes for the Department selection (department_id / department_node_id).
     if (!filterTicketKeys.value.length) {
         const {
             entity_ids,
             ticket_keys,
             search,
+            department_id,
             department_node_id,
             assigned_department_only,
             ...persistedParams
