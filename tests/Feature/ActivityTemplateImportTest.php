@@ -56,9 +56,17 @@ class ActivityTemplateImportTest extends TestCase
         file_put_contents($path, $response->streamedContent());
         $spreadsheet = IOFactory::load($path);
 
-        $this->assertSame($this->headers(), $spreadsheet->getSheetByName('Activity Templates')->rangeToArray('A1:P1')[0]);
+        $dataSheet = $spreadsheet->getSheetByName('Activity Templates');
+        $this->assertSame($this->headers(), $dataSheet->rangeToArray('A1:P1')[0]);
         $this->assertNotNull($spreadsheet->getSheetByName('Instructions'));
         $this->assertSame('hidden', $spreadsheet->getSheetByName('Lists')->getSheetState());
+
+        foreach (['B2', 'C2', 'E2', 'M2', 'N2'] as $cell) {
+            $this->assertSame('list', $dataSheet->getCell($cell)->getDataValidation()->getType(), "{$cell} should contain a dropdown.");
+            $this->assertTrue($dataSheet->getCell($cell)->getDataValidation()->getShowDropDown(), "{$cell} should show its dropdown arrow.");
+        }
+
+        $this->assertSame('$D$2:$D$1000', $dataSheet->getCell('E2')->getDataValidation()->getFormula1());
     }
 
     public function test_import_creates_multiple_templates_and_preserves_sub_task_hierarchy(): void

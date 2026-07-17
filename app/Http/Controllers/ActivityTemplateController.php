@@ -143,6 +143,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
 
         $this->applyImportListValidation($sheet, 'B', 'A', $projectTypes->count());
         $this->applyImportListValidation($sheet, 'C', 'B', $storeClasses->count());
+        $this->applyImportRangeListValidation($sheet, 'E', 'D');
         $this->applyImportListValidation($sheet, 'M', 'C', $departments->count(), true);
         $this->applyImportListValidation($sheet, 'N', 'D', $subUnits->count(), true);
 
@@ -685,22 +686,40 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         int $valueCount,
         bool $allowBlank = false
     ): void {
-        if ($valueCount < 1) {
-            return;
-        }
-
-        $validation = new DataValidation;
+        $lastListRow = max(2, $valueCount + 1);
+        $validation = $sheet->getCell("{$targetColumn}2")->getDataValidation();
         $validation->setType(DataValidation::TYPE_LIST)
             ->setErrorStyle(DataValidation::STYLE_STOP)
             ->setAllowBlank($allowBlank)
-            ->setShowDropDown(false)
+            ->setShowDropDown(true)
             ->setShowErrorMessage(true)
+            ->setShowInputMessage(true)
             ->setErrorTitle('Invalid value')
             ->setError('Select a value from the list.')
-            ->setFormula1(sprintf('Lists!$%1$s$2:$%1$s$%2$d', $listColumn, $valueCount + 1))
+            ->setPromptTitle('Select a value')
+            ->setPrompt('Choose an option from the dropdown list.')
+            ->setFormula1(sprintf('Lists!$%1$s$2:$%1$s$%2$d', $listColumn, $lastListRow))
             ->setSqref("{$targetColumn}2:{$targetColumn}1000");
+    }
 
-        $sheet->setDataValidation("{$targetColumn}2:{$targetColumn}1000", $validation);
+    private function applyImportRangeListValidation(
+        Worksheet $sheet,
+        string $targetColumn,
+        string $sourceColumn
+    ): void {
+        $validation = $sheet->getCell("{$targetColumn}2")->getDataValidation();
+        $validation->setType(DataValidation::TYPE_LIST)
+            ->setErrorStyle(DataValidation::STYLE_STOP)
+            ->setAllowBlank(true)
+            ->setShowDropDown(true)
+            ->setShowErrorMessage(true)
+            ->setShowInputMessage(true)
+            ->setErrorTitle('Invalid row key')
+            ->setError('Select a Row Key from the dropdown list or leave this cell blank.')
+            ->setPromptTitle('Optional parent row')
+            ->setPrompt('Choose the parent activity Row Key for sub-tasks.')
+            ->setFormula1(sprintf('$%1$s$2:$%1$s$1000', $sourceColumn))
+            ->setSqref("{$targetColumn}2:{$targetColumn}1000");
     }
 
     private function departmentOptions(): array
