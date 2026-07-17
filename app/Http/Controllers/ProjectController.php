@@ -196,8 +196,6 @@ class ProjectController extends Controller
             'assets'
         ]);
 
-        $storeClass = $project->store->class ?? 'Regular';
-
         // Manual boards not yet linked to any project — for "Attach Board" modal
         $availableBoards = \App\Models\TaskBoard::whereNull('project_id')
             ->where('board_source', 'manual')
@@ -222,8 +220,9 @@ class ProjectController extends Controller
             'boardYears'     => $this->boardYears(),
             'availableBoards' => $availableBoards,
             'taskListTargets' => $this->projectTaskBoards->monthlyTargetPreview($project),
-            'project_templates' => ProjectTemplate::whereIn('store_class', [$storeClass, 'Both'])
+            'project_templates' => ProjectTemplate::query()
                 ->withCount('activities')
+                ->orderBy('name')
                 ->get(),
         ]);
     }

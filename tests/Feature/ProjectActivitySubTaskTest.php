@@ -9,6 +9,7 @@ use App\Models\ProjectTemplate;
 use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class ProjectActivitySubTaskTest extends TestCase
@@ -23,6 +24,38 @@ class ProjectActivitySubTaskTest extends TestCase
             \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
             \Illuminate\Auth\Middleware\Authorize::class,
         ]);
+    }
+
+    public function test_project_shows_activity_templates_from_all_store_classes(): void
+    {
+        $user = User::factory()->create();
+        $project = $this->createProject('Regular Store', $user);
+
+        $regularTemplate = ProjectTemplate::create([
+            'name' => 'A Regular Template',
+            'project_type' => 'NSO',
+            'store_class' => 'Regular',
+        ]);
+        $kitchenTemplate = ProjectTemplate::create([
+            'name' => 'B Kitchen Template',
+            'project_type' => 'Renovation',
+            'store_class' => 'Kitchen',
+        ]);
+        $bothTemplate = ProjectTemplate::create([
+            'name' => 'C Universal Template',
+            'project_type' => 'Refresh',
+            'store_class' => 'Both',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('projects.show', $project))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Projects/Show')
+                ->has('project_templates', 3)
+                ->where('project_templates.0.id', $regularTemplate->id)
+                ->where('project_templates.1.id', $kitchenTemplate->id)
+                ->where('project_templates.2.id', $bothTemplate->id));
     }
 
     public function test_activity_template_persists_nested_sub_tasks(): void

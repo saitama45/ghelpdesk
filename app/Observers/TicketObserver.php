@@ -21,6 +21,16 @@ class TicketObserver
      */
     public function creating(Ticket $ticket): void
     {
+        // Every ticket must carry an owning entity: the entity-gated index
+        // (whereIn company_id) can never match NULL, so an entity-less ticket
+        // is invisible to every user. Derive it the way the key prefix does —
+        // the store's owner first, then the creator's active entity, then the
+        // TGI default — so unauthenticated pipelines (email fetch, schedulers,
+        // kiosks) can never insert an invisible ticket.
+        if (empty($ticket->company_id)) {
+            $ticket->company_id = $this->fallbackCompanyId($ticket);
+        }
+
         if (!$ticket->ticket_key) {
             $code = $this->keyCompanyCode($ticket);
             if ($code) {
@@ -47,10 +57,45 @@ class TicketObserver
     }
 
     /**
+     * The owning entity for a ticket whose creation path supplied none:
+     * the store's owning company, else the creator's active entity, else the
+     * TGI default entity, else the first company (empty table = stays null).
+     */
+    private function fallbackCompanyId(Ticket $ticket): ?int
+    {
+        if ($ticket->store_id) {
+            $storeCompanyId = Store::whereKey($ticket->store_id)->value('company_id');
+            if ($storeCompanyId) {
+                return (int) $storeCompanyId;
+            }
+        }
+
+        $activeId = \App\Support\CompanyContext::activeCompanyId();
+        if ($activeId) {
+            return $activeId;
+        }
+
+        $defaultId = Company::where('code', \App\Support\CompanyContext::DEFAULT_COMPANY_CODE)->value('id');
+        if ($defaultId) {
+            return (int) $defaultId;
+        }
+
+        return Company::query()->value('id');
+    }
+
+    /**
      * Handle the Ticket "updating" event.
      */
     public function updating(Ticket $ticket): void
     {
+        // company_id is never cleared: a NULL owner would make the ticket
+        // invisible to the entity-gated index for everyone. Any update trying
+        // to blank it keeps the previous owner instead (and thereby also keeps
+        // the ticket_key from being renumbered to EXT-*).
+        if ($ticket->isDirty('company_id') && empty($ticket->company_id) && $ticket->getOriginal('company_id')) {
+            $ticket->company_id = $ticket->getOriginal('company_id');
+        }
+
         // Repair legacy tickets that were inserted before every creation path
         // guaranteed a key. Any ordinary save/touch now assigns the next safe
         // entity key, or EXT-* when the ticket has no resolvable company.

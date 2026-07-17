@@ -224,7 +224,11 @@ class EmailTicketService
         }
 
         return DB::transaction(function () use ($message, $subject, $senderEmail, $senderName, $messageId, $user, $cleanBody, $emailBodyHash, $richBody) {
-            $company = Company::where('code', 'TBG')->first() ?? Company::first();
+            // Email tickets default to the TGI entity (same product decision as
+            // dynamic forms). 'TBG' predates the company-code cleanup and matches
+            // no row, which used to silently fall through to Company::first().
+            $company = Company::where('code', \App\Support\CompanyContext::DEFAULT_COMPANY_CODE)->first()
+                ?? Company::first();
             $companyId = $company ? $company->id : null;
             $companyCode = $company ? $company->code : 'EXT';
 

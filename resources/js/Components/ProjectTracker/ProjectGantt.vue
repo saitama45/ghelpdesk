@@ -154,7 +154,7 @@ const projectTeamMembers = computed(() => {
 const applyActivityTemplates = () => {
     if (!props.canManage) return;
     if (!props.projectTemplates || props.projectTemplates.length === 0) {
-        info('No activity templates available for this project class.');
+        info('No activity templates are available.');
         return;
     }
     showTemplateModal.value = true;
