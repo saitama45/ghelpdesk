@@ -475,6 +475,20 @@ const submitAssignSchedule = () => {
 // CC Recipients (parent ticket only — children inherit)
 const isChildTicket = computed(() => !!props.ticket.parent_id);
 const inheritedCcs = computed(() => props.ticket.parent?.ccs || []);
+const threadRequester = computed(() => {
+    const owner = isChildTicket.value ? props.ticket.parent : props.ticket;
+    if (!owner) return null;
+
+    if (owner.reporter?.email) {
+        return { name: owner.reporter.name, email: owner.reporter.email };
+    }
+
+    if (owner.sender_email) {
+        return { name: owner.sender_name || 'External Requestor', email: owner.sender_email };
+    }
+
+    return null;
+});
 const initialCcs = computed(() => (props.ticket.ccs || []).map(c => ({
     email: c.email,
     name: c.name || c.user?.name || '',
@@ -2637,7 +2651,12 @@ const linkify = (text) => {
                             </div>
 
                             <!-- Child ticket: read-only display of parent's CC list -->
-                            <div v-if="isChildTicket">
+                            <div v-if="isChildTicket" class="space-y-2">
+                                <div v-if="threadRequester" class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800 dark:bg-emerald-900/20">
+                                    <div class="text-[9px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-300">Original Requestor · Automatically Looped In</div>
+                                    <div class="mt-1 text-xs font-bold text-emerald-900 dark:text-emerald-100">{{ threadRequester.name }}</div>
+                                    <div class="text-[10px] text-emerald-700 dark:text-emerald-300">{{ threadRequester.email }}</div>
+                                </div>
                                 <div v-if="inheritedCcs.length === 0" class="text-[11px] text-gray-400 italic bg-gray-50 rounded-lg p-3 border border-dashed border-gray-200 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
                                     Parent ticket has no CC recipients.
                                 </div>
@@ -3547,6 +3566,11 @@ const linkify = (text) => {
                 </div>
 
                 <form @submit.prevent="submitChildTicket" class="space-y-4">
+                    <div v-if="threadRequester" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200">
+                        <span class="font-black uppercase tracking-wide">Requestor looped in:</span>
+                        {{ threadRequester.name }} ({{ threadRequester.email }}) will receive this child thread and its updates.
+                    </div>
+
                     <!-- Mode toggle: internal technician child vs external vendor escalation -->
                     <label
                         class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors"

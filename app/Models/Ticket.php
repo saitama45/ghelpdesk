@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 
 class Ticket extends Model
 {
@@ -153,6 +154,84 @@ class Ticket extends Model
     {
         $owner = $this->parent_id ? ($this->parent ?? static::find($this->parent_id)) : $this;
         return $owner ? $owner->ccs()->get() : collect();
+    }
+
+    /**
+     * The requestor whose concern owns this email thread. Child tickets retain
+     * their staff creator as reporter, so their customer/requestor comes from
+     * the parent ticket instead.
+     */
+    public function effectiveRequesterRecipient(): ?array
+    {
+        $owner = $this->parent_id ? $this->parent()->first() : $this;
+
+        if (!$owner) {
+            return null;
+        }
+
+        $owner->loadMissing('reporter:id,name,email');
+
+        if ($owner->reporter?->email) {
+            return [
+                'email' => strtolower(trim($owner->reporter->email)),
+                'name' => $owner->reporter->name,
+                'id' => $owner->reporter->id,
+                'role' => 'requester',
+            ];
+        }
+
+        if ($owner->sender_email) {
+            return [
+                'email' => strtolower(trim($owner->sender_email)),
+                'name' => $owner->sender_name ?: 'External User',
+                'id' => null,
+                'role' => 'requester',
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * Every email participant following this ticket thread. Parent requestors
+     * and CCs follow child tickets without changing the child's ownership.
+     */
+    public function threadEmailRecipients(): Collection
+    {
+        $this->loadMissing([
+            'assignee:id,name,email',
+            'reporter:id,name,email',
+            'vendor:id,name,email,contact_person',
+        ]);
+
+        $recipients = collect();
+        $push = function (?string $email, ?string $name, ?int $id, string $role) use ($recipients): void {
+            $email = strtolower(trim((string) $email));
+            if ($email === '') {
+                return;
+            }
+
+            $recipients->push([
+                'email' => $email,
+                'name' => $name ?: $email,
+                'id' => $id,
+                'role' => $role,
+            ]);
+        };
+
+        $push($this->assignee?->email, $this->assignee?->name, $this->assignee?->id, 'assignee');
+        $push($this->vendor?->email, $this->vendor?->contact_person ?: $this->vendor?->name, null, 'vendor');
+        $push($this->reporter?->email, $this->reporter?->name, $this->reporter?->id, 'reporter');
+
+        if ($requester = $this->effectiveRequesterRecipient()) {
+            $recipients->push($requester);
+        }
+
+        foreach ($this->effectiveCcs() as $cc) {
+            $push($cc->email, $cc->name ?: $cc->email, $cc->user_id, 'cc');
+        }
+
+        return $recipients->unique('email')->values();
     }
 
     public function histories()

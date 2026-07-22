@@ -176,7 +176,7 @@ class TicketController extends Controller
         $effectiveCompanyIds = \App\Support\CompanyContext::effectiveEntityIds($user, $selectedEntityIds, $canEntityFilter);
 
         $query = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)->with([
-            'reporter:id,name,profile_photo',
+            'reporter:id,name,email,profile_photo',
             'assignee:id,name,profile_photo,department_node_id',
             'company:id,name',
             'store:id,name', 
@@ -917,6 +917,7 @@ class TicketController extends Controller
             'store',
             'item',
             'parent.assignee:id,name,email,profile_photo',
+            'parent.reporter:id,name,email,profile_photo',
             'parent.vendor:id,name,email,contact_person',
             'scheduleStore.schedule',
             'scheduleStore.store',
@@ -1580,6 +1581,8 @@ class TicketController extends Controller
             return $childTicket;
         });
 
+        $this->notifyChildCreated($childTicket);
+
         return redirect()->back()->with('success', 'Child ticket and schedule created successfully.');
     }
 
@@ -1976,15 +1979,19 @@ class TicketController extends Controller
     }
 
     /**
-     * Apply effective CCs to a pending mail, excluding addresses already in $alreadySentTo.
-     * Returns the email addresses that were added as CCs.
+     * Apply effective CCs to a pending mail, plus the original parent requestor
+     * for child tickets. Returns the addresses that were added as CCs.
      */
     private function attachTicketCcs($pendingMail, Ticket $ticket, array $alreadySentTo = []): array
     {
-        $effective = $ticket->effectiveCcs();
         $excluded = collect($alreadySentTo)->map(fn ($e) => strtolower((string) $e))->all();
-        $ccEmails = $effective
-            ->pluck('email')
+        $ccEmails = $ticket->effectiveCcs()->pluck('email');
+
+        if ($ticket->parent_id && ($requester = $ticket->effectiveRequesterRecipient())) {
+            $ccEmails->push($requester['email']);
+        }
+
+        $ccEmails = $ccEmails
             ->filter()
             ->map(fn ($e) => strtolower($e))
             ->unique()
@@ -2426,7 +2433,9 @@ class TicketController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($validated) {
+        $createdChildren = DB::transaction(function () use ($validated) {
+            $children = collect();
+
             foreach ($validated['tickets'] as $entry) {
                 $parentTicket = Ticket::findOrFail($entry['parent_id']);
                 
@@ -2489,8 +2498,13 @@ class TicketController extends Controller
 
                 // Set parent to For Schedule
                 $parentTicket->update(['status' => 'for_schedule']);
+                $children->push($childTicket);
             }
+
+            return $children;
         });
+
+        $createdChildren->each(fn (Ticket $child) => $this->notifyChildCreated($child));
 
         return redirect()->back()->with('success', count($validated['tickets']) . ' child tickets and schedules created successfully.');
     }
@@ -2653,63 +2667,9 @@ class TicketController extends Controller
 
     private function notifyTicketCommentRecipients(Ticket $ticket, TicketComment $comment, $attachments = null): void
     {
-        $ticket->load(['reporter:id,name,email', 'assignee:id,name,email', 'vendor:id,name,email,contact_person']);
         $comment->loadMissing('user');
         $commenterId = auth()->id();
-        $recipients = collect();
-
-        if ($ticket->assignee && $ticket->assignee->email) {
-            $recipients->push([
-                'email' => strtolower($ticket->assignee->email),
-                'name' => $ticket->assignee->name,
-                'id' => $ticket->assignee->id,
-                'role' => 'assignee',
-            ]);
-        }
-
-        // Vendor-escalation children are handled by the vendor — make sure the
-        // vendor receives staff replies so the conversation stays on this thread.
-        if ($ticket->vendor && $ticket->vendor->email) {
-            $recipients->push([
-                'email' => strtolower($ticket->vendor->email),
-                'name' => $ticket->vendor->contact_person ?: $ticket->vendor->name,
-                'id' => null,
-                'role' => 'vendor',
-            ]);
-        }
-
-        if ($ticket->reporter && $ticket->reporter->email) {
-            $recipients->push([
-                'email' => strtolower($ticket->reporter->email),
-                'name' => $ticket->reporter->name,
-                'id' => $ticket->reporter->id,
-                'role' => 'requester',
-            ]);
-        }
-
-        if ($ticket->sender_email) {
-            $recipients->push([
-                'email' => strtolower($ticket->sender_email),
-                'name' => $ticket->sender_name ?? 'External User',
-                'id' => null,
-                'role' => 'requester',
-            ]);
-        }
-
-        foreach ($ticket->effectiveCcs() as $cc) {
-            if (!$cc->email) {
-                continue;
-            }
-
-            $recipients->push([
-                'email' => strtolower($cc->email),
-                'name' => $cc->name ?: $cc->email,
-                'id' => $cc->user_id,
-                'role' => 'cc',
-            ]);
-        }
-
-        $recipients = $recipients->filter(function ($recipient) use ($commenterId) {
+        $recipients = $ticket->threadEmailRecipients()->filter(function ($recipient) use ($commenterId) {
             if (empty($recipient['email'])) {
                 return false;
             }
@@ -2759,6 +2719,34 @@ class TicketController extends Controller
 
         foreach ($recipients as $recipient) {
             Mail::to($recipient['email'])->send(new TicketMergedNotification($parent, $children, $recipient['name']));
+        }
+    }
+
+    /**
+     * Notify the original parent requestor and inherited CCs that a child thread
+     * was created. Delivery failures do not roll back the child ticket.
+     */
+    private function notifyChildCreated(Ticket $ticket): void
+    {
+        $requester = $ticket->effectiveRequesterRecipient();
+
+        try {
+            if ($requester) {
+                $pending = Mail::to($requester['email']);
+                $this->attachTicketCcs($pending, $ticket, [$requester['email']]);
+                $pending->send(new NewTicketCreated($ticket, $requester['name']));
+                return;
+            }
+
+            foreach ($ticket->effectiveCcs()->unique('email') as $cc) {
+                if ($cc->email) {
+                    Mail::to($cc->email)->send(new NewTicketCreated($ticket, $cc->name ?: 'Subscriber'));
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error(
+                "ChildTicket: failed to notify requestor for {$ticket->ticket_key}: {$e->getMessage()}"
+            );
         }
     }
 

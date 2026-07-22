@@ -969,6 +969,8 @@ const openBulkChildModal = () => {
         parent_id: t.id,
         ticket_key: t.ticket_key,
         title: t.title,
+        requester_name: t.reporter?.name || t.sender_name || 'No requestor',
+        requester_email: t.reporter?.email || t.sender_email || '',
         user_id: '',
         status: 'On-site',
         start_time: startTimeStr,
@@ -2955,6 +2957,7 @@ const requesterTabs = computed(() => {
 
                     <p class="text-sm text-gray-600 bg-teal-50 p-3 rounded-lg border border-teal-100 mb-6 shrink-0 dark:text-gray-300">
                         Set individual schedules for **{{ selectedIds.length }}** parent tickets. Child tickets will be created and both parent and child will be set to "For Schedule".
+                        Each parent requestor will automatically receive the new child thread and future updates.
                     </p>
 
                     <form @submit.prevent="submitBulkChild" class="space-y-8 overflow-y-auto px-1 custom-scrollbar">
@@ -2967,6 +2970,11 @@ const requesterTabs = computed(() => {
                                     <span class="px-2 py-1 bg-teal-600 text-white text-[10px] font-black rounded uppercase shadow-sm">{{ ticketForm.ticket_key }}</span>
                                     <span class="text-sm font-bold text-gray-900 truncate max-w-[500px] dark:text-gray-100">{{ ticketForm.title }}</span>
                                 </div>
+                            </div>
+
+                            <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200">
+                                <span class="font-black uppercase tracking-wide">Requestor looped in:</span>
+                                {{ ticketForm.requester_name }}<span v-if="ticketForm.requester_email"> ({{ ticketForm.requester_email }})</span>
                             </div>
 
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -85,6 +85,10 @@ class NotificationService
     {
         $ids = collect([$ticket->assignee_id, $ticket->reporter_id]);
 
+        if ($requester = $ticket->effectiveRequesterRecipient()) {
+            $ids->push($requester['id'] ?? null);
+        }
+
         $ccUserIds = $ticket->effectiveCcs()
             ->pluck('user_id')
             ->filter();

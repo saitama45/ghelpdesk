@@ -2,13 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Mail\TicketCommentAdded;
 use App\Models\Company;
 use App\Models\Setting;
 use App\Models\Ticket;
 use App\Models\TicketComment;
+use App\Models\User;
+use App\Models\Vendor;
 use App\Services\EmailTicketService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class EmailTicketThreadingTest extends TestCase
@@ -523,6 +527,125 @@ class EmailTicketThreadingTest extends TestCase
         $this->assertSame(0, TicketComment::count());
 
         \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\ClosedTicketReplyNotification::class);
+    }
+
+    public function test_child_resolves_registered_parent_requester_without_changing_child_reporter(): void
+    {
+        $requester = User::factory()->create(['email' => 'requester@example.test']);
+        $creator = User::factory()->create(['email' => 'creator@example.test']);
+        $company = Company::firstOrFail();
+        $parent = Ticket::create([
+            'ticket_key' => 'TBG-100',
+            'title' => 'Parent concern',
+            'status' => 'open',
+            'reporter_id' => $requester->id,
+            'company_id' => $company->id,
+        ]);
+        $child = Ticket::create([
+            'ticket_key' => 'TBG-101',
+            'title' => 'Child concern',
+            'status' => 'open',
+            'reporter_id' => $creator->id,
+            'parent_id' => $parent->id,
+            'company_id' => $company->id,
+        ]);
+
+        $this->assertSame($creator->id, $child->reporter_id);
+        $this->assertSame('requester@example.test', $child->effectiveRequesterRecipient()['email']);
+    }
+
+    public function test_vendor_reply_on_child_is_forwarded_to_parent_requester_and_child_staff(): void
+    {
+        [$child, $creator, $vendor] = $this->makeVendorChild();
+        Mail::fake();
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<vendor-reply@example.test>',
+            senderEmail: $vendor->email,
+            senderName: $vendor->name,
+            subject: "Re: [{$child->ticket_key}] {$child->title}",
+            body: 'The replacement equipment will arrive tomorrow.',
+            references: [$child->source_message_id],
+        ));
+
+        Mail::assertSent(TicketCommentAdded::class, fn ($mail) => $mail->hasTo('customer@example.test'));
+        Mail::assertSent(TicketCommentAdded::class, fn ($mail) => $mail->hasTo($creator->email));
+        Mail::assertNotSent(TicketCommentAdded::class, fn ($mail) => $mail->hasTo($vendor->email));
+        $this->assertDatabaseHas('ticket_comments', [
+            'ticket_id' => $child->id,
+            'sender_email' => $vendor->email,
+        ]);
+    }
+
+    public function test_child_reply_is_not_forwarded_to_requester_who_was_already_copied_directly(): void
+    {
+        [$child, $creator, $vendor] = $this->makeVendorChild();
+        Mail::fake();
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<vendor-reply-all@example.test>',
+            senderEmail: $vendor->email,
+            senderName: $vendor->name,
+            subject: "Re: [{$child->ticket_key}] {$child->title}",
+            body: 'Reply-all update for everyone already on the thread.',
+            references: [$child->source_message_id],
+            ccRecipients: ['customer@example.test'],
+        ));
+
+        Mail::assertNotSent(TicketCommentAdded::class, fn ($mail) => $mail->hasTo('customer@example.test'));
+        Mail::assertSent(TicketCommentAdded::class, fn ($mail) => $mail->hasTo($creator->email));
+    }
+
+    public function test_parent_requester_reply_on_child_is_forwarded_to_vendor(): void
+    {
+        [$child, $creator, $vendor] = $this->makeVendorChild();
+        Mail::fake();
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<requester-child-reply@example.test>',
+            senderEmail: 'customer@example.test',
+            senderName: 'Original Customer',
+            subject: "Re: [{$child->ticket_key}] {$child->title}",
+            body: 'Please coordinate the delivery schedule directly with our branch.',
+            references: [$child->source_message_id],
+        ));
+
+        Mail::assertSent(TicketCommentAdded::class, fn ($mail) => $mail->hasTo($vendor->email));
+        Mail::assertSent(TicketCommentAdded::class, fn ($mail) => $mail->hasTo($creator->email));
+        Mail::assertNotSent(TicketCommentAdded::class, fn ($mail) => $mail->hasTo('customer@example.test'));
+    }
+
+    private function makeVendorChild(): array
+    {
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<customer-root@example.test>',
+            senderEmail: 'customer@example.test',
+            senderName: 'Original Customer',
+            subject: 'Original customer concern',
+            body: 'Please repair the affected equipment at our branch.',
+        ));
+
+        $parent = Ticket::firstOrFail();
+        $creator = User::factory()->create(['email' => 'child-creator@example.test']);
+        $vendor = Vendor::create([
+            'code' => 'VENDOR-1',
+            'name' => 'External Vendor',
+            'email' => 'vendor@example.test',
+            'is_active' => true,
+        ]);
+        $child = Ticket::create([
+            'ticket_key' => 'TBG-200',
+            'title' => 'Vendor Escalation: Original customer concern',
+            'status' => 'open',
+            'reporter_id' => $creator->id,
+            'vendor_id' => $vendor->id,
+            'parent_id' => $parent->id,
+            'company_id' => $parent->company_id,
+            'message_id' => 'ticket-tbg-200@example.test',
+            'source_message_id' => '<ticket-tbg-200@example.test>',
+        ]);
+
+        return [$child, $creator, $vendor];
     }
 }
 

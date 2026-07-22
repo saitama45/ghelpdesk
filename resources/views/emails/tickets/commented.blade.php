@@ -83,7 +83,7 @@
             </div>
             
             <div class="comment-box">
-                <div class="comment-author">{{ $comment->user ? $comment->user->name : ($ticket->sender_name ?? 'Support') }} commented:</div>
+                <div class="comment-author">{{ $comment->user ? $comment->user->name : ($comment->sender_name ?: ($ticket->sender_name ?? 'Support')) }} commented:</div>
                 <div class="comment-text">{{ $comment->comment_text }}</div>
             </div>
 

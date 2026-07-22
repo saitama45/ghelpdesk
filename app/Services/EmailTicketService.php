@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Mail\TicketCommentAdded;
 use App\Models\Company;
 use App\Models\Setting;
 use App\Models\Ticket;
@@ -11,6 +12,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Webklex\IMAP\Facades\Client;
 
@@ -336,7 +338,7 @@ class EmailTicketService
         $emailBodyHash ??= $this->emailBodyHash($cleanBody);
         $richBody ??= $this->extractRichHtmlBody($message);
 
-        return DB::transaction(function () use ($ticket, $message, $user, $senderEmail, $senderName, $cleanBody, $emailBodyHash, $messageId, $richBody) {
+        $comment = DB::transaction(function () use ($ticket, $message, $user, $senderEmail, $senderName, $cleanBody, $emailBodyHash, $messageId, $richBody) {
             // Create the comment
             $comment = TicketComment::create([
                 'ticket_id' => $ticket->id,
@@ -397,9 +399,55 @@ class EmailTicketService
                 ]);
             });
 
-            $message->setFlag('Seen');
-            return true;
+            return $comment;
         });
+
+        $this->forwardChildEmailReply($ticket, $comment, $message, $senderEmail);
+        $message->setFlag('Seen');
+
+        return true;
+    }
+
+    /**
+     * Fan an inbound child-ticket reply back out to thread participants who did
+     * not already receive it directly. Import success is never coupled to SMTP.
+     */
+    protected function forwardChildEmailReply(Ticket $ticket, TicketComment $comment, $message, string $senderEmail): void
+    {
+        if (!$ticket->parent_id) {
+            return;
+        }
+
+        $supportEmail = $this->normalizeEmailAddress(
+            Setting::get('imap_username', config('imap.accounts.default.username'))
+        );
+        $excluded = collect(array_keys($this->collectRecipientAddresses($message)))
+            ->push($this->normalizeEmailAddress($senderEmail))
+            ->push($supportEmail)
+            ->filter()
+            ->unique()
+            ->all();
+
+        $comment->loadMissing(['user', 'attachments']);
+
+        foreach ($ticket->threadEmailRecipients() as $recipient) {
+            if (in_array($recipient['email'], $excluded, true) || $this->isAutomatedAddress($recipient['email'])) {
+                continue;
+            }
+
+            try {
+                $mail = new TicketCommentAdded($ticket, $comment, $recipient['name'], $comment->attachments);
+                if ($supportEmail) {
+                    $mail->replyTo($supportEmail);
+                }
+
+                Mail::to($recipient['email'])->send($mail);
+            } catch (\Throwable $e) {
+                Log::error(
+                    "EmailTicketService: failed forwarding child reply {$comment->id} to {$recipient['email']}: {$e->getMessage()}"
+                );
+            }
+        }
     }
 
     protected function findExistingTicketForMessage($message, string $subject, string $senderEmail, ?string $emailBodyHash): ?Ticket
