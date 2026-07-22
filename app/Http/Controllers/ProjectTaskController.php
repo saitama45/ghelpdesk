@@ -37,8 +37,9 @@ class ProjectTaskController extends Controller
         }
 
         $actorId = $request->user()->id;
+        $schedule = $this->buildTemplateSchedule($activities, $project->day1_date);
 
-        [$addedCount, $reorderedCount] = DB::transaction(function () use ($project, $activities, $actorId) {
+        [$addedCount, $reorderedCount] = DB::transaction(function () use ($project, $activities, $actorId, $schedule) {
             $addedCount = 0;
             $reorderedCount = 0;
             $projectTasksByTemplateActivity = [];
@@ -48,6 +49,8 @@ class ProjectTaskController extends Controller
                 ['order', 'asc'],
                 ['id', 'asc'],
             ]) as $activity) {
+                $dates = $schedule[$activity->id] ?? null;
+
                 $task = ProjectTask::where('project_id', $project->id)
                     ->whereNull('parent_task_id')
                     ->where('name', $activity->activity)
@@ -69,16 +72,32 @@ class ProjectTaskController extends Controller
                         'status' => 'Pending',
                         'progress' => 0,
                         'order' => $activity->order,
+                        'start_date' => $dates['start'] ?? null,
+                        'end_date' => $dates['end'] ?? null,
+                        'lead_time_days' => $activity->default_duration_days,
                         'created_by' => $actorId,
                         'updated_by' => $actorId,
                     ]);
                     $addedCount++;
-                } elseif ((float) $task->order !== (float) $activity->order || (int) $task->milestone_order !== (int) $activity->milestone_order) {
-                    $task->update([
-                        'milestone_order' => $activity->milestone_order,
-                        'order' => $activity->order,
-                    ]);
-                    $reorderedCount++;
+                } else {
+                    $changedOrder = (float) $task->order !== (float) $activity->order || (int) $task->milestone_order !== (int) $activity->milestone_order;
+                    if ($changedOrder) {
+                        $reorderedCount++;
+                    }
+                    if ($dates) {
+                        $task->update([
+                            'milestone_order' => $activity->milestone_order,
+                            'order' => $activity->order,
+                            'start_date' => $dates['start'],
+                            'end_date' => $dates['end'],
+                            'lead_time_days' => $activity->default_duration_days,
+                        ]);
+                    } elseif ($changedOrder) {
+                        $task->update([
+                            'milestone_order' => $activity->milestone_order,
+                            'order' => $activity->order,
+                        ]);
+                    }
                 }
 
                 $projectTasksByTemplateActivity[$activity->id] = $task->fresh();
@@ -94,6 +113,8 @@ class ProjectTaskController extends Controller
                 if (!$parentTask) {
                     continue;
                 }
+
+                $dates = $schedule[$activity->id] ?? null;
 
                 $task = ProjectTask::where('project_id', $project->id)
                     ->where('parent_task_id', $parentTask->id)
@@ -114,16 +135,32 @@ class ProjectTaskController extends Controller
                         'status' => 'Pending',
                         'progress' => 0,
                         'order' => $activity->order,
+                        'start_date' => $dates['start'] ?? null,
+                        'end_date' => $dates['end'] ?? null,
+                        'lead_time_days' => $activity->default_duration_days,
                         'created_by' => $actorId,
                         'updated_by' => $actorId,
                     ]);
                     $addedCount++;
-                } elseif ((float) $task->order !== (float) $activity->order || (int) $task->milestone_order !== (int) $activity->milestone_order) {
-                    $task->update([
-                        'milestone_order' => $activity->milestone_order,
-                        'order' => $activity->order,
-                    ]);
-                    $reorderedCount++;
+                } else {
+                    $changedOrder = (float) $task->order !== (float) $activity->order || (int) $task->milestone_order !== (int) $activity->milestone_order;
+                    if ($changedOrder) {
+                        $reorderedCount++;
+                    }
+                    if ($dates) {
+                        $task->update([
+                            'milestone_order' => $activity->milestone_order,
+                            'order' => $activity->order,
+                            'start_date' => $dates['start'],
+                            'end_date' => $dates['end'],
+                            'lead_time_days' => $activity->default_duration_days,
+                        ]);
+                    } elseif ($changedOrder) {
+                        $task->update([
+                            'milestone_order' => $activity->milestone_order,
+                            'order' => $activity->order,
+                        ]);
+                    }
                 }
             }
 
@@ -133,15 +170,133 @@ class ProjectTaskController extends Controller
         $this->projectTaskBoards->syncProject($project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
         $this->projectTaskBoards->syncLinkedBoardItemsFromProject($project->fresh());
 
+        $scheduleNote = $project->day1_date
+            ? ''
+            : ' Set a Day 1 Date on the project to auto-schedule Start/End dates next time.';
+
         if ($addedCount > 0) {
-            return redirect()->back()->with('success', "Applied {$addedCount} activities from \"{$template->name}\" template successfully.");
+            return redirect()->back()->with('success', "Applied {$addedCount} activities from \"{$template->name}\" template successfully.{$scheduleNote}");
         }
 
         if ($reorderedCount > 0) {
-            return redirect()->back()->with('success', "Reapplied \"{$template->name}\" template sort order successfully.");
+            return redirect()->back()->with('success', "Reapplied \"{$template->name}\" template sort order successfully.{$scheduleNote}");
         }
 
-        return redirect()->back()->with('info', 'All activities from this template have already been added.');
+        if ($project->day1_date) {
+            return redirect()->back()->with('success', "Rescheduled activities from \"{$template->name}\" template using Day 1 Date " . $project->day1_date->format('M j, Y') . '.');
+        }
+
+        return redirect()->back()->with('info', 'All activities from this template have already been added.' . $scheduleNote);
+    }
+
+    /**
+     * Chain each template row's Start/End Date from the project's Day 1 Date,
+     * back-to-back in template order (milestone_order, then order): root
+     * activities first, each immediately followed by its own sub-tasks before
+     * the next root activity begins. Returns [] when no Day 1 Date is set.
+     *
+     * @return array<int, array{start: string, end: string}>
+     */
+    private function buildTemplateSchedule($activities, $day1Date): array
+    {
+        if (!$day1Date) {
+            return [];
+        }
+
+        $roots = $activities->filter(fn ($activity) => empty($activity->parent_activity_template_id))
+            ->sortBy([
+                ['milestone_order', 'asc'],
+                ['order', 'asc'],
+                ['id', 'asc'],
+            ]);
+
+        $childrenByParent = $activities->filter(fn ($activity) => !empty($activity->parent_activity_template_id))
+            ->groupBy('parent_activity_template_id');
+
+        $cursor = \Carbon\Carbon::parse($day1Date)->startOfDay();
+        $schedule = [];
+
+        foreach ($roots as $root) {
+            $cursor = $this->scheduleRow($root, $cursor, $schedule);
+
+            $children = ($childrenByParent[$root->id] ?? collect())->sortBy([
+                ['order', 'asc'],
+                ['id', 'asc'],
+            ]);
+
+            foreach ($children as $child) {
+                $cursor = $this->scheduleRow($child, $cursor, $schedule);
+            }
+        }
+
+        return $schedule;
+    }
+
+    /** Assigns $row's [start, end] from $cursor and returns the cursor advanced past it. */
+    private function scheduleRow($row, \Carbon\Carbon $cursor, array &$schedule): \Carbon\Carbon
+    {
+        $duration = max(1, (int) $row->default_duration_days);
+        $start = $cursor->copy();
+        $end = $start->copy()->addDays($duration - 1);
+
+        $schedule[$row->id] = ['start' => $start->toDateString(), 'end' => $end->toDateString()];
+
+        return $end->copy()->addDay();
+    }
+
+    /**
+     * Re-chain every task's Start/End Date in $project from its Day 1 Date, using
+     * each row's own lead_time_days — the live-Gantt counterpart of
+     * buildTemplateSchedule(). Same ordering rule: root tasks by (milestone_order,
+     * order), each immediately followed by its own sub-tasks. No-op without a
+     * Day 1 Date.
+     */
+    private function rescheduleProjectTasks(Project $project): void
+    {
+        if (!$project->day1_date) {
+            return;
+        }
+
+        $tasks = ProjectTask::where('project_id', $project->id)->get();
+
+        $roots = $tasks->filter(fn ($task) => empty($task->parent_task_id))
+            ->sortBy([
+                ['milestone_order', 'asc'],
+                ['order', 'asc'],
+                ['id', 'asc'],
+            ]);
+
+        $childrenByParent = $tasks->filter(fn ($task) => !empty($task->parent_task_id))
+            ->groupBy('parent_task_id');
+
+        $cursor = \Carbon\Carbon::parse($project->day1_date)->startOfDay();
+
+        foreach ($roots as $root) {
+            $cursor = $this->scheduleProjectTaskRow($root, $cursor);
+
+            $children = ($childrenByParent[$root->id] ?? collect())->sortBy([
+                ['order', 'asc'],
+                ['id', 'asc'],
+            ]);
+
+            foreach ($children as $child) {
+                $cursor = $this->scheduleProjectTaskRow($child, $cursor);
+            }
+        }
+    }
+
+    /** Assigns $task's [start_date, end_date] from $cursor and returns the cursor advanced past it. */
+    private function scheduleProjectTaskRow(ProjectTask $task, \Carbon\Carbon $cursor): \Carbon\Carbon
+    {
+        $duration = max(1, (int) ($task->lead_time_days ?? 1));
+        $start = $cursor->copy();
+        $end = $start->copy()->addDays($duration - 1);
+
+        if ($task->start_date?->toDateString() !== $start->toDateString() || $task->end_date?->toDateString() !== $end->toDateString()) {
+            $task->update(['start_date' => $start->toDateString(), 'end_date' => $end->toDateString()]);
+        }
+
+        return $end->copy()->addDay();
     }
 
     private function withResolvedMilestoneOrders($activities)
@@ -191,6 +346,7 @@ class ProjectTaskController extends Controller
             'progress' => 'integer|min:0|max:100',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
+            'lead_time_days' => 'nullable|integer|min:1',
             'order' => 'nullable|numeric',
         ]);
 
@@ -262,6 +418,10 @@ class ProjectTaskController extends Controller
         $validated['updated_by'] = $request->user()->id;
 
         $task = ProjectTask::create($validated);
+
+        // Inserting a row shifts everything chained after it — re-chain the whole plan.
+        $this->rescheduleProjectTasks($project);
+
         $this->projectTaskBoards->syncProject($task->project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
         $this->projectTaskBoards->syncLinkedBoardItemsFromProject($task->project);
 
@@ -293,6 +453,7 @@ class ProjectTaskController extends Controller
             'progress' => 'sometimes|integer|min:0|max:100',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
+            'lead_time_days' => 'sometimes|nullable|integer|min:1',
             'assigned_to' => 'nullable',
             'support_by' => 'nullable',
             'order' => 'sometimes|numeric',
@@ -353,10 +514,17 @@ class ProjectTaskController extends Controller
         $oldStatus = $projects_task->status;
         $oldProgress = (int) $projects_task->progress;
         $oldAssignee = $projects_task->assigned_to;
+        $oldLeadTime = $projects_task->lead_time_days;
 
         $validated['updated_by'] = $request->user()->id;
 
         $projects_task->update($validated);
+
+        // Editing the lead time re-chains every row's Start/End Date from Day 1.
+        if (array_key_exists('lead_time_days', $validated) && (int) ($validated['lead_time_days'] ?? 1) !== (int) ($oldLeadTime ?? 1)) {
+            $this->rescheduleProjectTasks($projects_task->project);
+        }
+
         $this->projectTaskBoards->syncProject($projects_task->project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
         $this->projectTaskBoards->syncLinkedBoardItemsFromProject($projects_task->project);
 
@@ -417,6 +585,8 @@ class ProjectTaskController extends Controller
         $projects_task->delete();
 
         if ($project) {
+            // Removing a row shifts everything chained after it — re-chain the whole plan.
+            $this->rescheduleProjectTasks($project);
             $this->projectTaskBoards->syncProject($project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
         }
 
@@ -502,6 +672,7 @@ class ProjectTaskController extends Controller
         }
 
         $progressChanges = [];
+        $reordered = false;
 
         foreach ($validated['tasks'] as $taskData) {
             $updates = [];
@@ -517,9 +688,11 @@ class ProjectTaskController extends Controller
             }
             if (array_key_exists('milestone_order', $taskData)) {
                 $updates['milestone_order'] = $taskData['milestone_order'];
+                $reordered = true;
             }
             if (array_key_exists('order', $taskData)) {
                 $updates['order'] = $taskData['order'];
+                $reordered = true;
             }
 
             if (empty($updates)) {
@@ -539,6 +712,13 @@ class ProjectTaskController extends Controller
                 }
             } else {
                 ProjectTask::where('id', $taskData['id'])->update($updates);
+            }
+        }
+
+        // Reordering rows shifts the whole chain — re-derive every date from Day 1.
+        if ($reordered) {
+            foreach ($projects as $project) {
+                $this->rescheduleProjectTasks($project);
             }
         }
 

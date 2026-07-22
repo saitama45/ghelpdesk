@@ -87,8 +87,18 @@ const form = useForm({
     task_progress: 0,
     start_date: '',
     end_date: '',
+    lead_time_days: 1,
     milestone_order: null,
     order: null,
+});
+
+// Progress entry defaults to a simple Done/Not-done toggle; user can switch to
+// typing an exact percentage. isTaskDone reads/writes form.task_progress so a
+// value the user never touches (e.g. an existing 45%) is left untouched.
+const progressMode = ref('done');
+const isTaskDone = computed({
+    get: () => Number(form.task_progress) >= 100,
+    set: (done) => { form.task_progress = done ? 100 : 0; },
 });
 
 // Sync status with progress in the form
@@ -171,8 +181,10 @@ const resetTaskForm = () => {
     form.task_progress = 0;
     form.start_date = '';
     form.end_date = '';
+    form.lead_time_days = 1;
     form.milestone_order = null;
     form.order = null;
+    progressMode.value = 'done';
 };
 
 const confirmApplyTemplate = async () => {
@@ -361,7 +373,9 @@ const editTask = (task) => {
     form.task_progress = task.progress;
     form.start_date = task.start_date ? task.start_date.split('T')[0] : '';
     form.end_date = task.end_date ? task.end_date.split('T')[0] : '';
+    form.lead_time_days = task.lead_time_days || 1;
     form.order = task.order;
+    progressMode.value = 'done';
 };
 
 const updateTaskField = async (task, field, value) => {
@@ -444,6 +458,11 @@ const parseLocalDate = (dateString) => {
     const datePart = dateString.split('T')[0];
     const [year, month, day] = datePart.split('-').map(Number);
     return new Date(year, month - 1, day);
+};
+
+const formatDisplayDate = (dateString) => {
+    const d = parseLocalDate(dateString);
+    return d ? d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '-';
 };
 
 const calculateDays = (start, end) => {
@@ -832,8 +851,26 @@ const isWeekend = (date) => {
                         <div v-if="form.errors.assigned_to" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.assigned_to }}</div>
                     </div>
                     <div class="md:col-span-1">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Progress</label>
-                        <input v-model="form.task_progress" type="number" min="0" max="100" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Lead Time (Days)</label>
+                        <input v-model.number="form.lead_time_days" type="number" min="1" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        <div v-if="form.errors.lead_time_days" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.lead_time_days }}</div>
+                        <p v-if="isEditing && project.day1_date" class="mt-1 ml-1 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">Saving will re-chain every row's dates from Day 1.</p>
+                        <p v-else-if="isEditing" class="mt-1 ml-1 text-[9px] font-semibold text-amber-600 dark:text-amber-400">No Day 1 Date set on this project — dates won't auto-schedule.</p>
+                    </div>
+                    <div class="md:col-span-2">
+                        <div class="flex items-center justify-between mb-1.5 ml-1">
+                            <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest dark:text-indigo-200">Progress</label>
+                            <button type="button" @click="progressMode = progressMode === 'done' ? 'manual' : 'done'"
+                                    class="text-[9px] font-bold text-indigo-500 hover:text-indigo-700 underline dark:text-indigo-300">
+                                {{ progressMode === 'done' ? 'Use %' : 'Use Yes/No' }}
+                            </button>
+                        </div>
+                        <label v-if="progressMode === 'done'"
+                               class="flex h-[38px] items-center justify-center gap-2 rounded-xl border border-slate-200 cursor-pointer dark:border-slate-700 dark:bg-slate-900">
+                            <input type="checkbox" v-model="isTaskDone" class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+                            <span class="text-xs font-bold text-slate-700 dark:text-slate-200">{{ isTaskDone ? 'Done (100%)' : 'Not done' }}</span>
+                        </label>
+                        <input v-else v-model="form.task_progress" type="number" min="0" max="100" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                         <div v-if="form.errors.progress" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.progress }}</div>
                     </div>
                     <div class="md:col-span-3">
@@ -1085,7 +1122,13 @@ const isWeekend = (date) => {
 
                 <div class="space-y-4">
                     <p class="text-sm text-slate-600 dark:text-slate-300">Select a predefined activity blueprint to apply to this project. This will automatically create the associated tasks.</p>
-                    
+                    <p v-if="project.day1_date" class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                        Start/End dates will be auto-scheduled from Day 1 Date ({{ formatDisplayDate(project.day1_date) }}) using each row's lead time.
+                    </p>
+                    <p v-else class="text-xs font-semibold text-amber-600 dark:text-amber-400">
+                        No Day 1 Date is set for this project — applied activities won't get Start/End dates. Set it under Edit Project first to auto-schedule.
+                    </p>
+
                     <div class="space-y-3 max-h-96 overflow-y-auto pr-2 custom-scrollbar">
                         <label v-for="template in projectTemplates" :key="template.id" 
                                :class="[

@@ -303,6 +303,227 @@ class ProjectActivitySubTaskTest extends TestCase
         $this->assertSame(2, ProjectTask::where('project_id', $project->id)->count());
     }
 
+    public function test_applying_template_auto_schedules_dates_from_project_day1_date(): void
+    {
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
+        $project->update(['day1_date' => '2026-08-03']);
+
+        $template = ProjectTemplate::create([
+            'name' => 'Scheduled NSO',
+            'project_type' => 'NSO',
+            'store_class' => 'Regular',
+        ]);
+
+        $parentActivity = $template->activities()->create([
+            'activity' => 'Install POS',
+            'milestone' => 'POS',
+            'qty' => 1,
+            'default_duration_days' => 2,
+            'order' => 1,
+        ]);
+
+        $template->activities()->create([
+            'parent_activity_template_id' => $parentActivity->id,
+            'activity' => 'Configure menu',
+            'milestone' => 'POS',
+            'qty' => 1,
+            'default_duration_days' => 1,
+            'order' => 1,
+        ]);
+
+        $template->activities()->create([
+            'activity' => 'Network Setup',
+            'milestone' => 'Network',
+            'qty' => 1,
+            'default_duration_days' => 3,
+            'order' => 2,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('projects.apply-templates', $project), [
+                'project_template_id' => $template->id,
+            ])
+            ->assertRedirect();
+
+        // Chain: Install POS (2026-08-03 to 08-04, 2 days) -> its sub-task
+        // Configure menu (08-05, 1 day) -> next root Network Setup (08-06 to 08-08, 3 days).
+        $installPos = ProjectTask::where('project_id', $project->id)->where('name', 'Install POS')->firstOrFail();
+        $this->assertSame('2026-08-03', $installPos->start_date->toDateString());
+        $this->assertSame('2026-08-04', $installPos->end_date->toDateString());
+
+        $configureMenu = ProjectTask::where('project_id', $project->id)->where('name', 'Configure menu')->firstOrFail();
+        $this->assertSame('2026-08-05', $configureMenu->start_date->toDateString());
+        $this->assertSame('2026-08-05', $configureMenu->end_date->toDateString());
+
+        $networkSetup = ProjectTask::where('project_id', $project->id)->where('name', 'Network Setup')->firstOrFail();
+        $this->assertSame('2026-08-06', $networkSetup->start_date->toDateString());
+        $this->assertSame('2026-08-08', $networkSetup->end_date->toDateString());
+    }
+
+    public function test_applying_template_without_day1_date_leaves_dates_null(): void
+    {
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
+        $this->assertNull($project->day1_date);
+
+        $template = ProjectTemplate::create([
+            'name' => 'Unscheduled NSO',
+            'project_type' => 'NSO',
+            'store_class' => 'Regular',
+        ]);
+
+        $template->activities()->create([
+            'activity' => 'Install POS',
+            'milestone' => 'POS',
+            'qty' => 1,
+            'default_duration_days' => 2,
+            'order' => 1,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('projects.apply-templates', $project), [
+                'project_template_id' => $template->id,
+            ])
+            ->assertRedirect();
+
+        $installPos = ProjectTask::where('project_id', $project->id)->where('name', 'Install POS')->firstOrFail();
+        $this->assertNull($installPos->start_date);
+        $this->assertNull($installPos->end_date);
+    }
+
+    public function test_editing_lead_time_reschedules_every_task_in_the_project(): void
+    {
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
+        $project->update(['day1_date' => '2026-09-01']);
+
+        $first = ProjectTask::create([
+            'project_id' => $project->id,
+            'name' => 'Install POS',
+            'category' => 'POS',
+            'status' => 'Pending',
+            'progress' => 0,
+            'lead_time_days' => 2,
+            'order' => 1,
+            'created_by' => $user->id,
+        ]);
+
+        $second = ProjectTask::create([
+            'project_id' => $project->id,
+            'name' => 'Network Setup',
+            'category' => 'Network',
+            'status' => 'Pending',
+            'progress' => 0,
+            'lead_time_days' => 3,
+            'order' => 2,
+            'created_by' => $user->id,
+        ]);
+
+        // Editing the first task's lead time should re-chain BOTH tasks.
+        $this->actingAs($user)
+            ->put(route('projects-tasks.update', $first), [
+                'name' => $first->name,
+                'category' => $first->category,
+                'status' => $first->status,
+                'lead_time_days' => 5,
+            ])
+            ->assertRedirect();
+
+        $this->assertSame('5', (string) $first->refresh()->lead_time_days);
+        $this->assertSame('2026-09-01', $first->start_date->toDateString());
+        $this->assertSame('2026-09-05', $first->end_date->toDateString());
+
+        // Second task now starts right after the first's new (longer) span.
+        $this->assertSame('2026-09-06', $second->refresh()->start_date->toDateString());
+        $this->assertSame('2026-09-08', $second->end_date->toDateString());
+    }
+
+    public function test_adding_a_task_reschedules_the_whole_project(): void
+    {
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
+        $project->update(['day1_date' => '2026-09-01']);
+
+        $first = ProjectTask::create([
+            'project_id' => $project->id,
+            'name' => 'Install POS',
+            'category' => 'POS',
+            'status' => 'Pending',
+            'progress' => 0,
+            'lead_time_days' => 2,
+            'order' => 1,
+            'created_by' => $user->id,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('projects-tasks.store'), [
+                'project_id' => $project->id,
+                'name' => 'Network Setup',
+                'category' => 'Network',
+                'status' => 'Pending',
+                'lead_time_days' => 3,
+                'order' => 2,
+            ])
+            ->assertRedirect();
+
+        $this->assertSame('2026-09-01', $first->refresh()->start_date->toDateString());
+        $this->assertSame('2026-09-02', $first->end_date->toDateString());
+
+        $newTask = ProjectTask::where('project_id', $project->id)->where('name', 'Network Setup')->firstOrFail();
+        $this->assertSame('2026-09-03', $newTask->start_date->toDateString());
+        $this->assertSame('2026-09-05', $newTask->end_date->toDateString());
+    }
+
+    public function test_deleting_a_task_reschedules_the_remaining_tasks(): void
+    {
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
+        $project->update(['day1_date' => '2026-09-01']);
+
+        $first = ProjectTask::create([
+            'project_id' => $project->id,
+            'name' => 'Install POS',
+            'category' => 'POS',
+            'status' => 'Pending',
+            'progress' => 0,
+            'lead_time_days' => 2,
+            'order' => 1,
+            'created_by' => $user->id,
+        ]);
+
+        $second = ProjectTask::create([
+            'project_id' => $project->id,
+            'name' => 'Network Setup',
+            'category' => 'Network',
+            'status' => 'Pending',
+            'progress' => 0,
+            'lead_time_days' => 3,
+            'order' => 2,
+            'created_by' => $user->id,
+        ]);
+
+        $third = ProjectTask::create([
+            'project_id' => $project->id,
+            'name' => 'Staff Training',
+            'category' => 'Training',
+            'status' => 'Pending',
+            'progress' => 0,
+            'lead_time_days' => 1,
+            'order' => 3,
+            'created_by' => $user->id,
+        ]);
+
+        $this->actingAs($user)->delete(route('projects-tasks.destroy', $second))->assertRedirect();
+
+        $this->assertSame('2026-09-01', $first->refresh()->start_date->toDateString());
+        $this->assertSame('2026-09-02', $first->end_date->toDateString());
+
+        // Staff Training now follows directly after Install POS — Network Setup's span is gone.
+        $this->assertSame('2026-09-03', $third->refresh()->start_date->toDateString());
+        $this->assertSame('2026-09-03', $third->end_date->toDateString());
+    }
+
     public function test_reapplying_template_refreshes_project_activity_sort_order(): void
     {
         $user = User::factory()->create();
@@ -361,7 +582,7 @@ class ProjectActivitySubTaskTest extends TestCase
                 'project_template_id' => $template->id,
             ])
             ->assertRedirect()
-            ->assertSessionHas('success', 'Reapplied "Sorted NSO" template sort order successfully.');
+            ->assertSessionHas('success', 'Reapplied "Sorted NSO" template sort order successfully. Set a Day 1 Date on the project to auto-schedule Start/End dates next time.');
 
         $this->assertSame(3.0, $firstTask->refresh()->order);
         $this->assertSame(1.0, $secondTask->refresh()->order);

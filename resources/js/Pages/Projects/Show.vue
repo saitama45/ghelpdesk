@@ -153,6 +153,7 @@ const editForm = useForm({
     mock_service_date: formatDateForInput(props.project.mock_service_date),
     turn_over_to_franchisee_date: formatDateForInput(props.project.turn_over_to_franchisee_date),
     target_go_live: formatDateForInput(props.project.target_go_live),
+    day1_date: formatDateForInput(props.project.day1_date),
     board_month: props.project.board_month || now.getMonth() + 1,
     board_year: props.project.board_year || now.getFullYear(),
     remarks: props.project.remarks,
@@ -293,6 +294,7 @@ const openEditModal = () => {
     editForm.mock_service_date = formatDateForInput(props.project.mock_service_date);
     editForm.turn_over_to_franchisee_date = formatDateForInput(props.project.turn_over_to_franchisee_date);
     editForm.target_go_live = formatDateForInput(props.project.target_go_live);
+    editForm.day1_date = formatDateForInput(props.project.day1_date);
     editForm.board_month = props.project.board_month || now.getMonth() + 1;
     editForm.board_year = props.project.board_year || now.getFullYear();
     editForm.remarks = props.project.remarks;
@@ -529,6 +531,12 @@ const getStatusColor = (status) => {
 
                         <!-- Dates -->
                         <div class="space-y-4">
+                            <div class="rounded-lg border border-dashed border-blue-200 bg-blue-50/50 p-3 dark:border-blue-800 dark:bg-blue-900/10">
+                                <InputLabel for="edit_day1_date" value="Day 1 Date" class="text-blue-700 dark:text-blue-300" />
+                                <TextInput id="edit_day1_date" type="date" v-model="editForm.day1_date" class="w-full" />
+                                <InputError :message="editForm.errors.day1_date" />
+                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Anchor date used to auto-schedule Start/End dates when an activity template is applied.</p>
+                            </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <InputLabel for="edit_target_go_live" value="Target Go-Live" />
@@ -863,6 +871,10 @@ const getStatusColor = (status) => {
                                 Project Timeline Milestones
                             </h3>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-12">
+                                <div class="flex flex-col">
+                                    <span class="text-sm text-gray-500 dark:text-gray-300">Day 1 Date</span>
+                                    <span class="text-lg font-bold text-blue-700">{{ formatDate(project.day1_date) }}</span>
+                                </div>
                                 <div class="flex flex-col">
                                     <span class="text-sm text-gray-500 dark:text-gray-300">Target Go-Live</span>
                                     <span class="text-lg font-bold text-blue-700">{{ formatDate(project.target_go_live) }}</span>

@@ -49,6 +49,7 @@ const form = useForm({
     mock_service_date:            '',
     turn_over_to_franchisee_date: '',
     target_go_live:               '',
+    day1_date:                    '',
     board_month: now.getMonth() + 1,
     board_year:  now.getFullYear(),
     remarks:     ''
@@ -233,6 +234,12 @@ const submit = () => {
                     <!-- Important Dates -->
                     <div>
                         <h3 class="mb-4 text-sm font-semibold text-gray-900 dark:text-gray-100">Important Dates</h3>
+                        <div class="mb-6 rounded-lg border border-dashed border-blue-200 bg-blue-50/50 p-4 dark:border-blue-800 dark:bg-blue-900/10">
+                            <label class="mb-1 block text-sm font-semibold text-blue-700 dark:text-blue-300">Day 1 Date</label>
+                            <input v-model="form.day1_date" type="date" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">When an activity template is applied, each milestone/activity/sub-task's Start and End Date is auto-scheduled from this date using the template's lead time (days).</p>
+                            <div v-if="form.errors.day1_date" class="mt-1 text-xs text-red-500">{{ form.errors.day1_date }}</div>
+                        </div>
                         <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
                             <div>
                                 <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Target Go-Live</label>
