@@ -80,7 +80,7 @@
                                 :href="menu.url"
                                 class="flex items-center px-4 py-3 hover:bg-blue-50 transition-colors group"
                                 :class="{ 'bg-blue-50': isSelected('menu', index) }"
-                                @click="closeSearch"
+                                @click.prevent="openSearchResult('menu', menu)"
                             >
                                 <div class="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-md flex items-center justify-center">
                                     <LinkIcon class="w-4 h-4" />
@@ -105,7 +105,7 @@
                                 :href="route('tickets.show', ticket.id)"
                                 class="flex items-center px-4 py-3 hover:bg-blue-50 transition-colors group"
                                 :class="{ 'bg-blue-50': isSelected('ticket', index) }"
-                                @click="closeSearch"
+                                @click.prevent="openSearchResult('ticket', ticket)"
                             >
                                 <div class="flex-shrink-0 w-8 h-8 bg-orange-100 text-orange-600 rounded-md flex items-center justify-center">
                                     <TicketIcon class="w-4 h-4" />
@@ -139,7 +139,7 @@
                                 :href="route(req.source === 'pos' ? 'pos-requests.show' : 'sap-requests.show', req.id)"
                                 class="flex items-center px-4 py-3 hover:bg-blue-50 transition-colors group"
                                 :class="{ 'bg-blue-50': isSelected('request', index) }"
-                                @click="closeSearch"
+                                @click.prevent="openSearchResult('request', req)"
                             >
                                 <div class="flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center"
                                     :class="req.source === 'pos' ? 'bg-indigo-100 text-indigo-600' : 'bg-teal-100 text-teal-600'">
@@ -179,7 +179,7 @@
                                 :href="getFormLink(form)"
                                 class="flex items-center px-4 py-3 hover:bg-blue-50 transition-colors group"
                                 :class="{ 'bg-blue-50': isSelected('form', index) }"
-                                @click="closeSearch"
+                                @click.prevent="openSearchResult('form', form)"
                             >
                                 <div class="flex-shrink-0 w-8 h-8 bg-purple-100 text-purple-600 rounded-md flex items-center justify-center">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -213,7 +213,7 @@
                                 :href="route('projects.show', project.id)"
                                 class="flex items-center px-4 py-3 hover:bg-green-50 transition-colors group"
                                 :class="{ 'bg-green-50': isSelected('project', index) }"
-                                @click="closeSearch"
+                                @click.prevent="openSearchResult('project', project)"
                             >
                                 <div class="flex-shrink-0 w-8 h-8 bg-green-100 text-green-600 rounded-md flex items-center justify-center">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -227,7 +227,9 @@
                                             {{ project.status }}
                                         </span>
                                     </div>
-                                    <p class="text-xs text-gray-500 truncate dark:text-gray-300">{{ project.store_name }}</p>
+                                    <p class="text-xs text-gray-500 truncate dark:text-gray-300">
+                                        {{ project.store_name }}<span v-if="project.company_name"> • {{ project.company_name }}</span>
+                                    </p>
                                 </div>
                             </Link>
                         </li>
@@ -245,7 +247,7 @@
                                 :href="getInventoryLink(item)"
                                 class="flex items-center px-4 py-3 hover:bg-orange-50 transition-colors group"
                                 :class="{ 'bg-orange-50': isSelected('inventory', index) }"
-                                @click="closeSearch"
+                                @click.prevent="openSearchResult('inventory', item)"
                             >
                                 <div class="flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center"
                                     :class="item.type === 'asset' ? 'bg-orange-100 text-orange-600' : 'bg-yellow-100 text-yellow-600'">
@@ -265,6 +267,7 @@
                                     <p class="text-xs text-gray-500 truncate dark:text-gray-300">
                                         <span v-if="item.type === 'asset'">{{ item.description }}</span>
                                         <span v-else>S/N: {{ item.serial_no || 'N/A' }} • {{ item.status }}</span>
+                                        <span v-if="item.company_name"> • {{ item.company_name }}</span>
                                     </p>
                                 </div>
                             </Link>
@@ -283,7 +286,7 @@
                                 :href="route('schedules.index')"
                                 class="flex items-center px-4 py-3 hover:bg-gray-50 transition-colors group dark:hover:bg-gray-700"
                                 :class="{ 'bg-gray-50': isSelected('schedule', index) }"
-                                @click="closeSearch"
+                                @click.prevent="openSearchResult('schedule', sched)"
                             >
                                 <div class="flex-shrink-0 w-8 h-8 bg-gray-100 text-gray-600 rounded-md flex items-center justify-center dark:bg-gray-800 dark:text-gray-300">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -298,7 +301,7 @@
                                         </span>
                                     </div>
                                     <p class="text-xs text-gray-500 dark:text-gray-300">
-                                        {{ formatDateRange(sched.start_time, sched.end_time) }}
+                                        {{ formatDateRange(sched.start_time, sched.end_time) }}<span v-if="sched.company_name"> • {{ sched.company_name }}</span>
                                     </p>
                                 </div>
                             </Link>
@@ -395,7 +398,7 @@
 
 <script setup>
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
-import { Link, router } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
 import {
     MagnifyingGlassIcon,
@@ -413,6 +416,9 @@ const searchInput   = ref(null);
 const selectedIndex = ref(-1);
 const activeTab     = ref('all');
 const activeSort    = ref('relevance');
+const switchingResult = ref(false);
+const page = usePage();
+const activeCompanyId = computed(() => Number(page.props.activeCompany?.id || 0));
 let debounceTimeout = null;
 
 const tabs = [
@@ -561,6 +567,46 @@ const getInventoryLink = (item) => {
     return route('assets.index');
 };
 
+const getResultUrl = (type, data) => {
+    if (type === 'menu') return data.url;
+    if (type === 'ticket') return route('tickets.show', data.id);
+    if (type === 'request') return route(data.source === 'pos' ? 'pos-requests.show' : 'sap-requests.show', data.id);
+    if (type === 'form') return getFormLink(data);
+    if (type === 'project') return route('projects.show', data.id);
+    if (type === 'inventory') return getInventoryLink(data);
+    if (type === 'schedule') return route('schedules.index');
+    if (type === 'attendance') return route('attendance.index');
+    if (type === 'user') return route('users.index', { search: data.email });
+    return null;
+};
+
+const openSearchResult = async (type, data) => {
+    if (switchingResult.value) return;
+
+    const targetUrl = getResultUrl(type, data);
+    if (!targetUrl) return;
+
+    const targetCompanyId = Number(data.company_id || 0);
+    const requiresSwitch = targetCompanyId > 0 && targetCompanyId !== activeCompanyId.value;
+
+    closeSearch();
+
+    if (!requiresSwitch) {
+        router.visit(targetUrl);
+        return;
+    }
+
+    switchingResult.value = true;
+
+    try {
+        await axios.post(route('companies.switch'), { company_id: targetCompanyId });
+        window.location.assign(targetUrl);
+    } catch (error) {
+        console.error('Unable to switch entity for the selected search result.', error);
+        switchingResult.value = false;
+    }
+};
+
 const formatDateRange = (start, end) => {
     if (!start) return '';
     const s = new Date(start).toLocaleDateString();
@@ -602,17 +648,7 @@ const isSelected = (type, index) => {
 const selectCurrentResult = () => {
     const item = allResults.value[selectedIndex.value];
     if (!item) return;
-    const { type, data } = item;
-    if (type === 'menu')       router.visit(data.url);
-    else if (type === 'ticket')     router.visit(route('tickets.show', data.id));
-    else if (type === 'request')    router.visit(route(data.source === 'pos' ? 'pos-requests.show' : 'sap-requests.show', data.id));
-    else if (type === 'form')       router.visit(getFormLink(data));
-    else if (type === 'project')    router.visit(route('projects.show', data.id));
-    else if (type === 'inventory')  router.visit(getInventoryLink(data));
-    else if (type === 'schedule')   router.visit(route('schedules.index'));
-    else if (type === 'attendance') router.visit(route('attendance.index'));
-    else if (type === 'user')       router.visit(route('users.index', { search: data.email }));
-    closeSearch();
+    openSearchResult(item.type, item.data);
 };
 
 const handleKeydown = (e) => {

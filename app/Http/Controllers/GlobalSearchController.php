@@ -14,6 +14,8 @@ use App\Models\Asset;
 use App\Models\StockIn;
 use App\Models\Schedule;
 use App\Models\AttendanceLog;
+use App\Models\Scopes\ActiveEntityScope;
+use App\Support\CompanyContext;
 use Illuminate\Support\Facades\Auth;
 
 class GlobalSearchController extends Controller
@@ -29,16 +31,18 @@ class GlobalSearchController extends Controller
             return response()->json($this->emptyResults());
         }
 
+        $entityContext = $this->entitySearchContext($user);
+
         $results = $this->emptyResults();
 
         if ($tab === 'all' || $tab === 'navigation') {
             $results['menus'] = $this->searchMenus($query, $user);
         }
         if ($tab === 'all' || $tab === 'tickets') {
-            $results['tickets'] = $this->searchTickets($query, $user, $sort);
+            $results['tickets'] = $this->searchTickets($query, $user, $sort, $entityContext);
         }
         if ($tab === 'all' || $tab === 'requests') {
-            $results['requests'] = $this->searchRequests($query, $user, $sort);
+            $results['requests'] = $this->searchRequests($query, $user, $sort, $entityContext);
         }
         if ($tab === 'all' || $tab === 'users') {
             $results['users'] = $this->searchUsers($query, $user, $sort);
@@ -47,13 +51,13 @@ class GlobalSearchController extends Controller
             $results['forms'] = $this->searchRequestTypes($query, $user, $sort);
         }
         if ($tab === 'all' || $tab === 'projects') {
-            $results['projects'] = $this->searchProjects($query, $user, $sort);
+            $results['projects'] = $this->searchProjects($query, $user, $sort, $entityContext);
         }
         if ($tab === 'all' || $tab === 'inventory') {
-            $results['inventory'] = $this->searchInventory($query, $user, $sort);
+            $results['inventory'] = $this->searchInventory($query, $user, $sort, $entityContext);
         }
         if ($tab === 'all' || $tab === 'schedules') {
-            $results['schedules'] = $this->searchSchedules($query, $user, $sort);
+            $results['schedules'] = $this->searchSchedules($query, $user, $sort, $entityContext);
         }
         if ($tab === 'all' || $tab === 'attendance') {
             $results['attendance'] = $this->searchAttendance($query, $user, $sort);
@@ -84,6 +88,46 @@ class GlobalSearchController extends Controller
             'last_modified' => $query->orderBy('updated_at', 'desc'),
             default         => $query->orderByRaw($relevanceCase, $bindings)->orderBy('created_at', 'desc'),
         };
+    }
+
+    private function entitySearchContext(User $user): array
+    {
+        $user->loadMissing('departmentReference:id,code');
+        $companies = CompanyContext::accessibleCompanies($user);
+
+        return [
+            'search_across_entities' => strcasecmp(trim((string) $user->departmentReference?->code), 'TAS') === 0,
+            'accessible_ids' => $companies->pluck('id')->map(fn ($id) => (int) $id)->values()->all(),
+            'company_names' => $companies->mapWithKeys(
+                fn ($company) => [(int) $company->id => $company->name]
+            )->all(),
+        ];
+    }
+
+    private function applyEntitySearchScope(Builder $query, array $entityContext): Builder
+    {
+        if (!$entityContext['search_across_entities']) {
+            return $query;
+        }
+
+        $query->withoutGlobalScope(ActiveEntityScope::class);
+        $companyColumn = $query->getModel()->qualifyColumn('company_id');
+
+        if (empty($entityContext['accessible_ids'])) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->whereIn($companyColumn, $entityContext['accessible_ids']);
+    }
+
+    private function entityResultFields($record, array $entityContext): array
+    {
+        $companyId = $record->company_id ? (int) $record->company_id : null;
+
+        return [
+            'company_id' => $companyId,
+            'company_name' => $companyId ? ($entityContext['company_names'][$companyId] ?? 'Unknown Entity') : null,
+        ];
     }
 
     private function searchMenus($query, $user): array
@@ -128,33 +172,24 @@ class GlobalSearchController extends Controller
         return array_slice($matched, 0, 5);
     }
 
-    private function searchTickets($query, $user, string $sort): array
+    private function searchTickets($query, $user, string $sort, array $entityContext): array
     {
         if (!$user->can('tickets.view')) {
             return [];
         }
 
-        $q = Ticket::query()->with(['assignee:id,name', 'company:id,name']);
+        $q = $this->applyEntitySearchScope(Ticket::query(), $entityContext)
+            ->with(['assignee:id,name', 'company:id,name']);
 
         if ($user->hasRole('User')) {
             $q->where('reporter_id', $user->id);
         }
 
-        $user->load('roles.companies');
-        $allowedCompanyIds = collect();
-        foreach ($user->roles as $role) {
-            if ($role->companies) {
-                $allowedCompanyIds = $allowedCompanyIds->merge($role->companies->pluck('id'));
-            }
-        }
-        if ($user->company_id) $allowedCompanyIds->push($user->company_id);
-        $allowedCompanyIds = $allowedCompanyIds->unique();
-
         if (!$user->hasRole('User')) {
-            if ($allowedCompanyIds->isEmpty()) {
+            if (empty($entityContext['accessible_ids'])) {
                 $q->whereRaw('1 = 0');
             } else {
-                $q->whereIn('company_id', $allowedCompanyIds);
+                $q->whereIn('tickets.company_id', $entityContext['accessible_ids']);
             }
         }
 
@@ -180,16 +215,18 @@ class GlobalSearchController extends Controller
                 'assignee_name' => $t->assignee?->name ?? 'Unassigned',
                 'created_at'    => $t->created_at?->toDateTimeString(),
                 'updated_at'    => $t->updated_at?->toDateTimeString(),
+                ...$this->entityResultFields($t, $entityContext),
             ])
             ->toArray();
     }
 
-    private function searchRequests($query, $user, string $sort): array
+    private function searchRequests($query, $user, string $sort, array $entityContext): array
     {
         $results = [];
 
         if ($user->can('pos_requests.view')) {
-            $posQ = PosRequest::with(['company:id,name', 'requestType:id,name', 'user:id,name', 'ticket:id,ticket_key'])
+            $posQ = $this->applyEntitySearchScope(PosRequest::query(), $entityContext)
+                ->with(['company:id,name', 'requestType:id,name', 'user:id,name', 'ticket:id,ticket_key'])
                 ->where(function ($q) use ($query) {
                     $q->where('requester_name', 'like', "%{$query}%")
                       ->orWhere('requester_email', 'like', "%{$query}%")
@@ -214,12 +251,14 @@ class GlobalSearchController extends Controller
                     'ticket_key'   => $r->ticket?->ticket_key,
                     'created_at'   => $r->created_at?->toDateTimeString(),
                     'updated_at'   => $r->updated_at?->toDateTimeString(),
+                    ...$this->entityResultFields($r, $entityContext),
                 ]);
             $results = array_merge($results, $pos->toArray());
         }
 
         if ($user->can('sap_requests.view')) {
-            $sapQ = SapRequest::with(['company:id,name', 'requestType:id,name', 'user:id,name', 'ticket:id,ticket_key'])
+            $sapQ = $this->applyEntitySearchScope(SapRequest::query(), $entityContext)
+                ->with(['company:id,name', 'requestType:id,name', 'user:id,name', 'ticket:id,ticket_key'])
                 ->where(function ($q) use ($query) {
                     $q->where('requester_name', 'like', "%{$query}%")
                       ->orWhere('requester_email', 'like', "%{$query}%")
@@ -244,6 +283,7 @@ class GlobalSearchController extends Controller
                     'ticket_key'   => $r->ticket?->ticket_key,
                     'created_at'   => $r->created_at?->toDateTimeString(),
                     'updated_at'   => $r->updated_at?->toDateTimeString(),
+                    ...$this->entityResultFields($r, $entityContext),
                 ]);
             $results = array_merge($results, $sap->toArray());
         }
@@ -304,13 +344,14 @@ class GlobalSearchController extends Controller
             ->toArray();
     }
 
-    private function searchProjects($query, $user, string $sort): array
+    private function searchProjects($query, $user, string $sort, array $entityContext): array
     {
         if (!$user->can('projects.view')) {
             return [];
         }
 
-        $q = Project::with('store:id,name')
+        $q = $this->applyEntitySearchScope(Project::query(), $entityContext)
+            ->with('store:id,name')
             ->where(function ($sub) use ($query) {
                 $sub->where('name', 'like', "%{$query}%")
                     ->orWhere('remarks', 'like', "%{$query}%")
@@ -331,11 +372,12 @@ class GlobalSearchController extends Controller
                 'store_name' => $p->store?->name ?? 'N/A',
                 'created_at' => $p->created_at?->toDateTimeString(),
                 'updated_at' => $p->updated_at?->toDateTimeString(),
+                ...$this->entityResultFields($p, $entityContext),
             ])
             ->toArray();
     }
 
-    private function searchInventory($query, $user, string $sort): array
+    private function searchInventory($query, $user, string $sort, array $entityContext): array
     {
         if (!$user->can('assets.view')) {
             return [];
@@ -344,19 +386,20 @@ class GlobalSearchController extends Controller
         $results = [];
 
         // Assets
-        $assetQ = Asset::where(function ($sub) use ($query) {
-            $sub->where('item_code', 'like', "%{$query}%")
-                ->orWhere('brand', 'like', "%{$query}%")
-                ->orWhere('model', 'like', "%{$query}%")
-                ->orWhere('description', 'like', "%{$query}%");
-        });
+        $assetQ = $this->applyEntitySearchScope(Asset::query(), $entityContext)
+            ->where(function ($sub) use ($query) {
+                $sub->where('item_code', 'like', "%{$query}%")
+                    ->orWhere('brand', 'like', "%{$query}%")
+                    ->orWhere('model', 'like', "%{$query}%")
+                    ->orWhere('description', 'like', "%{$query}%");
+            });
 
         $assetRelevance  = "CASE WHEN item_code LIKE ? THEN 0 WHEN item_code LIKE ? THEN 1 WHEN brand LIKE ? THEN 2 WHEN model LIKE ? THEN 3 ELSE 4 END";
         $assetBindings   = ["{$query}%", "%{$query}%", "%{$query}%", "%{$query}%"];
 
         $assets = $this->applySort($assetQ, $sort, $assetRelevance, $assetBindings)
             ->take(5)
-            ->get(['id', 'item_code', 'brand', 'model', 'description', 'created_at', 'updated_at'])
+            ->get(['id', 'item_code', 'brand', 'model', 'description', 'company_id', 'created_at', 'updated_at'])
             ->map(fn($a) => [
                 'id'          => $a->id,
                 'type'        => 'asset',
@@ -365,25 +408,27 @@ class GlobalSearchController extends Controller
                 'description' => $a->description,
                 'created_at'  => $a->created_at?->toDateTimeString(),
                 'updated_at'  => $a->updated_at?->toDateTimeString(),
+                ...$this->entityResultFields($a, $entityContext),
             ]);
 
         $results = array_merge($results, $assets->toArray());
 
         // Stock Ins (uses stock_ins.view permission under assets.view umbrella)
         if ($user->can('stock_ins.view')) {
-            $stockQ = StockIn::where(function ($sub) use ($query) {
-                $sub->where('dr_no', 'like', "%{$query}%")
-                    ->orWhere('vendor', 'like', "%{$query}%")
-                    ->orWhere('serial_no', 'like', "%{$query}%")
-                    ->orWhere('received_by', 'like', "%{$query}%");
-            });
+            $stockQ = $this->applyEntitySearchScope(StockIn::query(), $entityContext)
+                ->where(function ($sub) use ($query) {
+                    $sub->where('dr_no', 'like', "%{$query}%")
+                        ->orWhere('vendor', 'like', "%{$query}%")
+                        ->orWhere('serial_no', 'like', "%{$query}%")
+                        ->orWhere('received_by', 'like', "%{$query}%");
+                });
 
             $stockRelevance = "CASE WHEN dr_no LIKE ? THEN 0 WHEN dr_no LIKE ? THEN 1 WHEN vendor LIKE ? THEN 2 ELSE 3 END";
             $stockBindings  = ["{$query}%", "%{$query}%", "%{$query}%"];
 
             $stocks = $this->applySort($stockQ, $sort, $stockRelevance, $stockBindings)
                 ->take(5)
-                ->get(['id', 'dr_no', 'vendor', 'serial_no', 'received_by', 'status', 'created_at', 'updated_at'])
+                ->get(['id', 'dr_no', 'vendor', 'serial_no', 'received_by', 'status', 'company_id', 'created_at', 'updated_at'])
                 ->map(fn($s) => [
                     'id'          => $s->id,
                     'type'        => 'stock_in',
@@ -393,6 +438,7 @@ class GlobalSearchController extends Controller
                     'status'      => $s->status,
                     'created_at'  => $s->created_at?->toDateTimeString(),
                     'updated_at'  => $s->updated_at?->toDateTimeString(),
+                    ...$this->entityResultFields($s, $entityContext),
                 ]);
 
             $results = array_merge($results, $stocks->toArray());
@@ -401,13 +447,14 @@ class GlobalSearchController extends Controller
         return $results;
     }
 
-    private function searchSchedules($query, $user, string $sort): array
+    private function searchSchedules($query, $user, string $sort, array $entityContext): array
     {
         if (!$user->can('schedules.view')) {
             return [];
         }
 
-        $q = Schedule::with('user:id,name')
+        $q = $this->applyEntitySearchScope(Schedule::query(), $entityContext)
+            ->with('user:id,name')
             ->where(function ($sub) use ($query) {
                 $sub->where('status', 'like', "%{$query}%")
                     ->orWhere('remarks', 'like', "%{$query}%")
@@ -428,6 +475,7 @@ class GlobalSearchController extends Controller
                 'end_time'   => $s->end_time?->toDateTimeString(),
                 'created_at' => $s->created_at?->toDateTimeString(),
                 'updated_at' => $s->updated_at?->toDateTimeString(),
+                ...$this->entityResultFields($s, $entityContext),
             ])
             ->toArray();
     }
