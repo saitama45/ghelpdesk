@@ -264,6 +264,7 @@ Route::middleware('auth')->group(function () {
     Route::get('schedules/template', [\App\Http\Controllers\ScheduleController::class, 'template'])->name('schedules.template');
     Route::post('schedules/import', [\App\Http\Controllers\ScheduleController::class, 'import'])->name('schedules.import');
     Route::get('schedules/report-data', [\App\Http\Controllers\ScheduleController::class, 'reportData'])->name('schedules.report-data');
+    Route::get('schedules/report-dates', [\App\Http\Controllers\ScheduleController::class, 'reportDates'])->name('schedules.report-dates');
     Route::get('schedules/missing-schedules', [\App\Http\Controllers\ScheduleController::class, 'missingSchedules'])->name('schedules.missing-schedules');
     Route::get('schedules/complete-schedules', [\App\Http\Controllers\ScheduleController::class, 'completeSchedules'])->name('schedules.complete-schedules');
     Route::get('schedules/duplicates', [\App\Http\Controllers\ScheduleController::class, 'duplicates'])->name('schedules.duplicates');

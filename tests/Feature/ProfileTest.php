@@ -30,7 +30,6 @@ class ProfileTest extends TestCase
             ->from('/profile')
             ->patch('/profile', [
                 'name' => 'Test User',
-                'email' => 'test@example.com',
             ]);
 
         $response
@@ -40,27 +39,41 @@ class ProfileTest extends TestCase
         $user->refresh();
 
         $this->assertSame('Test User', $user->name);
-        $this->assertSame('test@example.com', $user->email);
-        $this->assertNull($user->email_verified_at);
+        $this->assertNotNull($user->email_verified_at);
     }
 
-    public function test_email_verification_status_is_unchanged_when_the_email_address_is_unchanged(): void
+    public function test_read_only_profile_fields_cannot_be_updated(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create([
+            'employee_id_no' => 'EMP-1001',
+            'department' => 'Information Technology',
+            'position' => 'Support Specialist',
+        ]);
+        $originalEmail = $user->email;
 
         $response = $this
             ->actingAs($user)
             ->from('/profile')
             ->patch('/profile', [
                 'name' => 'Test User',
-                'email' => $user->email,
+                'employee_id_no' => 'EMP-HACKED',
+                'email' => 'changed@example.com',
+                'department' => 'Changed Department',
+                'position' => 'Changed Position',
             ]);
 
         $response
             ->assertSessionHasNoErrors()
             ->assertRedirect('/profile');
 
-        $this->assertNotNull($user->refresh()->email_verified_at);
+        $user->refresh();
+
+        $this->assertSame('Test User', $user->name);
+        $this->assertSame('EMP-1001', $user->employee_id_no);
+        $this->assertSame($originalEmail, $user->email);
+        $this->assertSame('Information Technology', $user->department);
+        $this->assertSame('Support Specialist', $user->position);
+        $this->assertNotNull($user->email_verified_at);
     }
 
     public function test_user_can_delete_their_account(): void

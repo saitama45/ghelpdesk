@@ -180,6 +180,7 @@ watch([filterStatus, filterRole], () => {
 
 const createForm = useForm({
     name: '',
+    employee_id_no: '',
     email: '',
     password: '',
     role: '',
@@ -195,6 +196,7 @@ const createForm = useForm({
 
 const editForm = useForm({
     name: '',
+    employee_id_no: '',
     email: '',
     role: '',
     department_id: '',
@@ -283,6 +285,7 @@ const createUser = () => {
 const editUser = async (user) => {
     editingUser.value = user;
     editForm.name = user.name;
+    editForm.employee_id_no = user.employee_id_no || '';
     editForm.email = user.email;
     editForm.role = user.roles[0]?.name || '';
     editForm.department_id = user.department_id || '';
@@ -615,7 +618,7 @@ const sortRolePermissions = (permissions) => {
             <DataTable
                 title="User Management"
                 subtitle="Manage system users and their roles"
-                search-placeholder="Search users by name, email, department..."
+                search-placeholder="Search users by name, employee ID, email, department..."
                 empty-message="No users found. Create your first user to get started."
                 :search="pagination.search.value"
                 :data="pagination.data.value"
@@ -674,6 +677,7 @@ const sortRolePermissions = (permissions) => {
                 <template #header>
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">User</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Employee ID No</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Role</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Organisation</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Reports To</th>
@@ -695,6 +699,9 @@ const sortRolePermissions = (permissions) => {
                                     <div class="text-sm text-gray-500 dark:text-gray-300">{{ user.email }}</div>
                                 </div>
                             </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {{ user.employee_id_no || '-' }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             <span
@@ -803,6 +810,10 @@ const sortRolePermissions = (permissions) => {
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Name</label>
                             <input v-model="createForm.name" type="text" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Employee ID No</label>
+                            <input v-model="createForm.employee_id_no" type="text" maxlength="255" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Email</label>
@@ -923,6 +934,10 @@ const sortRolePermissions = (permissions) => {
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Name</label>
                             <input v-model="editForm.name" type="text" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Employee ID No</label>
+                            <input v-model="editForm.employee_id_no" type="text" maxlength="255" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Email</label>
@@ -1153,10 +1168,10 @@ const sortRolePermissions = (permissions) => {
                         <div class="p-4 bg-blue-50 rounded-lg border border-blue-100 dark:bg-blue-900/20 dark:border-blue-900/40">
                             <h4 class="text-xs font-bold text-blue-700 uppercase tracking-wider mb-2 dark:text-blue-300">Instructions</h4>
                             <ul class="text-xs text-blue-600 space-y-1 list-disc pl-4 dark:text-blue-300">
-                                <li>Download the template — the <strong>role</strong>, <strong>department</strong>, <strong>assigned_stores</strong> and <strong>reports_to</strong> columns have dropdowns.</li>
+                                <li>Download the template — include <strong>employee_id_no</strong> when available; the <strong>role</strong>, <strong>department</strong>, <strong>assigned_stores</strong> and <strong>reports_to</strong> columns have dropdowns.</li>
                                 <li>For <strong>assigned_stores</strong> and <strong>reports_to</strong>, pick from the dropdown and separate multiple values with a semicolon (<code>;</code>). See the header cell comments.</li>
                                 <li>New users are created with the default password <code class="font-mono font-bold">Password@123</code> — ask them to change it on first login.</li>
-                                <li>Rows whose email already exists are skipped and listed below.</li>
+                                <li>Rows whose email or Employee ID No already exists are skipped and listed below.</li>
                             </ul>
                             <div class="mt-4">
                                 <a :href="route('users.template')"

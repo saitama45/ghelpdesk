@@ -40,7 +40,7 @@ class UserController extends Controller
     {
         $query = User::query()
             ->select([
-                'id', 'name', 'email', 'department', 'org_path', 'department_id',
+                'id', 'name', 'employee_id_no', 'email', 'department', 'org_path', 'department_id',
                 'department_node_id', 'position', 'date_hired', 'is_active',
                 'is_manager', 'google_id',
             ])
@@ -53,6 +53,7 @@ class UserController extends Controller
         if ($request->filled('search')) {
             $query->where(function($q) use ($request) {
                 $q->where('name', 'like', "%{$request->search}%")
+                  ->orWhere('employee_id_no', 'like', "%{$request->search}%")
                   ->orWhere('email', 'like', "%{$request->search}%")
                   ->orWhere('department', 'like', "%{$request->search}%")
                   ->orWhere('org_path', 'like', "%{$request->search}%")
@@ -154,6 +155,7 @@ class UserController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:255',
+            'employee_id_no' => 'nullable|string|max:255|unique:users,employee_id_no',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8',
             'role' => 'required|string|exists:roles,name',
@@ -173,6 +175,7 @@ class UserController extends Controller
 
         $user = User::create([
             'name' => $request->name,
+            'employee_id_no' => $request->employee_id_no,
             'email' => $request->email,
             'password' => Hash::make($request->password),
             ...$organizationPayload,
@@ -202,6 +205,7 @@ class UserController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:255',
+            'employee_id_no' => 'nullable|string|max:255|unique:users,employee_id_no,' . $user->id,
             'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
             'role' => 'required|string|exists:roles,name',
             'department_id' => 'nullable|integer|exists:departments,id',
@@ -221,6 +225,7 @@ class UserController extends Controller
         $wasPendingGoogleRegistration = $this->isPendingGoogleRegistration($user);
 
         $user->name = $request->name;
+        $user->employee_id_no = $request->employee_id_no;
         $user->email = $request->email;
         $user->forceFill($organizationPayload);
         $user->position = $request->position;
@@ -459,7 +464,7 @@ class UserController extends Controller
         $sheet->setTitle('Import Template');
 
         $headers = [
-            'name', 'email', 'role', 'department', 'position',
+            'name', 'employee_id_no', 'email', 'role', 'department', 'position',
             'date_hired', 'is_manager', 'is_active', 'assigned_stores', 'reports_to',
         ];
         foreach ($headers as $i => $h) {
@@ -468,34 +473,35 @@ class UserController extends Controller
 
         // Example row
         $sheet->setCellValue('A2', 'Juan Dela Cruz');
-        $sheet->setCellValue('B2', 'juan.delacruz@example.com');
-        $sheet->setCellValue('C2', $roles->first() ?? 'Agent');
-        $sheet->setCellValue('D2', $departments->first() ?? '');
-        $sheet->setCellValue('E2', 'IT Technician');
-        $sheet->setCellValue('F2', Carbon::now()->format('Y-m-d'));
-        $sheet->setCellValue('G2', 'No');
-        $sheet->setCellValue('H2', 'Yes');
-        $sheet->setCellValue('I2', $stores->first()?->code ?? '');
-        $sheet->setCellValue('J2', $managers->first()?->email ?? '');
+        $sheet->setCellValue('B2', 'EMP-0001');
+        $sheet->setCellValue('C2', 'juan.delacruz@example.com');
+        $sheet->setCellValue('D2', $roles->first() ?? 'Agent');
+        $sheet->setCellValue('E2', $departments->first() ?? '');
+        $sheet->setCellValue('F2', 'IT Technician');
+        $sheet->setCellValue('G2', Carbon::now()->format('Y-m-d'));
+        $sheet->setCellValue('H2', 'No');
+        $sheet->setCellValue('I2', 'Yes');
+        $sheet->setCellValue('J2', $stores->first()?->code ?? '');
+        $sheet->setCellValue('K2', $managers->first()?->email ?? '');
 
         // Header styling
-        $sheet->getStyle('A1:J1')->getFont()->setBold(true);
-        $sheet->getStyle('A1:J1')->getFill()
+        $sheet->getStyle('A1:K1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:K1')->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setARGB('FFD9E1F2');
 
-        foreach (range(1, 10) as $colIndex) {
+        foreach (range(1, 11) as $colIndex) {
             $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($colIndex))->setAutoSize(true);
         }
 
         // Cell comments explaining the multi-value (semicolon) columns.
-        $storeComment = $sheet->getComment('I1');
+        $storeComment = $sheet->getComment('J1');
         $storeComment->getText()->createTextRun(
             "Pick a store code from the dropdown.\nTo assign several stores to one user, separate the codes with a semicolon ( ; ).\nExample:  STR-001; STR-002; STR-005"
         );
         $storeComment->setWidth('260pt')->setHeight('90pt');
 
-        $reportsComment = $sheet->getComment('J1');
+        $reportsComment = $sheet->getComment('K1');
         $reportsComment->getText()->createTextRun(
             "Pick a manager's email from the dropdown.\nTo report to several managers, separate the emails with a semicolon ( ; ).\nExample:  ana@example.com; ben@example.com"
         );
@@ -521,18 +527,18 @@ class UserController extends Controller
         };
 
         if ($roles->isNotEmpty()) {
-            $addList(sprintf('Lists!$A$2:$A$%d', $roles->count() + 1), "C2:C{$maxRow}", false);
+            $addList(sprintf('Lists!$A$2:$A$%d', $roles->count() + 1), "D2:D{$maxRow}", false);
         }
         if ($departments->isNotEmpty()) {
-            $addList(sprintf('Lists!$B$2:$B$%d', $departments->count() + 1), "D2:D{$maxRow}");
+            $addList(sprintf('Lists!$B$2:$B$%d', $departments->count() + 1), "E2:E{$maxRow}");
         }
-        $addList('Lists!$E$2:$E$3', "G2:G{$maxRow}");
         $addList('Lists!$E$2:$E$3', "H2:H{$maxRow}");
+        $addList('Lists!$E$2:$E$3', "I2:I{$maxRow}");
         if ($stores->isNotEmpty()) {
-            $addList(sprintf('Lists!$C$2:$C$%d', $stores->count() + 1), "I2:I{$maxRow}");
+            $addList(sprintf('Lists!$C$2:$C$%d', $stores->count() + 1), "J2:J{$maxRow}");
         }
         if ($managers->isNotEmpty()) {
-            $addList(sprintf('Lists!$D$2:$D$%d', $managers->count() + 1), "J2:J{$maxRow}");
+            $addList(sprintf('Lists!$D$2:$D$%d', $managers->count() + 1), "K2:K{$maxRow}");
         }
 
         $spreadsheet->setActiveSheetIndex(0);
@@ -580,6 +586,10 @@ class UserController extends Controller
         foreach (User::pluck('email') as $e) {
             $existingEmails[mb_strtolower(trim($e))] = true;
         }
+        $existingEmployeeIds = [];
+        foreach (User::whereNotNull('employee_id_no')->pluck('employee_id_no') as $employeeIdNo) {
+            $existingEmployeeIds[mb_strtolower(trim($employeeIdNo))] = true;
+        }
 
         $imported = 0;
         $errors = [];
@@ -601,11 +611,12 @@ class UserController extends Controller
             }
 
             $name = $data['name'] ?? '';
+            $employeeIdNo = $data['employee_id_no'] ?? '';
             $email = $data['email'] ?? '';
 
             $validator = Validator::make(
-                ['name' => $name ?: null, 'email' => $email ?: null],
-                ['name' => 'required|string|max:255', 'email' => 'required|email|max:255']
+                ['name' => $name ?: null, 'employee_id_no' => $employeeIdNo ?: null, 'email' => $email ?: null],
+                ['name' => 'required|string|max:255', 'employee_id_no' => 'nullable|string|max:255', 'email' => 'required|email|max:255']
             );
             if ($validator->fails()) {
                 $errors[] = "Row {$rowNum}: " . implode(', ', $validator->errors()->all());
@@ -615,6 +626,12 @@ class UserController extends Controller
             $emailKey = mb_strtolower($email);
             if (isset($existingEmails[$emailKey])) {
                 $errors[] = "Row {$rowNum}: email '{$email}' already exists — skipped.";
+                continue;
+            }
+
+            $employeeIdKey = mb_strtolower($employeeIdNo);
+            if ($employeeIdNo !== '' && isset($existingEmployeeIds[$employeeIdKey])) {
+                $errors[] = "Row {$rowNum}: employee_id_no '{$employeeIdNo}' already exists — skipped.";
                 continue;
             }
 
@@ -683,6 +700,7 @@ class UserController extends Controller
 
             $user = User::create([
                 'name' => $name,
+                'employee_id_no' => $employeeIdNo ?: null,
                 'email' => $email,
                 'password' => Hash::make(self::DEFAULT_IMPORT_PASSWORD),
                 ...$orgPayload,
@@ -706,6 +724,9 @@ class UserController extends Controller
 
             // Guard against duplicate emails within the same file.
             $existingEmails[$emailKey] = true;
+            if ($employeeIdNo !== '') {
+                $existingEmployeeIds[$employeeIdKey] = true;
+            }
             $imported++;
         }
 

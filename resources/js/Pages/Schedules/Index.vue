@@ -434,8 +434,9 @@
                             <thead class="bg-gray-100 dark:bg-gray-800">
                                 <!-- Year Headers -->
                                 <tr>
-                                    <th rowspan="2" class="px-4 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-200 bg-gray-50 z-10 sticky left-0 min-w-[100px] dark:bg-gray-900/50 dark:text-slate-300 dark:border-gray-700">Unit</th>
-                                    <th rowspan="2" class="px-4 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-200 bg-gray-50 z-10 sticky left-[100px] min-w-[150px] dark:bg-gray-900/50 dark:text-slate-300 dark:border-gray-700">Name</th>
+                                    <th rowspan="2" class="px-4 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-200 bg-gray-50 z-10 sticky left-0 min-w-[100px] dark:bg-gray-900/50 dark:text-slate-300 dark:border-gray-700">Department</th>
+                                    <th rowspan="2" class="px-4 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-200 bg-gray-50 z-10 sticky left-[100px] min-w-[130px] dark:bg-gray-900/50 dark:text-slate-300 dark:border-gray-700">Employee ID #</th>
+                                    <th rowspan="2" class="px-4 py-3 text-left text-[10px] font-black text-gray-500 uppercase tracking-widest border-r border-gray-200 bg-gray-50 z-10 sticky left-[230px] min-w-[150px] dark:bg-gray-900/50 dark:text-slate-300 dark:border-gray-700">Name</th>
                                     <th v-for="year in activePivotYears" :key="'header-' + year" :colspan="pivotStatuses.length" class="px-4 py-2 text-center text-xs font-black text-white bg-slate-700 uppercase tracking-widest border-r border-slate-600 last:border-r-0">
                                         {{ year }}
                                     </th>
@@ -452,7 +453,7 @@
                             <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                                 <!-- Loading state -->
                                 <tr v-if="isPivotLoading">
-                                    <td :colspan="2 + (activePivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center">
+                                    <td :colspan="3 + (activePivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center">
                                         <div class="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-300">
                                             <svg class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
                                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -463,21 +464,31 @@
                                     </td>
                                 </tr>
                                 <template v-else>
-                                    <tr v-for="row in pivotData" :key="row.name + row.unit" class="hover:bg-blue-50/50 transition-colors">
-                                        <td class="px-4 py-2 whitespace-nowrap text-xs font-bold text-gray-500 bg-white border-r border-gray-100 sticky left-0 z-10 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">{{ row.unit || '-' }}</td>
-                                        <td class="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-900 bg-white border-r border-gray-200 sticky left-[100px] z-10 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700">{{ row.name }}</td>
+                                    <tr v-for="row in pivotData" :key="row.user_id" class="hover:bg-blue-50/50 transition-colors">
+                                        <td class="px-4 py-2 whitespace-nowrap text-xs font-bold text-gray-500 bg-white border-r border-gray-100 sticky left-0 z-10 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">{{ row.department_code || '-' }}</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-xs font-bold text-gray-700 bg-white border-r border-gray-100 sticky left-[100px] z-10 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">{{ row.employee_id_no || '-' }}</td>
+                                        <td class="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-900 bg-white border-r border-gray-200 sticky left-[230px] z-10 dark:bg-gray-800 dark:text-gray-100 dark:border-gray-700">{{ row.name }}</td>
 
                                         <template v-for="year in activePivotYears" :key="'data-' + year">
                                             <td v-for="status in pivotStatuses" :key="row.name + year + status" class="px-2 py-2 whitespace-nowrap text-center text-xs border-r border-gray-100 last:border-r-0 dark:border-gray-700" :class="[
                                                 (row.years[year] && row.years[year][status] > 0) ? 'font-black text-blue-700' : 'font-medium text-gray-300',
                                                 status === 'Holiday' ? 'bg-red-50/30' : (status === 'Restday' ? 'bg-gray-50/30' : '')
                                             ]">
-                                                {{ (row.years[year] && row.years[year][status] > 0) ? row.years[year][status] : '-' }}
+                                                <button
+                                                    v-if="row.years[year] && row.years[year][status] > 0"
+                                                    type="button"
+                                                    class="inline-flex min-w-7 items-center justify-center rounded-md px-2 py-1 text-blue-700 underline decoration-blue-300 underline-offset-2 transition-colors hover:bg-blue-100 hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-blue-300 dark:hover:bg-blue-900/40"
+                                                    :title="`View ${status} schedule dates for ${row.name} in ${year}`"
+                                                    @click="openReportDates(row, year, status)"
+                                                >
+                                                    {{ row.years[year][status] }}
+                                                </button>
+                                                <span v-else>-</span>
                                             </td>
                                         </template>
                                     </tr>
                                     <tr v-if="pivotData.length === 0">
-                                        <td :colspan="2 + (activePivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center text-sm text-gray-500 italic dark:text-gray-300">
+                                        <td :colspan="3 + (activePivotYears.length * pivotStatuses.length)" class="px-6 py-12 text-center text-sm text-gray-500 italic dark:text-gray-300">
                                             No schedule data found for the reporting period.
                                         </td>
                                     </tr>
@@ -728,6 +739,63 @@
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                             </button>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Report Schedule Dates Modal -->
+        <div v-if="showReportDatesModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex min-h-screen items-center justify-center px-4 py-6">
+                <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" @click="closeReportDatesModal"></div>
+                <div class="relative w-full max-w-3xl overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800">
+                    <div class="flex items-start justify-between border-b border-gray-100 bg-gray-50 px-6 py-5 dark:border-gray-700 dark:bg-gray-900/50">
+                        <div>
+                            <h3 class="text-lg font-black text-gray-900 dark:text-gray-100">Schedule Dates</h3>
+                            <p class="mt-1 text-sm font-semibold text-gray-600 dark:text-gray-300">
+                                {{ reportDatesContext.name }}
+                                <span class="text-gray-400">•</span>
+                                {{ reportDatesContext.employeeId || 'No Employee ID' }}
+                            </p>
+                            <p class="mt-1 text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-300">
+                                {{ reportDatesContext.departmentCode || 'No Department' }} • {{ reportDatesContext.status }} • {{ reportDatesContext.year }}
+                            </p>
+                        </div>
+                        <button type="button" class="rounded-xl p-2 text-gray-400 transition-colors hover:bg-white hover:text-gray-600 dark:hover:bg-gray-700" @click="closeReportDatesModal">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+
+                    <div class="max-h-[65vh] overflow-y-auto p-6">
+                        <div v-if="isReportDatesLoading" class="flex items-center justify-center gap-2 py-12 text-sm font-semibold text-gray-500 dark:text-gray-300">
+                            <span class="h-5 w-5 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></span>
+                            Loading schedule dates...
+                        </div>
+                        <div v-else-if="reportDatesError" class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                            {{ reportDatesError }}
+                        </div>
+                        <div v-else-if="reportDateEntries.length === 0" class="py-12 text-center text-sm italic text-gray-500 dark:text-gray-300">
+                            No schedule dates found.
+                        </div>
+                        <div v-else class="space-y-3">
+                            <div v-for="entry in reportDateEntries" :key="`${entry.schedule_id}-${entry.date}`" class="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <div class="text-sm font-black text-gray-900 dark:text-gray-100">{{ formatReportScheduleDate(entry.date) }}</div>
+                                        <div class="mt-1 text-xs font-semibold text-gray-500 dark:text-gray-300">Schedule #{{ entry.schedule_id }}</div>
+                                    </div>
+                                    <div class="text-left sm:text-right">
+                                        <div class="text-sm font-bold text-blue-700 dark:text-blue-300">{{ entry.start_time }} – {{ entry.end_time }}</div>
+                                        <div class="mt-1 text-xs text-gray-500 dark:text-gray-300">{{ formatReportStores(entry.stores) }}</div>
+                                    </div>
+                                </div>
+                                <p v-if="entry.remarks" class="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-600 dark:border-gray-700 dark:text-gray-300">{{ entry.remarks }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end border-t border-gray-100 bg-gray-50 px-6 py-4 dark:border-gray-700 dark:bg-gray-900/50">
+                        <button type="button" class="rounded-xl px-5 py-2.5 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700" @click="closeReportDatesModal">Close</button>
                     </div>
                 </div>
             </div>
@@ -1823,6 +1891,17 @@ const calendarSchedules = computed(() => {
 // Pivot report data — fetched on demand when the user opens the Report tab
 const pivotData = ref([])
 const isPivotLoading = ref(false)
+const showReportDatesModal = ref(false)
+const isReportDatesLoading = ref(false)
+const reportDateEntries = ref([])
+const reportDatesError = ref('')
+const reportDatesContext = reactive({
+    name: '',
+    employeeId: '',
+    departmentCode: '',
+    year: null,
+    status: '',
+})
 
 // Resolves filterNodeId into the right department_id / department_node_id params
 const deptFilterParams = computed(() => {
@@ -1855,6 +1934,66 @@ const fetchPivotData = async () => {
     } finally {
         isPivotLoading.value = false
     }
+}
+
+const formatReportScheduleDate = (value) => {
+    if (!value) return '-'
+    const [year, month, day] = value.split('-').map(Number)
+    const date = new Date(year, month - 1, day)
+
+    return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+    })
+}
+
+const formatReportStores = (stores = []) => {
+    const labels = stores.map(store => store.code || store.name).filter(Boolean)
+    return labels.length ? labels.join(', ') : 'No assigned store'
+}
+
+const openReportDates = async (row, year, status) => {
+    reportDatesContext.name = row.name
+    reportDatesContext.employeeId = row.employee_id_no || ''
+    reportDatesContext.departmentCode = row.department_code || ''
+    reportDatesContext.year = year
+    reportDatesContext.status = status
+    reportDateEntries.value = []
+    reportDatesError.value = ''
+    showReportDatesModal.value = true
+    isReportDatesLoading.value = true
+
+    try {
+        const params = new URLSearchParams({
+            user_id: row.user_id,
+            year,
+            status,
+        })
+        if (filterSubUnit.value) params.set('sub_unit', filterSubUnit.value)
+        if (filterStore.value) params.set('store_id', filterStore.value)
+        if (deptFilterParams.value.department_id) params.set('department_id', deptFilterParams.value.department_id)
+        if (deptFilterParams.value.department_node_id) params.set('department_node_id', deptFilterParams.value.department_node_id)
+
+        const response = await fetch(`/schedules/report-dates?${params}`, {
+            headers: { Accept: 'application/json' },
+        })
+        if (!response.ok) throw new Error('Unable to load the schedule dates.')
+
+        const result = await response.json()
+        reportDateEntries.value = result.entries || []
+    } catch (error) {
+        reportDatesError.value = error.message || 'Unable to load the schedule dates.'
+    } finally {
+        isReportDatesLoading.value = false
+    }
+}
+
+const closeReportDatesModal = () => {
+    showReportDatesModal.value = false
+    reportDateEntries.value = []
+    reportDatesError.value = ''
 }
 
 // Missing schedules data
@@ -1954,7 +2093,8 @@ const switchView = (view) => {
 
 const handleKeydown = (e) => {
     if (e.key === 'Escape') {
-        if (showScheduleRequestDecisionModal.value) closeScheduleRequestDecision()
+        if (showReportDatesModal.value) closeReportDatesModal()
+        else if (showScheduleRequestDecisionModal.value) closeScheduleRequestDecision()
         else if (showImportModal.value) closeImportModal()
         else if (showDuplicateModal.value) closeDuplicateModal()
         else if (showModal.value) closeModal()

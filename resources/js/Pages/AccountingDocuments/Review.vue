@@ -145,14 +145,32 @@
                         <!-- Event log -->
                         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 dark:bg-gray-800 dark:border-gray-700">
                             <h2 class="text-sm font-bold text-gray-700 uppercase tracking-wider mb-3 dark:text-gray-200">Activity</h2>
-                            <ul class="space-y-2">
-                                <li v-for="event in review.events" :key="event.id" class="text-sm text-gray-600 dark:text-gray-300">
-                                    <span class="font-semibold capitalize">{{ event.event.replaceAll('_', ' ') }}</span>
-                                    <span v-if="event.user"> by {{ event.user.name }}</span>
-                                    <span class="text-xs text-gray-400"> · {{ formatDateTime(event.created_at) }}</span>
-                                    <p v-if="event.remarks" class="text-xs text-gray-500 mt-0.5 dark:text-gray-400">{{ event.remarks }}</p>
+                            <ol>
+                                <li v-for="(event, i) in review.events" :key="event.id" class="relative pb-6 pl-10 last:pb-0">
+                                    <span v-if="i !== review.events.length - 1"
+                                        class="absolute left-4 top-8 -ml-px h-[calc(100%-2rem)] w-0.5 bg-gray-200 dark:bg-gray-700" aria-hidden="true"></span>
+                                    <span class="absolute left-0 top-0 flex h-8 w-8 items-center justify-center rounded-full"
+                                        :class="eventIconWrapClass(event)">
+                                        <svg v-if="eventIconType(event) === 'check'" class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        <svg v-else-if="eventIconType(event) === 'warning'" class="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l6.28 11.164c.75 1.334-.213 2.987-1.743 2.987H3.72c-1.53 0-2.493-1.653-1.743-2.987L8.257 3.1zM11 14a1 1 0 11-2 0 1 1 0 012 0zm-.25-6.75a.75.75 0 00-1.5 0v3.5a.75.75 0 001.5 0v-3.5z" clip-rule="evenodd" />
+                                        </svg>
+                                        <svg v-else class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </span>
+                                    <div>
+                                        <p class="text-sm font-semibold text-gray-800 capitalize dark:text-gray-100">{{ event.event.replaceAll('_', ' ') }}</p>
+                                        <p class="text-xs text-gray-400">
+                                            <span v-if="event.user">{{ event.user.name }} · </span>{{ formatDateTime(event.created_at) }}
+                                        </p>
+                                        <p v-if="event.remarks" class="text-xs text-gray-500 mt-0.5 dark:text-gray-400">{{ event.remarks }}</p>
+                                    </div>
                                 </li>
-                            </ul>
+                                <li v-if="!review.events.length" class="text-sm text-gray-400">No activity yet.</li>
+                            </ol>
                         </div>
                     </div>
                 </div>
@@ -305,6 +323,21 @@ const confidenceClass = (value) => {
     if (value >= 0.75) return 'bg-yellow-100 text-yellow-800'
     return 'bg-red-100 text-red-800'
 }
+
+// Once the review is fully approved, the whole trail reads as done (green) —
+// otherwise only the approval itself is green, failures/returns warn, rest is neutral.
+const eventIconType = (event) => {
+    if (props.review.status === 'approved') return 'check'
+    if (['rejected', 'returned', 'callback_failed'].includes(event.event)) return 'warning'
+    if (event.event === 'approved') return 'check'
+    return 'clock'
+}
+
+const eventIconWrapClass = (event) => ({
+    check: 'bg-emerald-500',
+    warning: 'bg-amber-50 dark:bg-amber-900/30',
+    clock: 'bg-gray-100 dark:bg-gray-700',
+}[eventIconType(event)])
 
 const statusClass = (status) => ({
     pending: 'bg-blue-100 text-blue-800',

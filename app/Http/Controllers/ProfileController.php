@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ProfileUpdateRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Inertia;
@@ -15,27 +16,12 @@ class ProfileController extends Controller
         ]);
     }
 
-    public function update(Request $request)
+    public function update(ProfileUpdateRequest $request)
     {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users,email,' . auth()->id(),
-            'department' => 'nullable|string|max:255',
-            'position' => 'nullable|string|max:255',
-            'photo' => 'nullable|image|max:1024', // 1MB Max
-        ]);
-
         $user = auth()->user();
         $data = [
-            'name' => $request->name,
-            'email' => $request->email,
-            'department' => $request->department,
-            'position' => $request->position,
+            'name' => $request->validated('name'),
         ];
-
-        if ($user->email !== $request->email) {
-            $data['email_verified_at'] = null;
-        }
 
         if ($request->hasFile('photo')) {
             // Delete old photo if exists

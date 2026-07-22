@@ -73,7 +73,7 @@ class ScheduleController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('can:schedules.view', only: ['index', 'reportData', 'missingSchedules', 'completeSchedules']),
+            new Middleware('can:schedules.view', only: ['index', 'reportData', 'reportDates', 'missingSchedules', 'completeSchedules']),
             new Middleware('can:schedules.create', only: ['store', 'import', 'previewRecurring', 'storeRecurring']),
             new Middleware('can:schedules.edit', only: ['update']),
             new Middleware('can:schedules.approve', only: ['approveChangeRequest', 'rejectChangeRequest']),
@@ -1701,6 +1701,7 @@ class ScheduleController extends Controller implements HasMiddleware
             : [2024, 2025, 2026];
 
         $pivotUsersQuery = User::active()
+            ->with('departmentReference:id,code')
             ->where('is_vacant', false)
             ->whereNotNull('org_path')
             ->orderBy('org_path')
@@ -1709,7 +1710,7 @@ class ScheduleController extends Controller implements HasMiddleware
         if ($request->filled('sub_unit')) {
             $pivotUsersQuery->where('org_path', 'like', '%'.$request->sub_unit.'%');
         }
-        $pivotUsers   = $pivotUsersQuery->get(['id', 'name', 'org_path']);
+        $pivotUsers   = $pivotUsersQuery->get(['id', 'name', 'employee_id_no', 'department_id', 'org_path']);
         $pivotUserIds = $pivotUsers->pluck('id')->toArray();
 
         if (empty($pivotUserIds)) {
@@ -1767,7 +1768,13 @@ class ScheduleController extends Controller implements HasMiddleware
         $pivotData = [];
         foreach ($pivotUsers as $u) {
             $byYear = $grouped->get($u->id, collect())->groupBy('year');
-            $rowData = ['unit' => $u->org_path, 'name' => $u->name, 'years' => []];
+            $rowData = [
+                'user_id' => $u->id,
+                'department_code' => $u->departmentReference?->code,
+                'employee_id_no' => $u->employee_id_no,
+                'name' => $u->name,
+                'years' => [],
+            ];
 
             foreach ($selectedYears as $y) {
                 $yearRows   = $byYear->get((string)$y, collect());
@@ -1781,6 +1788,85 @@ class ScheduleController extends Controller implements HasMiddleware
         }
 
         return response()->json($pivotData);
+    }
+
+    public function reportDates(Request $request)
+    {
+        $validated = $request->validate([
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'year' => ['required', 'integer', 'min:2020', 'max:2100'],
+            'status' => ['required', 'string', 'in:On-site,Off-site,WFH,SL,VL,Restday,Offset,Holiday,N/A'],
+            'department_id' => ['nullable', 'integer'],
+            'department_node_id' => ['nullable', 'integer'],
+            'sub_unit' => ['nullable', 'string', 'max:255'],
+            'store_id' => ['nullable', 'integer', 'exists:stores,id'],
+        ]);
+
+        $userQuery = User::active()
+            ->with('departmentReference:id,code')
+            ->where('is_vacant', false)
+            ->whereNotNull('org_path');
+        $this->applyDeptFilter($userQuery, $request, onUser: true);
+        if ($request->filled('sub_unit')) {
+            $userQuery->where('org_path', 'like', '%'.$validated['sub_unit'].'%');
+        }
+
+        $user = $userQuery->findOrFail($validated['user_id']);
+
+        $scheduleQuery = Schedule::query()
+            ->with('scheduleStores.store:id,name,code')
+            ->where('user_id', $user->id)
+            ->where('status', $validated['status'])
+            ->whereYear('start_time', $validated['year'])
+            ->orderBy('start_time');
+
+        if (!empty($validated['store_id'])) {
+            $scheduleQuery->whereHas(
+                'scheduleStores',
+                fn ($query) => $query->where('store_id', $validated['store_id'])
+            );
+        }
+
+        $entries = [];
+        foreach ($scheduleQuery->get() as $schedule) {
+            $stores = $schedule->scheduleStores
+                ->map(fn (ScheduleStore $scheduleStore) => [
+                    'code' => $scheduleStore->store?->code,
+                    'name' => $scheduleStore->store?->name,
+                ])
+                ->filter(fn (array $store) => filled($store['code']) || filled($store['name']))
+                ->unique(fn (array $store) => ($store['code'] ?? '').'|'.($store['name'] ?? ''))
+                ->values();
+
+            $date = $schedule->start_time->copy()->startOfDay();
+            $endDate = $schedule->end_time->copy()->startOfDay();
+
+            while ($date->lte($endDate)) {
+                $entries[] = [
+                    'schedule_id' => $schedule->id,
+                    'date' => $date->format('Y-m-d'),
+                    'start_time' => $schedule->start_time->format('h:i A'),
+                    'end_time' => $schedule->end_time->format('h:i A'),
+                    'stores' => $stores,
+                    'remarks' => $schedule->remarks,
+                ];
+                $date->addDay();
+            }
+        }
+
+        return response()->json([
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'employee_id_no' => $user->employee_id_no,
+                'department_code' => $user->departmentReference?->code,
+            ],
+            'year' => $validated['year'],
+            'status' => $validated['status'],
+            'entries' => collect($entries)->sortBy(
+                fn (array $entry) => $entry['date'].' '.$entry['start_time'].' '.$entry['schedule_id']
+            )->values(),
+        ]);
     }
 
     public function template(Request $request)

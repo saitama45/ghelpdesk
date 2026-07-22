@@ -13,9 +13,6 @@ const { showError } = useToast();
 
 const profileForm = useForm({
     name: props.user.name,
-    email: props.user.email,
-    department: props.user.department || '',
-    position: props.user.position || '',
     photo: null,
 });
 
@@ -174,34 +171,31 @@ const updatePassword = () => {
                             </div>
 
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Email Address</label>
-                                <input 
-                                    v-model="profileForm.email" 
-                                    type="email" 
-                                    required 
-                                    class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
-                                >
-                                <div v-if="profileForm.errors.email" class="text-red-600 text-sm mt-1">{{ profileForm.errors.email }}</div>
+                                <span class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Employee ID No</span>
+                                <p class="min-h-10 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-900 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-100">
+                                    {{ user.employee_id_no || '-' }}
+                                </p>
                             </div>
 
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Department</label>
-                                <input 
-                                    v-model="profileForm.department" 
-                                    type="text" 
-                                    class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
-                                >
-                                <div v-if="profileForm.errors.department" class="text-red-600 text-sm mt-1">{{ profileForm.errors.department }}</div>
+                                <span class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Email</span>
+                                <p class="min-h-10 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-900 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-100">
+                                    {{ user.email }}
+                                </p>
                             </div>
 
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Position</label>
-                                <input 
-                                    v-model="profileForm.position" 
-                                    type="text" 
-                                    class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
-                                >
-                                <div v-if="profileForm.errors.position" class="text-red-600 text-sm mt-1">{{ profileForm.errors.position }}</div>
+                                <span class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Department</span>
+                                <p class="min-h-10 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-900 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-100">
+                                    {{ user.department || '-' }}
+                                </p>
+                            </div>
+
+                            <div>
+                                <span class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Position</span>
+                                <p class="min-h-10 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-900 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-100">
+                                    {{ user.position || '-' }}
+                                </p>
                             </div>
                         </div>
 
