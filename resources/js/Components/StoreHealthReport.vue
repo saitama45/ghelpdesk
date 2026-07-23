@@ -217,6 +217,49 @@ const officeBucket = (item) => {
     return healthSummaryItems.value[0];
 };
 
+// ── % Healthy ─────────────────────────────────────────────────────────
+// A store counts as healthy when it sits in the green band; stores with no open
+// tickets fold into green, so the denominator is every active store in scope.
+const formatPct = (value) => {
+    if (value === null || value === undefined) return '—';
+    const n = Number(value);
+    return (Number.isInteger(n) ? n : n.toFixed(1)) + '%';
+};
+
+const hasHealthyPct = (item) => item?.healthy_pct !== null && item?.healthy_pct !== undefined;
+
+// Per-location % Health (corporate offices) is a resolution rate, so shade it on its
+// own scale rather than the open-ticket legend bands.
+const healthyPctTone = (pct) => {
+    if (pct >= 90) return 'green';
+    if (pct >= 75) return 'yellow';
+    if (pct >= 50) return 'orange';
+    return 'red';
+};
+const PCT_TEXT_CLASSES = {
+    green: 'text-green-600',
+    yellow: 'text-yellow-600',
+    orange: 'text-orange-600',
+    red: 'text-red-600',
+};
+const healthyPctClass = (pct) => PCT_TEXT_CLASSES[healthyPctTone(pct)];
+const healthyPctBarClass = (pct) => BAND_CLASSES[healthyPctTone(pct)];
+
+// Rollup across a list of sector cards (North / South area totals).
+const areaHealth = (items) => {
+    const rows = (items || []).filter(hasHealthyPct);
+    const total = rows.reduce((sum, item) => sum + (item.total_stores || 0), 0);
+    const healthy = rows.reduce((sum, item) => sum + (item.healthy_stores || 0), 0);
+
+    return {
+        total_stores: total,
+        healthy_stores: healthy,
+        healthy_pct: total > 0 ? Math.round((healthy / total) * 1000) / 10 : null,
+    };
+};
+
+const officeTotals = computed(() => props.summary?.office_totals || null);
+
 // ── Entity health heatmap ─────────────────────────────────────────────
 const BUCKET_KEYS = ['green', 'yellow', 'orange', 'red'];
 const CELL_RGB = { green: '34,197,94', yellow: '234,179,8', orange: '249,115,22', red: '239,68,68' };
@@ -469,6 +512,16 @@ const getAreaItemClass = (count, maxCols) => {
                                     <span class="block text-2xl sm:text-3xl font-black text-blue-700 leading-tight">{{ item.total_tickets ?? 0 }}</span>
                                 </span>
                             </span>
+                            <span v-if="hasHealthyPct(item)" class="mt-3 block">
+                                <span class="flex items-center justify-between text-[9px] font-black uppercase tracking-wider">
+                                    <span class="text-gray-400 dark:text-gray-400">% Healthy</span>
+                                    <span class="text-green-600 tabular-nums">{{ formatPct(item.healthy_pct) }}</span>
+                                </span>
+                                <span class="mt-1 block h-1.5 w-full rounded-full bg-gray-100 overflow-hidden dark:bg-gray-900">
+                                    <span class="block h-full rounded-full bg-green-500" :style="{ width: Math.min(100, item.healthy_pct) + '%' }"></span>
+                                </span>
+                                <span class="mt-1 block text-right text-[9px] font-bold text-gray-400 tabular-nums dark:text-gray-500">{{ item.healthy_stores }} of {{ item.total_stores }} stores</span>
+                            </span>
                             <span class="mt-3 grid grid-cols-2 gap-1.5 text-left">
                                 <span
                                     v-for="health in healthSummaryItems"
@@ -499,6 +552,16 @@ const getAreaItemClass = (count, maxCols) => {
                 <div class="bg-gray-800 py-2.5 text-center">
                     <span class="text-xs sm:text-sm font-black text-white tracking-[0.3em] sm:tracking-[0.5em] uppercase">C O R P O R A T E &nbsp;&nbsp; O F F I C E</span>
                 </div>
+                <div v-if="officeTotals && officeTotals.healthy_pct !== null" class="flex items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2 dark:bg-gray-900/50 dark:border-gray-700">
+                    <span class="text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Offices in Healthy Band</span>
+                    <span class="flex items-center gap-2">
+                        <span class="block h-1.5 w-20 sm:w-40 rounded-full bg-gray-200 overflow-hidden dark:bg-gray-700">
+                            <span class="block h-full rounded-full bg-green-500" :style="{ width: Math.min(100, officeTotals.healthy_pct) + '%' }"></span>
+                        </span>
+                        <span class="text-[11px] font-black text-green-600 tabular-nums">{{ formatPct(officeTotals.healthy_pct) }}</span>
+                        <span class="text-[9px] font-bold text-gray-400 tabular-nums dark:text-gray-500">{{ officeTotals.healthy_stores }}/{{ officeTotals.total_stores }}</span>
+                    </span>
+                </div>
                 <div v-if="summary.office?.length" :class="getAreaGridClass(summary.office.length, 6)">
                     <div v-for="item in summary.office" :key="item.store_id" :class="getAreaItemClass(summary.office.length, 6)">
                         <div class="bg-gray-50 py-1.5 px-2 text-center border-b border-gray-200 dark:bg-gray-900/50 dark:border-gray-700">
@@ -515,6 +578,18 @@ const getAreaItemClass = (count, maxCols) => {
                         >
                             <span class="block text-[9px] font-black uppercase tracking-wider text-blue-500">Tickets</span>
                             <span class="block text-3xl font-black text-blue-700 leading-tight">{{ item.total_tickets ?? 0 }}</span>
+                            <span v-if="hasHealthyPct(item)" class="mt-3 block w-full">
+                                <span class="flex items-center justify-between text-[9px] font-black uppercase tracking-wider">
+                                    <span class="text-gray-400 dark:text-gray-400">% Health</span>
+                                    <span class="tabular-nums" :class="healthyPctClass(item.healthy_pct)">{{ formatPct(item.healthy_pct) }}</span>
+                                </span>
+                                <span class="mt-1 block h-1.5 w-full rounded-full bg-gray-100 overflow-hidden dark:bg-gray-900">
+                                    <span class="block h-full rounded-full" :class="healthyPctBarClass(item.healthy_pct)" :style="{ width: Math.min(100, item.healthy_pct) + '%' }"></span>
+                                </span>
+                                <span class="mt-1 block text-[9px] font-bold text-gray-400 tabular-nums dark:text-gray-500">
+                                    {{ item.all_tickets ? `${item.closed_tickets} of ${item.all_tickets} cleared` : 'No tickets raised' }}
+                                </span>
+                            </span>
                             <span class="mt-2 inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 dark:bg-gray-900/50 dark:border-gray-700">
                                 <span class="w-2 h-2 rounded-full shrink-0" :class="officeBucket(item).class"></span>
                                 <span class="text-[9px] font-black uppercase tracking-wider text-gray-600 dark:text-gray-300">{{ officeBucket(item).label }}</span>
@@ -531,6 +606,16 @@ const getAreaItemClass = (count, maxCols) => {
             <div v-if="!isCtMode && !isOfficeMode" class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden dark:bg-gray-800 dark:border-gray-700">
                 <div class="bg-gray-800 py-2.5 text-center">
                     <span class="text-xs sm:text-sm font-black text-white tracking-[0.3em] sm:tracking-[0.5em] uppercase">N O R T H &nbsp;&nbsp; A R E A</span>
+                </div>
+                <div v-if="areaHealth(summary.north).healthy_pct !== null" class="flex items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2 dark:bg-gray-900/50 dark:border-gray-700">
+                    <span class="text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">% Healthy Stores</span>
+                    <span class="flex items-center gap-2">
+                        <span class="block h-1.5 w-20 sm:w-40 rounded-full bg-gray-200 overflow-hidden dark:bg-gray-700">
+                            <span class="block h-full rounded-full bg-green-500" :style="{ width: Math.min(100, areaHealth(summary.north).healthy_pct) + '%' }"></span>
+                        </span>
+                        <span class="text-[11px] font-black text-green-600 tabular-nums">{{ formatPct(areaHealth(summary.north).healthy_pct) }}</span>
+                        <span class="text-[9px] font-bold text-gray-400 tabular-nums dark:text-gray-500">{{ areaHealth(summary.north).healthy_stores }}/{{ areaHealth(summary.north).total_stores }}</span>
+                    </span>
                 </div>
                 <div :class="getAreaGridClass(summary.north?.length || 0, 4)">
                     <div v-for="item in summary.north" :key="item.sector" :class="getAreaItemClass(summary.north?.length || 0, 4)">
@@ -554,6 +639,16 @@ const getAreaItemClass = (count, maxCols) => {
                                     <span class="block text-[9px] font-black uppercase tracking-wider text-blue-500">Tickets</span>
                                     <span class="block text-2xl sm:text-3xl font-black text-blue-700 leading-tight">{{ item.total_tickets ?? 0 }}</span>
                                 </span>
+                            </span>
+                            <span v-if="hasHealthyPct(item)" class="mt-3 block">
+                                <span class="flex items-center justify-between text-[9px] font-black uppercase tracking-wider">
+                                    <span class="text-gray-400 dark:text-gray-400">% Healthy</span>
+                                    <span class="text-green-600 tabular-nums">{{ formatPct(item.healthy_pct) }}</span>
+                                </span>
+                                <span class="mt-1 block h-1.5 w-full rounded-full bg-gray-100 overflow-hidden dark:bg-gray-900">
+                                    <span class="block h-full rounded-full bg-green-500" :style="{ width: Math.min(100, item.healthy_pct) + '%' }"></span>
+                                </span>
+                                <span class="mt-1 block text-right text-[9px] font-bold text-gray-400 tabular-nums dark:text-gray-500">{{ item.healthy_stores }} of {{ item.total_stores }} stores</span>
                             </span>
                             <span class="mt-3 grid grid-cols-2 gap-1.5 text-left">
                                 <span
@@ -582,6 +677,16 @@ const getAreaItemClass = (count, maxCols) => {
                 <div class="bg-gray-800 py-2.5 text-center">
                     <span class="text-xs sm:text-sm font-black text-white tracking-[0.3em] sm:tracking-[0.5em] uppercase">S O U T H &nbsp;&nbsp; A R E A</span>
                 </div>
+                <div v-if="areaHealth(summary.south).healthy_pct !== null" class="flex items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2 dark:bg-gray-900/50 dark:border-gray-700">
+                    <span class="text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">% Healthy Stores</span>
+                    <span class="flex items-center gap-2">
+                        <span class="block h-1.5 w-20 sm:w-40 rounded-full bg-gray-200 overflow-hidden dark:bg-gray-700">
+                            <span class="block h-full rounded-full bg-green-500" :style="{ width: Math.min(100, areaHealth(summary.south).healthy_pct) + '%' }"></span>
+                        </span>
+                        <span class="text-[11px] font-black text-green-600 tabular-nums">{{ formatPct(areaHealth(summary.south).healthy_pct) }}</span>
+                        <span class="text-[9px] font-bold text-gray-400 tabular-nums dark:text-gray-500">{{ areaHealth(summary.south).healthy_stores }}/{{ areaHealth(summary.south).total_stores }}</span>
+                    </span>
+                </div>
                 <div :class="getAreaGridClass(summary.south?.length || 0, 4)">
                     <div v-for="item in summary.south" :key="item.sector" :class="getAreaItemClass(summary.south?.length || 0, 4)">
                         <div class="bg-gray-50 py-1.5 px-2 text-center border-b border-gray-200 dark:bg-gray-900/50 dark:border-gray-700">
@@ -604,6 +709,16 @@ const getAreaItemClass = (count, maxCols) => {
                                     <span class="block text-[9px] font-black uppercase tracking-wider text-blue-500">Tickets</span>
                                     <span class="block text-2xl sm:text-3xl font-black text-blue-700 leading-tight">{{ item.total_tickets ?? 0 }}</span>
                                 </span>
+                            </span>
+                            <span v-if="hasHealthyPct(item)" class="mt-3 block">
+                                <span class="flex items-center justify-between text-[9px] font-black uppercase tracking-wider">
+                                    <span class="text-gray-400 dark:text-gray-400">% Healthy</span>
+                                    <span class="text-green-600 tabular-nums">{{ formatPct(item.healthy_pct) }}</span>
+                                </span>
+                                <span class="mt-1 block h-1.5 w-full rounded-full bg-gray-100 overflow-hidden dark:bg-gray-900">
+                                    <span class="block h-full rounded-full bg-green-500" :style="{ width: Math.min(100, item.healthy_pct) + '%' }"></span>
+                                </span>
+                                <span class="mt-1 block text-right text-[9px] font-bold text-gray-400 tabular-nums dark:text-gray-500">{{ item.healthy_stores }} of {{ item.total_stores }} stores</span>
                             </span>
                             <span class="mt-3 grid grid-cols-2 gap-1.5 text-left">
                                 <span

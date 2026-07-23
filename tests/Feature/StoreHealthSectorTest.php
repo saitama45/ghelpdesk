@@ -102,6 +102,92 @@ class StoreHealthSectorTest extends TestCase
         $this->assertSame(1, $officeEntity['counts']['red']);
     }
 
+    public function test_corporate_office_percent_health_is_a_per_location_resolution_rate(): void
+    {
+        $user = User::factory()->create();
+        $busyOffice = $this->store('OFF-BUSY', 9);
+        $busyOffice->update(['class' => 'Office']);
+        $quietOffice = $this->store('OFF-QUIET', 9);
+        $quietOffice->update(['class' => 'Office']);
+
+        // 8 tickets raised on the busy office, 6 already cleared → 75% health.
+        for ($i = 1; $i <= 6; $i++) {
+            $this->ticket("HD-C{$i}", $busyOffice, $user, $i % 2 === 0 ? 'closed' : 'resolved', '2026-05-19 09:00:00');
+        }
+        for ($i = 1; $i <= 2; $i++) {
+            $this->ticket("HD-O{$i}", $busyOffice, $user, 'open', '2026-05-20 09:00:00');
+        }
+        // Raised after the as-of date — must not count either way.
+        $this->ticket('HD-LATE', $busyOffice, $user, 'open', '2026-05-25 09:00:00');
+
+        $data = app(StoreReportService::class)->getStoreHealthData([
+            'as_of_date' => '2026-05-20',
+            'user_id' => 'all',
+            'store_id' => 'all',
+            'split_office' => true,
+        ]);
+
+        $cards = collect($data['office']['summary']['office'])->keyBy('store_code');
+        $this->assertSame(8, $cards['OFF-BUSY']['all_tickets']);
+        $this->assertSame(6, $cards['OFF-BUSY']['closed_tickets']);
+        $this->assertSame(2, $cards['OFF-BUSY']['total_tickets']);
+        $this->assertSame(75.0, $cards['OFF-BUSY']['healthy_pct']);
+
+        // A location that never raised a ticket has nothing outstanding.
+        $this->assertSame(0, $cards['OFF-QUIET']['all_tickets']);
+        $this->assertSame(100.0, $cards['OFF-QUIET']['healthy_pct']);
+
+        // The block rollup stays a share of offices sitting in the healthy band.
+        $this->assertSame(2, $data['office']['summary']['office_totals']['total_stores']);
+        $this->assertSame(2, $data['office']['summary']['office_totals']['healthy_stores']);
+    }
+
+    public function test_percent_healthy_counts_every_active_store_and_splits_offices(): void
+    {
+        $user = User::factory()->create();
+
+        // Sector 1: 4 stores — 1 quiet, 1 in the green band, 1 warning, 1 critical.
+        $this->store('S1-QUIET', 1);
+        $greenStore = $this->store('S1-GREEN', 1);
+        $warnStore = $this->store('S1-WARN', 1);
+        $criticalStore = $this->store('S1-RED', 1);
+        // An inactive store must not dilute the denominator.
+        $this->store('S1-DEAD', 1, false);
+
+        $this->ticket('HD-G1', $greenStore, $user, 'open', '2026-05-20 09:00:00');
+        for ($i = 1; $i <= 3; $i++) {
+            $this->ticket("HD-W{$i}", $warnStore, $user, 'open', '2026-05-20 09:00:00');
+        }
+        for ($i = 1; $i <= 5; $i++) {
+            $this->ticket("HD-R{$i}", $criticalStore, $user, 'open', '2026-05-20 09:00:00');
+        }
+
+        $office = $this->store('OFF-A', 1);
+        $office->update(['class' => 'Office']);
+
+        $data = app(StoreReportService::class)->getStoreHealthData([
+            'as_of_date' => '2026-05-20',
+            'user_id' => 'all',
+            'store_id' => 'all',
+            'split_office' => true,
+        ]);
+
+        // Offices are carved out, so the sector denominator is the 4 active sector stores.
+        $sector = collect($data['summary']['north'])->firstWhere('sector', 1);
+        $this->assertSame(4, $sector['total_stores']);
+        $this->assertSame(2, $sector['healthy_stores']);
+        $this->assertSame(50.0, $sector['healthy_pct']);
+        $this->assertSame(3, $sector['store_count']);
+
+        // A sector with no stores at all reports no percentage rather than 0%.
+        $this->assertNull(collect($data['summary']['north'])->firstWhere('sector', 2)['healthy_pct']);
+
+        $this->assertSame(
+            ['total_stores' => 1, 'healthy_stores' => 1, 'healthy_pct' => 100.0],
+            $data['office']['summary']['office_totals']
+        );
+    }
+
     public function test_sector_summary_respects_department_node_and_child_filters(): void
     {
         $department = Department::create(['name' => 'IT']);
