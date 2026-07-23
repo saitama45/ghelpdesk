@@ -362,7 +362,14 @@ class StoreHealthSectorTest extends TestCase
 
         $sectorSixReport = collect($data['reportData'])->firstWhere('name', 'Princess Dacuma');
         $this->assertNotNull($sectorSixReport);
-        $this->assertEqualsCanonicalizing(['NN3CN', 'CBTLMAX', 'CBTLPHL'], collect($sectorSixReport['stores'])->pluck('code')->all());
+
+        // The card lists the whole sector: the 3 stores with tickets plus the 30 quiet
+        // ones at 0, so a store that raised nothing is still visible.
+        $sectorSixStores = collect($sectorSixReport['stores'])->pluck('ticket_count', 'code');
+        $this->assertCount(33, $sectorSixStores);
+        $this->assertSame([1, 1, 1], [$sectorSixStores['NN3CN'], $sectorSixStores['CBTLMAX'], $sectorSixStores['CBTLPHL']]);
+        $this->assertSame(0, $sectorSixStores['S601']);
+        $this->assertSame(30, $sectorSixStores->filter(fn (int $count) => $count === 0)->count());
     }
 
     public function test_duplicate_sector_nodes_merge_assigned_user_names(): void

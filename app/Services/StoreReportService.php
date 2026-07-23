@@ -103,6 +103,11 @@ class StoreReportService
             ->filter(fn ($ticket) => !$splitOffice || $ticket->store?->class !== 'Office')
             ->filter(fn ($ticket) => $this->ticketMatchesDisplayUser($ticket, $userId, $sectorAssignments));
 
+        // Every active store in scope, whether or not it has open tickets. Drives the
+        // "% Healthy" denominators and the quiet rows on the sector store tables.
+        // Offices are excluded when they are split into their own block.
+        $activeStoresBySector = $this->activeStoresBySector($companyIds, $storeId, $splitOffice);
+
         $reportData = $activeTickets->groupBy(function ($ticket) use ($sectorAssignments, $isCtMode) {
             if ($isCtMode) {
                 return $ticket->store_id ? "store-{$ticket->store_id}" : 'unassigned-store';
@@ -115,7 +120,7 @@ class StoreReportService
             }
 
             return $ticket->assignee_id ? "assignee-{$ticket->assignee_id}" : 'unassigned';
-        })->map(function ($tickets, $groupKey) use ($sectorAssignments, $isCtMode, $thresholdBands) {
+        })->map(function ($tickets, $groupKey) use ($sectorAssignments, $isCtMode, $thresholdBands, $activeStoresBySector) {
             $firstTicket = $tickets->first();
             $sector = (int) $firstTicket->store->sector;
             $assignee = $firstTicket->assignee;
@@ -135,7 +140,33 @@ class StoreReportService
                     'ticket_count' => $storeTickets->count(),
                     'health_bucket' => $this->healthBucket($storeTickets->count(), $thresholdBands),
                 ];
-            })->filter()
+            })->filter()->values();
+
+            // Quiet stores — the rest of the sector's active stores, listed at 0 open
+            // tickets so the card shows the whole sector, not only the stores with
+            // tickets. Only sector-owned cards get them; assignee-keyed groups have no
+            // store list of their own to complete.
+            if (str_starts_with((string) $groupKey, 'sector-')) {
+                $withTickets = $stores->pluck('id')->all();
+
+                foreach ($activeStoresBySector->get($sector, collect()) as $store) {
+                    if (in_array($store->id, $withTickets, true)) {
+                        continue;
+                    }
+
+                    $stores->push([
+                        'id' => $store->id,
+                        'code' => $store->code,
+                        'name' => $store->name,
+                        'sector' => $store->sector,
+                        'area' => $store->area,
+                        'ticket_count' => 0,
+                        'health_bucket' => $this->healthBucket(0, $thresholdBands),
+                    ]);
+                }
+            }
+
+            $stores = $stores
                 ->sortBy([
                     ['sector', 'asc'],
                     ['area', 'asc'],
@@ -212,10 +243,6 @@ class StoreReportService
             ->groupBy(fn ($ticket) => (int) $ticket->store->sector)
             ->map(fn ($sectorTickets) => $sectorTickets->groupBy('store_id')->map->count());
 
-        // Denominator for "% Healthy" — every active store in scope, whether or not it
-        // has open tickets. Offices are excluded when they are split into their own block.
-        $activeStoresBySector = $this->activeStoreCountsBySector($companyIds, $storeId, $splitOffice);
-
         $northArea = DepartmentNode::where('name', 'North Area')->first();
         $southArea = DepartmentNode::where('name', 'South Area')->first();
         $northNodes = $northArea ? DepartmentNode::where('parent_id', $northArea->id)->with('users')->get() : collect();
@@ -253,7 +280,7 @@ class StoreReportService
             // % Healthy counts a store as healthy when it sits in the green band, and a
             // store with zero open tickets folds into green (same rule as the entity
             // heatmap). So healthy = all active stores minus the yellow/orange/red ones.
-            $totalStores = (int) ($activeStoresBySector->get($i) ?? 0);
+            $totalStores = $activeStoresBySector->get($i, collect())->count();
             $unhealthyStores = $healthStoreCounts['yellow'] + $healthStoreCounts['orange'] + $healthStoreCounts['red'];
             $healthyStores = max(0, $totalStores - $unhealthyStores);
 
@@ -289,13 +316,13 @@ class StoreReportService
     }
 
     /**
-     * Active store count per sector, used as the "% Healthy" denominator on the sector
-     * cards. Counts EVERY active store in scope — not just the ones carrying open
-     * tickets — so a quiet store correctly counts as healthy. Respects the entity and
-     * store filters only; the assignee dept/user filter is deliberately ignored, the
-     * same way the entity heatmap is entity-wide.
+     * Every active store in scope, keyed by sector. Feeds both the "% Healthy"
+     * denominator and the quiet (0 open ticket) rows on the sector store tables, so a
+     * store that raised nothing still shows up. Respects the entity and store filters
+     * only; the assignee dept/user filter is deliberately ignored, the same way the
+     * entity heatmap is entity-wide.
      */
-    private function activeStoreCountsBySector($companyIds, $storeId, bool $excludeOffice)
+    private function activeStoresBySector($companyIds, $storeId, bool $excludeOffice)
     {
         $query = Store::query()->where('is_active', true);
 
@@ -309,9 +336,8 @@ class StoreReportService
             $query->where('id', $storeId);
         }
 
-        return $query->selectRaw('sector, COUNT(*) as c')
-            ->groupBy('sector')
-            ->pluck('c', 'sector');
+        return $query->get(['id', 'code', 'name', 'sector', 'area'])
+            ->groupBy(fn ($store) => (int) $store->sector);
     }
 
     /**

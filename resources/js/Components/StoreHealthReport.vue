@@ -202,7 +202,12 @@ const bandRange = (band) => band.max === null
 const healthItem = (key) => healthSummaryItems.value.find(item => item.key === key) || healthSummaryItems.value[0];
 const healthTicketCount = (item, key) => item.health_ticket_counts?.[key] ?? item.health_counts?.[key] ?? 0;
 const healthStoreCount = (item, key) => item.health_store_counts?.[key] ?? 0;
-const criticalMinimum = computed(() => healthSummaryItems.value.find(item => item.key === 'red')?.min || 1);
+// The status bar is a solid band indicator, not a fill gauge — the store's legend
+// band carries the meaning, so every row reads full width in its band colour.
+const healthBarTitle = (store) => {
+    const band = healthItem(store.health_bucket);
+    return `${band.label} · ${store.ticket_count} ticket${store.ticket_count === 1 ? '' : 's'}`;
+};
 const isCtMode = computed(() => Boolean(props.summary?.is_ct_mode));
 const isOfficeMode = computed(() => Boolean(props.summary?.is_office_mode));
 
@@ -771,16 +776,15 @@ const getAreaItemClass = (count, maxCols) => {
                                     >
                                         {{ store.ticket_count }}
                                     </button>
-                                    <span v-else>{{ store.ticket_count }}</span>
+                                    <!-- Quiet store: listed so the sector is complete, muted so problem stores still stand out. -->
+                                    <span v-else class="text-gray-300 dark:text-gray-600">{{ store.ticket_count }}</span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="w-full bg-gray-100 rounded-full h-4 overflow-hidden shadow-inner dark:bg-gray-800">
-                                        <div 
-                                            class="h-full transition-all duration-500 shadow-sm"
-                                            :class="healthItem(store.health_bucket).class"
-                                            :style="{ width: Math.min(100, (store.ticket_count / criticalMinimum) * 100) + '%' }"
-                                        ></div>
-                                    </div>
+                                    <div
+                                        class="w-full h-4 rounded-full shadow-sm transition-colors duration-500"
+                                        :class="healthItem(store.health_bucket).class"
+                                        :title="healthBarTitle(store)"
+                                    ></div>
                                 </td>
                             </tr>
                         </tbody>
