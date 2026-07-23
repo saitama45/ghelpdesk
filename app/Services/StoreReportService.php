@@ -138,6 +138,9 @@ class StoreReportService
                     'sector' => $store->sector,
                     'area' => $store->area,
                     'ticket_count' => $storeTickets->count(),
+                    // Breakdown of the open count by status. The ticket set already
+                    // excludes resolved/closed, so every category here is live work.
+                    'status_counts' => $storeTickets->groupBy('status')->map->count()->all(),
                     'health_bucket' => $this->healthBucket($storeTickets->count(), $thresholdBands),
                 ];
             })->filter()->values();
@@ -161,6 +164,7 @@ class StoreReportService
                         'sector' => $store->sector,
                         'area' => $store->area,
                         'ticket_count' => 0,
+                        'status_counts' => [],
                         'health_bucket' => $this->healthBucket(0, $thresholdBands),
                     ]);
                 }
@@ -475,6 +479,16 @@ class StoreReportService
             $ticketQuery->whereDate('tickets.created_at', '<=', $asOfDate);
         }
 
+        // Open count broken down by status, so the detail table can show the same
+        // Open / WCF / WSP split as the sector tables. Cloned before the pluck below,
+        // which mutates the query's select.
+        $statusCountsByStore = (clone $ticketQuery)
+            ->selectRaw('store_id, status, COUNT(*) as c')
+            ->groupBy('store_id', 'status')
+            ->get()
+            ->groupBy('store_id')
+            ->map(fn ($rows) => $rows->pluck('c', 'status')->map(fn ($count) => (int) $count)->all());
+
         $openCountsByStore = $ticketQuery
             ->selectRaw('store_id, COUNT(*) as c')
             ->groupBy('store_id')
@@ -538,7 +552,7 @@ class StoreReportService
         // Detail table, grouped by entity, reusing the sector reportData shape.
         $reportData = $stores
             ->groupBy('company_id')
-            ->map(function ($companyStores) use ($openCountsByStore, $thresholdBands) {
+            ->map(function ($companyStores) use ($openCountsByStore, $statusCountsByStore, $thresholdBands) {
                 $company = $companyStores->first()->company;
 
                 $storeRows = $companyStores->map(fn ($store) => [
@@ -548,6 +562,7 @@ class StoreReportService
                     'sector' => $store->sector,
                     'area' => $store->area,
                     'ticket_count' => (int) ($openCountsByStore->get($store->id) ?? 0),
+                    'status_counts' => $statusCountsByStore->get($store->id, []),
                     'health_bucket' => $this->healthBucket((int) ($openCountsByStore->get($store->id) ?? 0), $thresholdBands),
                 ])->sortBy([['code', 'asc'], ['name', 'asc']])->values();
 

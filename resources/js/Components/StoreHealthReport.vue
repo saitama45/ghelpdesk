@@ -208,6 +208,38 @@ const healthBarTitle = (store) => {
     const band = healthItem(store.health_bucket);
     return `${band.label} · ${store.ticket_count} ticket${store.ticket_count === 1 ? '' : 's'}`;
 };
+
+// Live status categories, in workflow order. Resolved/closed never appear — the
+// report only ever counts open tickets.
+const STATUS_CATEGORIES = [
+    { key: 'open', short: 'OPEN', label: 'Open', class: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800' },
+    { key: 'for_schedule', short: 'FS', label: 'For Schedule', class: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800' },
+    { key: 'in_progress', short: 'IP', label: 'In Progress', class: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-300 dark:border-sky-800' },
+    { key: 'waiting_client_feedback', short: 'WCF', label: "Waiting for Client's Feedback", class: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800' },
+    { key: 'waiting_service_provider', short: 'WSP', label: 'Waiting for Service Provider', class: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800' },
+];
+const FALLBACK_CHIP_CLASS = 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700';
+
+// Only the categories the store actually has, so quiet rows stay clean. Any status
+// outside the known list still shows rather than being silently dropped.
+const storeStatusChips = (store) => {
+    const counts = store.status_counts || {};
+    const known = STATUS_CATEGORIES
+        .filter(category => (counts[category.key] || 0) > 0)
+        .map(category => ({ ...category, count: counts[category.key] }));
+
+    const extra = Object.keys(counts)
+        .filter(key => counts[key] > 0 && !STATUS_CATEGORIES.some(category => category.key === key))
+        .map(key => ({
+            key,
+            short: key.replace(/_/g, ' ').toUpperCase(),
+            label: getStatusLabel(key),
+            class: FALLBACK_CHIP_CLASS,
+            count: counts[key],
+        }));
+
+    return [...known, ...extra];
+};
 const isCtMode = computed(() => Boolean(props.summary?.is_ct_mode));
 const isOfficeMode = computed(() => Boolean(props.summary?.is_office_mode));
 
@@ -785,6 +817,19 @@ const getAreaItemClass = (count, maxCols) => {
                                         :class="healthItem(store.health_bucket).class"
                                         :title="healthBarTitle(store)"
                                     ></div>
+                                    <!-- Live status split of the open count: Open / FS / IP / WCF / WSP. -->
+                                    <div v-if="storeStatusChips(store).length" class="mt-1.5 flex flex-wrap gap-1">
+                                        <span
+                                            v-for="chip in storeStatusChips(store)"
+                                            :key="chip.key"
+                                            class="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider"
+                                            :class="chip.class"
+                                            :title="`${chip.label}: ${chip.count}`"
+                                        >
+                                            {{ chip.short }}
+                                            <span class="tabular-nums">{{ chip.count }}</span>
+                                        </span>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>

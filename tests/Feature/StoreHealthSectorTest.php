@@ -102,6 +102,57 @@ class StoreHealthSectorTest extends TestCase
         $this->assertSame(1, $officeEntity['counts']['red']);
     }
 
+    public function test_store_rows_break_the_open_count_down_by_status(): void
+    {
+        $department = Department::create(['name' => 'IT']);
+        $northArea = DepartmentNode::create(['department_id' => $department->id, 'name' => 'North Area']);
+        $sectorNode = DepartmentNode::create([
+            'department_id' => $department->id,
+            'parent_id' => $northArea->id,
+            'name' => 'Sector 1',
+        ]);
+        $user = User::factory()->create([
+            'name' => 'Sector Owner',
+            'department_id' => $department->id,
+            'department_node_id' => $sectorNode->id,
+        ]);
+
+        $store = $this->store('S-MIX', 1);
+        $quietStore = $this->store('S-QUIET', 1);
+
+        $this->ticket('HD-OP1', $store, $user, 'open', '2026-05-20 09:00:00');
+        $this->ticket('HD-OP2', $store, $user, 'open', '2026-05-20 09:05:00');
+        $this->ticket('HD-WCF', $store, $user, 'waiting_client_feedback', '2026-05-20 09:10:00');
+        $this->ticket('HD-WSP', $store, $user, 'waiting_service_provider', '2026-05-20 09:15:00');
+        $this->ticket('HD-IPR', $store, $user, 'in_progress', '2026-05-20 09:20:00');
+        // Terminal statuses never reach the report.
+        $this->ticket('HD-RES', $store, $user, 'resolved', '2026-05-20 09:25:00');
+        $this->ticket('HD-CLO', $store, $user, 'closed', '2026-05-20 09:30:00');
+
+        $data = app(StoreReportService::class)->getStoreHealthData([
+            'as_of_date' => '2026-05-20',
+            'user_id' => 'all',
+            'store_id' => 'all',
+        ]);
+
+        $rows = collect($data['reportData'])
+            ->flatMap(fn (array $group) => $group['stores'])
+            ->keyBy('code');
+
+        $this->assertSame([
+            'open' => 2,
+            'waiting_client_feedback' => 1,
+            'waiting_service_provider' => 1,
+            'in_progress' => 1,
+        ], $rows['S-MIX']['status_counts']);
+        // The split always adds up to the ticket count shown on the row.
+        $this->assertSame(5, $rows['S-MIX']['ticket_count']);
+        $this->assertSame(5, array_sum($rows['S-MIX']['status_counts']));
+
+        $this->assertSame([], $rows['S-QUIET']['status_counts']);
+        $this->assertSame(0, $rows['S-QUIET']['ticket_count']);
+    }
+
     public function test_corporate_office_percent_health_is_a_per_location_resolution_rate(): void
     {
         $user = User::factory()->create();
