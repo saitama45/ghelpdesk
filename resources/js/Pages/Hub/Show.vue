@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
-import { PuzzlePieceIcon } from '@heroicons/vue/24/outline';
+import { PuzzlePieceIcon, Squares2X2Icon, ChevronRightIcon } from '@heroicons/vue/24/outline';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import BrandHealthReport from '@/Components/BrandHealthReport.vue';
 import StoreHealthReport from '@/Components/StoreHealthReport.vue';
@@ -29,26 +29,12 @@ const priorityClass = (p) => ({
 const statusLabel = (s) => (s || '').replace(/_/g, ' ');
 const isProvider = computed(() => props.sectionData?.accessView === 'provider');
 
-// Services in-page sub-tabs (prototype parity): Service Catalog | Ticket Board | Inventory Management.
-const serviceTab = ref('catalog');
-const hasServiceTabs = computed(() => props.section === 'services' && !!props.sectionData?.department);
 const openCount = computed(() =>
     (props.sectionData?.board || []).reduce((sum, lane) => sum + (lane.count || 0), 0)
 );
-const showCatalog = computed(() => !hasServiceTabs.value || serviceTab.value === 'catalog');
-// Ticket Board opens the real /tickets page; Inventory Management opens its
-// workspace. Service Catalog is the in-page view.
-const selectServiceTab = (tab) => {
-    if (tab === 'board') {
-        router.visit(route('tickets.index'));
-        return;
-    }
-    if (tab === 'inventory') {
-        router.visit(route('inventory-workspace.index'));
-        return;
-    }
-    serviceTab.value = tab;
-};
+// The hub's own content is always the default tab on page load; every other tab
+// is a child module of this parent menu (see `hubTabs` below, derived from the
+// registry) and opens that module's page.
 
 const page = usePage();
 const { hasPermission } = usePermission();
@@ -105,6 +91,18 @@ const tiles = computed(() => {
         .sort((a, b) => getChildOrder(section.value.id, a.id) - getChildOrder(section.value.id, b.id));
 });
 
+/**
+ * In-page sub-tabs, derived from this parent menu's child modules so a new module
+ * automatically becomes a tab. Tab 1 is always this hub's own view (the default on
+ * page load); the rest open their module page.
+ */
+const hubTabs = computed(() => tiles.value);
+const defaultTabLabel = computed(() => (props.section === 'services' ? 'Service Catalog' : 'Overview'));
+/** Services shows the live open-ticket count on its Ticket Board tab. */
+const tabBadge = (tile) =>
+    props.section === 'services' && tile.id === 'tickets' ? openCount.value : null;
+const openTile = (tile) => router.visit(route(tile.routeName, ...(tile.routeParams || [])));
+
 onMounted(() => {
     ensureDynamicFormChildren(page.props.dynamicForms || []);
 });
@@ -158,35 +156,41 @@ const showGenericKpis = computed(() =>
                     </span>
                 </div>
 
-                <!-- Services in-page sub-tabs -->
-                <div v-if="hasServiceTabs" class="flex items-center gap-1 border-b border-gray-200 dark:border-gray-700">
+                <!-- In-page sub-tabs, dynamic from this parent menu's child modules.
+                     Rendered as a segmented chip bar so each tab reads as clickable. -->
+                <div v-if="hubTabs.length"
+                     class="flex items-center gap-1.5 overflow-x-auto no-scrollbar rounded-xl border border-gray-200 bg-gray-100/70 p-1.5 dark:border-gray-700 dark:bg-gray-800/60">
+                    <!-- Default tab: this hub's own view (active on page load) -->
                     <button
                         type="button"
-                        @click="selectServiceTab('catalog')"
-                        :style="serviceTab === 'catalog' ? { color: 'var(--dept-accent)', borderColor: 'var(--dept-accent)' } : {}"
-                        :class="['-mb-px border-b-2 px-4 py-2 text-sm font-bold transition-colors',
-                            serviceTab === 'catalog' ? '' : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200']"
-                    >Service Catalog</button>
-                    <button
-                        type="button"
-                        @click="selectServiceTab('board')"
-                        :style="serviceTab === 'board' ? { color: 'var(--dept-accent)', borderColor: 'var(--dept-accent)' } : {}"
-                        :class="['-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-bold transition-colors',
-                            serviceTab === 'board' ? '' : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200']"
+                        :style="{ backgroundColor: 'var(--dept-accent)' }"
+                        class="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-transparent px-3.5 py-2 text-sm font-bold text-white shadow-md"
                     >
-                        Ticket Board
-                        <span class="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-black text-gray-500 dark:bg-gray-700 dark:text-gray-300">{{ openCount }}</span>
+                        <Squares2X2Icon class="h-4 w-4 shrink-0" />
+                        {{ defaultTabLabel }}
                     </button>
+                    <!-- One tab per child module -->
                     <button
-                        v-if="sectionData.canInventory"
+                        v-for="tile in hubTabs"
+                        :key="tile.id"
                         type="button"
-                        @click="selectServiceTab('inventory')"
-                        class="-mb-px border-b-2 border-transparent px-4 py-2 text-sm font-bold text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-                    >Inventory Management</button>
+                        @click="openTile(tile)"
+                        :title="'Open ' + tile.resolvedLabel + (tile.description ? ' — ' + tile.description : '')"
+                        class="group inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3.5 py-2 text-sm font-bold text-gray-600 shadow-sm transition-all hover:-translate-y-0.5 hover:text-gray-900 hover:shadow dark:border-gray-600 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-white"
+                        :style="{ '--tw-ring-color': 'var(--dept-accent)' }"
+                        @mouseenter="(e) => (e.currentTarget.style.borderColor = 'var(--dept-accent)')"
+                        @mouseleave="(e) => (e.currentTarget.style.borderColor = '')"
+                    >
+                        <component :is="tile.icon" v-if="tile.icon" class="h-4 w-4 shrink-0 text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200" />
+                        {{ tile.resolvedLabel }}
+                        <span v-if="tabBadge(tile) !== null"
+                              class="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-black text-gray-500 dark:bg-gray-700 dark:text-gray-300">{{ tabBadge(tile) }}</span>
+                        <ChevronRightIcon class="h-3.5 w-3.5 shrink-0 text-gray-300 transition-transform group-hover:translate-x-0.5 dark:text-gray-600" />
+                    </button>
                 </div>
 
                 <!-- Section content: real-data widgets (Services) — Service Catalog tab -->
-                <template v-if="sectionData && sectionData.department && showCatalog">
+                <template v-if="sectionData && sectionData.department">
                     <!-- KPI strip -->
                     <div v-if="sectionData.kpis.length" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         <div
@@ -403,7 +407,7 @@ const showGenericKpis = computed(() =>
                 <!-- Modules live in the floating launcher (right edge). Empty state
                      only when there is no content AND no modules to launch. -->
                 <div
-                    v-if="showCatalog && !tiles.length && !sectionData"
+                    v-if="!tiles.length && !sectionData"
                     class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-10 text-center dark:border-gray-700 dark:bg-gray-900/40"
                 >
                     <p class="text-sm font-semibold text-gray-500 dark:text-gray-400">

@@ -55,6 +55,11 @@ Route::middleware('auth')->group(function () {
     // Executive master view (enterprise roll-up; gated on dashboard.filter_entity).
     Route::get('/executive', [\App\Http\Controllers\ExecutiveController::class, 'index'])
         ->name('executive.index');
+    // ALAGA store IT-asset assessments.
+    Route::get('/alaga', [\App\Http\Controllers\AlagaController::class, 'index'])->name('alaga.index');
+    Route::post('/alaga', [\App\Http\Controllers\AlagaController::class, 'store'])->name('alaga.store');
+    // Real deployed equipment for a store, sourced from Assets + Stock In.
+    Route::get('/alaga/stores/{store}/assets', [\App\Http\Controllers\AlagaController::class, 'storeAssets'])->name('alaga.store-assets');
     Route::post('/inventory-workspace/requests/{ticketAsset}/advance', [\App\Http\Controllers\InventoryWorkspaceController::class, 'advance'])
         ->name('inventory-workspace.advance');
     Route::get('/dashboard/export', [\App\Http\Controllers\DashboardController::class, 'export'])

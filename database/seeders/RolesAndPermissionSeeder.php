@@ -182,6 +182,12 @@ class RolesAndPermissionSeeder extends Seeder
             'cctv_monitoring.edit' => 'Edit CCTV inspections',
             'cctv_monitoring.delete' => 'Delete CCTV inspections',
 
+            // Monitoring - ALAGA Asset Assessment
+            'alaga.view' => 'View ALAGA store asset assessments',
+            'alaga.create' => 'Create ALAGA assessments and requests',
+            'alaga.edit' => 'Edit ALAGA assessments',
+            'alaga.delete' => 'Delete ALAGA assessments',
+
             // Monitoring - WIGS (Wildly Important Goals)
             'wigs.view' => 'View WIGS (records scoped to self + org subtree)',
             'wigs.create' => 'Create a PCF (Performance Commitment Form)',
@@ -357,6 +363,9 @@ class RolesAndPermissionSeeder extends Seeder
             'stamps.create',
             'stamps.edit',
             'stamps.redeem',
+            'alaga.view',
+            'alaga.create',
+            'alaga.edit',
         ]);
         
         $user->givePermissionTo([

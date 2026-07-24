@@ -253,6 +253,15 @@ export const MODULE_REGISTRY = [
                 permission: 'cctv_monitoring.view',
             },
             {
+                id: 'alaga',
+                label: 'ALAGA',
+                description: 'Store IT-asset condition assessments & scorecards',
+                icon: ClipboardDocumentCheckIcon,
+                routeName: 'alaga.index',
+                activeMatch: ['alaga.*'],
+                permission: 'alaga.view',
+            },
+            {
                 id: 'wigs',
                 label: 'WIGS',
                 description: 'Yardstick, PCF, PAF, and quarterly grading',

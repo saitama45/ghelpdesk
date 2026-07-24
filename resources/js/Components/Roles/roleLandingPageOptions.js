@@ -41,6 +41,7 @@ export const roleLandingPageOptions = [
         options: [
             { label: 'NPC Status', value: 'npc-statuses.index' },
             { label: 'CCTV Monitoring', value: 'cctv-monitoring.index' },
+            { label: 'ALAGA', value: 'alaga.index' },
             { label: 'WIGS', value: 'wigs.index' },
             { label: 'Payments & SOA', value: 'payments.index' },
             { label: 'Accounting Documents', value: 'accounting-documents.index' },

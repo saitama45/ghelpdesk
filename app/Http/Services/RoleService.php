@@ -88,6 +88,7 @@ class RoleService
             'form_builder',
             'stores',
             'cctv monitoring',
+            'alaga',
             'wigs',
             'vendors',
             'activity_templates',
@@ -125,6 +126,8 @@ class RoleService
                 $categoryDisplay = 'Accounting Documents';
             } elseif ($category === 'cctv_monitoring') {
                 $categoryDisplay = 'CCTV Monitoring';
+            } elseif ($category === 'alaga') {
+                $categoryDisplay = 'ALAGA';
             } elseif ($category === 'mall_hookup') {
                 $categoryDisplay = 'Mall Hookup';
             } elseif ($category === 'wigs') {

@@ -14,7 +14,7 @@ import { usePresence } from '@/Composables/usePresence.js';
 import NotificationBell from '@/Components/NotificationBell.vue';
 import ThemeToggle from '@/Components/ThemeToggle.vue';
 import DepartmentTabs from '@/Components/DepartmentTabs.vue';
-import ModuleLauncher from '@/Components/ModuleLauncher.vue';
+import ModuleTabs from '@/Components/ModuleTabs.vue';
 import { useTheme } from '@/Composables/useTheme.js';
 
 const page = usePage();
@@ -248,11 +248,13 @@ const deptSoft = computed(() => page.props.departmentContext?.soft || '#eaf1ff')
                 </div>
             </div>
 
-            <!-- Global department strip (tabs + derived access), below top nav -->
-            <DepartmentTabs />
-
-            <!-- Global floating module launcher (right edge, self-scopes to route) -->
-            <ModuleLauncher />
+            <!-- Global strips below the top nav: department axis, then the module
+                 tabs of the parent menu that owns the current route. Pinned as one
+                 unit so the two never drift apart. -->
+            <div class="sticky top-16 z-30">
+                <DepartmentTabs />
+                <ModuleTabs />
+            </div>
 
             <!-- Page Content -->
             <main scroll-region class="flex-1 bg-gray-50 dark:bg-gray-950" :class="mainClass">

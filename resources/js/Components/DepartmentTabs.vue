@@ -68,7 +68,7 @@ const changeBelong = (event) => {
 <template>
     <div
         v-if="departments.length"
-        class="sticky top-16 z-30 border-b border-gray-200 bg-white/95 backdrop-blur px-4 sm:px-6 lg:px-8 dark:border-gray-700 dark:bg-gray-800/95"
+        class="border-b border-gray-200 bg-white/95 backdrop-blur px-4 sm:px-6 lg:px-8 dark:border-gray-700 dark:bg-gray-800/95"
         :style="{ borderTop: '2px solid var(--dept-accent)' }"
     >
         <div class="flex flex-col gap-2 py-2 xl:flex-row xl:items-center xl:justify-between">
