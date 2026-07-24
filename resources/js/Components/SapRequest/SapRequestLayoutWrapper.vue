@@ -67,7 +67,7 @@ const flash = computed(() => page.props.flash ?? {})
 
             <!-- Centralized Footer -->
             <p v-if="isPublic" class="text-center text-xs text-gray-400 font-medium mt-8 dark:text-gray-400">
-                Having trouble with this form? Contact IT Support.
+                Having trouble with this form? Contact TAS Services at tasservices@tablgroup.com.ph
             </p>
         </div>
     </div>

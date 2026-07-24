@@ -14,6 +14,8 @@ class TaskChecklist extends Model
     protected $fillable = [
         'task_card_id',
         'title',
+        'notes',
+        'due_date',
         'weight',
         'sort_order',
     ];
@@ -22,6 +24,7 @@ class TaskChecklist extends Model
         'task_card_id' => 'integer',
         'weight' => 'float',
         'sort_order' => 'integer',
+        'due_date' => 'date:Y-m-d',
     ];
 
     public function card(): BelongsTo

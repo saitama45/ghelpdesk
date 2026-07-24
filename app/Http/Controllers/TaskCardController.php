@@ -588,6 +588,8 @@ class TaskCardController extends Controller implements HasMiddleware
 
         $validated = $request->validate([
             'title' => 'sometimes|required|string|max:255',
+            'notes' => 'nullable|string|max:5000',
+            'due_date' => 'nullable|date',
             'weight' => 'nullable|numeric|min:0|max:100',
             'sort_order' => 'nullable|integer|min:0',
         ]);
@@ -666,6 +668,8 @@ class TaskCardController extends Controller implements HasMiddleware
 
         $validated = $request->validate([
             'title' => 'sometimes|required|string|max:255',
+            'notes' => 'nullable|string|max:5000',
+            'due_date' => 'nullable|date',
             'is_complete' => 'nullable|boolean',
             'weight' => 'nullable|numeric|min:0|max:100',
             'assigned_to' => 'nullable|exists:users,id',
@@ -725,6 +729,13 @@ class TaskCardController extends Controller implements HasMiddleware
         $card = $taskChecklistItem->checklist->card;
         // Remove the mirrored project task(s) before deleting the board item.
         $taskChecklistItem->loadMissing('children');
+        // Subtasks reference their parent via the self-referencing parent_item_id FK,
+        // which SQL Server will not cascade — delete the children first so removing an
+        // activity that still has subtasks doesn't violate the constraint.
+        foreach ($taskChecklistItem->children as $child) {
+            $this->projectTaskBoards->deleteProjectTasksForChecklistItem($child);
+            $child->delete();
+        }
         $this->projectTaskBoards->deleteProjectTasksForChecklistItem($taskChecklistItem);
         $taskChecklistItem->delete();
         $this->applyWeightedCompletion($card, $request->user());

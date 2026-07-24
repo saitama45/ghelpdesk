@@ -176,6 +176,9 @@ const newCardTitles = reactive(Object.fromEntries((localBoard.value.columns || [
 const collapsedChecklists = reactive({});
 const activitySectionOpen = ref(true);
 const collapsedSubTaskItems = reactive({});
+// Reveal state for the per-milestone / per-item "Notes & schedule" panels.
+const showChecklistMeta = reactive({});
+const showItemMeta = reactive({});
 
 const colorOptions = [
     '#0f766e',
@@ -300,6 +303,13 @@ const toDateTimeInput = (value) => {
     if (isNaN(date.getTime())) return '';
     const pad = (n) => String(n).padStart(2, '0');
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+// Date-only value ('YYYY-MM-DD') for <input type="date">. The server sends these
+// already date-cast, so just take the leading date portion when present.
+const toDateInput = (value) => {
+    if (!value) return '';
+    return String(value).slice(0, 10);
 };
 
 const detailsPayloadFromDraft = () => ({
@@ -1247,6 +1257,17 @@ const updateChecklist = async (checklist) => {
         handleApiError(error, 'Unable to rename checklist');
     } finally {
         isUpdatingChecklist.value = false;
+    }
+};
+
+// Save a milestone's notes / planned dates (independent of the title rename form).
+const saveChecklistMeta = async (checklist, payload) => {
+    if (!checklist || !canEditBoard.value) return;
+    try {
+        const response = await axios.put(route('task-checklists.update', checklist.id), payload);
+        replaceCard(response.data.card);
+    } catch (error) {
+        handleApiError(error, 'Unable to save checklist details');
     }
 };
 
@@ -2435,6 +2456,10 @@ onUnmounted(() => {
                                             <button v-if="canEditBoard" type="button" title="Rename checklist" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-white hover:text-blue-600 dark:text-gray-400 dark:hover:bg-gray-700" @click="startEditingChecklist(checklist)">
                                                 <PencilSquareIcon class="h-4 w-4" />
                                             </button>
+                                            <button type="button" title="Notes &amp; dates" class="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg dark:hover:bg-gray-700" :class="showChecklistMeta[checklist.id] ? 'bg-blue-50 text-blue-600 dark:bg-gray-700' : 'text-gray-400 hover:bg-white hover:text-blue-600'" @click="showChecklistMeta[checklist.id] = !showChecklistMeta[checklist.id]">
+                                                <CalendarDaysIcon class="h-4 w-4" />
+                                                <span v-if="checklist.notes || checklist.due_date" class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-blue-500"></span>
+                                            </button>
                                         </div>
                                         <div v-if="canEditBoard && editingChecklistId !== checklist.id" class="flex items-center gap-2 self-start sm:self-auto">
                                             <button type="button" title="Duplicate checklist" class="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800" @click="duplicateChecklist(checklist)">
@@ -2443,6 +2468,12 @@ onUnmounted(() => {
                                             </button>
                                             <button type="button" @click="deleteChecklist(checklist)" class="text-xs font-bold text-red-600">Delete</button>
                                         </div>
+                                    </div>
+                                    <div v-if="showChecklistMeta[checklist.id]" class="mb-3 rounded-lg border border-blue-100 bg-blue-50/40 p-3 dark:border-gray-700 dark:bg-gray-900/40">
+                                        <label class="mb-1 block text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Due date</label>
+                                        <input type="date" :value="toDateInput(checklist.due_date)" :disabled="!canEditBoard" class="h-8 w-full rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" @change="saveChecklistMeta(checklist, { due_date: $event.target.value || null })">
+                                        <label class="mb-1 mt-2 block text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Notes</label>
+                                        <textarea :value="checklist.notes" :disabled="!canEditBoard" rows="2" maxlength="5000" placeholder="Notes for this milestone..." class="w-full rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" @change="saveChecklistMeta(checklist, { notes: $event.target.value })"></textarea>
                                     </div>
                                     <div v-show="isChecklistOpen(checklist.id)" class="space-y-3">
                                         <div v-for="item in checklist.items" :key="item.id" class="space-y-2">
@@ -2499,9 +2530,19 @@ onUnmounted(() => {
                                                     <button v-if="canEditBoard" type="button" title="Duplicate item" class="text-gray-300 hover:text-blue-600" @click="duplicateChecklistItem(item)">
                                                         <DocumentDuplicateIcon class="h-4 w-4" />
                                                     </button>
+                                                    <button type="button" title="Notes &amp; dates" class="relative" :class="showItemMeta[item.id] ? 'text-blue-600' : 'text-gray-300 hover:text-blue-600'" @click="showItemMeta[item.id] = !showItemMeta[item.id]">
+                                                        <CalendarDaysIcon class="h-4 w-4" />
+                                                        <span v-if="item.notes || item.due_date" class="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-blue-500"></span>
+                                                    </button>
                                                     <button v-if="canEditBoard" type="button" @click="deleteChecklistItem(item)" class="text-gray-300 hover:text-red-600">
                                                         <XMarkIcon class="h-4 w-4" />
                                                     </button>
+                                                </div>
+                                                <div v-if="showItemMeta[item.id] && editingItemId !== item.id" class="ml-7 mt-2 rounded-lg border border-blue-100 bg-blue-50/40 p-2.5 dark:border-gray-700 dark:bg-gray-900/40">
+                                                    <label class="mb-1 block text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Due date</label>
+                                                    <input type="date" :value="toDateInput(item.due_date)" :disabled="!canEditBoard" class="h-8 w-full rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" @change="updateChecklistItem(item, { due_date: $event.target.value || null })">
+                                                    <label class="mb-1 mt-2 block text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Notes</label>
+                                                    <textarea :value="item.notes" :disabled="!canEditBoard" rows="2" maxlength="5000" placeholder="Notes for this activity..." class="w-full rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" @change="updateChecklistItem(item, { notes: $event.target.value })"></textarea>
                                                 </div>
                                             </div>
 
@@ -2556,9 +2597,19 @@ onUnmounted(() => {
                                                         <button v-if="canEditBoard" type="button" title="Duplicate sub-task" class="text-gray-300 hover:text-blue-600" @click="duplicateChecklistItem(child)">
                                                             <DocumentDuplicateIcon class="h-4 w-4" />
                                                         </button>
+                                                        <button type="button" title="Notes &amp; dates" class="relative" :class="showItemMeta[child.id] ? 'text-blue-600' : 'text-gray-300 hover:text-blue-600'" @click="showItemMeta[child.id] = !showItemMeta[child.id]">
+                                                            <CalendarDaysIcon class="h-4 w-4" />
+                                                            <span v-if="child.notes || child.due_date" class="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-blue-500"></span>
+                                                        </button>
                                                         <button v-if="canEditBoard" type="button" @click="deleteChecklistItem(child)" class="text-gray-300 hover:text-red-600">
                                                             <XMarkIcon class="h-4 w-4" />
                                                         </button>
+                                                    </div>
+                                                    <div v-if="showItemMeta[child.id] && editingItemId !== child.id" class="ml-7 mt-2 rounded-lg border border-blue-100 bg-blue-50/40 p-2.5 dark:border-gray-700 dark:bg-gray-900/40">
+                                                        <label class="mb-1 block text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Due date</label>
+                                                        <input type="date" :value="toDateInput(child.due_date)" :disabled="!canEditBoard" class="h-8 w-full rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" @change="updateChecklistItem(child, { due_date: $event.target.value || null })">
+                                                        <label class="mb-1 mt-2 block text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Notes</label>
+                                                        <textarea :value="child.notes" :disabled="!canEditBoard" rows="2" maxlength="5000" placeholder="Notes for this subtask..." class="w-full rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" @change="updateChecklistItem(child, { notes: $event.target.value })"></textarea>
                                                     </div>
                                                 </div>
                                             </div>
