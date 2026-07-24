@@ -6,6 +6,7 @@ use App\Models\DepartmentNode;
 use App\Models\Item;
 use App\Models\Scopes\ActiveEntityScope;
 use App\Services\StoreReportService;
+use App\Services\BrandHealthService;
 use App\Services\OrganizationReferenceService;
 use App\Support\CompanyContext;
 use App\Models\Project;
@@ -25,11 +26,13 @@ class DashboardController extends Controller
 {
     protected $reportService;
     protected $organizationReferenceService;
+    protected $brandHealthService;
 
-    public function __construct(StoreReportService $reportService, OrganizationReferenceService $organizationReferenceService)
+    public function __construct(StoreReportService $reportService, OrganizationReferenceService $organizationReferenceService, BrandHealthService $brandHealthService)
     {
         $this->reportService = $reportService;
         $this->organizationReferenceService = $organizationReferenceService;
+        $this->brandHealthService = $brandHealthService;
     }
 
     public function index(Request $request)
@@ -138,6 +141,9 @@ class DashboardController extends Controller
 
             // Lazy tabs — excluded from the initial load, fetched on first tab click.
             'storeHealth' => Inertia::optional(fn () => $this->buildStoreHealth($selectedSubUnitLabel, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter, $effectiveCompanyIds)),
+            // Live Brand Health — brand-wide (every active Brand company), independent
+            // of the entity/sector/user filters so the tab is a full brand monitor.
+            'brandHealth' => Inertia::optional(fn () => $this->brandHealthService->build($user)),
             'ticketCharts' => Inertia::optional(fn () => $this->buildTicketCharts($filteredQuery, $user, $effectiveCompanyIds, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter)),
             'leaderboard' => Inertia::optional(fn () => $this->buildLeaderboard($filteredQuery, $year ? (int) $year : null, $month ? (int) $month : null, $departmentIdFilter, $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null, $userIdFilter, $storeIdFilter, $effectiveCompanyIds)),
             'stats' => Inertia::optional(fn () => $overviewData()['stats']),

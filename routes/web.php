@@ -50,6 +50,11 @@ Route::middleware('auth')->group(function () {
         ->name('dashboard.chart-tickets');
     Route::get('/dashboard/chart-tickets/export', [\App\Http\Controllers\DashboardController::class, 'exportChartTickets'])
         ->name('dashboard.chart-tickets.export');
+    // Live Brand Health — WCF confirmation register actions.
+    Route::post('/dashboard/brand-health/wcf/{ticket}/resolve', [\App\Http\Controllers\BrandHealthController::class, 'resolve'])
+        ->name('dashboard.brand-health.wcf.resolve');
+    Route::post('/dashboard/brand-health/wcf/{ticket}/reopen', [\App\Http\Controllers\BrandHealthController::class, 'reopen'])
+        ->name('dashboard.brand-health.wcf.reopen');
     Route::get('/global-search', [\App\Http\Controllers\GlobalSearchController::class, 'search'])->name('global-search');
     Route::get('/dtr', [\App\Http\Controllers\AttendanceController::class, 'index'])->name('attendance.index');
     Route::get('/attendance/logs', [\App\Http\Controllers\AttendanceController::class, 'logs'])->name('attendance.logs');
