@@ -1,97 +1,23 @@
 import { reactive } from 'vue'
+import {
+    REGISTRY_SECTION_ORDER,
+    REGISTRY_SECTION_LABELS,
+    REGISTRY_CHILD_ORDER,
+    REGISTRY_CHILD_LABELS,
+} from '@/Composables/useModuleRegistry.js'
 
-export const SECTION_LABELS = {
-    dashboard: 'Dashboard',
-    projectTracker: 'Project Tracker',
-    services: 'Services',
-    inventory: 'Inventory',
-    monitoring: 'Monitoring',
-    adminTask: 'Administrative',
-    references: 'References',
-    reports: 'Reports',
-    userManagement: 'User Management',
-    settings: 'Settings',
-}
+/**
+ * Section/child structure and default labels come from the module registry —
+ * see useModuleRegistry.js. This file owns only the *user customisation* layer
+ * on top of it: saved ordering and renamed labels.
+ */
+export const SECTION_LABELS = REGISTRY_SECTION_LABELS
 
-export const DEFAULT_SECTION_ORDER = [
-    'dashboard', 'projectTracker', 'services', 'inventory', 'monitoring', 'adminTask', 'references', 'reports', 'userManagement', 'settings',
-]
+export const DEFAULT_SECTION_ORDER = REGISTRY_SECTION_ORDER
 
-export const DEFAULT_CHILD_ORDER = {
-    dashboard: [],
-    projectTracker: [],
-    services: ['tickets', 'queue', 'task-boards', 'pos-requests', 'sap-requests', 'stamps'],
-    inventory: ['assets', 'stock-ins', 'stock-transfers', 'stock-receivings', 'inventory-report'],
-    monitoring: ['npc-status', 'cctv-monitoring', 'wigs', 'payments', 'accounting-documents', 'mall-hookups'],
-    adminTask: ['dtr', 'attendance-logs', 'scheduling', 'service-vehicle-trips', 'presence', 'kb-articles'],
-    references: ['companies', 'departments', 'clusters', 'stores', 'vendors', 'activity-templates', 'categories', 'sub-categories', 'items', 'request-types', 'form-builder'],
-    reports: ['store-health', 'sla-performance', 'assignee-performance'],
-    userManagement: ['users', 'roles'],
-    settings: ['system-settings', 'ticket-archive', 'canned-messages', 'leadership-points', 'profile'],
-}
+export const DEFAULT_CHILD_ORDER = REGISTRY_CHILD_ORDER
 
-export const CHILD_LABELS = {
-    services: {
-        'tickets': 'Tickets',
-        'queue': 'Queue Monitor',
-        'task-boards': 'Task Board',
-        'pos-requests': 'POS Requests',
-        'sap-requests': 'SAP Requests',
-        'stamps': 'Loyalty Stamps',
-    },
-    inventory: {
-        'assets': 'Assets',
-        'stock-ins': 'Stock In',
-        'stock-transfers': 'Stock Transfer',
-        'stock-receivings': 'Receiving Stock',
-        'inventory-report': 'Inventory Report',
-    },
-    monitoring: {
-        'npc-status': 'NPC Status',
-        'cctv-monitoring': 'CCTV Monitoring',
-        'wigs': 'WIGS',
-        'payments': 'Payments & SOA',
-        'accounting-documents': 'Accounting Documents',
-        'mall-hookups': 'Mall Hookup',
-    },
-    adminTask: {
-        'dtr': 'DTR',
-        'attendance-logs': 'Attendance Logs',
-        'scheduling': 'Scheduling',
-        'presence': 'Presence',
-        'kb-articles': 'KB Articles',
-        'service-vehicle-trips': 'Service Vehicle Trips',
-    },
-    references: {
-        'companies': 'Companies',
-        'departments': 'Departments',
-        'clusters': 'Clusters',
-        'stores': 'Stores',
-        'vendors': 'Vendors',
-        'activity-templates': 'Activity Templates',
-        'categories': 'Categories',
-        'sub-categories': 'Sub-Categories',
-        'items': 'Items',
-        'request-types': 'Request Types',
-        'form-builder': 'Form Builder',
-    },
-    reports: {
-        'store-health': 'Store Health Report',
-        'sla-performance': 'SLA Performance Report',
-        'assignee-performance': 'Assignee Performance',
-    },
-    userManagement: {
-        'users': 'Users',
-        'roles': 'Roles & Permissions',
-    },
-    settings: {
-        'system-settings': 'System Settings',
-        'ticket-archive': 'Ticket Archive',
-        'canned-messages': 'Canned Messages',
-        'leadership-points': 'Leadership Points',
-        'profile': 'My Profile',
-    },
-}
+export const CHILD_LABELS = REGISTRY_CHILD_LABELS
 
 function cloneChildren(src) {
     if (!src || typeof src !== 'object') return {}

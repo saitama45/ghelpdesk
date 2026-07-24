@@ -44,6 +44,19 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [\App\Http\Controllers\DashboardController::class, 'index'])
         ->middleware(['verified'])
         ->name('dashboard');
+    // Section hub landing pages (box-button grid of a section's modules).
+    // Presentational only — tiles/labels/permissions come from the frontend
+    // module registry and shared auth props; per-tile gating is client-side.
+    Route::get('/hub/{section}', [\App\Http\Controllers\HubController::class, 'show'])
+        ->name('hub.show');
+    // Inventory Management workspace (prototype's 6-tab TAS work tool).
+    Route::get('/inventory-workspace', [\App\Http\Controllers\InventoryWorkspaceController::class, 'index'])
+        ->name('inventory-workspace.index');
+    // Executive master view (enterprise roll-up; gated on dashboard.filter_entity).
+    Route::get('/executive', [\App\Http\Controllers\ExecutiveController::class, 'index'])
+        ->name('executive.index');
+    Route::post('/inventory-workspace/requests/{ticketAsset}/advance', [\App\Http\Controllers\InventoryWorkspaceController::class, 'advance'])
+        ->name('inventory-workspace.advance');
     Route::get('/dashboard/export', [\App\Http\Controllers\DashboardController::class, 'export'])
         ->name('dashboard.export');
     Route::get('/dashboard/chart-tickets', [\App\Http\Controllers\DashboardController::class, 'chartTickets'])
@@ -139,6 +152,10 @@ Route::middleware('auth')->group(function () {
     Route::get('roles/{role}/editor-data', [RoleController::class, 'editorData'])->name('roles.editor-data');
     Route::resource('roles', RoleController::class)->except(['show', 'create', 'edit']);
     Route::post('companies/switch', [CompanyController::class, 'switch'])->name('companies.switch');
+    // Department axis: set the viewed department (nested inside the active entity).
+    Route::post('department-context/switch', [\App\Http\Controllers\DepartmentContextController::class, 'switch'])->name('department-context.switch');
+    Route::post('department-context/belong', [\App\Http\Controllers\DepartmentContextController::class, 'belong'])->name('department-context.belong');
+    Route::post('department-context/open-department', [\App\Http\Controllers\DepartmentContextController::class, 'openDepartment'])->name('department-context.open-department');
     Route::resource('companies', CompanyController::class)->except(['show', 'create', 'edit']);
     Route::resource('departments', DepartmentController::class)->except(['show', 'create', 'edit']);
     Route::post('departments/{department}/nodes', [DepartmentController::class, 'storeNode'])->name('departments.nodes.store');

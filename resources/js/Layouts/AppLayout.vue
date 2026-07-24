@@ -13,6 +13,8 @@ import UserStatus from '@/Components/UserStatus.vue';
 import { usePresence } from '@/Composables/usePresence.js';
 import NotificationBell from '@/Components/NotificationBell.vue';
 import ThemeToggle from '@/Components/ThemeToggle.vue';
+import DepartmentTabs from '@/Components/DepartmentTabs.vue';
+import ModuleLauncher from '@/Components/ModuleLauncher.vue';
 import { useTheme } from '@/Composables/useTheme.js';
 
 const page = usePage();
@@ -116,10 +118,18 @@ watch(() => page.url, () => {
 const isCurrentRoute = (routeName) => {
     return route().current(routeName);
 };
+
+// Department accent (retints on switch). Exposed as CSS vars so the sidebar,
+// department strip, and page accents can follow the viewed department.
+const deptAccent = computed(() => page.props.departmentContext?.accent || '#2d6fe4');
+const deptSoft = computed(() => page.props.departmentContext?.soft || '#eaf1ff');
 </script>
 
 <template>
-    <div class="h-screen bg-gray-50 flex overflow-hidden relative dark:bg-gray-950">
+    <div
+        class="h-screen bg-gray-50 flex overflow-hidden relative dark:bg-gray-950"
+        :style="{ '--dept-accent': deptAccent, '--dept-soft': deptSoft }"
+    >
         <!-- Sidebar -->
         <Sidebar 
             :is-collapsed="isSidebarCollapsed" 
@@ -237,6 +247,12 @@ const isCurrentRoute = (routeName) => {
                     </div>
                 </div>
             </div>
+
+            <!-- Global department strip (tabs + derived access), below top nav -->
+            <DepartmentTabs />
+
+            <!-- Global floating module launcher (right edge, self-scopes to route) -->
+            <ModuleLauncher />
 
             <!-- Page Content -->
             <main scroll-region class="flex-1 bg-gray-50 dark:bg-gray-950" :class="mainClass">

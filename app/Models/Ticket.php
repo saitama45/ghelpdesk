@@ -36,6 +36,7 @@ class Ticket extends Model
         'sender_email',
         'sender_name',
         'department',
+        'department_id',
         'message_id',
         'source_message_id',
         'email_body_hash',
@@ -266,6 +267,7 @@ class Ticket extends Model
         'reporter_id' => 'integer',
         'assignee_id' => 'integer',
         'company_id' => 'integer',
+        'department_id' => 'integer',
         'store_id' => 'integer',
         'category_id' => 'integer',
         'sub_category_id' => 'integer',
@@ -324,6 +326,15 @@ class Ticket extends Model
     public function company()
     {
         return $this->belongsTo(Company::class);
+    }
+
+    /**
+     * The owning department. Nullable — legacy rows may only carry the free-text
+     * {@see $department} string, which remains the display fallback.
+     */
+    public function departmentRef()
+    {
+        return $this->belongsTo(Department::class, 'department_id');
     }
 
     public function store()

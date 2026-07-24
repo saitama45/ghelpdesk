@@ -16,6 +16,9 @@ class TicketAsset extends Model
         'serial_no',
         'barcode',
         'transaction_type',
+        'condition',
+        'purchase_required',
+        'procurement_status',
         'quantity',
         'notes',
         'created_by',
@@ -25,6 +28,7 @@ class TicketAsset extends Model
     protected $casts = [
         'asset_id' => 'integer',
         'stock_in_id' => 'integer',
+        'purchase_required' => 'boolean',
         'quantity' => 'integer',
         'created_by' => 'integer',
         'updated_by' => 'integer',

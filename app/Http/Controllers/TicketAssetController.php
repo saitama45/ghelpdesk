@@ -18,6 +18,15 @@ class TicketAssetController extends Controller
 
     public const TRANSACTION_TYPES = ['PM', 'Repair', 'Stock Out', 'Stock In', 'Deployment'];
 
+    /** Asset condition options (LINK Hub chain). */
+    public const CONDITIONS = ['Healthy', 'For Checking', 'Not Working', 'For Replacement'];
+
+    /** Conditions for which a "For Purchase" replacement is allowed. */
+    public const PURCHASABLE_CONDITIONS = ['Not Working', 'For Replacement'];
+
+    /** Procurement lifecycle beyond the initial Pending Approval (advanced states preserved on update). */
+    public const ADVANCED_PROCUREMENT = ['Approved', 'Incoming', 'Received', 'For Setup', 'Deployed'];
+
     /**
      * List assets/units tagged to a ticket, including current SOH at the ticket's store
      * (for Consumables) — Fixed units carry their own serial/barcode.
@@ -49,6 +58,8 @@ class TicketAssetController extends Controller
             'asset_id' => ['required', 'integer', 'exists:assets,id'],
             'stock_in_id' => ['nullable', 'integer', 'exists:stock_ins,id'],
             'transaction_type' => ['required', Rule::in(self::TRANSACTION_TYPES)],
+            'condition' => ['nullable', Rule::in(self::CONDITIONS)],
+            'purchase_required' => ['nullable', 'boolean'],
             'quantity' => ['nullable', 'integer', 'min:1'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
@@ -100,12 +111,24 @@ class TicketAssetController extends Controller
             ], 422);
         }
 
+        [$condition, $purchaseRequired, $procurementStatus] = $this->deriveProcurement(
+            $asset,
+            $ticket->store?->code,
+            $isFixed,
+            $validated['condition'] ?? null,
+            (bool) ($validated['purchase_required'] ?? false),
+            null
+        );
+
         $link = $ticket->taggedAssets()->create([
             'asset_id' => $asset->id,
             'stock_in_id' => $stockInId,
             'serial_no' => $serialNo,
             'barcode' => $barcode,
             'transaction_type' => $validated['transaction_type'],
+            'condition' => $condition,
+            'purchase_required' => $purchaseRequired,
+            'procurement_status' => $procurementStatus,
             'quantity' => $validated['quantity'] ?? 1,
             'notes' => $validated['notes'] ?? null,
             'created_by' => $request->user()->id,
@@ -131,12 +154,26 @@ class TicketAssetController extends Controller
 
         $validated = $request->validate([
             'transaction_type' => ['required', Rule::in(self::TRANSACTION_TYPES)],
+            'condition' => ['nullable', Rule::in(self::CONDITIONS)],
+            'purchase_required' => ['nullable', 'boolean'],
             'quantity' => ['nullable', 'integer', 'min:1'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
+        [$condition, $purchaseRequired, $procurementStatus] = $this->deriveProcurement(
+            $ticketAsset->asset,
+            $ticket->store?->code,
+            $ticketAsset->asset?->type === 'Fixed',
+            $validated['condition'] ?? null,
+            (bool) ($validated['purchase_required'] ?? false),
+            $ticketAsset->procurement_status
+        );
+
         $ticketAsset->update([
             'transaction_type' => $validated['transaction_type'],
+            'condition' => $condition,
+            'purchase_required' => $purchaseRequired,
+            'procurement_status' => $procurementStatus,
             'quantity' => $validated['quantity'] ?? 1,
             'notes' => $validated['notes'] ?? null,
             'updated_by' => $request->user()->id,
@@ -166,6 +203,38 @@ class TicketAssetController extends Controller
         ]);
     }
 
+    /**
+     * Resolve condition, purchase flag, and procurement status for a tag.
+     *
+     * Rules (LINK Hub chain):
+     *  - "For Purchase" only applies to Not Working / For Replacement conditions.
+     *  - When purchasing: stock on hand > 0 → reserve path (no procurement row,
+     *    status null); stock 0 (or a Fixed unit) → 'Pending Approval'.
+     *  - An already-advanced lifecycle status (Approved…Deployed) is preserved.
+     *
+     * @return array{0: ?string, 1: bool, 2: ?string} [condition, purchaseRequired, procurementStatus]
+     */
+    private function deriveProcurement(?Asset $asset, ?string $storeCode, bool $isFixed, ?string $condition, bool $purchaseRequired, ?string $existingStatus): array
+    {
+        $purchaseRequired = $purchaseRequired && in_array($condition, self::PURCHASABLE_CONDITIONS, true);
+
+        if (! $purchaseRequired) {
+            return [$condition, false, null];
+        }
+
+        // Preserve an in-flight procurement lifecycle rather than resetting it.
+        if ($existingStatus && in_array($existingStatus, self::ADVANCED_PROCUREMENT, true)) {
+            return [$condition, true, $existingStatus];
+        }
+
+        $stock = (! $isFixed && $asset && $storeCode)
+            ? $this->stockOnHand($asset->id, $storeCode)
+            : 0;
+
+        // Stock available → reserve & release (no procurement). Zero stock → needs approval.
+        return [$condition, true, $stock > 0 ? null : 'Pending Approval'];
+    }
+
     private function presentLink(TicketAsset $link, ?string $storeCode): array
     {
         $isFixed = $link->asset?->type === 'Fixed';
@@ -177,6 +246,9 @@ class TicketAssetController extends Controller
             'serial_no' => $link->serial_no,
             'barcode' => $link->barcode,
             'transaction_type' => $link->transaction_type,
+            'condition' => $link->condition,
+            'purchase_required' => (bool) $link->purchase_required,
+            'procurement_status' => $link->procurement_status,
             'quantity' => $link->quantity,
             'notes' => $link->notes,
             'created_at' => $link->created_at,

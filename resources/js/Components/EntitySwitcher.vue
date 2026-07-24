@@ -70,8 +70,8 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
             type="button"
             @click.stop="toggle"
             :class="[
-                'w-full flex items-center rounded-lg border border-gray-700 bg-gray-800/60 transition-colors',
-                canSwitch ? 'hover:bg-gray-800 cursor-pointer' : 'cursor-default',
+                'w-full flex items-center rounded-lg border border-gray-200 bg-gray-50 transition-colors dark:border-gray-700 dark:bg-gray-800/60',
+                canSwitch ? 'hover:bg-gray-100 cursor-pointer dark:hover:bg-gray-800' : 'cursor-default',
                 isCollapsed ? 'justify-center p-2' : 'px-3 py-2',
             ]"
             :title="isCollapsed ? activeCompany.name : (canSwitch ? 'Switch entity' : activeCompany.name)"
@@ -87,7 +87,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
             <template v-if="!isCollapsed">
                 <span class="ml-3 flex-1 min-w-0 text-left">
                     <span class="block text-[10px] font-semibold uppercase tracking-wider text-gray-500">Entity</span>
-                    <span class="block text-sm font-semibold text-white truncate">{{ activeCompany.name }}</span>
+                    <span class="block text-sm font-semibold text-gray-800 truncate dark:text-white">{{ activeCompany.name }}</span>
                 </span>
                 <ChevronUpDownIcon v-if="canSwitch" class="ml-2 h-5 w-5 text-gray-400 flex-shrink-0" />
             </template>

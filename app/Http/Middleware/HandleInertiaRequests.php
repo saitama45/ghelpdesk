@@ -71,6 +71,11 @@ class HandleInertiaRequests extends Middleware
             ],
             'activeCompany' => $activeCompany,
             'availableCompanies' => $availableCompanies,
+            // Department axis (nested inside the active entity): home vs viewed
+            // department and the derived provider/customer access view.
+            'departmentContext' => $user
+                ? \App\Support\DepartmentContext::share($user)
+                : ['home' => null, 'viewed' => null, 'accessView' => 'customer', 'departments' => []],
             'sidebarLayout' => Cache::remember('sidebar_layout_config', 3600, function () {
                 $val = \App\Models\Setting::where('key', 'sidebar_layout')->value('value');
                 return $val ? json_decode($val, true) : null;

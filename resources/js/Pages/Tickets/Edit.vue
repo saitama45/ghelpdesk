@@ -757,8 +757,35 @@ const pendingAsset = ref(null);
 const assetSubmitting = ref(false);
 const editingAssetId = ref(null);
 
-const addAssetForm = reactive({ transaction_type: 'PM', quantity: 1, notes: '' });
-const editAssetForm = reactive({ transaction_type: 'PM', quantity: 1, notes: '' });
+const addAssetForm = reactive({ transaction_type: 'PM', condition: 'For Checking', purchase_required: false, quantity: 1, notes: '' });
+const editAssetForm = reactive({ transaction_type: 'PM', condition: 'For Checking', purchase_required: false, quantity: 1, notes: '' });
+
+// LINK Hub asset condition + procurement chain.
+const assetConditions = ['Healthy', 'For Checking', 'Not Working', 'For Replacement'];
+const purchasableCondition = (c) => c === 'Not Working' || c === 'For Replacement';
+const conditionBadgeClass = (c) => {
+    switch (c) {
+        case 'Healthy': return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+        case 'For Checking': return 'bg-amber-100 text-amber-800 border border-amber-200';
+        case 'Not Working': return 'bg-red-100 text-red-800 border border-red-200';
+        case 'For Replacement': return 'bg-orange-100 text-orange-800 border border-orange-200';
+        default: return 'bg-gray-100 text-gray-700 border border-gray-200';
+    }
+};
+const procurementBadgeClass = (s) => {
+    switch (s) {
+        case 'Pending Approval': return 'bg-amber-100 text-amber-800 border border-amber-200';
+        case 'Approved':
+        case 'Incoming': return 'bg-blue-100 text-blue-800 border border-blue-200';
+        case 'Received':
+        case 'For Setup': return 'bg-indigo-100 text-indigo-800 border border-indigo-200';
+        case 'Deployed': return 'bg-emerald-100 text-emerald-800 border border-emerald-200';
+        default: return 'bg-gray-100 text-gray-700 border border-gray-200';
+    }
+};
+// Keep purchase flag consistent when condition changes away from a purchasable state.
+watch(() => addAssetForm.condition, (c) => { if (!purchasableCondition(c)) addAssetForm.purchase_required = false; });
+watch(() => editAssetForm.condition, (c) => { if (!purchasableCondition(c)) editAssetForm.purchase_required = false; });
 
 const loadTaggedAssets = async () => {
     try {
@@ -812,6 +839,8 @@ const hideAssetDropdownSoon = () => {
 const selectAssetToAdd = (asset) => {
     pendingAsset.value = asset;
     addAssetForm.transaction_type = 'PM';
+    addAssetForm.condition = 'For Checking';
+    addAssetForm.purchase_required = false;
     addAssetForm.quantity = 1;
     addAssetForm.notes = '';
     showAddAssetForm.value = true;
@@ -833,6 +862,8 @@ const submitAddAsset = async () => {
             asset_id: pendingAsset.value.asset_id,
             stock_in_id: pendingAsset.value.stock_in_id || null,
             transaction_type: addAssetForm.transaction_type,
+            condition: addAssetForm.condition,
+            purchase_required: purchasableCondition(addAssetForm.condition) ? addAssetForm.purchase_required : false,
             quantity: quantityRelevant(addAssetForm.transaction_type) ? (addAssetForm.quantity || 1) : 1,
             notes: addAssetForm.notes || null,
         });
@@ -849,6 +880,8 @@ const submitAddAsset = async () => {
 const startEditAsset = (link) => {
     editingAssetId.value = link.id;
     editAssetForm.transaction_type = link.transaction_type;
+    editAssetForm.condition = link.condition || 'For Checking';
+    editAssetForm.purchase_required = !!link.purchase_required;
     editAssetForm.quantity = link.quantity || 1;
     editAssetForm.notes = link.notes || '';
 };
@@ -863,6 +896,8 @@ const submitEditAsset = async (link) => {
     try {
         const response = await axios.put(route('tickets.assets.update', [props.ticket.id, link.id]), {
             transaction_type: editAssetForm.transaction_type,
+            condition: editAssetForm.condition,
+            purchase_required: purchasableCondition(editAssetForm.condition) ? editAssetForm.purchase_required : false,
             quantity: quantityRelevant(editAssetForm.transaction_type) ? (editAssetForm.quantity || 1) : 1,
             notes: editAssetForm.notes || null,
         });
@@ -2574,6 +2609,17 @@ const linkify = (text) => {
                                     <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Action / Transaction</label>
                                     <CustomSelect v-model="addAssetForm.transaction_type" :options="assetTransactionTypes" placeholder="Select type" />
                                 </div>
+                                <div>
+                                    <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Asset Condition</label>
+                                    <CustomSelect v-model="addAssetForm.condition" :options="assetConditions" placeholder="Select condition" />
+                                </div>
+                                <label v-if="purchasableCondition(addAssetForm.condition)" class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2 cursor-pointer dark:border-amber-800 dark:bg-amber-900/20">
+                                    <input type="checkbox" v-model="addAssetForm.purchase_required" class="mt-0.5 rounded border-gray-300 text-amber-600 focus:ring-amber-500">
+                                    <span>
+                                        <span class="block text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">For Purchase</span>
+                                        <span class="block text-[9px] text-amber-700 dark:text-amber-400">Checks inventory stock; routes zero stock to TAS approval.</span>
+                                    </span>
+                                </label>
                                 <div v-if="quantityRelevant(addAssetForm.transaction_type)">
                                     <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Quantity</label>
                                     <input v-model.number="addAssetForm.quantity" type="number" min="1" class="block w-full border-gray-300 rounded-lg shadow-sm text-xs dark:border-gray-600">
@@ -2601,6 +2647,17 @@ const linkify = (text) => {
                                             <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Action / Transaction</label>
                                             <CustomSelect v-model="editAssetForm.transaction_type" :options="assetTransactionTypes" placeholder="Select type" />
                                         </div>
+                                        <div>
+                                            <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Asset Condition</label>
+                                            <CustomSelect v-model="editAssetForm.condition" :options="assetConditions" placeholder="Select condition" />
+                                        </div>
+                                        <label v-if="purchasableCondition(editAssetForm.condition)" class="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2 cursor-pointer dark:border-amber-800 dark:bg-amber-900/20">
+                                            <input type="checkbox" v-model="editAssetForm.purchase_required" class="mt-0.5 rounded border-gray-300 text-amber-600 focus:ring-amber-500">
+                                            <span>
+                                                <span class="block text-[10px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">For Purchase</span>
+                                                <span class="block text-[9px] text-amber-700 dark:text-amber-400">Checks inventory stock; routes zero stock to TAS approval.</span>
+                                            </span>
+                                        </label>
                                         <div v-if="quantityRelevant(editAssetForm.transaction_type)">
                                             <label class="block text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 dark:text-gray-300">Quantity</label>
                                             <input v-model.number="editAssetForm.quantity" type="number" min="1" class="block w-full border-gray-300 rounded-lg shadow-sm text-xs dark:border-gray-600">
@@ -2623,7 +2680,18 @@ const linkify = (text) => {
                                                 <span class="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider" :class="assetTypeBadgeClass(link.transaction_type)">
                                                     {{ link.transaction_type }}
                                                 </span>
+                                                <span v-if="link.condition" class="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider" :class="conditionBadgeClass(link.condition)">
+                                                    {{ link.condition }}
+                                                </span>
+                                                <span v-if="link.purchase_required" class="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">For Purchase</span>
                                                 <span v-if="quantityRelevant(link.transaction_type)" class="text-[9px] font-bold text-gray-500 dark:text-gray-300">×{{ link.quantity }}</span>
+                                            </div>
+                                            <div v-if="link.procurement_status || (link.purchase_required && (link.soh_at_store ?? 0) > 0)" class="mt-1 flex items-center gap-1.5">
+                                                <span v-if="link.procurement_status" class="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider" :class="procurementBadgeClass(link.procurement_status)">
+                                                    {{ link.procurement_status }}
+                                                </span>
+                                                <span v-else class="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">Stock Available</span>
+                                                <span v-if="link.soh_at_store != null" class="text-[9px] font-bold text-gray-400 dark:text-gray-500">SOH: {{ link.soh_at_store }}</span>
                                             </div>
                                             <div class="text-[10px] text-gray-600 truncate dark:text-gray-300">
                                                 <span v-if="link.serial_no || link.barcode" class="font-semibold text-gray-500 dark:text-gray-300">{{ link.asset?.item_code }} · </span>{{ link.asset?.brand }} {{ link.asset?.model }}
