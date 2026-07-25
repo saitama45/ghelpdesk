@@ -1228,7 +1228,10 @@ class TicketController extends Controller
         ]);
 
         $acceptedTicket = DB::transaction(function () use ($ticket, $validated, $request) {
-            $lockedTicket = Ticket::whereKey($ticket->id)->lockForUpdate()->firstOrFail();
+            // The route binding already resolved $ticket unscoped, so it may sit outside
+            // the actor's active entity. Re-lock unscoped too, or firstOrFail() 404s here.
+            $lockedTicket = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+                ->whereKey($ticket->id)->lockForUpdate()->firstOrFail();
 
             if ($lockedTicket->assignee_id && (int) $lockedTicket->assignee_id !== (int) $request->user()->id) {
                 abort(409, 'This ticket was already accepted by another user.');
@@ -1326,10 +1329,16 @@ class TicketController extends Controller
      */
     private function syncParentStatus($parentId, $triggeredStatus)
     {
-        $parent = Ticket::find($parentId);
+        // A ticket family can span entities, so drop ActiveEntityScope. Left on, the
+        // parent (or some children) can fall outside the actor's active entity, which
+        // both skips the parent update and computes $allDone over a partial child set —
+        // prematurely closing a parent while a cross-entity child is still open.
+        $parent = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->find($parentId);
         if (!$parent) return;
 
-        $allChildren = Ticket::where('parent_id', $parentId)->get();
+        $allChildren = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->where('parent_id', $parentId)->get();
         
         if (in_array($triggeredStatus, ['resolved', 'closed'])) {
             // Check if ALL children are terminal (resolved or closed)
@@ -2310,8 +2319,12 @@ class TicketController extends Controller
             return redirect()->back()->withErrors(['bulk' => 'No fields selected for update.']);
         }
 
+        // Unscoped: selection can span entities (the index supports an "All Entities"
+        // filter and families cross entities). tickets.edit is the gate here, not the
+        // entity scope — scoped, cross-entity ids silently drop and the count lies.
         if (isset($updates['status'])) {
-            $ticketsToUpdate = Ticket::whereIn('id', $validated['ticket_ids'])->get();
+            $ticketsToUpdate = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+                ->whereIn('id', $validated['ticket_ids'])->get();
             $count = 0;
             foreach ($ticketsToUpdate as $t) {
                 $oldStatus = $t->status;
@@ -2332,7 +2345,8 @@ class TicketController extends Controller
                 $count++;
             }
         } else {
-            $count = Ticket::whereIn('id', $validated['ticket_ids'])->update($updates);
+            $count = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+                ->whereIn('id', $validated['ticket_ids'])->update($updates);
         }
 
         return redirect()->back()->with('success', "{$count} ticket(s) updated successfully.");
@@ -2357,8 +2371,11 @@ class TicketController extends Controller
             return redirect()->back()->withErrors(['bulk_response' => 'Response text or at least one attachment is required.']);
         }
 
+        // Unscoped: selection can span entities. Scoped, cross-entity tickets silently
+        // drop — they get no response, and the closed-ticket guard below never sees them.
         $ticketIds = collect($validated['ticket_ids'])->unique()->values();
-        $tickets = Ticket::whereIn('id', $ticketIds)
+        $tickets = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->whereIn('id', $ticketIds)
             ->with(['reporter', 'assignee', 'slaMetric'])
             ->get();
 
@@ -2423,7 +2440,10 @@ class TicketController extends Controller
             'tickets.*.remarks'           => 'nullable|string',
         ]);
 
-        $childParentKeys = Ticket::whereIn('id', collect($validated['tickets'])->pluck('parent_id')->unique())
+        // Unscoped: a selected parent can live in another entity. Scoped, this guard
+        // misses cross-entity children AND findOrFail() below 404s on a cross-entity parent.
+        $childParentKeys = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->whereIn('id', collect($validated['tickets'])->pluck('parent_id')->unique())
             ->whereNotNull('parent_id')
             ->pluck('ticket_key');
 
@@ -2437,7 +2457,8 @@ class TicketController extends Controller
             $children = collect();
 
             foreach ($validated['tickets'] as $entry) {
-                $parentTicket = Ticket::findOrFail($entry['parent_id']);
+                $parentTicket = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+                    ->findOrFail($entry['parent_id']);
                 
                 // Check for schedule conflicts (optional but recommended)
                 $newStart = \Carbon\Carbon::parse($entry['start_time']);
@@ -2581,9 +2602,21 @@ class TicketController extends Controller
             return redirect()->back()->withErrors(['merge' => 'Parent ticket must be one of the selected tickets.']);
         }
 
-        $parent = Ticket::find($validated['parent_id']);
+        // A merge can span entities, so drop ActiveEntityScope — it is a listing
+        // filter, not an authorization boundary. Left on, find()/whereIn() return
+        // null/empty when the viewer's active entity differs from the ticket's
+        // company (validation passes because `exists` hits the raw table), and
+        // $parent->id then fatals. See Ticket::scopeFamilyOf() for the same rule.
+        $parent = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->find($validated['parent_id']);
+
+        if (!$parent) {
+            return redirect()->back()->withErrors(['merge' => 'Parent ticket could not be found.']);
+        }
+
         $childIds = array_diff($validated['ticket_ids'], [$parent->id]);
-        $children = Ticket::whereIn('id', $childIds)->get();
+        $children = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->whereIn('id', $childIds)->get();
 
         DB::transaction(function () use ($parent, $children) {
             $childKeys = $children->pluck('ticket_key')->implode(', ');

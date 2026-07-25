@@ -470,15 +470,20 @@ class CctvMonitoringController extends Controller implements HasMiddleware
     private function ensureTicket(CctvSystem $system, array $validated, $user, ?CctvInspection $inspection = null): Ticket
     {
         // Reuse the inspection's existing ticket on edit, or an explicitly provided one.
+        // Bypass ActiveEntityScope: these are explicit id references. Scoped, a
+        // cross-entity linked ticket resolves to null and we spawn a duplicate ticket
+        // instead of reusing the one already linked.
         if ($inspection && $inspection->ticket_id) {
-            $existing = Ticket::find($inspection->ticket_id);
+            $existing = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+                ->find($inspection->ticket_id);
             if ($existing) {
                 return $existing;
             }
         }
 
         if (!empty($validated['ticket_id'])) {
-            $existing = Ticket::find($validated['ticket_id']);
+            $existing = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+                ->find($validated['ticket_id']);
             if ($existing) {
                 return $existing;
             }

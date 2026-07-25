@@ -431,10 +431,16 @@ class TicketObserver
      */
     private function syncParentStatus($parentId, $triggeredStatus)
     {
-        $parent = Ticket::find($parentId);
+        // A ticket family can span entities; the scope is a listing filter, not an auth
+        // boundary. Left on, the parent (or some children) can fall outside the actor's
+        // active entity, skipping the parent update and computing $allDone over a partial
+        // child set — prematurely closing a parent while a cross-entity child is still open.
+        $parent = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->find($parentId);
         if (!$parent) return;
 
-        $allChildren = Ticket::where('parent_id', $parentId)->get();
+        $allChildren = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->where('parent_id', $parentId)->get();
         
         if (in_array($triggeredStatus, ['resolved', 'closed'])) {
             // Check if ALL children are terminal (resolved or closed)
