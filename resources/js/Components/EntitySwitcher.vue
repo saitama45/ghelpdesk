@@ -78,11 +78,11 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
         >
             <span
                 class="h-8 w-8 rounded-md overflow-hidden flex items-center justify-center flex-shrink-0"
-                :class="!logoUrl(activeCompany) ? 'bg-gray-600' : ''"
+                :class="!logoUrl(activeCompany) ? 'bg-gray-200 dark:bg-gray-600' : ''"
                 :style="logoUrl(activeCompany) ? 'background-color: #ffffff;' : ''"
             >
                 <img v-if="logoUrl(activeCompany)" :src="logoUrl(activeCompany)" :alt="activeCompany.name" class="h-8 w-8 object-contain" />
-                <BuildingOffice2Icon v-else class="h-5 w-5 text-gray-300" />
+                <BuildingOffice2Icon v-else class="h-5 w-5 text-gray-500 dark:text-gray-300" />
             </span>
             <template v-if="!isCollapsed">
                 <span class="ml-3 flex-1 min-w-0 text-left">
@@ -97,11 +97,11 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
         <div
             v-if="open && canSwitch"
             :class="[
-                'absolute z-[90] bottom-full mb-2 rounded-lg border border-gray-700 bg-gray-900 shadow-2xl overflow-hidden',
+                'absolute z-[90] bottom-full mb-2 rounded-lg border border-gray-200 bg-white shadow-2xl overflow-hidden dark:border-gray-700 dark:bg-gray-900',
                 isCollapsed ? 'left-0 w-60' : 'left-0 right-0',
             ]"
         >
-            <div class="px-3 py-2 border-b border-gray-800">
+            <div class="px-3 py-2 border-b border-gray-200 dark:border-gray-800">
                 <p class="text-[10px] font-black uppercase tracking-widest text-gray-500">Switch Entity</p>
             </div>
             <div class="max-h-72 overflow-y-auto py-1">
@@ -112,22 +112,22 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
                     @click="selectCompany(company)"
                     :class="[
                         'w-full flex items-center px-3 py-2 text-left transition-colors',
-                        isActive(company) ? 'bg-gray-800' : 'hover:bg-gray-800',
+                        isActive(company) ? 'bg-gray-100 dark:bg-gray-800' : 'hover:bg-gray-100 dark:hover:bg-gray-800',
                     ]"
                 >
                     <span
                         class="h-7 w-7 rounded-md overflow-hidden flex items-center justify-center flex-shrink-0"
-                        :class="!logoUrl(company) ? 'bg-gray-600' : ''"
+                        :class="!logoUrl(company) ? 'bg-gray-200 dark:bg-gray-600' : ''"
                         :style="logoUrl(company) ? 'background-color: #ffffff;' : ''"
                     >
                         <img v-if="logoUrl(company)" :src="logoUrl(company)" :alt="company.name" class="h-7 w-7 object-contain" />
-                        <BuildingOffice2Icon v-else class="h-4 w-4 text-gray-300" />
+                        <BuildingOffice2Icon v-else class="h-4 w-4 text-gray-500 dark:text-gray-300" />
                     </span>
                     <span class="ml-3 flex-1 min-w-0">
-                        <span class="block text-sm font-medium text-white truncate">{{ company.name }}</span>
+                        <span class="block text-sm font-medium text-gray-800 truncate dark:text-white">{{ company.name }}</span>
                         <span v-if="company.code" class="block text-xs text-gray-500 truncate">{{ company.code }}</span>
                     </span>
-                    <CheckIcon v-if="isActive(company)" class="ml-2 h-4 w-4 text-blue-400 flex-shrink-0" />
+                    <CheckIcon v-if="isActive(company)" class="ml-2 h-4 w-4 text-blue-600 flex-shrink-0 dark:text-blue-400" />
                 </button>
             </div>
         </div>
