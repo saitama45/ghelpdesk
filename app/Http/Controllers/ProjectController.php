@@ -10,7 +10,7 @@ use App\Models\Store;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\ProjectTemplate;
-use App\Services\ProjectDashboardService;
+use App\Services\ProjectProgressChartService;
 use App\Services\ProjectTaskBoardSyncService;
 use App\Services\OrganizationReferenceService;
 use Illuminate\Http\Request;
@@ -22,7 +22,7 @@ class ProjectController extends Controller
     public function __construct(
         private ProjectTaskBoardSyncService $projectTaskBoards,
         private OrganizationReferenceService $organizationReferenceService,
-        private ProjectDashboardService $projectDashboard
+        private ProjectProgressChartService $progressChart
     ) {
     }
 
@@ -34,12 +34,19 @@ class ProjectController extends Controller
         $typeFilter = trim((string) $request->input('type', ''));
 
         // Dashboard tab filters — independent of the project-list filters above.
-        $dashFrom  = trim((string) $request->input('dash_from', '')) ?: now()->startOfMonth()->toDateString();
-        $dashTo    = trim((string) $request->input('dash_to', '')) ?: now()->toDateString();
+        // Defaults to the last twelve weeks so the BS Team lands on a presentable
+        // range. The dates reach Carbon::parse in the service, so a hand-edited query
+        // string is normalised back to the default here rather than throwing a 500.
+        $dashFrom  = $this->safeDate($request->input('dash_from'), now()->subWeeks(11)->startOfWeek());
+        $dashTo    = $this->safeDate($request->input('dash_to'), now());
         $dashTypes = array_values(array_intersect(
             array_map('strval', (array) $request->input('dash_types', [])),
             Project::projectTypes()
-        ));
+        )) ?: [ProjectProgressChartService::DEFAULT_TYPE];
+        $dashProjects = array_values(array_filter(array_map(
+            'intval',
+            (array) $request->input('dash_projects', [])
+        )));
 
         $projects = Project::with(['store', 'tasks', 'subject'])
             ->when($typeFilter !== '', fn ($query) => $query->where('project_type', $typeFilter))
@@ -98,18 +105,38 @@ class ProjectController extends Controller
                 'type'     => $typeFilter,
             ],
             'dashboardFilters' => [
-                'dash_from'  => $dashFrom,
-                'dash_to'    => $dashTo,
-                'dash_types' => $dashTypes,
+                'dash_from'     => $dashFrom,
+                'dash_to'       => $dashTo,
+                'dash_types'    => $dashTypes,
+                'dash_projects' => $dashProjects,
             ],
             // Only resolved when the Dashboard tab asks for it (router.reload({ only: ['dashboard'] })).
             'dashboard' => Inertia::optional(
-                fn () => $this->projectDashboard->build($dashTypes, $dashFrom, $dashTo)
+                fn () => $this->progressChart->build($dashProjects, $dashTypes, $dashFrom, $dashTo)
+            ),
+            'dashboardProjectOptions' => Inertia::optional(
+                fn () => $this->progressChart->options($dashTypes)
             ),
             'statusOptions' => $statusOptions,
             'storeOptions' => Store::orderBy('name')->get(['id', 'name'])
                 ->map(fn (Store $store) => ['label' => $store->name, 'value' => $store->id]),
         ]);
+    }
+
+    /** A Y-m-d date from user input, or $fallback when it is absent or unparseable. */
+    private function safeDate($value, \Carbon\CarbonInterface $fallback): string
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return $fallback->toDateString();
+        }
+
+        try {
+            return \Carbon\CarbonImmutable::parse($value)->toDateString();
+        } catch (\Throwable) {
+            return $fallback->toDateString();
+        }
     }
 
     public function create(Request $request)

@@ -94,6 +94,10 @@ const props = defineProps({
         type: Object,
         default: () => ({}),
     },
+    dashboardProjectOptions: {
+        type: Array,
+        default: () => [],
+    },
 });
 
 const searchQuery = ref(props.filters?.search || '');
@@ -102,14 +106,14 @@ const storeFilter = ref(props.filters?.store_id || null);
 const activeType = ref(props.filters?.type || '');
 let searchTimeout = null;
 
-// 'projects' = the existing list; 'dashboard' = the lazy-loaded trend chart.
+// 'projects' = the existing list; 'dashboard' = the lazy-loaded weekly progress chart.
 const activeTab = ref('projects');
 
 const openDashboard = () => {
     activeTab.value = 'dashboard';
     // Inertia::optional means the prop is absent until we ask for it.
     if (!props.dashboard) {
-        router.reload({ only: ['dashboard', 'dashboardFilters'] });
+        router.reload({ only: ['dashboard', 'dashboardProjectOptions', 'dashboardFilters'] });
     }
 };
 
@@ -628,10 +632,11 @@ const typeTabConfig = computed(() => {
             </div>
             </div>
 
-            <!-- Dashboard tab -->
+            <!-- Dashboard tab: weekly per-project progress (BS Team ManCom report) -->
             <ProjectDashboard
-                v-else
+                v-else-if="activeTab === 'dashboard'"
                 :dashboard="dashboard"
+                :project-options="dashboardProjectOptions"
                 :project-types="projectTypes"
                 :filters="dashboardFilters"
             />
