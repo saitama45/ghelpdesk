@@ -481,32 +481,144 @@ const showResults = computed(() =>
     isFocused.value && (query.value.length >= 2 || (query.value.length > 0 && loading.value))
 );
 
+const emptyResults = () => ({ menus: [], tickets: [], requests: [], users: [], forms: [], projects: [], inventory: [], schedules: [], attendance: [] });
+
+const countOf = (payload) => Object.values(payload).reduce((n, list) => n + (list?.length ?? 0), 0);
+
+// --- client-side result cache -------------------------------------------------
+// Search results are read-only and short-lived, so caching them per
+// query+tab+sort makes backspacing, retyping and tab-flipping instant instead of
+// costing another cloud round trip.
+const CACHE_TTL = 60_000;
+const CACHE_MAX = 60;
+const resultCache = new Map();
+const cacheKey = () => `${query.value.toLowerCase()}|${activeTab.value}|${activeSort.value}`;
+
+const cacheGet = (key) => {
+    const hit = resultCache.get(key);
+    if (!hit) return null;
+    if (Date.now() - hit.at > CACHE_TTL) {
+        resultCache.delete(key);
+        return null;
+    }
+    // refresh LRU position
+    resultCache.delete(key);
+    resultCache.set(key, hit);
+    return hit.data;
+};
+
+const cacheSet = (key, data) => {
+    resultCache.set(key, { data, at: Date.now() });
+    while (resultCache.size > CACHE_MAX) {
+        resultCache.delete(resultCache.keys().next().value);
+    }
+};
+
+// Results are scoped to the active entity, and switching entities does not
+// remount this component — without this the cache would keep serving the
+// previous entity's hits under the new one.
+watch(activeCompanyId, () => {
+    resultCache.clear();
+    if (query.value.length >= 2) {
+        fetchResults();
+    } else {
+        applyResults(emptyResults());
+    }
+});
+
+// Every field is matched with LIKE %query%, so if a shorter prefix returned
+// nothing, no longer query built on it can match either — answer those locally
+// instead of asking the server.
+const knownEmptyPrefix = () => {
+    const q = query.value.toLowerCase();
+    for (const [key, hit] of resultCache) {
+        if (Date.now() - hit.at > CACHE_TTL) continue;
+        const [cachedQuery, cachedTab, cachedSort] = key.split('|');
+        if (cachedTab !== activeTab.value || cachedSort !== activeSort.value) continue;
+        if (cachedQuery.length >= 2 && q.startsWith(cachedQuery) && countOf(hit.data) === 0) return true;
+    }
+    return false;
+};
+
+let inFlight = null;      // AbortController for the request currently running
+let requestSeq = 0;       // guards against out-of-order responses
+
+const applyResults = (payload) => {
+    results.value = payload;
+    selectedIndex.value = totalResults.value > 0 ? 0 : -1;
+};
+
 const fetchResults = async () => {
     if (query.value.length < 2) {
-        results.value = { menus: [], tickets: [], requests: [], users: [], forms: [], projects: [], inventory: [], schedules: [], attendance: [] };
+        applyResults(emptyResults());
         return;
     }
+
+    const key = cacheKey();
+
+    const cached = cacheGet(key);
+    if (cached) {
+        inFlight?.abort();
+        inFlight = null;
+        loading.value = false;
+        applyResults(cached);
+        return;
+    }
+
+    if (knownEmptyPrefix()) {
+        inFlight?.abort();
+        inFlight = null;
+        loading.value = false;
+        const empty = emptyResults();
+        cacheSet(key, empty);
+        applyResults(empty);
+        return;
+    }
+
+    // Drop the previous request so a stale reply can never overwrite a newer one
+    // and the server is not left serving searches nobody is waiting for.
+    inFlight?.abort();
+    const controller = new AbortController();
+    inFlight = controller;
+    const seq = ++requestSeq;
+
     loading.value = true;
     try {
         const response = await axios.get(route('global-search'), {
-            params: { query: query.value, tab: activeTab.value, sort: activeSort.value }
+            params: { query: query.value, tab: activeTab.value, sort: activeSort.value },
+            signal: controller.signal,
         });
-        results.value = response.data;
-        selectedIndex.value = totalResults.value > 0 ? 0 : -1;
+        cacheSet(key, response.data);
+        if (seq !== requestSeq) return;
+        applyResults(response.data);
     } catch (error) {
+        if (axios.isCancel?.(error) || error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return;
         console.error('Search error:', error);
     } finally {
-        loading.value = false;
+        if (seq === requestSeq) {
+            loading.value = false;
+            inFlight = null;
+        }
     }
 };
 
 const handleInput = () => {
     if (debounceTimeout) clearTimeout(debounceTimeout);
     if (query.value.length < 2) {
-        results.value = { menus: [], tickets: [], requests: [], users: [], forms: [], projects: [], inventory: [], schedules: [], attendance: [] };
+        inFlight?.abort();
+        inFlight = null;
+        loading.value = false;
+        applyResults(emptyResults());
         return;
     }
-    debounceTimeout = setTimeout(fetchResults, 300);
+
+    // A cached or provably-empty query needs no debounce at all — render it now.
+    if (cacheGet(cacheKey()) || knownEmptyPrefix()) {
+        fetchResults();
+        return;
+    }
+
+    debounceTimeout = setTimeout(fetchResults, 150);
 };
 
 const switchTab = (tab) => {
@@ -665,5 +777,6 @@ onMounted(() => {
 onUnmounted(() => {
     window.removeEventListener('keydown', handleKeydown);
     if (debounceTimeout) clearTimeout(debounceTimeout);
+    inFlight?.abort();
 });
 </script>

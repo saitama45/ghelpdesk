@@ -81,12 +81,19 @@ class GlobalSearchController extends Controller
         ];
     }
 
-    private function applySort(Builder $query, string $sort, string $relevanceCase, array $bindings = []): Builder
+    /**
+     * @param  string|null  $table  Qualify the date columns with this table when
+     *                              the query joins others that share the names.
+     */
+    private function applySort(Builder $query, string $sort, string $relevanceCase, array $bindings = [], ?string $table = null): Builder
     {
+        $created = $table ? "{$table}.created_at" : 'created_at';
+        $updated = $table ? "{$table}.updated_at" : 'updated_at';
+
         return match ($sort) {
-            'date_created'  => $query->orderBy('created_at', 'desc'),
-            'last_modified' => $query->orderBy('updated_at', 'desc'),
-            default         => $query->orderByRaw($relevanceCase, $bindings)->orderBy('created_at', 'desc'),
+            'date_created'  => $query->orderBy($created, 'desc'),
+            'last_modified' => $query->orderBy($updated, 'desc'),
+            default         => $query->orderByRaw($relevanceCase, $bindings)->orderBy($created, 'desc'),
         };
     }
 
@@ -178,19 +185,21 @@ class GlobalSearchController extends Controller
             return [];
         }
 
+        // Never SELECT * here: tickets.description and .description_html are
+        // nvarchar(MAX), and dragging those LOBs across the wire for 10 rows
+        // dominates the request time against the cloud DB.
         $q = $this->applyEntitySearchScope(Ticket::query(), $entityContext)
-            ->with(['assignee:id,name', 'company:id,name']);
+            ->select(['id', 'ticket_key', 'title', 'status', 'company_id', 'assignee_id', 'created_at', 'updated_at'])
+            ->with('assignee:id,name');
 
         if ($user->hasRole('User')) {
             $q->where('reporter_id', $user->id);
-        }
-
-        if (!$user->hasRole('User')) {
-            if (empty($entityContext['accessible_ids'])) {
-                $q->whereRaw('1 = 0');
-            } else {
-                $q->whereIn('tickets.company_id', $entityContext['accessible_ids']);
-            }
+        } elseif (empty($entityContext['accessible_ids'])) {
+            $q->whereRaw('1 = 0');
+        } elseif (!$entityContext['search_across_entities']) {
+            // applyEntitySearchScope already restricted cross-entity searchers
+            // to the accessible list; adding it again just duplicates the IN().
+            $q->whereIn('tickets.company_id', $entityContext['accessible_ids']);
         }
 
         $q->where(function ($sub) use ($query) {
@@ -206,17 +215,23 @@ class GlobalSearchController extends Controller
         return $this->applySort($q, $sort, $relevance, $bindings)
             ->take(10)
             ->get()
-            ->map(fn($t) => [
-                'id'            => $t->id,
-                'ticket_key'    => $t->ticket_key,
-                'title'         => $t->title,
-                'status'        => $t->status,
-                'company_name'  => $t->company?->name ?? 'N/A',
-                'assignee_name' => $t->assignee?->name ?? 'Unassigned',
-                'created_at'    => $t->created_at?->toDateTimeString(),
-                'updated_at'    => $t->updated_at?->toDateTimeString(),
-                ...$this->entityResultFields($t, $entityContext),
-            ])
+            ->map(function ($t) use ($entityContext) {
+                // company name comes from the already-loaded accessible-entities
+                // map, so the company relation costs no extra round trip.
+                $entity = $this->entityResultFields($t, $entityContext);
+                $entity['company_name'] ??= 'N/A';
+
+                return [
+                    'id'            => $t->id,
+                    'ticket_key'    => $t->ticket_key,
+                    'title'         => $t->title,
+                    'status'        => $t->status,
+                    'assignee_name' => $t->assignee?->name ?? 'Unassigned',
+                    'created_at'    => $t->created_at?->toDateTimeString(),
+                    'updated_at'    => $t->updated_at?->toDateTimeString(),
+                    ...$entity,
+                ];
+            })
             ->toArray();
     }
 
@@ -225,70 +240,99 @@ class GlobalSearchController extends Controller
         $results = [];
 
         if ($user->can('pos_requests.view')) {
-            $posQ = $this->applyEntitySearchScope(PosRequest::query(), $entityContext)
-                ->with(['company:id,name', 'requestType:id,name', 'user:id,name', 'ticket:id,ticket_key'])
-                ->where(function ($q) use ($query) {
-                    $q->where('requester_name', 'like', "%{$query}%")
-                      ->orWhere('requester_email', 'like', "%{$query}%")
-                      ->orWhereHas('requestType', fn($r) => $r->where('name', 'like', "%{$query}%"))
-                      ->orWhereHas('company', fn($r) => $r->where('name', 'like', "%{$query}%"))
-                      ->orWhereHas('ticket', fn($r) => $r->where('ticket_key', 'like', "%{$query}%"));
-                });
-
-            $relevance = "CASE WHEN requester_name LIKE ? THEN 0 WHEN requester_name LIKE ? THEN 1 ELSE 2 END";
-            $bindings  = ["{$query}%", "%{$query}%"];
-
-            $pos = $this->applySort($posQ, $sort, $relevance, $bindings)
-                ->take(5)
-                ->get()
-                ->map(fn($r) => [
-                    'id'           => $r->id,
-                    'source'       => 'pos',
-                    'request_type' => $r->requestType?->name ?? 'N/A',
-                    'company'      => $r->company?->name ?? 'N/A',
-                    'requester'    => $r->user?->name ?? $r->requester_name ?? 'Public',
-                    'status'       => $r->status,
-                    'ticket_key'   => $r->ticket?->ticket_key,
-                    'created_at'   => $r->created_at?->toDateTimeString(),
-                    'updated_at'   => $r->updated_at?->toDateTimeString(),
-                    ...$this->entityResultFields($r, $entityContext),
-                ]);
-            $results = array_merge($results, $pos->toArray());
+            $results = array_merge(
+                $results,
+                $this->searchRequestTable(PosRequest::query(), 'pos_requests', 'pos', $query, $sort, $entityContext)
+            );
         }
 
         if ($user->can('sap_requests.view')) {
-            $sapQ = $this->applyEntitySearchScope(SapRequest::query(), $entityContext)
-                ->with(['company:id,name', 'requestType:id,name', 'user:id,name', 'ticket:id,ticket_key'])
-                ->where(function ($q) use ($query) {
-                    $q->where('requester_name', 'like', "%{$query}%")
-                      ->orWhere('requester_email', 'like', "%{$query}%")
-                      ->orWhereHas('requestType', fn($r) => $r->where('name', 'like', "%{$query}%"))
-                      ->orWhereHas('company', fn($r) => $r->where('name', 'like', "%{$query}%"))
-                      ->orWhereHas('ticket', fn($r) => $r->where('ticket_key', 'like', "%{$query}%"));
-                });
-
-            $relevance = "CASE WHEN requester_name LIKE ? THEN 0 WHEN requester_name LIKE ? THEN 1 ELSE 2 END";
-            $bindings  = ["{$query}%", "%{$query}%"];
-
-            $sap = $this->applySort($sapQ, $sort, $relevance, $bindings)
-                ->take(5)
-                ->get()
-                ->map(fn($r) => [
-                    'id'           => $r->id,
-                    'source'       => 'sap',
-                    'request_type' => $r->requestType?->name ?? 'N/A',
-                    'company'      => $r->company?->name ?? 'N/A',
-                    'requester'    => $r->user?->name ?? $r->requester_name ?? 'Public',
-                    'status'       => $r->status,
-                    'ticket_key'   => $r->ticket?->ticket_key,
-                    'created_at'   => $r->created_at?->toDateTimeString(),
-                    'updated_at'   => $r->updated_at?->toDateTimeString(),
-                    ...$this->entityResultFields($r, $entityContext),
-                ]);
-            $results = array_merge($results, $sap->toArray());
+            $results = array_merge(
+                $results,
+                $this->searchRequestTable(SapRequest::query(), 'sap_requests', 'sap', $query, $sort, $entityContext)
+            );
         }
 
         return $results;
+    }
+
+    /**
+     * POS and SAP requests are searched identically. Both tables carry
+     * nvarchar(MAX) payload columns (form_data, approver_data, stores_covered)
+     * that this result set never uses, so the select is pinned to real columns
+     * and the four relations are resolved with joins instead of four extra
+     * round trips each.
+     */
+    private function searchRequestTable(Builder $base, string $table, string $source, $query, string $sort, array $entityContext): array
+    {
+        $q = $this->applyEntitySearchScope($base, $entityContext)
+            ->leftJoin('request_types', "{$table}.request_type_id", '=', 'request_types.id')
+            ->leftJoin('users', "{$table}.user_id", '=', 'users.id')
+            // The tickets join deliberately bypasses ActiveEntityScope: a
+            // cross-entity searcher must still see the linked ticket key.
+            ->leftJoin('tickets', function ($join) use ($table) {
+                $join->on("{$table}.ticket_id", '=', 'tickets.id')
+                     ->whereNull('tickets.deleted_at');
+            })
+            ->select([
+                "{$table}.id",
+                "{$table}.status",
+                "{$table}.company_id",
+                "{$table}.requester_name",
+                "{$table}.created_at",
+                "{$table}.updated_at",
+                'request_types.name as request_type_name',
+                'users.name as user_name',
+                'tickets.ticket_key as linked_ticket_key',
+            ])
+            ->where(function ($sub) use ($query, $table, $entityContext) {
+                $sub->where("{$table}.requester_name", 'like', "%{$query}%")
+                    ->orWhere("{$table}.requester_email", 'like', "%{$query}%")
+                    ->orWhere('request_types.name', 'like', "%{$query}%")
+                    ->orWhere('tickets.ticket_key', 'like', "%{$query}%");
+
+                // Company names are already in memory, so matching them needs
+                // no companies join at all.
+                $matchedCompanies = $this->companyIdsMatching($query, $entityContext);
+                if (!empty($matchedCompanies)) {
+                    $sub->orWhereIn("{$table}.company_id", $matchedCompanies);
+                }
+            });
+
+        $relevance = "CASE WHEN {$table}.requester_name LIKE ? THEN 0 WHEN {$table}.requester_name LIKE ? THEN 1 ELSE 2 END";
+        $bindings  = ["{$query}%", "%{$query}%"];
+
+        return $this->applySort($q, $sort, $relevance, $bindings, $table)
+            ->take(5)
+            ->get()
+            ->map(function ($r) use ($source, $entityContext) {
+                $entity = $this->entityResultFields($r, $entityContext);
+
+                return [
+                    'id'           => $r->id,
+                    'source'       => $source,
+                    'request_type' => $r->request_type_name ?? 'N/A',
+                    'company'      => $entity['company_name'] ?? 'N/A',
+                    'requester'    => $r->user_name ?? $r->requester_name ?? 'Public',
+                    'status'       => $r->status,
+                    'ticket_key'   => $r->linked_ticket_key,
+                    'created_at'   => $r->created_at?->toDateTimeString(),
+                    'updated_at'   => $r->updated_at?->toDateTimeString(),
+                    ...$entity,
+                ];
+            })
+            ->toArray();
+    }
+
+    /** Accessible company ids whose name matches the query, resolved in memory. */
+    private function companyIdsMatching($query, array $entityContext): array
+    {
+        $needle = mb_strtolower((string) $query);
+
+        return array_keys(array_filter(
+            $entityContext['company_names'],
+            fn ($name) => str_contains(mb_strtolower((string) $name), $needle)
+        ));
     }
 
     private function searchUsers($query, $user, string $sort): array
@@ -350,7 +394,9 @@ class GlobalSearchController extends Controller
             return [];
         }
 
+        // projects.remarks is nvarchar(MAX) — matched against, never returned.
         $q = $this->applyEntitySearchScope(Project::query(), $entityContext)
+            ->select(['id', 'name', 'status', 'store_id', 'company_id', 'created_at', 'updated_at'])
             ->with('store:id,name')
             ->where(function ($sub) use ($query) {
                 $sub->where('name', 'like', "%{$query}%")
@@ -453,7 +499,9 @@ class GlobalSearchController extends Controller
             return [];
         }
 
+        // schedules.remarks is nvarchar(MAX) — matched against, never returned.
         $q = $this->applyEntitySearchScope(Schedule::query(), $entityContext)
+            ->select(['id', 'user_id', 'status', 'start_time', 'end_time', 'company_id', 'created_at', 'updated_at'])
             ->with('user:id,name')
             ->where(function ($sub) use ($query) {
                 $sub->where('status', 'like', "%{$query}%")
@@ -486,7 +534,10 @@ class GlobalSearchController extends Controller
             return [];
         }
 
-        $q = AttendanceLog::with('user:id,name')
+        // attendance_logs.device_info is nvarchar(MAX) — never returned.
+        $q = AttendanceLog::query()
+            ->select(['id', 'user_id', 'type', 'log_time', 'location_client', 'created_at', 'updated_at'])
+            ->with('user:id,name')
             ->where(function ($sub) use ($query) {
                 $sub->where('type', 'like', "%{$query}%")
                     ->orWhere('location_client', 'like', "%{$query}%")
