@@ -164,6 +164,16 @@ const pagination = usePagination(props.users, 'users.index', () => ({
     role: filterRole.value,
 }), { only: ['users', 'filters'] });
 
+// Export mirrors whatever the list is currently filtered to.
+const exportUrl = computed(() => {
+    const params = new URLSearchParams();
+    if (pagination.search.value) params.set('search', pagination.search.value);
+    if (filterStatus.value) params.set('status', filterStatus.value);
+    if (filterRole.value) params.set('role', filterRole.value);
+    const query = params.toString();
+    return query ? `/users/export?${query}` : '/users/export';
+});
+
 onMounted(() => {
     pagination.search.value = props.filters?.search || '';
     pagination.updateData(props.users);
@@ -652,6 +662,17 @@ const sortRolePermissions = (permissions) => {
                             size="sm"
                         />
                     </div>
+                    <a
+                        v-if="hasPermission('users.export')"
+                        :href="exportUrl"
+                        class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center space-x-2 text-sm font-medium shadow-sm whitespace-nowrap dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600"
+                        title="Export the current user list to Excel"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        <span>Export</span>
+                    </a>
                     <button
                         v-if="hasPermission('users.create')"
                         @click="openImportModal"

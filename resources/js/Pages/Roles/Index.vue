@@ -1,7 +1,7 @@
 <template>
-    <AppLayout title="Roles">
-        <div class="py-12">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+    <AppLayout title="Roles" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
+        <div class="space-y-6">
+            <div>
                 <!-- Data Table -->
                 <DataTable
                     title="Roles & Permissions"
@@ -20,9 +20,30 @@
                     @change-per-page="pagination.changePerPage"
                 >
                     <template #actions>
-                        <button 
+                        <a
+                            v-if="hasPermission('roles.export')"
+                            :href="exportUrl"
+                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600"
+                            title="Export the current role list to Excel"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            <span>Export</span>
+                        </a>
+                        <button
+                            v-if="hasPermission('roles.import')"
+                            @click="openImportModal"
+                            class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span>Import</span>
+                        </button>
+                        <button
                             v-if="hasPermission('roles.create')"
-                            @click="openCreateModal" 
+                            @click="openCreateModal"
                             class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
                         >
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -147,6 +168,83 @@
             </div>
         </div>
 
+        <!-- Import Roles Modal -->
+        <div v-if="showImportModal" class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 py-6">
+                <div class="fixed inset-0 bg-black/20 backdrop-blur-md" @click="showImportModal = false"></div>
+                <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-xl p-6 border border-gray-100 transform transition-all dark:bg-gray-800 dark:border-gray-700">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">Import Roles</h3>
+                        <button @click="showImportModal = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-400">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="p-4 bg-blue-50 rounded-lg border border-blue-100 dark:bg-blue-900/20 dark:border-blue-900/40">
+                            <h4 class="text-xs font-bold text-blue-700 uppercase tracking-wider mb-2 dark:text-blue-300">Instructions</h4>
+                            <ul class="text-xs text-blue-600 space-y-1 list-disc pl-4 dark:text-blue-300">
+                                <li>Use an <strong>Export</strong> file as the starting point — the columns it produces are exactly what this importer reads.</li>
+                                <li><strong>companies</strong> (names) and <strong>permissions</strong> (keys) accept several values separated by a semicolon (<code>;</code>).</li>
+                                <li>Every role needs at least one company that already exists; unknown permissions are reported and skipped, never created.</li>
+                                <li>Existing role names are skipped unless you tick "Update existing roles" — that overwrites their permissions and companies.</li>
+                            </ul>
+                            <div class="mt-4">
+                                <a :href="exportUrl" class="text-xs font-black text-blue-700 underline hover:text-blue-800 dark:text-blue-300">
+                                    Download current roles as Excel
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <label class="block">
+                                <span class="sr-only">Choose file</span>
+                                <input type="file" @change="handleImportFileChange" accept=".xlsx,.csv"
+                                       class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all cursor-pointer dark:text-gray-300">
+                            </label>
+
+                            <label class="flex items-start space-x-2 cursor-pointer">
+                                <input type="checkbox" v-model="updateExisting" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <span class="text-xs text-gray-600 dark:text-gray-300">
+                                    Update existing roles with the same name
+                                    <span class="block text-[10px] text-amber-600 dark:text-amber-400">Their permissions and companies are replaced by what the file says.</span>
+                                </span>
+                            </label>
+
+                            <div v-if="importResults" class="p-4 rounded-lg" :class="importResults.errors.length > 0 ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-green-50 dark:bg-green-900/20'">
+                                <p class="text-sm font-bold" :class="importResults.errors.length > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-green-800 dark:text-green-300'">
+                                    Created {{ importResults.created }} role(s), updated {{ importResults.updated }}.
+                                </p>
+                                <div v-if="importResults.errors.length > 0" class="mt-2">
+                                    <p class="text-xs font-black text-amber-700 uppercase mb-1 dark:text-amber-400">Issues encountered:</p>
+                                    <ul class="text-[10px] text-amber-600 max-h-32 overflow-y-auto custom-scrollbar list-disc pl-4 dark:text-amber-300">
+                                        <li v-for="(err, i) in importResults.errors" :key="i">{{ err }}</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end space-x-3 pt-6 border-t dark:border-gray-700">
+                            <button type="button" @click="showImportModal = false"
+                                    class="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
+                                Close
+                            </button>
+                            <button @click="submitImport" :disabled="!selectedImportFile || importing"
+                                    class="px-6 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 shadow-md transition-all disabled:opacity-50 flex items-center space-x-2">
+                                <svg v-if="importing" class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 6.477 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span>{{ importing ? 'Importing...' : 'Start Import' }}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <RoleFormModal
             :show="showModal"
             :title="isEditing ? 'Edit Role' : 'Create Role'"
@@ -163,8 +261,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
+import axios from 'axios'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import RoleFormModal from '@/Components/Roles/RoleFormModal.vue'
@@ -195,6 +294,61 @@ const currentRole = ref(null)
 const selectedRole = ref(null)
 
 const landingPageOptions = roleLandingPageOptions
+
+// ── Export / import ──────────────────────────────────────────────────────
+const exportUrl = computed(() => {
+    const search = pagination.search.value
+    return search ? `/roles/export?search=${encodeURIComponent(search)}` : '/roles/export'
+})
+
+const showImportModal = ref(false)
+const importing = ref(false)
+const selectedImportFile = ref(null)
+const importResults = ref(null)
+const updateExisting = ref(false)
+
+const openImportModal = () => {
+    selectedImportFile.value = null
+    importResults.value = null
+    updateExisting.value = false
+    showImportModal.value = true
+}
+
+const handleImportFileChange = (event) => {
+    selectedImportFile.value = event.target.files[0] || null
+    importResults.value = null
+}
+
+const submitImport = async () => {
+    if (!selectedImportFile.value) return
+
+    importing.value = true
+    importResults.value = null
+
+    const formData = new FormData()
+    formData.append('file', selectedImportFile.value)
+    formData.append('update_existing', updateExisting.value ? '1' : '0')
+
+    try {
+        const { data } = await axios.post('/roles/import', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        importResults.value = data
+        if (data.created > 0 || data.updated > 0) {
+            showSuccess(`Imported ${data.created} new role(s), updated ${data.updated}.`)
+            router.reload({ only: ['roles', 'permissions'] })
+        } else if (data.errors.length === 0) {
+            showError('Nothing to import — the file had no role rows.')
+        }
+    } catch (error) {
+        const message = error.response?.data?.message
+            || Object.values(error.response?.data?.errors || {}).flat().join(', ')
+            || 'Import failed. Please check the file and try again.'
+        showError(message)
+    } finally {
+        importing.value = false
+    }
+}
 
 const getLandingPageLabel = (value) => {
     for (const group of landingPageOptions) {

@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Cache;
 
 class RoleService
 {
-    protected const ACTION_ORDER = ['view', 'operate', 'show', 'create', 'edit', 'assign', 'resolve', 'close', 'post', 'delete', 'approve', 'canned_messages', 'internal_notes'];
+    protected const ACTION_ORDER = ['view', 'operate', 'show', 'create', 'edit', 'assign', 'resolve', 'close', 'post', 'delete', 'approve', 'export', 'import', 'canned_messages', 'internal_notes'];
 
     /**
      * Get all roles with their permissions
@@ -34,7 +34,10 @@ class RoleService
     {
         $permissions = Permission::all()->pluck('name')->toArray();
 
-        foreach (['tickets.resolve', 'queue.view', 'queue.operate', 'tickets.filter_entity', 'dashboard.filter_entity'] as $permissionName) {
+        foreach ([
+            'tickets.resolve', 'queue.view', 'queue.operate', 'tickets.filter_entity', 'dashboard.filter_entity',
+            'users.export', 'roles.export', 'roles.import',
+        ] as $permissionName) {
             if (!in_array($permissionName, $permissions, true)) {
                 $permissions[] = $permissionName;
             }

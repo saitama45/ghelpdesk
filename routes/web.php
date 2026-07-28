@@ -147,6 +147,7 @@ Route::middleware('auth')->group(function () {
         Route::put('locations/{mallHookup}', [\App\Http\Controllers\MallHookupController::class, 'updateHookup'])->name('locations.update');
     });
 
+    Route::get('users/export', [UserController::class, 'export'])->name('users.export')->middleware('can:users.export');
     Route::get('users/template', [UserController::class, 'template'])->name('users.template')->middleware('can:users.create');
     Route::post('users/import', [UserController::class, 'import'])->name('users.import')->middleware('can:users.create');
     Route::get('users/form-options', [UserController::class, 'formOptions'])->name('users.form-options');
@@ -154,6 +155,8 @@ Route::middleware('auth')->group(function () {
     Route::resource('users', UserController::class);
     Route::put('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
     
+    Route::get('roles/export', [RoleController::class, 'export'])->name('roles.export')->middleware('can:roles.export');
+    Route::post('roles/import', [RoleController::class, 'import'])->name('roles.import')->middleware('can:roles.import');
     Route::get('roles/{role}/editor-data', [RoleController::class, 'editorData'])->name('roles.editor-data');
     Route::resource('roles', RoleController::class)->except(['show', 'create', 'edit']);
     Route::post('companies/switch', [CompanyController::class, 'switch'])->name('companies.switch');

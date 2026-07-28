@@ -51,11 +51,14 @@ class RolesAndPermissionSeeder extends Seeder
             'users.view' => 'View users',
             'users.create' => 'Create users',
             'users.edit' => 'Edit users',
-            
+            'users.export' => 'Export the user list to Excel',
+
             // Roles & Permissions
             'roles.view' => 'View roles',
             'roles.create' => 'Create roles',
             'roles.edit' => 'Edit roles',
+            'roles.export' => 'Export roles to Excel',
+            'roles.import' => 'Import roles from Excel',
             
             // Reports
             'reports.view' => 'View reports',

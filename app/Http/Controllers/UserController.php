@@ -49,7 +49,28 @@ class UserController extends Controller
                 'managers:id,name',
             ])
             ->withCount('stores');
-        
+
+        $this->applyIndexFilters($query, $request);
+
+        $perPage = max(10, min(100, $request->integer('per_page', 10)));
+        $users = $query->orderBy('name')->paginate($perPage)->withQueryString();
+        return Inertia::render('Users/Index', [
+            'users' => $users,
+            'roles' => fn () => Role::query()->orderBy('name')->get(['id', 'name']),
+            'filters' => [
+                'search' => $request->input('search', ''),
+                'status' => $request->input('status', ''),
+                'role' => $request->input('role', ''),
+            ],
+        ]);
+    }
+
+    /**
+     * Search / status / role filters shared by the index listing and the export
+     * so a download always mirrors what the page is showing.
+     */
+    private function applyIndexFilters($query, Request $request): void
+    {
         if ($request->filled('search')) {
             $query->where(function($q) use ($request) {
                 $q->where('name', 'like', "%{$request->search}%")
@@ -81,17 +102,88 @@ class UserController extends Controller
                 $query->whereHas('roles', fn ($q) => $q->where('name', $role));
             }
         }
+    }
 
-        $perPage = max(10, min(100, $request->integer('per_page', 10)));
-        $users = $query->orderBy('name')->paginate($perPage)->withQueryString();
-        return Inertia::render('Users/Index', [
-            'users' => $users,
-            'roles' => fn () => Role::query()->orderBy('name')->get(['id', 'name']),
-            'filters' => [
-                'search' => $request->input('search', ''),
-                'status' => $request->input('status', ''),
-                'role' => $request->input('role', ''),
-            ],
+    /**
+     * Export the current (filtered) user list to Excel. Columns match the
+     * import template so an export can be edited and fed back in.
+     */
+    public function export(Request $request)
+    {
+        $query = User::query()
+            ->select([
+                'id', 'name', 'employee_id_no', 'email', 'department', 'org_path',
+                'department_node_id', 'position', 'date_hired', 'is_active', 'is_manager', 'google_id',
+            ])
+            ->with(['roles:id,name', 'managers:id,name,email', 'stores:id,code,name']);
+
+        $this->applyIndexFilters($query, $request);
+
+        $users = $query->orderBy('name')->get();
+
+        // Placement labels straight from the live tree, so the exported value is
+        // one the importer can match back (the denormalized columns can be stale).
+        $nodeLabels = collect($this->departmentNodeOptions())->pluck('label', 'node_id');
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Users');
+
+        $headers = [
+            'name', 'employee_id_no', 'email', 'role', 'department', 'position',
+            'date_hired', 'is_manager', 'is_active', 'assigned_stores', 'reports_to',
+        ];
+        foreach ($headers as $i => $header) {
+            $sheet->setCellValue(Coordinate::stringFromColumnIndex($i + 1) . '1', $header);
+        }
+
+        $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle("A1:{$lastColumn}1")->getFont()->setBold(true);
+        $sheet->getStyle("A1:{$lastColumn}1")->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFD9E1F2');
+
+        $row = 2;
+        foreach ($users as $user) {
+            $values = [
+                $user->name,
+                $user->employee_id_no,
+                $user->email,
+                $user->roles->pluck('name')->implode('; '),
+                // Same "Department > Node > Sub-node" label the importer matches on.
+                $nodeLabels[$user->department_node_id]
+                    ?? collect([$user->department, $user->org_path])->filter()->implode(' > '),
+                $user->position,
+                $user->date_hired ? Carbon::parse($user->date_hired)->format('Y-m-d') : '',
+                $user->is_manager ? 'Yes' : 'No',
+                $user->is_active ? 'Yes' : 'No',
+                $user->stores->pluck('code')->implode('; '),
+                $user->managers->pluck('email')->implode('; '),
+            ];
+
+            foreach ($values as $i => $value) {
+                $sheet->setCellValueExplicit(
+                    Coordinate::stringFromColumnIndex($i + 1) . $row,
+                    (string) ($value ?? ''),
+                    \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
+                );
+            }
+            $row++;
+        }
+
+        foreach (range(1, count($headers)) as $colIndex) {
+            $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($colIndex))->setAutoSize(true);
+        }
+
+        $writer = new Xlsx($spreadsheet);
+        $filename = 'users-export-' . now()->format('Y-m-d-His') . '.xlsx';
+
+        return response()->stream(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'max-age=0',
         ]);
     }
 
