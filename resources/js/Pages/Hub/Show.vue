@@ -125,16 +125,14 @@ onMounted(() => {
 // Re-fetch just the section payload (e.g. after a Brand Health WCF action).
 const reloadSection = () => router.reload({ only: ['sectionData'] });
 
-// Service Exchange catalogue (what the viewed department offers).
+// The viewed department's catalogue — its published Form Builder forms. Opening
+// a card opens that form, never a ticket.
 const catalog = computed(() => props.sectionData?.catalog || []);
 const startService = (svc) => {
-    if (svc.route_name) {
-        // Form-backed services carry the form slug as a route parameter.
-        router.visit(route(svc.route_name, ...(svc.route_params || [])));
-    } else {
-        // No fulfilling module — start a general request against this department.
-        router.visit(route('tickets.index'));
-    }
+    // Every catalogue entry is a Form Builder form and carries its slug, so a
+    // card always opens its form. It must never fall back to the ticket list.
+    if (!svc.route_name) return;
+    router.visit(route(svc.route_name, ...(svc.route_params || [])));
 };
 
 // Monitoring hub: Live Store Health (sectors vs corporate office sub-tabs).
@@ -332,8 +330,8 @@ const showGenericKpis = computed(() =>
                         </div>
                     </div>
 
-                    <!-- Service Exchange: the viewed department's service catalogue.
-                         For customers this is the primary content (what TAS provides). -->
+                    <!-- Service catalogue: the department's published Form Builder
+                         forms. For customers this is the primary content. -->
                     <template v-if="catalog.length">
                         <div class="flex items-center justify-between">
                             <div class="text-[10px] font-black uppercase tracking-[0.18em]" :style="{ color: 'var(--dept-accent)' }">
@@ -353,11 +351,34 @@ const showGenericKpis = computed(() =>
                                 <span class="mt-0.5 flex-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{{ svc.description }}</span>
                                 <span class="mt-3 flex items-center justify-between">
                                     <span v-if="svc.eta" class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">◷ Target response · {{ svc.eta }}</span>
-                                    <span class="ml-auto text-[11px] font-bold text-blue-600 dark:text-blue-400">{{ isProvider ? 'Manage →' : 'Start →' }}</span>
+                                    <span class="ml-auto text-[11px] font-bold text-blue-600 dark:text-blue-400">{{ isProvider ? 'Open form →' : 'Start request →' }}</span>
                                 </span>
                             </button>
                         </div>
                     </template>
+
+                    <!-- No published forms: say so plainly instead of leaving a gap.
+                         A department offers exactly what it has built in Form Builder. -->
+                    <div v-else
+                         class="rounded-xl border border-dashed border-gray-300 bg-white px-4 py-6 text-center dark:border-gray-600 dark:bg-gray-800">
+                        <div class="text-sm font-bold text-gray-900 dark:text-white">
+                            {{ sectionData.department.name }} has not published any services yet
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            <template v-if="isProvider">
+                                Build a form in Form Builder and set its owning department to
+                                {{ sectionData.department.name }} — it appears here automatically.
+                            </template>
+                            <template v-else>
+                                There is nothing to request from this department yet.
+                            </template>
+                        </p>
+                        <Link v-if="isProvider && hasPermission('form_builder.view')"
+                              :href="route('form-builder.index')"
+                              class="mt-3 inline-block text-xs font-bold text-blue-600 hover:underline dark:text-blue-400">
+                            Open Form Builder →
+                        </Link>
+                    </div>
 
                     <!-- Brand Health (TAS desk) — SAME shared component as the
                          dashboard's Live Brand Health tab (one centralised view). -->

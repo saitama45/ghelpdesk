@@ -54,13 +54,14 @@ class DepartmentContextController extends Controller
 
     /**
      * Set the "I belong to" home department for the session (a preview/explore
-     * tool). Gated to elevated cross-scope users; accepts a department id under
+     * tool). Restricted to the administrative roles in
+     * {@see DepartmentContext::HOME_SWITCH_ROLES}; accepts a department id under
      * the active entity or the Executive sentinel. Everyone else keeps their DB
      * placement (users.department_id).
      */
     public function belong(Request $request)
     {
-        abort_unless($request->user()->can('dashboard.filter_entity'), 403);
+        abort_unless(DepartmentContext::canSwitchHome($request->user()), 403);
 
         $request->validate([
             'home' => 'required|string',

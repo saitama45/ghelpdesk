@@ -36,6 +36,21 @@ class DepartmentContext
     public const EXECUTIVE = 'executive';
 
     /**
+     * Roles allowed to change "I belong to". Deliberately HARD-CODED role names
+     * rather than a permission: switching your home department rewrites the
+     * provider/customer axis for the whole session, so it is an administrative
+     * capability, not something that should follow a broadly-granted permission.
+     * Everyone else sees their home department as a read-only badge.
+     */
+    public const HOME_SWITCH_ROLES = ['Dev', 'Admin', 'Solutions Admin'];
+
+    /** Whether this user may change their "I belong to" home department. */
+    public static function canSwitchHome($user): bool
+    {
+        return (bool) $user?->hasAnyRole(static::HOME_SWITCH_ROLES);
+    }
+
+    /**
      * Per-department accent palette, ported from the LINK Hub prototype and keyed
      * by department code. Drives the CSS accent that retints on department switch.
      * Unknown codes fall back to {@see DEFAULT_ACCENT}.
@@ -218,9 +233,9 @@ class DepartmentContext
             'viewed' => $viewed,
             'accessView' => ($home && $viewed && $home === $viewed) ? 'provider' : 'customer',
             'isExecutive' => $executive,
-            // Elevated cross-scope users may switch their "I belong to" home
+            // Only the administrative roles may switch their "I belong to" home
             // department (a preview/explore tool); everyone else sees it read-only.
-            'canSwitchHome' => (bool) $user->can('dashboard.filter_entity'),
+            'canSwitchHome' => static::canSwitchHome($user),
             'accent' => $palette['accent'],
             'soft' => $palette['soft'],
             'departments' => $departments->map(fn ($d) => [

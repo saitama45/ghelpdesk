@@ -163,15 +163,19 @@ class TicketController extends Controller
     /**
      * Apply the department axis to a ticket query and describe the resulting view.
      *
-     * PROVIDER (you are on your own department's tab) — the query is left alone.
-     * This is deliberate: roughly half of all tickets predate tickets.department_id
-     * and still carry NULL, so narrowing the provider desk to the viewed department
-     * would silently hide them. The home tab therefore behaves exactly as before.
+     * PROVIDER (you are on your own department's tab) — your department's own
+     * desk: tickets assigned to its members, plus the unassigned intake pool that
+     * nobody has claimed. Another department's work never appears here.
      *
      * CUSTOMER (you are on another department's tab) — you are that department's
      * internal customer, so the list narrows to your OWN department's requests to
-     * them and the page renders read-only. Executive mode sits above the axis and
-     * keeps the full view.
+     * them and the page renders read-only. Unassigned tickets are excluded here:
+     * with no assignee there is nothing tying them to the department you are
+     * visiting, and including them would repeat the same ticket under every tab.
+     *
+     * Executive ("All") sits above the axis and keeps the unscoped enterprise view.
+     *
+     * Ownership is defined once, on {@see Ticket::scopeOwnedByDepartment()}.
      *
      * @return array The payload the page needs to frame itself.
      */
@@ -194,13 +198,19 @@ class TicketController extends Controller
             'isExecutive' => $isExecutive,
         ];
 
-        // Executive, unplaced-with-no-viewed-department, or on your own tab: the
-        // provider desk, unchanged.
-        if ($isExecutive || ! $viewedId || ($homeId && $homeId === $viewedId)) {
+        // Executive mode, or an entity with no departments: no axis to apply.
+        if ($isExecutive || ! $viewedId) {
             return $payload;
         }
 
-        $query->where('tickets.department_id', $viewedId);
+        // Your own department's tab → its service desk.
+        if ($homeId && $homeId === $viewedId) {
+            $query->ownedByDepartment($viewedId);
+
+            return $payload;
+        }
+
+        $query->ownedByDepartment($viewedId, includeUnassigned: false);
 
         if ($homeId) {
             // Your department's requests to them — a manager sees their team's.
@@ -237,7 +247,9 @@ class TicketController extends Controller
 
         $query = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)->with([
             'reporter:id,name,email,profile_photo',
-            'assignee:id,name,profile_photo,department_node_id',
+            // department_id rides along so the department axis is inspectable from
+            // the rendered page (which desk a row belongs to is the assignee's).
+            'assignee:id,name,profile_photo,department_node_id,department_id',
             'company:id,name',
             'store:id,name', 
             'item:id,name,priority,category_id,sub_category_id',

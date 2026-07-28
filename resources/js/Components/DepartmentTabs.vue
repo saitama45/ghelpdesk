@@ -1,13 +1,13 @@
 <script setup>
 import { computed } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
-import { ArrowUpRightIcon, ArrowDownLeftIcon } from '@heroicons/vue/24/solid';
 
 /**
  * Global department strip, shown on every page directly below the top nav.
  * Left: department master-tabs (the departments under the active entity).
- * Right: the derived provider/customer access indicator. Selecting a tab sets
- * the viewed department for the session, which flips the access view.
+ * Right: the "I belong to" home department. Selecting a tab sets the viewed
+ * department for the session, which flips the derived provider/customer view —
+ * stated on the pages that act on it, not repeated as a chip here.
  */
 const page = usePage();
 
@@ -15,12 +15,8 @@ const ctx = computed(() => page.props.departmentContext || { home: null, viewed:
 const departments = computed(() => ctx.value.departments || []);
 const viewedId = computed(() => ctx.value.viewed);
 const homeId = computed(() => ctx.value.home);
-const isProvider = computed(() => ctx.value.accessView === 'provider');
 const isExecutive = computed(() => ctx.value.isExecutive === true);
 const canSwitchHome = computed(() => ctx.value.canSwitchHome === true);
-
-const viewedName = computed(() => departments.value.find(d => d.id === viewedId.value)?.name || '');
-const homeName = computed(() => departments.value.find(d => d.id === homeId.value)?.name || '');
 
 // "I belong to" current selection: Executive sentinel or the home department id.
 const belongValue = computed(() => isExecutive.value ? 'executive' : (homeId.value != null ? String(homeId.value) : ''));
@@ -146,28 +142,11 @@ const changeBelong = (event) => {
                 <span class="text-[8px] font-black uppercase tracking-widest opacity-70">Enterprise →</span>
             </Link>
 
-            <!-- Derived access indicator -->
-            <div
-                v-else
-                :class="[
-                    'hidden md:flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5',
-                    isProvider
-                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-300'
-                        : 'bg-blue-50 text-blue-700 dark:bg-blue-900/25 dark:text-blue-300',
-                ]"
-                :title="isProvider
-                    ? viewedName + ' — you manage this department\'s work (provider)'
-                    : (homeName ? homeName + ' visiting ' + viewedName + ' (customer)' : viewedName + ' (customer)')"
-            >
-                <ArrowDownLeftIcon v-if="isProvider" class="h-3.5 w-3.5" />
-                <ArrowUpRightIcon v-else class="h-3.5 w-3.5" />
-                <span class="text-[11px] font-black">
-                    <template v-if="isProvider">{{ viewedName }} Provider</template>
-                    <template v-else-if="homeName">Customer of {{ viewedName }}</template>
-                    <template v-else>{{ viewedName }}</template>
-                </span>
-                <span class="text-[8px] font-black uppercase tracking-widest opacity-70">Auto</span>
-            </div>
+            <!-- The derived provider/customer chip used to sit here. Removed: it
+                 crowded the department tabs out of the strip (clipping the last
+                 tab), and the same information is already stated where it is
+                 acted on — the sidebar Services verb, and the role banner on the
+                 Services hub and the Tickets page. -->
             </div>
         </div>
     </div>

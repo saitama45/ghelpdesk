@@ -81,6 +81,34 @@ class Ticket extends Model
             });
     }
 
+    /**
+     * The tickets a department is responsible for.
+     *
+     * Ownership follows the ASSIGNEE's department — the people who actually do
+     * the work — not `tickets.department`/`department_id`, which began life as
+     * free text and was only backfilled by name match, so it disagrees with the
+     * real owner on a large share of rows.
+     *
+     * Unassigned tickets are the shared intake pool: nobody has taken ownership,
+     * so every department's desk sees them until someone does. Set
+     * `$includeUnassigned` to false where the department must be certain — e.g.
+     * the internal-customer view, which would otherwise repeat the same
+     * unclaimed ticket under every department tab.
+     *
+     * The OR is grouped so the unassigned branch cannot escape the surrounding
+     * constraints on the query.
+     */
+    public function scopeOwnedByDepartment(Builder $query, int $departmentId, bool $includeUnassigned = true): Builder
+    {
+        return $query->where(function (Builder $q) use ($departmentId, $includeUnassigned) {
+            $q->whereHas('assignee', fn ($a) => $a->where('department_id', $departmentId));
+
+            if ($includeUnassigned) {
+                $q->orWhereNull('assignee_id');
+            }
+        });
+    }
+
     public function parent()
     {
         return $this->belongsTo(Ticket::class, 'parent_id')

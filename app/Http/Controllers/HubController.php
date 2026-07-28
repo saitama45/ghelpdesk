@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\AttendanceLog;
 use App\Models\Company;
-use App\Models\DepartmentService;
 use App\Models\FormDefinition;
 use App\Models\Item;
 use App\Models\Schedule;
@@ -218,31 +217,18 @@ class HubController extends Controller
             return null;
         }
 
-        $base = fn () => Ticket::query()->where('department_id', $viewedId);
+        // The department's desk: tickets assigned to its members plus the
+        // unassigned intake pool. Defined once on the model so this and the
+        // /tickets page can never disagree — and so the "Unassigned" KPI below
+        // has rows to count (an assignee-only base can never match a null one).
+        $base = fn () => Ticket::query()->ownedByDepartment($viewedId);
         $monthStart = Carbon::now('Asia/Manila')->startOfMonth();
 
-        // The viewed department's service catalogue (Service Exchange) — what it
-        // OFFERS to internal customers, independent of the visitor's module perms.
-        //
-        // ONE list, two sources: the curated Service Exchange rows plus every form
-        // the department owns in /form-builder. A form IS a service, so it belongs
-        // in the catalogue rather than in a second competing list beside it.
-        $catalog = DepartmentService::query()
-            ->where('department_id', $viewedId)
-            ->where('is_active', true)
-            ->orderBy('sort_order')->orderBy('name')
-            ->get(['id', 'name', 'description', 'eta', 'route_name'])
-            ->map(fn (DepartmentService $s) => [
-                'id' => 'svc-' . $s->id,
-                'name' => $s->name,
-                'description' => $s->description,
-                'eta' => $s->eta,
-                'route_name' => $s->route_name,
-                'route_params' => [],
-                'source' => 'exchange',
-            ])->all();
-
-        $formServices = FormDefinition::query()
+        // The viewed department's service catalogue comes from FORM BUILDER: a
+        // published form IS the service, and opening a card opens that form. No
+        // ticket-backed placeholders — a service the department has not published
+        // in /form-builder simply is not offered yet.
+        $catalog = FormDefinition::query()
             ->where('department_id', $viewedId)
             ->where('is_active', true)
             ->orderBy('name')
@@ -250,14 +236,17 @@ class HubController extends Controller
             ->map(fn (FormDefinition $f) => [
                 'id' => 'form-' . $f->id,
                 'name' => $f->name,
-                'description' => $f->description ?: 'Submit a request on this form',
+                // Several forms carry a description identical to their name, which
+                // renders as the same line twice on the card.
+                'description' => ($f->description && trim(strtolower($f->description)) !== trim(strtolower($f->name)))
+                    ? $f->description
+                    : 'Submit a request on this form',
                 'eta' => null,
                 'route_name' => 'dynamic-form.index',
                 'route_params' => [$f->slug],
+                'slug' => $f->slug,
                 'source' => 'form',
             ])->all();
-
-        $catalog = array_merge($catalog, $formServices);
 
         $open = (clone $base())->whereNotIn('status', self::CLOSED_STATUSES)->count();
         $resolvedMtd = (clone $base())->whereIn('status', self::CLOSED_STATUSES)
@@ -389,7 +378,11 @@ class HubController extends Controller
         $requestsTo = null;
         if ($homeId) {
             $homeUserIds = User::where('department_id', $homeId)->pluck('id');
-            $toBase = fn () => Ticket::query()->where('department_id', $viewedId)->whereIn('reporter_id', $homeUserIds);
+            // Requests my department sent to THIS department. Unassigned tickets
+            // are excluded: nothing ties them to the department being visited.
+            $toBase = fn () => Ticket::query()
+                ->ownedByDepartment($viewedId, includeUnassigned: false)
+                ->whereIn('reporter_id', $homeUserIds);
             $requestsTo = [
                 'active' => (clone $toBase())->whereNotIn('status', self::CLOSED_STATUSES)->count(),
                 'completed_mtd' => (clone $toBase())->whereIn('status', self::CLOSED_STATUSES)->where('updated_at', '>=', $monthStart)->count(),
