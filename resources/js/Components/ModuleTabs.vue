@@ -5,6 +5,7 @@ import { Squares2X2Icon } from '@heroicons/vue/24/outline';
 import { usePermission } from '@/Composables/usePermission.js';
 import { useSidebarOrder } from '@/Composables/useSidebarOrder.js';
 import { MODULE_REGISTRY, MODULE_SECTIONS } from '@/Composables/useModuleRegistry.js';
+import { useDepartmentContext } from '@/Composables/useDepartmentContext.js';
 
 /**
  * GLOBAL module tab strip: self-determines the current section from the route and
@@ -15,6 +16,7 @@ const page = usePage();
 const route = window.route;
 const { hasPermission } = usePermission();
 const { getSectionLabel, getChildLabel, getChildOrder } = useSidebarOrder();
+const { moduleInScope, formInScope } = useDepartmentContext();
 
 const permitted = (permission) => {
     if (!permission) return true;
@@ -22,10 +24,13 @@ const permitted = (permission) => {
     return hasPermission(permission);
 };
 
-/** Dynamic forms behave as extra Services modules. */
+/**
+ * Dynamic forms behave as extra Services modules, listed by the department that
+ * owns them rather than by permission — matching the Services hub catalogue.
+ */
 const dynamicFormChildren = computed(() =>
     (page.props.dynamicForms || [])
-        .filter((f) => hasPermission(f.slug + '.view'))
+        .filter(formInScope)
         .map((f) => {
             const id = 'form-' + f.slug;
             const label = getChildLabel('services', id);
@@ -61,7 +66,7 @@ const tabs = computed(() => {
     const section = currentSection.value;
     if (!section || section.direct) return [];
     const base = section.children
-        .filter((c) => permitted(c.permission))
+        .filter((c) => permitted(c.permission) && moduleInScope(c))
         .map((c) => {
             const label = getChildLabel(section.id, c.id);
             return { ...c, resolvedLabel: label === c.id ? c.label : label };

@@ -25,6 +25,20 @@ class DynamicFormController extends Controller
     {
         $query = FormRecord::query();
 
+        // Cross-form list: show each form's records only where the viewer manages
+        // that form; everything else narrows to their own submissions. Mirrors the
+        // per-form rule in index() so /forms can't sidestep it.
+        $managedFormIds = FormDefinition::where('is_active', true)
+            ->get(['id', 'slug'])
+            ->filter(fn (FormDefinition $f) => $request->user()->can($f->slug . '.view'))
+            ->pluck('id')
+            ->all();
+
+        $query->where(function ($q) use ($managedFormIds, $request) {
+            $q->whereIn('form_definition_id', $managedFormIds)
+                ->orWhere('created_by', $request->user()->id);
+        });
+
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where('data', 'like', "%{$search}%");
@@ -51,11 +65,31 @@ class DynamicFormController extends Controller
         ]);
     }
 
+    /**
+     * Whether the viewer MANAGES this form's queue rather than merely using it.
+     *
+     * Anyone may submit a request to another department's service — that is the
+     * whole point of the internal-customer view — but only the holder of the
+     * form's {slug}.view permission may see everybody's records. Without it the
+     * viewer is a customer and sees only what they submitted themselves.
+     */
+    private function managesForm(Request $request, FormDefinition $form): bool
+    {
+        return (bool) $request->user()?->can($form->slug . '.view');
+    }
+
     public function index(Request $request, $slug)
     {
-        $form = FormDefinition::where('slug', $slug)->with('requestTypes')->firstOrFail();
-        
+        $form = FormDefinition::where('slug', $slug)->with(['requestTypes', 'department:id,name,code'])->firstOrFail();
+
+        $manages = $this->managesForm($request, $form);
+
         $query = FormRecord::where('form_definition_id', $form->id);
+
+        // Customer mode: your own submissions only, never the department's queue.
+        if (! $manages) {
+            $query->where('created_by', $request->user()->id);
+        }
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -87,15 +121,26 @@ class DynamicFormController extends Controller
             'records' => $records,
             'filters' => $request->only(['search', 'status', 'onboarding_date_from', 'onboarding_date_to']),
             'copyTransferPayload' => session('copy_transfer_payload'),
+            // Drives the provider-vs-customer framing on the page: managers work
+            // the whole queue, customers see and track only their own requests.
+            'accessView' => $manages ? 'provider' : 'customer',
         ]);
     }
 
-    public function show($slug, $id)
+    public function show(Request $request, $slug, $id)
     {
         $form = FormDefinition::where('slug', $slug)->firstOrFail();
         $record = FormRecord::with(['creator', 'updator', 'approvals.user', 'definition', 'requestType', 'ticket.slaMetric'])
             ->where('form_definition_id', $form->id)
             ->findOrFail($id);
+
+        // Customers may open their own submission and nothing else — index() hides
+        // other people's records, so a direct id must not be a way around it.
+        // Approvers are exempt: they have to read what they are asked to approve.
+        $manages = $this->managesForm($request, $form);
+        $isOwner = (int) $record->created_by === (int) $request->user()->id;
+        $isApprover = $record->approvals()->where('user_id', $request->user()->id)->exists();
+        abort_unless($manages || $isOwner || $isApprover, 403);
 
         // A live ticket in another entity loads as null through the scoped relation;
         // re-attach it so the page shows the ticket instead of claiming it's missing.

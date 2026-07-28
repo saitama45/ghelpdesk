@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Department;
 use App\Models\FormDefinition;
 use App\Models\RequestType;
 use App\Models\User;
@@ -26,8 +27,8 @@ class FormBuilderController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = FormDefinition::query()->with('requestTypes');
-        
+        $query = FormDefinition::query()->with(['requestTypes', 'department:id,name,code']);
+
         if ($request->filled('search')) {
             $query->where(function($q) use ($request) {
                 $q->where('name', 'like', "%{$request->search}%")
@@ -41,6 +42,13 @@ class FormBuilderController extends Controller implements HasMiddleware
             'forms' => $forms,
             'users' => User::active()->orderBy('name')->get(['id', 'name', 'email']),
             'requestTypes' => RequestType::where('is_active', true)->orderBy('name')->get(['id', 'name', 'approval_levels', 'approver_matrix', 'form_schema']),
+            // Options for the "Owning Department" picker. Every form belongs to the
+            // department that provides it — that is what makes it appear in that
+            // department's Services catalogue and nobody else's.
+            'departments' => Department::orderBy('name')->get(['id', 'name', 'code']),
+            // Forms left unassigned (e.g. their department was deleted) are surfaced
+            // as a warning banner so they don't silently vanish from every catalogue.
+            'unassignedFormCount' => FormDefinition::whereNull('department_id')->count(),
         ]);
     }
 
@@ -51,6 +59,7 @@ class FormBuilderController extends Controller implements HasMiddleware
             'request_type_ids.*' => 'exists:request_types,id',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:255',
+            'department_id' => 'required|exists:departments,id',
             'workflow_type' => 'required|string|in:approval,checklist',
             'icon' => 'nullable|string|max:50',
             'approval_levels' => 'required|integer|min:0',
@@ -63,6 +72,7 @@ class FormBuilderController extends Controller implements HasMiddleware
             'name' => $request->name,
             'slug' => Str::slug($request->name),
             'description' => $request->description,
+            'department_id' => $request->department_id,
             'workflow_type' => $request->workflow_type,
             'icon' => $request->icon ?? 'DocumentTextIcon',
             'approval_levels' => $request->approval_levels,
@@ -83,7 +93,7 @@ class FormBuilderController extends Controller implements HasMiddleware
             $formDefinition->requestTypes()->sync($request->request_type_ids);
         }
 
-        Cache::forget('active_form_definitions');
+        Cache::forget('active_form_definitions_v2');
         Cache::increment('permissions_version');
 
         return redirect()->back()->with('success', 'Form Definition created successfully');
@@ -96,6 +106,7 @@ class FormBuilderController extends Controller implements HasMiddleware
             'request_type_ids.*' => 'exists:request_types,id',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:255',
+            'department_id' => 'required|exists:departments,id',
             'workflow_type' => 'required|string|in:approval,checklist',
             'icon' => 'nullable|string|max:50',
             'approval_levels' => 'required|integer|min:0',
@@ -108,6 +119,7 @@ class FormBuilderController extends Controller implements HasMiddleware
             'name' => $request->name,
             'slug' => Str::slug($request->name),
             'description' => $request->description,
+            'department_id' => $request->department_id,
             'workflow_type' => $request->workflow_type,
             'icon' => $request->icon ?? 'DocumentTextIcon',
             'approval_levels' => $request->approval_levels,
@@ -120,7 +132,7 @@ class FormBuilderController extends Controller implements HasMiddleware
             $form_builder->requestTypes()->sync($request->request_type_ids);
         }
 
-        Cache::forget('active_form_definitions');
+        Cache::forget('active_form_definitions_v2');
         Cache::increment('permissions_version');
 
         return redirect()->back()->with('success', 'Form Definition updated successfully');
@@ -136,7 +148,7 @@ class FormBuilderController extends Controller implements HasMiddleware
             'form_schema' => $request->form_schema,
         ]);
 
-        Cache::forget('active_form_definitions');
+        Cache::forget('active_form_definitions_v2');
 
         return redirect()->back()->with('success', 'Form Schema updated successfully');
     }
@@ -145,7 +157,7 @@ class FormBuilderController extends Controller implements HasMiddleware
     {
         $form_builder->delete();
 
-        Cache::forget('active_form_definitions');
+        Cache::forget('active_form_definitions_v2');
         Cache::increment('permissions_version');
 
         return redirect()->back()->with('success', 'Form Definition deleted successfully');

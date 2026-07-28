@@ -8,6 +8,7 @@ import StoreHealthReport from '@/Components/StoreHealthReport.vue';
 import { usePermission } from '@/Composables/usePermission.js';
 import { useSidebarOrder } from '@/Composables/useSidebarOrder.js';
 import { MODULE_SECTIONS } from '@/Composables/useModuleRegistry.js';
+import { useDepartmentContext } from '@/Composables/useDepartmentContext.js';
 
 const props = defineProps({
     section: { type: String, required: true },
@@ -38,6 +39,14 @@ const openCount = computed(() =>
 
 const page = usePage();
 const { hasPermission } = usePermission();
+const {
+    viewedName: deptName,
+    homeName: myDeptName,
+    isProvider: viewingOwnDepartment,
+    isExecutive,
+    moduleInScope,
+    formInScope,
+} = useDepartmentContext();
 const { init: initSidebar, getSectionLabel, getChildLabel, getChildOrder, ensureDynamicFormChildren } = useSidebarOrder();
 
 // Load saved order/labels so the hub matches the sidebar customisation layer.
@@ -49,11 +58,17 @@ const sectionLabel = computed(() =>
     section.value ? getSectionLabel(section.value.id) : 'Hub'
 );
 
-/** Dynamic forms are Services children not present in the static registry. */
+/**
+ * Dynamic forms are Services children not present in the static registry. They
+ * are listed by OWNING DEPARTMENT, not by permission: requesting a service you
+ * cannot administer is exactly what the internal-customer view is for. The
+ * records page itself narrows to your own submissions without the {slug}.view
+ * permission (see DynamicFormController::index).
+ */
 const dynamicFormTiles = computed(() => {
     if (props.section !== 'services') return [];
     return (page.props.dynamicForms || [])
-        .filter((form) => hasPermission(form.slug + '.view'))
+        .filter(formInScope)
         .map((form) => {
             const childId = 'form-' + form.slug;
             const label = getChildLabel('services', childId);
@@ -79,7 +94,7 @@ const permitted = (permission) => {
 const tiles = computed(() => {
     if (!section.value) return [];
     const registryTiles = section.value.children
-        .filter((child) => permitted(child.permission))
+        .filter((child) => permitted(child.permission) && moduleInScope(child))
         .map((child) => {
             const label = getChildLabel(section.value.id, child.id);
             return {
@@ -114,7 +129,8 @@ const reloadSection = () => router.reload({ only: ['sectionData'] });
 const catalog = computed(() => props.sectionData?.catalog || []);
 const startService = (svc) => {
     if (svc.route_name) {
-        router.visit(route(svc.route_name));
+        // Form-backed services carry the form slug as a route parameter.
+        router.visit(route(svc.route_name, ...(svc.route_params || [])));
     } else {
         // No fulfilling module — start a general request against this department.
         router.visit(route('tickets.index'));
@@ -153,6 +169,38 @@ const showGenericKpis = computed(() =>
                     </div>
                     <span class="text-[11px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">
                         {{ tiles.length }} {{ tiles.length === 1 ? 'module' : 'modules' }}
+                    </span>
+                </div>
+
+                <!-- Role banner: the one place that states, in words, whether you are
+                     looking at your own department's desk or shopping another
+                     department's catalogue. Same layout for every department. -->
+                <div v-if="section.id === 'services' && deptName"
+                     class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border-l-4 bg-white px-4 py-3 shadow-sm dark:bg-gray-800"
+                     :class="viewingOwnDepartment
+                         ? 'border border-gray-200 dark:border-gray-700'
+                         : 'border border-dashed border-gray-300 dark:border-gray-600'"
+                     :style="{ borderLeftColor: 'var(--dept-accent)' }">
+                    <span class="rounded-md px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white"
+                          :style="{ backgroundColor: 'var(--dept-accent)' }">
+                        {{ viewingOwnDepartment ? '↙ Service Provider' : '↗ Internal Customer' }}
+                    </span>
+                    <span class="text-sm font-bold text-gray-900 dark:text-white">
+                        <template v-if="viewingOwnDepartment">You provide {{ deptName }} services</template>
+                        <template v-else-if="myDeptName">{{ myDeptName }} requesting from {{ deptName }}</template>
+                        <template v-else>Requesting from {{ deptName }}</template>
+                    </span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">
+                        <template v-if="viewingOwnDepartment">
+                            Requests raised against {{ deptName }} land on this desk — work the queue below.
+                        </template>
+                        <template v-else>
+                            Browse what {{ deptName }} offers and track the requests you have sent them.
+                        </template>
+                    </span>
+                    <span v-if="isExecutive"
+                          class="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                        Executive view
                     </span>
                 </div>
 

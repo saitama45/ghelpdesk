@@ -31,7 +31,22 @@ const props = defineProps({
     entityFilter: { type: Object, default: () => ({ enabled: false, options: [], selected: [] }) },
     ticketKeyOptions: { type: Array, default: () => [] },
     requesterOptions: { type: Array, default: () => [] },
+    departmentAxis: {
+        type: Object,
+        default: () => ({ accessView: 'provider', readOnly: false, viewedDepartment: null, homeDepartment: null }),
+    },
 });
+
+/**
+ * Department axis. On your own department's tab this page is the SERVICE
+ * PROVIDER desk and behaves exactly as before. On another department's tab you
+ * are their INTERNAL CUSTOMER: the controller has already narrowed the rows to
+ * your department's requests to them, and the page drops every queue-management
+ * control so it reads as a tracking view rather than a work surface.
+ */
+const isCustomerView = computed(() => props.departmentAxis?.accessView === 'customer');
+const axisViewedName = computed(() => props.departmentAxis?.viewedDepartment?.name || null);
+const axisHomeName = computed(() => props.departmentAxis?.homeDepartment?.name || null);
 
 const page = usePage();
 const showCreateModal = ref(false);
@@ -1888,15 +1903,36 @@ const requesterTabs = computed(() => {
         </template>
 
         <div class="space-y-6 min-w-fit">
+            <!-- Role banner: same shape and wording as the Services hub, so the
+                 provider/customer distinction reads identically everywhere. -->
+            <div v-if="isCustomerView"
+                 class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-dashed border-slate-300 border-l-4 bg-white px-4 py-3 shadow-sm dark:border-slate-600 dark:bg-slate-900"
+                 :style="{ borderLeftColor: 'var(--dept-accent)' }">
+                <span class="rounded-md px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white"
+                      :style="{ backgroundColor: 'var(--dept-accent)' }">
+                    ↗ Internal Customer
+                </span>
+                <span class="text-sm font-bold text-slate-900 dark:text-white">
+                    <template v-if="axisHomeName">{{ axisHomeName }} requests to {{ axisViewedName }}</template>
+                    <template v-else>Your requests to {{ axisViewedName }}</template>
+                </span>
+                <span class="text-xs text-slate-500 dark:text-slate-400">
+                    Tracking view only — {{ axisViewedName }} owns this queue. Switch to your own department tab to work tickets.
+                </span>
+            </div>
+
             <section class="hidden sm:block relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-blue-50 px-4 py-3.5 text-slate-900 shadow-lg shadow-slate-200/60 sm:px-5 dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-blue-950 dark:text-white dark:shadow-black/30">
                 <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.10),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(20,184,166,0.08),transparent_30%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(96,165,250,0.25),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(45,212,191,0.18),transparent_30%)]"></div>
                 <div class="relative flex flex-col gap-3">
                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div class="flex items-center gap-3">
                             <span class="inline-flex shrink-0 items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-blue-700 dark:border-white/15 dark:bg-white/10 dark:text-blue-100">
-                                Ticket Monitoring
+                                {{ isCustomerView ? 'Request Tracking' : 'Ticket Monitoring' }}
                             </span>
-                            <h2 class="text-base font-bold tracking-tight text-slate-900 sm:text-lg dark:text-white">Live queue triage — urgency, ownership &amp; SLA pressure.</h2>
+                            <h2 class="text-base font-bold tracking-tight text-slate-900 sm:text-lg dark:text-white">
+                                <template v-if="isCustomerView">Requests we sent to {{ axisViewedName }} — status &amp; turnaround.</template>
+                                <template v-else>Live queue triage — urgency, ownership &amp; SLA pressure.</template>
+                            </h2>
                         </div>
                         <div class="text-[11px] font-medium text-slate-500 sm:text-right dark:text-slate-400">
                             Scope: <span class="text-slate-700 dark:text-slate-200">{{ ticketsShowingText }}</span>
@@ -2355,7 +2391,7 @@ const requesterTabs = computed(() => {
 
                 <template #header>
                     <tr>
-                        <th class="px-4 py-3 w-10">
+                        <th v-if="!isCustomerView" class="px-4 py-3 w-10">
                             <input
                                 type="checkbox"
                                 :checked="allSelected"
@@ -2390,7 +2426,7 @@ const requesterTabs = computed(() => {
                             selectedIds.includes(ticket.id) ? 'ring-1 ring-inset ring-blue-300' : ''
                         ]"
                     >
-                        <td class="px-4 py-5 w-10 align-top" @click.stop>
+                        <td v-if="!isCustomerView" class="px-4 py-5 w-10 align-top" @click.stop>
                             <input
                                 type="checkbox"
                                 :value="ticket.id"

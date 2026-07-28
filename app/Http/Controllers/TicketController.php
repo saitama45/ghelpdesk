@@ -20,6 +20,7 @@ use App\Models\Store;
 use App\Models\Vendor;
 use App\Models\Schedule;
 use App\Services\TicketKnowledgeBaseService;
+use App\Support\DepartmentContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -160,6 +161,65 @@ class TicketController extends Controller
     }
 
     /**
+     * Apply the department axis to a ticket query and describe the resulting view.
+     *
+     * PROVIDER (you are on your own department's tab) — the query is left alone.
+     * This is deliberate: roughly half of all tickets predate tickets.department_id
+     * and still carry NULL, so narrowing the provider desk to the viewed department
+     * would silently hide them. The home tab therefore behaves exactly as before.
+     *
+     * CUSTOMER (you are on another department's tab) — you are that department's
+     * internal customer, so the list narrows to your OWN department's requests to
+     * them and the page renders read-only. Executive mode sits above the axis and
+     * keeps the full view.
+     *
+     * @return array The payload the page needs to frame itself.
+     */
+    private function applyDepartmentAxis($query, $user): array
+    {
+        $departments = collect(DepartmentContext::accessibleDepartments($user));
+        $viewedId = DepartmentContext::resolveViewedId($user);
+        $homeId = DepartmentContext::homeDepartmentId($user);
+        $isExecutive = DepartmentContext::isExecutive($user);
+
+        $describe = fn ($dept) => $dept
+            ? ['id' => (int) $dept->id, 'name' => $dept->name, 'code' => $dept->code]
+            : null;
+
+        $payload = [
+            'accessView' => 'provider',
+            'readOnly' => false,
+            'viewedDepartment' => $describe($departments->firstWhere('id', $viewedId)),
+            'homeDepartment' => $describe($departments->firstWhere('id', $homeId)),
+            'isExecutive' => $isExecutive,
+        ];
+
+        // Executive, unplaced-with-no-viewed-department, or on your own tab: the
+        // provider desk, unchanged.
+        if ($isExecutive || ! $viewedId || ($homeId && $homeId === $viewedId)) {
+            return $payload;
+        }
+
+        $query->where('tickets.department_id', $viewedId);
+
+        if ($homeId) {
+            // Your department's requests to them — a manager sees their team's.
+            $query->whereIn(
+                'tickets.reporter_id',
+                User::where('department_id', $homeId)->pluck('id')
+            );
+        } else {
+            // No home department to speak for you: your own requests only.
+            $query->where('tickets.reporter_id', $user->id);
+        }
+
+        $payload['accessView'] = 'customer';
+        $payload['readOnly'] = true;
+
+        return $payload;
+    }
+
+    /**
      * Display a listing of the resource.
      */
     public function index(Request $request)
@@ -210,6 +270,11 @@ class TicketController extends Controller
                 $query->whereIn('company_id', $effectiveCompanyIds);
             }
         }
+
+        // Department axis. Applied BEFORE the filter options and the summary
+        // snapshot so the KPI cards, the filter dropdowns, and the table all
+        // describe the same set of rows in the customer view.
+        $departmentAxis = $this->applyDepartmentAxis($query, $user);
 
         $filterOptions = $this->ticketIndexFilterOptions(clone $query);
 
@@ -485,6 +550,8 @@ class TicketController extends Controller
             'departmentReferences' => $this->organizationReferences->tree(activeOnly: true),
             'hierarchicalDepartments' => $this->organizationReferences->tree(),
             'summaryStats' => $summaryStats,
+            // Provider vs internal-customer framing for this department tab.
+            'departmentAxis' => $departmentAxis,
             'ticketKeyOptions' => $filterOptions['ticketKeyOptions'],
             'requesterOptions' => $filterOptions['requesterOptions'],
             'filters' => [
@@ -537,6 +604,10 @@ class TicketController extends Controller
         } else {
             $query->whereIn('company_id', $effectiveCompanyIds);
         }
+
+        // Same department axis as index(): an export must never return rows the
+        // customer view is not allowed to show on screen.
+        $this->applyDepartmentAxis($query, $user);
 
         $normalizeFilterValues = fn ($value) => collect(is_array($value) ? $value : [$value])
             ->filter(fn ($item) => $item !== null && $item !== '')

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class FormDefinition extends Model
 {
@@ -10,6 +11,9 @@ class FormDefinition extends Model
         'name',
         'slug',
         'description',
+        // The department that OWNS this service. Drives the Services hub:
+        // its own members see it as providers, everyone else as customers.
+        'department_id',
         'workflow_type',
         'icon',
         'approval_levels',
@@ -23,7 +27,14 @@ class FormDefinition extends Model
         'approver_matrix' => 'array',
         'form_schema' => 'array',
         'is_active' => 'boolean',
+        'department_id' => 'integer',
     ];
+
+    /** The department that offers this service to the organisation. */
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
+    }
 
     public function requestTypes()
     {

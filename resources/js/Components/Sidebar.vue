@@ -6,6 +6,7 @@ import { usePermission } from '@/Composables/usePermission.js';
 import { usePresence } from '@/Composables/usePresence.js';
 import { useSidebarOrder } from '@/Composables/useSidebarOrder.js';
 import { MODULE_REGISTRY } from '@/Composables/useModuleRegistry.js';
+import { useDepartmentContext } from '@/Composables/useDepartmentContext.js';
 import EntitySwitcher from '@/Components/EntitySwitcher.vue';
 
 const props = defineProps({
@@ -24,6 +25,19 @@ const { hasPermission } = usePermission();
 const visibleDynamicForms = computed(() => {
     return dynamicForms.value.filter(form => hasPermission(form.slug + '.view'));
 });
+const { isProvider: viewingOwnDepartment } = useDepartmentContext();
+
+/**
+ * The Services verb flips with the department axis: on your own department's tab
+ * you PROVIDE its services, on any other tab you REQUEST from theirs. The menu
+ * item itself never moves — only the word under it — so the sidebar stays stable
+ * while still telling you, at a glance, which side of the counter you are on.
+ */
+const sectionVerb = (section) => {
+    if (section.id !== 'services') return section.verb;
+    return viewingOwnDepartment.value ? 'Provide' : 'Request';
+};
+
 const { init: initPresence, destroy: destroyPresence } = usePresence();
 const { init: initSidebar, getSectionOrder, getSectionLabel, ensureDynamicFormChildren } = useSidebarOrder();
 
@@ -162,12 +176,12 @@ onUnmounted(() => {
                             'truncate text-[9px] font-black uppercase tracking-[0.18em]',
                             sectionActive(section) ? 'text-white/70' : 'text-gray-400 group-hover:text-gray-500 dark:text-gray-500 dark:group-hover:text-gray-400'
                         ]"
-                    >{{ section.verb }}</span>
+                    >{{ sectionVerb(section) }}</span>
                 </span>
                 <!-- Collapsed: tooltip on hover -->
                 <div v-if="isCollapsed" class="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-sm rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
                     {{ getSectionLabel(section.id) }}
-                    <span v-if="section.verb" class="ml-1 text-[9px] font-black uppercase tracking-widest text-blue-300">{{ section.verb }}</span>
+                    <span v-if="section.verb" class="ml-1 text-[9px] font-black uppercase tracking-widest text-blue-300">{{ sectionVerb(section) }}</span>
                 </div>
             </Link>
         </nav>

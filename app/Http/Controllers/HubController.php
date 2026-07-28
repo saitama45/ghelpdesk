@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AttendanceLog;
 use App\Models\Company;
 use App\Models\DepartmentService;
+use App\Models\FormDefinition;
 use App\Models\Item;
 use App\Models\Schedule;
 use App\Models\ServiceVehicleTrip;
@@ -222,18 +223,41 @@ class HubController extends Controller
 
         // The viewed department's service catalogue (Service Exchange) — what it
         // OFFERS to internal customers, independent of the visitor's module perms.
+        //
+        // ONE list, two sources: the curated Service Exchange rows plus every form
+        // the department owns in /form-builder. A form IS a service, so it belongs
+        // in the catalogue rather than in a second competing list beside it.
         $catalog = DepartmentService::query()
             ->where('department_id', $viewedId)
             ->where('is_active', true)
             ->orderBy('sort_order')->orderBy('name')
             ->get(['id', 'name', 'description', 'eta', 'route_name'])
             ->map(fn (DepartmentService $s) => [
-                'id' => $s->id,
+                'id' => 'svc-' . $s->id,
                 'name' => $s->name,
                 'description' => $s->description,
                 'eta' => $s->eta,
                 'route_name' => $s->route_name,
+                'route_params' => [],
+                'source' => 'exchange',
             ])->all();
+
+        $formServices = FormDefinition::query()
+            ->where('department_id', $viewedId)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'description', 'slug'])
+            ->map(fn (FormDefinition $f) => [
+                'id' => 'form-' . $f->id,
+                'name' => $f->name,
+                'description' => $f->description ?: 'Submit a request on this form',
+                'eta' => null,
+                'route_name' => 'dynamic-form.index',
+                'route_params' => [$f->slug],
+                'source' => 'form',
+            ])->all();
+
+        $catalog = array_merge($catalog, $formServices);
 
         $open = (clone $base())->whereNotIn('status', self::CLOSED_STATUSES)->count();
         $resolvedMtd = (clone $base())->whereIn('status', self::CLOSED_STATUSES)

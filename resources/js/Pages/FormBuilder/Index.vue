@@ -1,10 +1,11 @@
 <script setup>
 import { ref, reactive, onMounted, watch, computed } from 'vue'
-import { router, Head } from '@inertiajs/vue3'
+import { router, Head, usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import FormFieldBuilderModal from '@/Components/FormBuilder/FormFieldBuilderModal.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
+import Autocomplete from '@/Components/Autocomplete.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
@@ -21,7 +22,20 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    departments: {
+        type: Array,
+        default: () => [],
+    },
+    unassignedFormCount: {
+        type: Number,
+        default: 0,
+    },
 })
+
+const page = usePage()
+
+/** The viewer's own department — the sensible default owner for a new form. */
+const homeDepartmentId = computed(() => page.props.departmentContext?.home ?? null)
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
@@ -51,6 +65,7 @@ const form = reactive({
     request_type_ids: [],
     name: '',
     description: '',
+    department_id: null,
     workflow_type: 'approval',
     icon: 'DocumentTextIcon',
     approval_levels: 0,
@@ -73,6 +88,13 @@ const userOptions = computed(() => {
         name: user.email ? `${user.name} (${user.email})` : user.name,
     }))
 })
+
+const departmentOptions = computed(() =>
+    (props.departments ?? []).map(d => ({
+        id: d.id,
+        name: d.code ? `${d.name} (${d.code})` : d.name,
+    }))
+)
 
 const requestTypeOptions = computed(() => {
     return (props.requestTypes ?? []).map(rt => ({
@@ -115,6 +137,7 @@ const openCreateModal = () => {
     form.request_type_ids = []
     form.name = ''
     form.description = ''
+    form.department_id = homeDepartmentId.value
     form.workflow_type = 'approval'
     form.icon = 'DocumentTextIcon'
     form.approval_levels = 0
@@ -130,6 +153,7 @@ const editForm = (formData) => {
     form.request_type_ids = Array.isArray(formData.request_types) ? formData.request_types.map(rt => rt.id) : []
     form.name = formData.name
     form.description = formData.description || ''
+    form.department_id = formData.department_id ?? null
     form.workflow_type = formData.workflow_type || 'approval'
     form.icon = formData.icon || 'DocumentTextIcon'
     form.approval_levels = formData.approval_levels ?? 0
@@ -201,6 +225,18 @@ const openFieldBuilder = (formData) => {
     <AppLayout title="Form Builder" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
         <div class="py-12 bg-gray-50/50 min-h-screen">
             <div class="w-full mx-auto sm:px-6 lg:px-8">
+                <!-- A form with no owning department belongs to no catalogue, so it is
+                     invisible on every department's Services hub until reassigned. -->
+                <div v-if="unassignedFormCount > 0"
+                     class="mb-4 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-900/20">
+                    <span class="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-amber-500"></span>
+                    <p class="text-sm font-medium text-amber-800 dark:text-amber-300">
+                        {{ unassignedFormCount }} form{{ unassignedFormCount === 1 ? '' : 's' }} {{ unassignedFormCount === 1 ? 'has' : 'have' }} no owning department, so
+                        {{ unassignedFormCount === 1 ? 'it does' : 'they do' }} not appear in any department's Services catalogue. Edit
+                        {{ unassignedFormCount === 1 ? 'it' : 'them' }} to assign a department.
+                    </p>
+                </div>
+
                 <DataTable
                     title="Form Builder Management"
                     subtitle="Build and configure custom forms with dynamic fields and approvals"
@@ -234,6 +270,7 @@ const openFieldBuilder = (formData) => {
                         <tr class="bg-gray-50/80 backdrop-blur-sm dark:bg-gray-800/80">
                             <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Name</th>
                             <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Slug</th>
+                            <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Department</th>
                             <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Description</th>
                             <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Status</th>
                             <th class="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-widest dark:text-slate-300">Actions</th>
@@ -264,6 +301,16 @@ const openFieldBuilder = (formData) => {
                             <td class="px-6 py-5 whitespace-nowrap text-left">
                                 <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono font-bold bg-gray-100 text-gray-700 border border-gray-200 group-hover:bg-indigo-50 group-hover:text-indigo-700 group-hover:border-indigo-100 transition-colors duration-300 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
                                     {{ formData.slug }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-5 whitespace-nowrap text-left">
+                                <span v-if="formData.department"
+                                      class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700">
+                                    {{ formData.department.code || formData.department.name }}
+                                </span>
+                                <span v-else
+                                      class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800">
+                                    Unassigned
                                 </span>
                             </td>
                             <td class="px-6 py-5 whitespace-nowrap text-left">
@@ -402,6 +449,20 @@ const openFieldBuilder = (formData) => {
                                         Checklist
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="md:col-span-2">
+                                <label class="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1 dark:text-gray-400">Owning Department</label>
+                                <Autocomplete
+                                    v-model="form.department_id"
+                                    :options="departmentOptions"
+                                    label-key="name"
+                                    value-key="id"
+                                    placeholder="Which department provides this service?"
+                                />
+                                <p class="text-[10px] text-indigo-500 mt-2 ml-1 italic font-medium dark:text-indigo-400">This form appears in the owning department's Services catalogue. Its own members see it as the service provider; everyone else sees it as an internal customer.</p>
                             </div>
                         </div>
 

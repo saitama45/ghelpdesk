@@ -128,6 +128,7 @@ export const MODULE_REGISTRY = [
                 routeName: 'queue.index',
                 activeMatch: ['queue.*'],
                 permission: 'queue.view',
+                ownerDepartments: ['TAS'],
                 eta: 'Live',
             },
             {
@@ -148,6 +149,7 @@ export const MODULE_REGISTRY = [
                 routeName: 'pos-requests.index',
                 activeMatch: ['pos-requests.*'],
                 permission: 'pos_requests.view',
+                ownerDepartments: ['TAS'],
                 eta: '1 business day',
             },
             {
@@ -158,6 +160,7 @@ export const MODULE_REGISTRY = [
                 routeName: 'sap-requests.index',
                 activeMatch: ['sap-requests.*'],
                 permission: 'sap_requests.view',
+                ownerDepartments: ['TAS'],
                 eta: '2 business days',
             },
             {
@@ -168,6 +171,7 @@ export const MODULE_REGISTRY = [
                 routeName: 'stamps.index',
                 activeMatch: ['stamps.*'],
                 permission: 'stamps.view',
+                ownerDepartments: ['MKTG'],
                 eta: '1 business day',
             },
         ],
@@ -629,10 +633,30 @@ export function findChild(sectionId, childId) {
     return MODULE_SECTIONS[sectionId]?.children.find((child) => child.id === childId) || null;
 }
 
+/**
+ * Whether a module is part of a department's service catalogue.
+ *
+ * A child with no `ownerDepartments` is SHARED — every department runs its own
+ * instance of it (Tickets and Task Board are the universal request and work
+ * channels), so it appears on every department tab. A child that names its
+ * owners appears only on those departments' tabs; from anywhere else you reach
+ * it by switching to the owning department, where you are its customer.
+ *
+ * `departmentCode` is the VIEWED department's code. A null code (an entity with
+ * no departments configured) disables the filter entirely rather than hiding
+ * every module.
+ */
+export function isOfferedByDepartment(child, departmentCode) {
+    if (!child?.ownerDepartments?.length) return true;
+    if (!departmentCode) return true;
+    return child.ownerDepartments.includes(departmentCode);
+}
+
 export function useModuleRegistry() {
     return {
         registry: MODULE_REGISTRY,
         sections: MODULE_SECTIONS,
         findChild,
+        isOfferedByDepartment,
     };
 }

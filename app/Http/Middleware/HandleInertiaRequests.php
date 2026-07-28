@@ -97,8 +97,13 @@ class HandleInertiaRequests extends Middleware
             return [];
         }
 
-        return Cache::remember('active_form_definitions', 3600, function () {
-            return \App\Models\FormDefinition::where('is_active', true)->get(['name', 'slug', 'icon'])->toArray();
+        // Cache key is versioned: the payload gained department_id, and a stale v1
+        // entry would leave every form unassigned (invisible in all catalogues)
+        // until the hour expired.
+        return Cache::remember('active_form_definitions_v2', 3600, function () {
+            return \App\Models\FormDefinition::where('is_active', true)
+                ->get(['name', 'slug', 'icon', 'department_id'])
+                ->toArray();
         });
     }
 }
