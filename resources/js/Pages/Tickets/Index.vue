@@ -1518,11 +1518,11 @@ const summaryCards = computed(() => {
             label: 'New',
             value: stats.new ?? 0,
             hint: 'Open, uncategorized, and unassigned',
-            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-            valueClass: 'text-white',
-            labelClass: 'text-blue-300',
-            hintClass: 'text-slate-400',
-            accentClass: 'bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)]',
+            shellClass: 'border-slate-200 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10',
+            valueClass: 'text-slate-900 dark:text-white',
+            labelClass: 'text-blue-600 dark:text-blue-300',
+            hintClass: 'text-slate-500 dark:text-slate-400',
+            accentClass: 'bg-blue-500 dark:bg-blue-400 dark:shadow-[0_0_8px_rgba(96,165,250,0.6)]',
         },
         {
             key: 'open',
@@ -1530,11 +1530,11 @@ const summaryCards = computed(() => {
             label: 'Open',
             value: stats.open ?? 0,
             hint: 'All open tickets',
-            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-            valueClass: 'text-white',
-            labelClass: 'text-emerald-300',
-            hintClass: 'text-slate-400',
-            accentClass: 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]',
+            shellClass: 'border-slate-200 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10',
+            valueClass: 'text-slate-900 dark:text-white',
+            labelClass: 'text-emerald-600 dark:text-emerald-300',
+            hintClass: 'text-slate-500 dark:text-slate-400',
+            accentClass: 'bg-emerald-500 dark:bg-emerald-400 dark:shadow-[0_0_8px_rgba(52,211,153,0.6)]',
         },
         {
             key: 'waiting',
@@ -1542,11 +1542,11 @@ const summaryCards = computed(() => {
             label: 'Waiting',
             value: stats.waiting ?? 0,
             hint: 'Awaiting service provider or client feedback',
-            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-            valueClass: 'text-white',
-            labelClass: 'text-amber-400',
-            hintClass: 'text-slate-400',
-            accentClass: 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]',
+            shellClass: 'border-slate-200 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10',
+            valueClass: 'text-slate-900 dark:text-white',
+            labelClass: 'text-amber-600 dark:text-amber-400',
+            hintClass: 'text-slate-500 dark:text-slate-400',
+            accentClass: 'bg-amber-500 dark:bg-amber-400 dark:shadow-[0_0_8px_rgba(251,191,36,0.6)]',
         },
         {
             key: 'urgent',
@@ -1554,11 +1554,11 @@ const summaryCards = computed(() => {
             label: 'Urgent (P1)',
             value: stats.urgent ?? 0,
             hint: 'Critical priority tickets',
-            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-            valueClass: 'text-white',
-            labelClass: 'text-red-400',
-            hintClass: 'text-slate-400',
-            accentClass: 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]',
+            shellClass: 'border-slate-200 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10',
+            valueClass: 'text-slate-900 dark:text-white',
+            labelClass: 'text-red-600 dark:text-red-400',
+            hintClass: 'text-slate-500 dark:text-slate-400',
+            accentClass: 'bg-red-500 dark:shadow-[0_0_8px_rgba(239,68,68,0.6)]',
         },
         {
             key: 'closed',
@@ -1566,10 +1566,10 @@ const summaryCards = computed(() => {
             label: 'Closed',
             value: stats.closed ?? 0,
             hint: 'Closed tickets',
-            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-            valueClass: 'text-white',
-            labelClass: 'text-slate-300',
-            hintClass: 'text-slate-400',
+            shellClass: 'border-slate-200 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10',
+            valueClass: 'text-slate-900 dark:text-white',
+            labelClass: 'text-slate-600 dark:text-slate-300',
+            hintClass: 'text-slate-500 dark:text-slate-400',
             accentClass: 'bg-slate-400',
         },
         {
@@ -1578,11 +1578,11 @@ const summaryCards = computed(() => {
             label: 'In Progress',
             value: stats.in_progress ?? 0,
             hint: 'Actively being worked on',
-            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-            valueClass: 'text-white',
-            labelClass: 'text-emerald-400',
-            hintClass: 'text-slate-400',
-            accentClass: 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]',
+            shellClass: 'border-slate-200 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10',
+            valueClass: 'text-slate-900 dark:text-white',
+            labelClass: 'text-emerald-600 dark:text-emerald-400',
+            hintClass: 'text-slate-500 dark:text-slate-400',
+            accentClass: 'bg-emerald-500 dark:bg-emerald-400 dark:shadow-[0_0_8px_rgba(52,211,153,0.6)]',
         },
         {
             key: 'unassigned',
@@ -1590,10 +1590,10 @@ const summaryCards = computed(() => {
             label: 'Unassigned',
             value: stats.unassigned ?? 0,
             hint: 'Tickets waiting for ownership',
-            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-            valueClass: 'text-white',
-            labelClass: 'text-slate-300',
-            hintClass: 'text-slate-400',
+            shellClass: 'border-slate-200 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10',
+            valueClass: 'text-slate-900 dark:text-white',
+            labelClass: 'text-slate-600 dark:text-slate-300',
+            hintClass: 'text-slate-500 dark:text-slate-400',
             accentClass: 'bg-slate-400',
         },
         {
@@ -1602,11 +1602,11 @@ const summaryCards = computed(() => {
             label: 'SLA Breached',
             value: stats.breached ?? 0,
             hint: 'Immediate follow-up required',
-            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-            valueClass: 'text-white',
-            labelClass: 'text-red-400',
-            hintClass: 'text-slate-400',
-            accentClass: 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]',
+            shellClass: 'border-slate-200 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10',
+            valueClass: 'text-slate-900 dark:text-white',
+            labelClass: 'text-red-600 dark:text-red-400',
+            hintClass: 'text-slate-500 dark:text-slate-400',
+            accentClass: 'bg-red-500 dark:shadow-[0_0_8px_rgba(239,68,68,0.6)]',
         },
         {
             key: 'nearly_due',
@@ -1614,11 +1614,11 @@ const summaryCards = computed(() => {
             label: 'Due Soon',
             value: stats.due_soon ?? 0,
             hint: 'Targets due within one hour',
-            shellClass: 'border-white/10 bg-white/5 hover:bg-white/10',
-            valueClass: 'text-white',
-            labelClass: 'text-amber-400',
-            hintClass: 'text-slate-400',
-            accentClass: 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]',
+            shellClass: 'border-slate-200 bg-white/80 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10',
+            valueClass: 'text-slate-900 dark:text-white',
+            labelClass: 'text-amber-600 dark:text-amber-400',
+            hintClass: 'text-slate-500 dark:text-slate-400',
+            accentClass: 'bg-amber-500 dark:bg-amber-400 dark:shadow-[0_0_8px_rgba(251,191,36,0.6)]',
         },
     ];
 });
@@ -1888,33 +1888,35 @@ const requesterTabs = computed(() => {
         </template>
 
         <div class="space-y-6 min-w-fit">
-            <section class="hidden sm:block relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-4 py-3.5 text-white shadow-lg sm:px-5">
-                <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(96,165,250,0.25),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(45,212,191,0.18),transparent_30%)]"></div>
+            <section class="hidden sm:block relative overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-blue-50 px-4 py-3.5 text-slate-900 shadow-lg shadow-slate-200/60 sm:px-5 dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-blue-950 dark:text-white dark:shadow-black/30">
+                <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.10),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(20,184,166,0.08),transparent_30%)] dark:bg-[radial-gradient(circle_at_top_right,rgba(96,165,250,0.25),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(45,212,191,0.18),transparent_30%)]"></div>
                 <div class="relative flex flex-col gap-3">
                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div class="flex items-center gap-3">
-                            <span class="inline-flex shrink-0 items-center rounded-full border border-white/15 bg-white/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-blue-100">
+                            <span class="inline-flex shrink-0 items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-blue-700 dark:border-white/15 dark:bg-white/10 dark:text-blue-100">
                                 Ticket Monitoring
                             </span>
-                            <h2 class="text-base font-bold tracking-tight text-white sm:text-lg">Live queue triage — urgency, ownership &amp; SLA pressure.</h2>
+                            <h2 class="text-base font-bold tracking-tight text-slate-900 sm:text-lg dark:text-white">Live queue triage — urgency, ownership &amp; SLA pressure.</h2>
                         </div>
-                        <div class="text-[11px] font-medium text-slate-400 sm:text-right">
-                            Scope: <span class="text-slate-200">{{ ticketsShowingText }}</span>
+                        <div class="text-[11px] font-medium text-slate-500 sm:text-right dark:text-slate-400">
+                            Scope: <span class="text-slate-700 dark:text-slate-200">{{ ticketsShowingText }}</span>
                         </div>
                     </div>
 
                     <!-- Queue stat cards -->
                     <div class="space-y-2.5">
                         <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+                            <!-- The active shell REPLACES the base shell: layering both leaves Tailwind's
+                                 stylesheet order to decide which bg/border wins, which made the
+                                 selected card indistinguishable in light mode. -->
                             <button
                                 v-for="card in summaryCards"
                                 :key="card.key"
                                 type="button"
                                 class="rounded-xl border px-3 py-2.5 text-left shadow-sm backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
-                                :class="[
-                                    card.shellClass,
-                                    activeDashboardFilter === card.filterKey ? 'ring-1 ring-white/30 border-white/30 bg-white/10' : ''
-                                ]"
+                                :class="activeDashboardFilter === card.filterKey
+                                    ? 'ring-2 ring-blue-500 border-blue-400 bg-blue-100 dark:ring-white/30 dark:border-white/30 dark:bg-white/10'
+                                    : card.shellClass"
                                 @click="toggleDashboardFilter(card.filterKey)"
                             >
                                 <div class="flex items-start justify-between gap-2">
