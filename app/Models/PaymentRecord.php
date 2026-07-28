@@ -11,6 +11,7 @@ class PaymentRecord extends Model
         'payable_id',
         'vendor_id',
         'amount',
+        'paid_amount',
         'paid_on',
         'reference_no',
         'paid_by',
@@ -26,6 +27,7 @@ class PaymentRecord extends Model
         'payable_id' => 'integer',
         'vendor_id' => 'integer',
         'amount' => 'decimal:2',
+        'paid_amount' => 'decimal:2',
         'paid_on' => 'date:Y-m-d',
         'paid_by' => 'integer',
         'current_approval_level' => 'integer',
@@ -42,6 +44,38 @@ class PaymentRecord extends Model
     public function approvals()
     {
         return $this->hasMany(PaymentRecordApproval::class);
+    }
+
+    public function tenders()
+    {
+        return $this->hasMany(PaymentRecordTender::class);
+    }
+
+    public function plannedTenders()
+    {
+        return $this->hasMany(PaymentRecordTender::class)
+            ->where('kind', PaymentRecordTender::KIND_PLANNED);
+    }
+
+    public function actualTenders()
+    {
+        return $this->hasMany(PaymentRecordTender::class)
+            ->where('kind', PaymentRecordTender::KIND_ACTUAL);
+    }
+
+    /**
+     * Still-unpaid portion. Postings may be partial, so this drives both the
+     * "can I post more?" guard and the balance shown in the approvals table.
+     */
+    public function remainingBalance(): float
+    {
+        return round((float) $this->amount - (float) $this->paid_amount, 2);
+    }
+
+    public function isFullyPaid(): bool
+    {
+        // Tolerance absorbs the rounding of percentage-based splits.
+        return $this->remainingBalance() <= 0.009;
     }
 
     public function payable()

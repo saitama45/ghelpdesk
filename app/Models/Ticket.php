@@ -109,6 +109,36 @@ class Ticket extends Model
         });
     }
 
+    /**
+     * Escalated to an external vendor: responsibility (and SLA) sits with the
+     * vendor rather than an internal user.
+     *
+     * A vendor_id ALONE does not mean this. Ordinary tickets are tagged with a
+     * vendor for reporting — including the "None - Remote" placeholder, which
+     * carries 128 tickets — and they still need an internal owner. Escalation
+     * creates a CHILD ticket against the vendor, so it is the pairing of a
+     * parent with a vendor that identifies one. Mirrors `isVendorEscalationChild`
+     * in Tickets/Edit.vue; keep the two definitions in step.
+     */
+    public function scopeVendorEscalated(Builder $query): Builder
+    {
+        return $query->whereNotNull('vendor_id')->whereNotNull('parent_id');
+    }
+
+    /**
+     * Tickets genuinely waiting for someone to take ownership.
+     *
+     * A null assignee alone is not enough: a vendor-escalation child also has no
+     * internal assignee yet IS owned, so the desk must not invite anyone to
+     * "accept" it. Excluding those keeps the Unassigned counts and filters
+     * meaning "needs an owner".
+     */
+    public function scopeAwaitingOwner(Builder $query): Builder
+    {
+        return $query->whereNull('assignee_id')
+            ->where(fn (Builder $q) => $q->whereNull('vendor_id')->orWhereNull('parent_id'));
+    }
+
     public function parent()
     {
         return $this->belongsTo(Ticket::class, 'parent_id')

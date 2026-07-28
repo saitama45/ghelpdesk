@@ -55,7 +55,48 @@
                     <button @click="switchTab('approvals')" class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm text-left hover:border-yellow-200 hover:bg-yellow-50 transition-colors group dark:bg-gray-800 dark:border-gray-700">
                         <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider group-hover:text-yellow-600 dark:text-gray-300">Pending Approvals</p>
                         <p class="text-xl font-bold text-yellow-600 mt-1">{{ summary.pending_approvals || 0 }}</p>
+                        <p v-if="summary.partially_paid_records" class="text-[10px] font-bold text-orange-600 mt-0.5 uppercase tracking-wide">
+                            +{{ summary.partially_paid_records }} partially paid
+                        </p>
                     </button>
+                </div>
+
+                <!-- Payments by mode -->
+                <div class="bg-white rounded-xl border border-gray-100 p-4 shadow-sm dark:bg-gray-800 dark:border-gray-700">
+                    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                        <div>
+                            <h3 class="font-semibold text-gray-900 dark:text-gray-100">Payments by Mode</h3>
+                            <p class="text-xs text-gray-500 dark:text-gray-300">Posted amounts split by how they were paid</p>
+                        </div>
+                        <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 w-fit dark:bg-gray-900/50 dark:border-gray-700">
+                            <button v-for="w in modeWindows" :key="w.id" @click="modeWindow = w.id"
+                                    :class="[
+                                        'px-3 py-1 rounded-md text-xs font-medium transition-colors',
+                                        modeWindow === w.id ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                                    ]">
+                                {{ w.label }}
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="paidByModeRows.length" class="space-y-2">
+                        <div v-for="row in paidByModeRows" :key="row.mode" class="flex items-center gap-3">
+                            <span :class="modePill(row.mode)" class="w-44 shrink-0 px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wide text-center truncate">
+                                {{ row.mode }}
+                            </span>
+                            <div class="flex-1 h-2.5 rounded-full bg-gray-100 overflow-hidden dark:bg-gray-700">
+                                <div class="h-full rounded-full bg-blue-500" :style="{ width: modeSharePercent(row) + '%' }"></div>
+                            </div>
+                            <span class="w-16 shrink-0 text-right text-[11px] text-gray-500 dark:text-gray-300">{{ modeSharePercent(row).toFixed(1) }}%</span>
+                            <span class="w-32 shrink-0 text-right text-sm font-mono font-semibold text-gray-900 dark:text-gray-100">₱{{ formatAmount(row.total) }}</span>
+                        </div>
+                        <div class="pt-2 mt-1 border-t border-gray-100 flex justify-between text-sm font-bold dark:border-gray-700">
+                            <span class="text-gray-500 dark:text-gray-300">Total posted</span>
+                            <span class="font-mono text-gray-900 dark:text-gray-100">₱{{ formatAmount(paidByModeTotal) }}</span>
+                        </div>
+                    </div>
+                    <p v-else class="text-xs text-gray-400 italic py-4 text-center dark:text-gray-400">
+                        No payments posted in this period yet.
+                    </p>
                 </div>
 
                 <!-- Controls -->
@@ -287,6 +328,7 @@
                                         <th class="px-4 py-3 text-right">Renewals</th>
                                         <th class="px-4 py-3 text-right">Weekly Plans</th>
                                         <th class="px-4 py-3 text-right">Total</th>
+                                        <th class="px-4 py-3 text-left">Payment Mode</th>
                                         <th class="px-4 py-3 text-right">Items</th>
                                     </tr>
                                 </thead>
@@ -298,10 +340,17 @@
                                         <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.renewal_total) }}</td>
                                         <td class="px-4 py-3 text-right font-mono">{{ formatAmount(row.weekly_total) }}</td>
                                         <td class="px-4 py-3 text-right font-mono font-semibold">{{ formatAmount(row.total) }}</td>
+                                        <td class="px-4 py-3">
+                                            <div v-if="(row.modes || []).length" class="flex flex-wrap gap-1">
+                                                <span v-for="m in row.modes" :key="m" :class="modePill(m)"
+                                                      class="px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wide">{{ m }}</span>
+                                            </div>
+                                            <span v-else class="text-xs text-gray-400 italic dark:text-gray-400">—</span>
+                                        </td>
                                         <td class="px-4 py-3 text-right">{{ row.count }}</td>
                                     </tr>
                                     <tr v-if="!(cashSchedule.monthly || []).length">
-                                        <td colspan="7" class="px-4 py-8 text-center text-gray-400 dark:text-gray-400">No scheduled payable dates found.</td>
+                                        <td colspan="8" class="px-4 py-8 text-center text-gray-400 dark:text-gray-400">No scheduled payable dates found.</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -324,6 +373,11 @@
                                         <div>
                                             <div class="font-medium text-gray-800 dark:text-gray-200">{{ item.vendor_name || '—' }}</div>
                                             <div class="text-xs text-gray-500 dark:text-gray-300">{{ sourceLabel(item.source_type) }} · {{ item.label }}</div>
+                                            <div v-if="(item.modes || []).length" class="mt-1 flex flex-wrap items-center gap-1">
+                                                <span v-for="m in item.modes" :key="m.mode" :class="modePill(m.mode)"
+                                                      class="px-1.5 py-0.5 text-[9px] rounded-full font-bold uppercase tracking-wide">{{ m.mode }}</span>
+                                                <span class="text-[9px] uppercase tracking-wide text-gray-400 dark:text-gray-400">{{ modeSourceLabel(item.mode_source) }}</span>
+                                            </div>
                                         </div>
                                         <div class="text-right shrink-0">
                                             <div class="font-mono">{{ formatAmount(item.amount) }}</div>
@@ -347,7 +401,8 @@
                                 <div v-if="day.total > 0" class="font-mono font-bold text-blue-700 mb-1">₱{{ formatCompactAmount(day.total) }}</div>
                                 <div class="space-y-1">
                                     <div v-for="item in day.items.slice(0, 3)" :key="`${day.key}-${item.source_type}-${item.source_id}`"
-                                         class="rounded border border-gray-200 px-1.5 py-1 bg-gray-50 truncate dark:bg-gray-900/50 dark:border-gray-700" :title="`${item.vendor_name} - ${item.label}`">
+                                         class="rounded border border-gray-200 px-1.5 py-1 bg-gray-50 truncate dark:bg-gray-900/50 dark:border-gray-700"
+                                         :title="`${item.vendor_name} - ${item.label}${(item.modes || []).length ? ' — ' + item.modes.map(m => m.mode).join(' + ') : ''}`">
                                         {{ sourceLabel(item.source_type) }} · {{ item.vendor_name || '—' }}
                                     </div>
                                     <div v-if="day.items.length > 3" class="text-gray-500 dark:text-gray-300">+{{ day.items.length - 3 }} more</div>
@@ -361,9 +416,15 @@
             <!-- ============ APPROVALS TAB ============ -->
             <div v-if="currentTab === 'approvals'" class="space-y-4">
                 <div class="flex flex-wrap gap-2">
+                    <select :value="recordsPagination.filters?.rec_mode || ''"
+                            @change="recordsPagination.updateSearchParam('rec_mode', $event.target.value || null)"
+                            class="ml-auto border-gray-300 rounded-lg text-xs pl-2 pr-7 dark:border-gray-600">
+                        <option value="">All Payment Modes</option>
+                        <option v-for="m in paymentModesLocal" :key="m.id" :value="m.value">{{ m.label }}</option>
+                    </select>
                     <select :value="recordsPagination.filters?.rec_vendor_id || ''"
                             @change="recordsPagination.updateSearchParam('rec_vendor_id', $event.target.value || null)"
-                            class="ml-auto border-gray-300 rounded-lg text-xs pl-2 pr-7 dark:border-gray-600">
+                            class="border-gray-300 rounded-lg text-xs pl-2 pr-7 dark:border-gray-600">
                         <option value="">All Telcos / Vendors</option>
                         <option v-for="v in vendors" :key="v.id" :value="v.id">{{ v.name }}</option>
                     </select>
@@ -389,30 +450,88 @@
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Payable</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Vendor</th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Amount</th>
+                            <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Paid / Balance</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Payment Mode</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Status / Level</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Paid On / Ref</th>
                             <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase dark:text-slate-300">Actions</th>
                         </tr>
                     </template>
                     <template #body="{ data }">
-                        <tr v-for="rec in data" :key="rec.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
-                            <td class="px-4 py-3 text-sm">{{ rec.id }}</td>
-                            <td class="px-4 py-3 text-sm capitalize">{{ rec.payable_type }} #{{ rec.payable_id }}</td>
-                            <td class="px-4 py-3 text-sm">{{ rec.vendor?.name || '—' }}</td>
-                            <td class="px-4 py-3 text-right text-sm font-mono">{{ formatAmount(rec.amount) }}</td>
-                            <td class="px-4 py-3 text-sm">
-                                <span :class="statusPill(rec.status)" class="px-2 py-0.5 text-xs rounded-full font-semibold">{{ rec.status }}</span>
-                                <div class="text-xs text-gray-500 mt-0.5 dark:text-gray-300">Lvl {{ rec.current_approval_level }} / {{ rec.approver_data?.levels || '?' }}</div>
-                            </td>
-                            <td class="px-4 py-3 text-xs">{{ rec.paid_on || '—' }}<div v-if="rec.reference_no" class="text-gray-500 dark:text-gray-300">{{ rec.reference_no }}</div></td>
-                            <td class="px-4 py-3 text-right">
-                                <div class="flex justify-end space-x-1">
-                                    <IconBtn v-if="rec.status === 'pending' && hasPermission('payments.approve')" kind="approve" title="Approve" @click="openApproveModal(rec)" />
-                                    <IconBtn v-if="rec.status === 'pending' && hasPermission('payments.approve')" kind="reject" title="Reject" @click="openRejectModal(rec)" />
-                                    <IconBtn v-if="rec.status === 'approved' && hasPermission('payments.mark_paid')" kind="paid" title="Mark as Paid" @click="openMarkPaidModal(rec)" />
-                                </div>
-                            </td>
-                        </tr>
+                        <template v-for="rec in data" :key="rec.id">
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                <td class="px-4 py-3 text-sm">{{ rec.id }}</td>
+                                <td class="px-4 py-3 text-sm capitalize">{{ rec.payable_type }} #{{ rec.payable_id }}</td>
+                                <td class="px-4 py-3 text-sm">{{ rec.vendor?.name || '—' }}</td>
+                                <td class="px-4 py-3 text-right text-sm font-mono">{{ formatAmount(rec.amount) }}</td>
+                                <td class="px-4 py-3 text-right text-xs font-mono">
+                                    <div class="text-emerald-700 dark:text-emerald-300">{{ formatAmount(recordPaid(rec)) }}</div>
+                                    <div v-if="recordBalance(rec) > 0.01" class="text-orange-700 dark:text-orange-300">
+                                        bal {{ formatAmount(recordBalance(rec)) }}
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <div v-if="recordModes(rec).length" class="flex flex-wrap items-center gap-1">
+                                        <span v-for="m in recordModes(rec)" :key="m"
+                                              :class="modePill(m)" class="px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wide">
+                                            {{ m }}
+                                        </span>
+                                        <span v-if="!actualTenders(rec).length" class="text-[10px] text-gray-400 italic dark:text-gray-400">planned</span>
+                                        <button v-if="rec.tenders?.length" type="button" @click="toggleRecord(rec.id)"
+                                                class="text-[10px] font-bold text-blue-600 hover:text-blue-800 dark:text-blue-300">
+                                            {{ expandedRecords[rec.id] ? 'hide' : 'details' }}
+                                        </button>
+                                    </div>
+                                    <span v-else class="text-xs text-gray-400 italic dark:text-gray-400">—</span>
+                                </td>
+                                <td class="px-4 py-3 text-sm">
+                                    <span :class="statusPill(rec.status)" class="px-2 py-0.5 text-xs rounded-full font-semibold">{{ approvalLabel(rec.status) }}</span>
+                                    <div class="text-xs text-gray-500 mt-0.5 dark:text-gray-300">Lvl {{ rec.current_approval_level }} / {{ rec.approver_data?.levels || '?' }}</div>
+                                </td>
+                                <td class="px-4 py-3 text-xs">{{ rec.paid_on || '—' }}<div v-if="rec.reference_no" class="text-gray-500 dark:text-gray-300">{{ rec.reference_no }}</div></td>
+                                <td class="px-4 py-3 text-right">
+                                    <div class="flex justify-end space-x-1">
+                                        <IconBtn v-if="rec.status === 'pending' && hasPermission('payments.approve')" kind="approve" title="Approve" @click="openApproveModal(rec)" />
+                                        <IconBtn v-if="rec.status === 'pending' && hasPermission('payments.approve')" kind="reject" title="Reject" @click="openRejectModal(rec)" />
+                                        <IconBtn v-if="['approved', 'partially_paid'].includes(rec.status) && hasPermission('payments.mark_paid')"
+                                                 kind="paid" :title="rec.status === 'partially_paid' ? 'Post Remaining Balance' : 'Post Payment'"
+                                                 @click="openMarkPaidModal(rec)" />
+                                    </div>
+                                </td>
+                            </tr>
+                            <!-- Tender breakdown: planned vs actual -->
+                            <tr v-if="expandedRecords[rec.id]" class="bg-gray-50/70 dark:bg-gray-900/40">
+                                <td colspan="9" class="px-4 py-3">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 dark:text-gray-400">Planned at submission</p>
+                                            <div v-if="plannedTenders(rec).length" class="space-y-1">
+                                                <div v-for="t in plannedTenders(rec)" :key="`p-${t.id}`" class="flex items-center justify-between text-xs">
+                                                    <span :class="modePill(t.mode)" class="px-2 py-0.5 rounded-full font-bold uppercase tracking-wide text-[10px]">{{ t.mode }}</span>
+                                                    <span class="font-mono">{{ formatAmount(t.amount) }} <span class="text-gray-400">({{ Number(t.share_percent || 0).toFixed(2) }}%)</span></span>
+                                                </div>
+                                            </div>
+                                            <p v-else class="text-xs text-gray-400 italic dark:text-gray-400">No split was planned.</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 dark:text-gray-400">Actually posted</p>
+                                            <div v-if="actualTenders(rec).length" class="space-y-1.5">
+                                                <div v-for="t in actualTenders(rec)" :key="`a-${t.id}`" class="text-xs">
+                                                    <div class="flex items-center justify-between">
+                                                        <span :class="modePill(t.mode)" class="px-2 py-0.5 rounded-full font-bold uppercase tracking-wide text-[10px]">{{ t.mode }}</span>
+                                                        <span class="font-mono">{{ formatAmount(t.amount) }} <span class="text-gray-400">· {{ t.paid_on || '—' }}</span></span>
+                                                    </div>
+                                                    <div v-if="tenderDetailText(t) || t.reference_no" class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-300">
+                                                        {{ tenderDetailText(t) }}<span v-if="t.reference_no"> · ref: {{ t.reference_no }}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <p v-else class="text-xs text-gray-400 italic dark:text-gray-400">Nothing posted yet.</p>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </template>
                     </template>
                 </DataTable>
             </div>
@@ -776,7 +895,8 @@
             </div>
 
             <!-- ============ SETTINGS TAB ============ -->
-            <div v-if="currentTab === 'settings'" class="bg-white rounded-xl border border-gray-100 p-6 shadow-sm space-y-4 max-w-2xl dark:bg-gray-800 dark:border-gray-700">
+            <div v-if="currentTab === 'settings'" class="space-y-5">
+            <div class="bg-white rounded-xl border border-gray-100 p-6 shadow-sm space-y-4 max-w-2xl dark:bg-gray-800 dark:border-gray-700">
                 <h3 class="font-semibold text-gray-900 dark:text-gray-100">Reminder & Approval Settings</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -806,6 +926,62 @@
                         Save Settings
                     </button>
                 </div>
+            </div>
+
+            <!-- Vendor payment defaults -->
+            <div class="bg-white rounded-xl border border-gray-100 p-6 shadow-sm space-y-4 dark:bg-gray-800 dark:border-gray-700">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="font-semibold text-gray-900 dark:text-gray-100">Vendor Payment Defaults</h3>
+                        <p class="text-xs text-gray-500 dark:text-gray-300">
+                            Pre-fills the payment mode split when submitting or posting a payment for that vendor.
+                        </p>
+                    </div>
+                    <input v-model="vendorDefaultsSearch" type="text" placeholder="Search vendor..."
+                           class="border-gray-300 rounded-lg text-sm w-64 dark:border-gray-600" />
+                </div>
+                <div class="overflow-x-auto border border-gray-200 rounded-lg max-h-96 overflow-y-auto dark:border-gray-700">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
+                        <thead class="bg-gray-50 text-xs uppercase text-gray-500 sticky top-0 dark:bg-gray-900/50 dark:text-slate-300">
+                            <tr>
+                                <th class="px-4 py-3 text-left">Vendor</th>
+                                <th class="px-4 py-3 text-left">Default Payment Mode</th>
+                                <th class="px-4 py-3 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                            <tr v-for="vendor in vendorDefaultsList" :key="vendor.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                <td class="px-4 py-3">
+                                    <div class="font-medium text-gray-900 dark:text-gray-100">{{ vendor.name }}</div>
+                                    <div v-if="vendor.code" class="text-xs text-gray-500 dark:text-gray-300">{{ vendor.code }}</div>
+                                </td>
+                                <td class="px-4 py-3">
+                                    <div v-if="(vendor.default_payment_split || []).length" class="flex flex-wrap gap-1">
+                                        <span v-for="line in vendor.default_payment_split" :key="line.mode"
+                                              :class="modePill(line.mode)" class="px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wide">
+                                            {{ line.mode }} · {{ Number(line.share_percent || 0).toFixed(2) }}%
+                                        </span>
+                                    </div>
+                                    <span v-else-if="vendor.default_payment_mode" :class="modePill(vendor.default_payment_mode)"
+                                          class="px-2 py-0.5 text-[10px] rounded-full font-bold uppercase tracking-wide">
+                                        {{ vendor.default_payment_mode }}
+                                    </span>
+                                    <span v-else class="text-xs text-gray-400 italic dark:text-gray-400">Not set</span>
+                                </td>
+                                <td class="px-4 py-3 text-right">
+                                    <div class="flex justify-end space-x-1">
+                                        <IconBtn v-if="hasPermission('payments.manage_settings')" kind="edit"
+                                                 title="Edit Payment Defaults" @click="openVendorDefaults(vendor)" />
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr v-if="!vendorDefaultsList.length">
+                                <td colspan="3" class="px-4 py-8 text-center text-gray-400 dark:text-gray-400">No vendors match that search.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
             </div>
         </div>
 
@@ -1265,20 +1441,100 @@
                 <FormField label="Remarks">
                     <textarea v-model="submitForm.remarks" rows="2" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"></textarea>
                 </FormField>
+
+                <!-- Planned split — optional; the actual tender is confirmed at posting -->
+                <div class="pt-3 border-t border-gray-100 dark:border-gray-700">
+                    <TenderEditor
+                        v-model="submitForm.planned_tenders"
+                        :total="Number(submitForm.amount) || 0"
+                        :modes="paymentModesLocal"
+                        :mode-fields="paymentModeFields"
+                        :user-options="userOptions"
+                        kind="planned"
+                        optional
+                        @modes-changed="paymentModesLocal = $event"
+                    />
+                    <p class="mt-2 text-[11px] text-gray-400 dark:text-gray-400">
+                        Optional. Approvers see this plan; the actual modes are confirmed when the payment is posted.
+                    </p>
+                </div>
+
                 <ModalFooter @cancel="submitModal.open = false" submit-label="Submit" />
             </form>
         </Modal>
 
-        <!-- MARK PAID MODAL -->
-        <Modal v-if="markPaidModal.open" @close="markPaidModal.open = false" title="Mark as Paid">
+        <!-- POST PAYMENT MODAL (full or partial) -->
+        <Modal v-if="markPaidModal.open" @close="markPaidModal.open = false" title="Post Payment">
             <form @submit.prevent="confirmMarkPaid" class="space-y-3">
-                <FormField label="Paid On" required>
-                    <input v-model="markPaidForm.paid_on" type="date" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
-                </FormField>
-                <FormField label="Reference No.">
-                    <input v-model="markPaidForm.reference_no" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
-                </FormField>
-                <ModalFooter @cancel="markPaidModal.open = false" submit-label="Post Payment" />
+                <!-- Balance summary -->
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="rounded-lg border border-gray-200 py-2 dark:border-gray-700">
+                        <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-300">Record Amount</div>
+                        <div class="text-sm font-mono font-bold text-gray-900 dark:text-gray-100">{{ formatAmount(markPaidModal.record?.amount) }}</div>
+                    </div>
+                    <div class="rounded-lg border border-gray-200 py-2 dark:border-gray-700">
+                        <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-300">Already Paid</div>
+                        <div class="text-sm font-mono font-bold text-emerald-700 dark:text-emerald-300">{{ formatAmount(recordPaid(markPaidModal.record)) }}</div>
+                    </div>
+                    <div class="rounded-lg border border-gray-200 py-2 dark:border-gray-700">
+                        <div class="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-300">Balance</div>
+                        <div class="text-sm font-mono font-bold text-orange-700 dark:text-orange-300">{{ formatAmount(markPaidBalance) }}</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <FormField label="Paid On" required>
+                        <input v-model="markPaidForm.paid_on" type="date" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
+                    </FormField>
+                    <FormField label="Reference No.">
+                        <input v-model="markPaidForm.reference_no" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600" />
+                    </FormField>
+                </div>
+
+                <div class="pt-3 border-t border-gray-100 dark:border-gray-700">
+                    <TenderEditor
+                        v-model="markPaidForm.tenders"
+                        :total="markPaidBalance"
+                        :modes="paymentModesLocal"
+                        :mode-fields="paymentModeFields"
+                        :user-options="userOptions"
+                        kind="actual"
+                        @modes-changed="paymentModesLocal = $event"
+                    />
+                </div>
+
+                <div v-if="markPaidRemainingAfter > 0.01"
+                     class="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-800 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-200">
+                    Posting {{ formatAmount(markPaidPosting) }} now — {{ formatAmount(markPaidRemainingAfter) }} stays outstanding and the record
+                    will be marked <span class="uppercase">partially paid</span>.
+                </div>
+
+                <ModalFooter @cancel="markPaidModal.open = false"
+                             :submit-label="markPaidRemainingAfter > 0.01 ? 'Post Partial Payment' : 'Post Payment'" />
+            </form>
+        </Modal>
+
+        <!-- VENDOR PAYMENT DEFAULTS MODAL -->
+        <Modal v-if="vendorDefaultsModal.open" @close="vendorDefaultsModal.open = false" title="Default Payment Mode">
+            <form @submit.prevent="saveVendorDefaults" class="space-y-3">
+                <p class="text-sm text-gray-600 dark:text-gray-300">
+                    Default split for <strong>{{ vendorDefaultsModal.vendor?.name }}</strong>. Used to pre-fill the
+                    split when submitting or posting a payment. Shares must total 100%.
+                </p>
+                <TenderEditor
+                    v-model="vendorDefaultsModal.split"
+                    :total="100"
+                    :modes="paymentModesLocal"
+                    :mode-fields="paymentModeFields"
+                    :user-options="userOptions"
+                    kind="planned"
+                    optional
+                    @modes-changed="paymentModesLocal = $event"
+                />
+                <p class="text-[11px] text-gray-400 dark:text-gray-400">
+                    Amounts here are percentages — leave the list empty to clear the vendor's default.
+                </p>
+                <ModalFooter @cancel="vendorDefaultsModal.open = false" submit-label="Save Defaults" />
             </form>
         </Modal>
 
@@ -1362,6 +1618,7 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
 import ManageableAutocomplete from '@/Components/ManageableAutocomplete.vue'
+import TenderEditor from '@/Pages/Payments/_TenderEditor.vue'
 import Modal from '@/Pages/Payments/_PaymentsModal.vue'
 import FormField from '@/Pages/Payments/_PaymentsField.vue'
 import ModalFooter from '@/Pages/Payments/_PaymentsFooter.vue'
@@ -1385,6 +1642,8 @@ const props = defineProps({
     installTypes: { type: Array, default: () => [] },
     serviceStatuses: { type: Array, default: () => [] },
     telcoOptions: { type: Array, default: () => [] },
+    paymentModes: { type: Array, default: () => [] },
+    paymentModeFields: { type: Object, default: () => ({}) },
     monitoringStatuses: { type: Array, default: () => [] },
     invoiceStatuses: { type: Array, default: () => [] },
     renewalStatuses: { type: Array, default: () => [] },
@@ -1440,6 +1699,19 @@ const payablesTabs = [
 const payablesTab = ref(['renewals', 'invoices', 'weekly'].includes(props.tab) ? props.tab : 'renewals')
 
 const summary = computed(() => props.summary || {})
+
+/* Paid-by-mode breakdown (Monitoring tab) */
+const modeWindows = [
+    { id: 'month', label: 'This Month' },
+    { id: 'ytd', label: 'Year to Date' },
+]
+const modeWindow = ref('month')
+const paidByModeRows = computed(() => summary.value.paid_by_mode?.[modeWindow.value] || [])
+const paidByModeTotal = computed(() => Number(summary.value.paid_by_mode?.[`${modeWindow.value}_total`] || 0))
+const modeSharePercent = (row) => {
+    const total = paidByModeTotal.value
+    return total > 0 ? (Number(row.total || 0) / total) * 100 : 0
+}
 const weeklyCategories = ['POS', 'CCTV', 'Internet', 'Speaker', 'Anti-virus', 'Router', 'Google']
 const cashViews = [
     { id: 'monthly', label: 'Monthly' },
@@ -1543,6 +1815,8 @@ const monitoringStatusOptions = computed(() => (props.monitoringStatuses || []).
    to the same options the Stores page uses. Kept in a local ref synced via @options-changed. */
 const telcoOptionsLocal = ref([...(props.telcoOptions || [])])
 watch(() => props.telcoOptions, (v) => { telcoOptionsLocal.value = [...(v || [])] })
+const paymentModesLocal = ref([...(props.paymentModes || [])])
+watch(() => props.paymentModes, (v) => { paymentModesLocal.value = [...(v || [])] })
 const canCreateOption = computed(() => hasPermission('reference_options.create'))
 const canEditOption = computed(() => hasPermission('reference_options.edit'))
 const canDeleteOption = computed(() => hasPermission('reference_options.delete'))
@@ -1633,6 +1907,7 @@ const statusPill = (s) => {
     const k = String(s || '').toLowerCase()
     if (['paid', 'posted', 'approved', 'released', 'active'].includes(k)) return 'bg-green-100 text-green-800'
     if (['overdue', 'rejected', 'terminated'].includes(k)) return 'bg-red-100 text-red-800'
+    if (k === 'partially_paid') return 'bg-orange-100 text-orange-800'
     if (['due', 'pending', 'planned'].includes(k)) return 'bg-blue-100 text-blue-800'
     if (['paused', 'cancelled'].includes(k)) return 'bg-gray-200 text-gray-700'
     return 'bg-gray-100 text-gray-700'
@@ -1648,12 +1923,14 @@ const approvalPill = (s) => {
     const k = String(s || '').toLowerCase()
     if (k === 'pending') return 'bg-yellow-100 text-yellow-800 border border-yellow-200'
     if (k === 'approved') return 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+    if (k === 'partially_paid') return 'bg-orange-100 text-orange-800 border border-orange-200'
     return 'bg-gray-100 text-gray-700 border border-gray-200'
 }
 const approvalLabel = (s) => {
     const k = String(s || '').toLowerCase()
     if (k === 'pending') return 'Pending Approval'
     if (k === 'approved') return 'Approved — Awaiting Payment'
+    if (k === 'partially_paid') return 'Partially Paid'
     return s
 }
 const todayDateString = () => {
@@ -2106,9 +2383,93 @@ const submitWeekly = () => {
     })
 }
 
+/* ---- Payment mode / tender helpers ---- */
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100
+
+/* Build tender rows from a vendor's default split (falls back to a single
+   full-amount row on its default mode, or one blank row). */
+const tendersFromVendorDefault = (vendorId, total) => {
+    const vendor = (props.vendors || []).find(v => Number(v.id) === Number(vendorId))
+    const split = vendor?.default_payment_split
+
+    if (Array.isArray(split) && split.length) {
+        const rows = split.map(line => ({
+            mode: line.mode,
+            share_percent: round2(line.share_percent),
+            amount: round2((total * Number(line.share_percent || 0)) / 100),
+            reference_no: '',
+            details: {},
+            remarks: '',
+        }))
+        // Last row absorbs the rounding cents so the split always totals exactly.
+        const allocated = round2(rows.slice(0, -1).reduce((s, r) => s + r.amount, 0))
+        rows[rows.length - 1].amount = round2(total - allocated)
+        return rows
+    }
+
+    return [{
+        mode: vendor?.default_payment_mode || '',
+        amount: round2(total),
+        share_percent: total > 0 ? 100 : 0,
+        reference_no: '',
+        details: {},
+        remarks: '',
+    }]
+}
+
+const tenderTotal = (rows) => round2((rows || []).reduce((s, r) => s + (Number(r.amount) || 0), 0))
+
+const recordPaid = (rec) => round2(rec?.paid_amount)
+const recordBalance = (rec) => round2(Number(rec?.amount || 0) - Number(rec?.paid_amount || 0))
+const actualTenders = (rec) => (rec?.tenders || []).filter(t => t.kind === 'actual')
+const plannedTenders = (rec) => (rec?.tenders || []).filter(t => t.kind === 'planned')
+/* Distinct modes to show as chips in the table — actual if posted, else planned. */
+const recordModes = (rec) => {
+    const source = actualTenders(rec).length ? actualTenders(rec) : plannedTenders(rec)
+    return [...new Set(source.map(t => t.mode))]
+}
+/* Where a cash-schedule row's mode came from — posted, planned, or vendor default. */
+const modeSourceLabel = (source) => ({
+    actual: 'posted',
+    planned: 'planned',
+    default: 'vendor default',
+}[source] || '')
+const modePill = (mode) => {
+    const m = String(mode || '').toLowerCase()
+    if (m.includes('cheque') || m.includes('check')) return 'bg-violet-100 text-violet-800 border border-violet-200'
+    if (m.includes('card')) return 'bg-sky-100 text-sky-800 border border-sky-200'
+    if (m.includes('transfer') || m.includes('bank') || m.includes('online')) return 'bg-teal-100 text-teal-800 border border-teal-200'
+    if (m.includes('cod') || m.includes('cash')) return 'bg-amber-100 text-amber-800 border border-amber-200'
+    return 'bg-gray-100 text-gray-700 border border-gray-200'
+}
+/* Detail keys are mode-specific; 'user' fields hold an id, so resolve the name. */
+const modeFieldMeta = computed(() => {
+    const map = {}
+    Object.values(props.paymentModeFields || {}).forEach(group => {
+        (group.fields || []).forEach(f => { map[f.key] = f })
+    })
+    return map
+})
+const userName = (id) => (props.users || []).find(u => Number(u.id) === Number(id))?.name || id
+const tenderDetailText = (tender) => {
+    const details = tender?.details || {}
+    return Object.entries(details)
+        .filter(([, v]) => v)
+        .map(([k, v]) => {
+            const field = modeFieldMeta.value[k]
+            const label = field?.label || k.replace(/_/g, ' ')
+            return `${label}: ${field?.type === 'user' ? userName(v) : v}`
+        })
+        .join(' · ')
+}
+
+/* Expandable tender breakdown in the approvals table */
+const expandedRecords = reactive({})
+const toggleRecord = (id) => { expandedRecords[id] = !expandedRecords[id] }
+
 /* ---- Submit for approval ---- */
 const submitModal = reactive({ open: false, payableType: '', payable: null })
-const submitForm = reactive({ amount: 0, remarks: '', payable_type: '', payable_id: null })
+const submitForm = reactive({ amount: 0, remarks: '', payable_type: '', payable_id: null, planned_tenders: [] })
 const openSubmitModal = (type, payable) => {
     submitModal.payableType = type; submitModal.payable = payable; submitModal.open = true
     submitForm.payable_type = type
@@ -2118,8 +2479,23 @@ const openSubmitModal = (type, payable) => {
                      : type === 'service' ? Number(payable.mrc || 0)
                      : Number(payable.amount || 0)
     submitForm.remarks = ''
+    submitForm.planned_tenders = tendersFromVendorDefault(payable.vendor_id, submitForm.amount)
+        .filter(r => r.mode)
 }
+const submitPlannedTotal = computed(() => tenderTotal(submitForm.planned_tenders))
+const submitPlanBalanced = computed(() =>
+    submitForm.planned_tenders.length === 0
+    || Math.abs(submitPlannedTotal.value - round2(submitForm.amount)) <= 0.01
+)
 const confirmSubmit = () => {
+    if (!submitPlanBalanced.value) {
+        showError('The planned split must equal the payment amount, or be left empty.')
+        return
+    }
+    if (submitForm.planned_tenders.some(r => !r.mode)) {
+        showError('Choose a payment mode for every planned split line.')
+        return
+    }
     post('/payments/records', submitForm, {
         preserveScroll: true,
         onSuccess: () => { submitModal.open = false },
@@ -2167,18 +2543,36 @@ const confirmReject = () => {
     })
 }
 
-/* ---- Mark Paid ---- */
+/* ---- Post payment (full or partial) ---- */
 const markPaidModal = reactive({ open: false, record: null })
-const markPaidForm = reactive({ paid_on: new Date().toISOString().slice(0, 10), reference_no: '' })
+const markPaidForm = reactive({ paid_on: todayDateString(), reference_no: '', tenders: [] })
+/* The outstanding portion of the record — a posting may not exceed it. */
+const markPaidBalance = computed(() => recordBalance(markPaidModal.record))
+const markPaidPosting = computed(() => tenderTotal(markPaidForm.tenders))
+const markPaidRemainingAfter = computed(() => round2(markPaidBalance.value - markPaidPosting.value))
 const openMarkPaidModal = (rec) => {
     markPaidModal.record = rec
     markPaidModal.open = true
-    markPaidForm.paid_on = new Date().toISOString().slice(0, 10)
+    markPaidForm.paid_on = todayDateString()
     markPaidForm.reference_no = ''
+    // Pre-fill from the split planned at submission, else the vendor default.
+    const planned = plannedTenders(rec)
+    const balance = recordBalance(rec)
+    markPaidForm.tenders = planned.length && Math.abs(Number(rec.paid_amount || 0)) < 0.01
+        ? planned.map(t => ({
+            mode: t.mode,
+            amount: round2(t.amount),
+            share_percent: round2(t.share_percent),
+            reference_no: '',
+            details: {},
+            remarks: '',
+        }))
+        : tendersFromVendorDefault(rec.vendor_id, balance)
 }
 const openMarkPaidForPayable = (payableType, payableId) => {
     const rec = (props.records?.data || []).find(
-        r => r.payable_type === payableType && r.payable_id === payableId && r.status === 'approved'
+        r => r.payable_type === payableType && r.payable_id === payableId
+             && ['approved', 'partially_paid'].includes(r.status)
     )
     if (!rec) {
         showError('Approved payment record not found. Try refreshing the page.')
@@ -2187,6 +2581,22 @@ const openMarkPaidForPayable = (payableType, payableId) => {
     openMarkPaidModal(rec)
 }
 const confirmMarkPaid = () => {
+    if (!markPaidForm.tenders.length) {
+        showError('Add at least one payment mode before posting.')
+        return
+    }
+    if (markPaidForm.tenders.some(r => !r.mode)) {
+        showError('Choose a payment mode for every split line.')
+        return
+    }
+    if (markPaidPosting.value <= 0) {
+        showError('The posted amount must be greater than zero.')
+        return
+    }
+    if (markPaidPosting.value > markPaidBalance.value + 0.01) {
+        showError(`The split total exceeds the remaining balance of ${formatAmount(markPaidBalance.value)}.`)
+        return
+    }
     post(`/payments/records/${markPaidModal.record.id}/mark-paid`, markPaidForm, {
         preserveScroll: true,
         preserveState: true,
@@ -2212,6 +2622,52 @@ const settingsForm = reactive({
 })
 const saveSettings = () => {
     put('/payments/settings', settingsForm, { preserveScroll: true })
+}
+
+/* ---- Vendor payment defaults ---- */
+const vendorDefaultsSearch = ref('')
+const vendorDefaultsList = computed(() => {
+    const term = vendorDefaultsSearch.value.trim().toLowerCase()
+    const list = props.vendors || []
+    if (!term) return list
+    return list.filter(v => `${v.name} ${v.code || ''}`.toLowerCase().includes(term))
+})
+const vendorSplitLabel = (vendor) => {
+    const split = vendor?.default_payment_split
+    if (Array.isArray(split) && split.length) {
+        return split.map(l => `${l.mode} ${round2(l.share_percent)}%`).join(' + ')
+    }
+    return vendor?.default_payment_mode || ''
+}
+const vendorDefaultsModal = reactive({ open: false, vendor: null, split: [] })
+const openVendorDefaults = (vendor) => {
+    vendorDefaultsModal.vendor = vendor
+    const split = vendor?.default_payment_split
+    vendorDefaultsModal.split = Array.isArray(split) && split.length
+        ? split.map(l => ({ mode: l.mode, share_percent: round2(l.share_percent), amount: round2(l.share_percent), details: {} }))
+        : (vendor?.default_payment_mode
+            ? [{ mode: vendor.default_payment_mode, share_percent: 100, amount: 100, details: {} }]
+            : [])
+    vendorDefaultsModal.open = true
+}
+/* The editor works in amounts; with total = 100 the amounts ARE the percentages. */
+const vendorDefaultsTotal = computed(() => tenderTotal(vendorDefaultsModal.split))
+const saveVendorDefaults = () => {
+    if (vendorDefaultsModal.split.length && Math.abs(vendorDefaultsTotal.value - 100) > 0.01) {
+        showError('The default split must total 100%.')
+        return
+    }
+    if (vendorDefaultsModal.split.some(r => !r.mode)) {
+        showError('Choose a payment mode for every line.')
+        return
+    }
+    put(`/payments/vendors/${vendorDefaultsModal.vendor.id}/payment-defaults`, {
+        split: vendorDefaultsModal.split.map(r => ({ mode: r.mode, share_percent: round2(r.amount) })),
+    }, {
+        preserveScroll: true,
+        onSuccess: () => { vendorDefaultsModal.open = false },
+        onError: (errs) => showError(Object.values(errs).flat().join(', ') || 'Save failed'),
+    })
 }
 
 /* ---- Generic delete (modal-driven) ---- */

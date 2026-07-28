@@ -23,6 +23,7 @@ class ReferenceOptionController extends Controller implements HasMiddleware
         'store_telco',
         'store_connectivity_type',
         'store_remote_app',
+        'payment_mode',
     ];
 
     // Maps store_options reference types to the store_options.type they populate.
@@ -121,6 +122,14 @@ class ReferenceOptionController extends Controller implements HasMiddleware
 
         if ($type === 'store_hookup') {
             return [Store::where('hookup', $value)->exists(), 'stores'];
+        }
+
+        if ($type === 'payment_mode') {
+            return [
+                \App\Models\PaymentRecordTender::where('mode', $value)->exists()
+                    || \App\Models\Vendor::where('default_payment_mode', $value)->exists(),
+                'payment records',
+            ];
         }
 
         if (isset(self::STORE_OPTION_TYPE_MAP[$type])) {

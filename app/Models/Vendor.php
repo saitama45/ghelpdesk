@@ -15,10 +15,13 @@ class Vendor extends Model
         'phone',
         'address',
         'is_active',
+        'default_payment_mode',
+        'default_payment_split',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'default_payment_split' => 'array',
     ];
 
     public function scopeActive($query)

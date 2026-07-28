@@ -482,6 +482,7 @@ Route::middleware('auth')->group(function () {
 
         // Settings
         Route::put('settings', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateSettings'])->name('settings.update');
+        Route::put('vendors/{vendor}/payment-defaults', [\App\Http\Controllers\PaymentMonitoringController::class, 'updateVendorPaymentDefaults'])->name('vendors.payment-defaults');
     });
 
     // Accounting Document Reviews (vendor documents handed off from linkportal)

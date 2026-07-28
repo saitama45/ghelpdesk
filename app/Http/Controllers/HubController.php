@@ -326,7 +326,7 @@ class HubController extends Controller
             }
 
             $unassigned = (clone $base())->whereNotIn('status', self::CLOSED_STATUSES)
-                ->whereNull('assignee_id')->count();
+                ->awaitingOwner()->count();
             $highPriority = (clone $base())->whereNotIn('status', self::CLOSED_STATUSES)
                 ->whereIn('priority', ['high', 'urgent'])->count();
 

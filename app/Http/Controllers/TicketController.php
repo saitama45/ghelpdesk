@@ -250,6 +250,9 @@ class TicketController extends Controller
             // department_id rides along so the department axis is inspectable from
             // the rendered page (which desk a row belongs to is the assignee's).
             'assignee:id,name,profile_photo,department_node_id,department_id',
+            // Vendor-escalated tickets have no internal assignee; the list shows
+            // the vendor in the Assignee column instead of an "Accept" prompt.
+            'vendor:id,name',
             'company:id,name',
             'store:id,name', 
             'item:id,name,priority,category_id,sub_category_id',
@@ -341,7 +344,7 @@ class TicketController extends Controller
                 }
 
                 if ($statusFilters->contains('unassigned')) {
-                    $statusQuery->orWhereNull('assignee_id');
+                    $statusQuery->orWhere(fn ($q) => $q->awaitingOwner());
                 }
             });
         }
@@ -456,7 +459,7 @@ class TicketController extends Controller
                 ->whereNull('category_id')
                 ->whereNull('sub_category_id')
                 ->whereNull('item_id')
-                ->whereNull('assignee_id')
+                ->awaitingOwner()
                 ->count(),
             'open' => (clone $summaryQuery)->where('status', 'open')->count(),
             'waiting' => (clone $summaryQuery)
@@ -470,7 +473,7 @@ class TicketController extends Controller
                 ->where('status', '!=', 'closed')
                 ->count(),
             'closed' => (clone $summaryQuery)->where('status', 'closed')->count(),
-            'unassigned' => (clone $summaryQuery)->whereNull('assignee_id')->count(),
+            'unassigned' => (clone $summaryQuery)->awaitingOwner()->count(),
             'breached' => (clone $summaryQuery)
                 ->whereHas('slaMetric', function ($slaQuery) {
                     $slaQuery->where('is_response_breached', true)
@@ -503,8 +506,8 @@ class TicketController extends Controller
                 ->whereNull('category_id')
                 ->whereNull('sub_category_id')
                 ->whereNull('item_id')
-                ->whereNull('assignee_id'),
-            'unassigned' => $query->whereNull('assignee_id'),
+                ->awaitingOwner(),
+            'unassigned' => $query->awaitingOwner(),
             'breached' => $query->whereHas('slaMetric', function ($slaQuery) {
                 $slaQuery->where('is_response_breached', true)
                     ->orWhere('is_resolution_breached', true);
@@ -649,7 +652,7 @@ class TicketController extends Controller
                 if ($statusFilters->contains('my_tickets')) {
                     $q->orWhere(fn($sq) => $sq->where('reporter_id', $user->id)->orWhere('assignee_id', $user->id));
                 }
-                if ($statusFilters->contains('unassigned')) $q->orWhereNull('assignee_id');
+                if ($statusFilters->contains('unassigned')) $q->orWhere(fn ($sq) => $sq->awaitingOwner());
             });
         }
 

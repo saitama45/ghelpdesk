@@ -45,6 +45,15 @@ const props = defineProps({
  * control so it reads as a tracking view rather than a work surface.
  */
 const isCustomerView = computed(() => props.departmentAxis?.accessView === 'customer');
+
+/**
+ * Escalated to an external vendor — owned by the vendor, so the row must show
+ * the vendor rather than an "Accept Ticket" prompt. A vendor_id alone is not
+ * enough: ordinary tickets are tagged with a vendor for reporting (including the
+ * "None - Remote" placeholder) and still need an internal owner. Matches
+ * Ticket::scopeVendorEscalated() and isVendorEscalationChild in Tickets/Edit.vue.
+ */
+const isVendorEscalated = (ticket) => Boolean(ticket?.parent_id && ticket?.vendor_id);
 const axisViewedName = computed(() => props.departmentAxis?.viewedDepartment?.name || null);
 const axisHomeName = computed(() => props.departmentAxis?.homeDepartment?.name || null);
 
@@ -2538,6 +2547,21 @@ const requesterTabs = computed(() => {
                                         <div v-if="assigneeSectorLabel(ticket.assignee)" class="text-[10px] font-black text-slate-400 dark:text-slate-300">
                                             {{ assigneeSectorLabel(ticket.assignee) }}
                                         </div>
+                                    </div>
+                                </div>
+                                <!-- Escalated to an external vendor: it has no internal
+                                     assignee but it IS owned, so never offer "Accept". -->
+                                <div
+                                    v-else-if="isVendorEscalated(ticket)"
+                                    class="inline-flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 dark:border-amber-700 dark:bg-amber-900/20"
+                                    title="Handled by an external vendor; not tracked against a user's SLA."
+                                >
+                                    <svg class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-2a4 4 0 014-4h4M16 11l2 2 4-4M9 7a4 4 0 108 0 4 4 0 00-8 0z" />
+                                    </svg>
+                                    <div class="min-w-0">
+                                        <div class="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">Vendor Escalated</div>
+                                        <div class="break-words text-xs font-bold text-slate-700 dark:text-slate-200">{{ ticket.vendor?.name || 'External vendor' }}</div>
                                     </div>
                                 </div>
                                 <button

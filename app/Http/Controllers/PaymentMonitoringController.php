@@ -7,6 +7,7 @@ use App\Models\PaymentInvoice;
 use App\Models\PaymentOverpayment;
 use App\Models\PaymentRecord;
 use App\Models\PaymentRecordApproval;
+use App\Models\PaymentRecordTender;
 use App\Models\PaymentRenewal;
 use App\Models\PaymentSetting;
 use App\Models\PaymentVendor;
@@ -33,6 +34,12 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class PaymentMonitoringController extends Controller implements HasMiddleware
 {
+    /** A payable with a record in one of these states can't be re-submitted. */
+    private const OPEN_RECORD_STATUSES = ['pending', 'approved', 'partially_paid'];
+
+    /** Postings are allowed only once the approval chain has cleared. */
+    private const POSTABLE_RECORD_STATUSES = ['approved', 'partially_paid'];
+
     public static function middleware(): array
     {
         return [
@@ -53,7 +60,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             new Middleware('can:payments.submit', only: ['submitRecord', 'sendManualReminder']),
             new Middleware('can:payments.approve', only: ['approveRecord', 'rejectRecord']),
             new Middleware('can:payments.mark_paid', only: ['markPaid']),
-            new Middleware('can:payments.manage_settings', only: ['updateSettings']),
+            new Middleware('can:payments.manage_settings', only: ['updateSettings', 'updateVendorPaymentDefaults']),
         ];
     }
 
@@ -63,7 +70,8 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
 
         $shared = [
             'tab' => $tab,
-            'vendors' => Vendor::orderBy('name')->get(['id', 'name', 'code']),
+            'vendors' => Vendor::orderBy('name')
+                ->get(['id', 'name', 'code', 'default_payment_mode', 'default_payment_split']),
             'stores' => Store::orderBy('code')->get(['id', 'code', 'name']),
             'brands' => Store::query()
                 ->whereNotNull('brand')->where('brand', '!=', '')
@@ -75,6 +83,8 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             'installTypes' => ['copper', 'fiber', 'wireless'],
             'serviceStatuses' => ['active', 'pending', 'terminated'],
             'telcoOptions' => \App\Models\ReferenceOption::ofType('store_telco'),
+            'paymentModes' => \App\Models\ReferenceOption::ofType('payment_mode'),
+            'paymentModeFields' => PaymentRecordTender::FIELD_GROUPS,
             'monitoringStatuses' => ['OPEN', 'PENDING', 'FOR APPLICATION', 'FOR TERMINATION', 'TEMPORARILY CLOSED', 'CLOSED'],
             'invoiceStatuses' => ['Pending', 'Due', 'Overdue', 'Paid', 'Cancelled'],
             'renewalStatuses' => ['active', 'paused', 'cancelled'],
@@ -223,6 +233,10 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             });
 
         $pendingApprovals = PaymentRecord::whereIn('status', ['pending', 'approved'])->count();
+        $partiallyPaid = PaymentRecord::where('status', 'partially_paid')->count();
+        $unpostedBalance = (float) PaymentRecord::whereIn('status', self::POSTABLE_RECORD_STATUSES)
+            ->selectRaw('SUM(amount - paid_amount) as total')
+            ->value('total');
 
         $monthlyMrc = (float) PaymentConnectivityService::where('status', 'active')->sum('mrc');
         $activeServices = PaymentConnectivityService::where('status', 'active')->count();
@@ -236,11 +250,48 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             'upcoming_renewals_30d' => $upcomingRenewals,
             'annual_renewal_spend' => $annualRenewalSpend,
             'pending_approvals' => $pendingApprovals,
+            'partially_paid_records' => $partiallyPaid,
+            'unposted_balance' => round($unpostedBalance, 2),
+            'paid_by_mode' => $this->paidByMode($monthStart, $monthEnd),
             'monthly_mrc' => $monthlyMrc,
             'annual_mrc' => $monthlyMrc * 12,
             'active_services' => $activeServices,
             'pending_installs' => $pendingInstalls,
             'monitored_locations' => $monitoredLocations,
+        ];
+    }
+
+    /**
+     * Posted amounts grouped by payment mode, for the month and year-to-date.
+     */
+    protected function paidByMode(Carbon $monthStart, Carbon $monthEnd): array
+    {
+        $breakdown = function (Carbon $from, Carbon $to) {
+            return PaymentRecordTender::query()
+                ->where('kind', PaymentRecordTender::KIND_ACTUAL)
+                ->whereNotNull('paid_on')
+                ->whereBetween('paid_on', [$from->toDateString(), $to->toDateString()])
+                ->selectRaw('mode, SUM(amount) as total, COUNT(*) as tender_count')
+                ->groupBy('mode')
+                ->orderByRaw('SUM(amount) DESC')
+                ->get()
+                ->map(fn ($row) => [
+                    'mode' => $row->mode,
+                    'total' => round((float) $row->total, 2),
+                    'count' => (int) $row->tender_count,
+                ])
+                ->values()
+                ->all();
+        };
+
+        $month = $breakdown($monthStart, $monthEnd);
+        $ytd = $breakdown($monthStart->copy()->startOfYear(), $monthEnd->copy()->endOfYear());
+
+        return [
+            'month' => $month,
+            'ytd' => $ytd,
+            'month_total' => round(array_sum(array_column($month, 'total')), 2),
+            'ytd_total' => round(array_sum(array_column($ytd, 'total')), 2),
         ];
     }
 
@@ -254,7 +305,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             ->addSelect(['latest_record_status' => PaymentRecord::select('status')
                 ->whereColumn('payable_id', 'payment_connectivity_services.id')
                 ->where('payable_type', 'service')
-                ->whereIn('status', ['pending', 'approved'])
+                ->whereIn('status', self::OPEN_RECORD_STATUSES)
                 ->orderByDesc('id')
                 ->limit(1),
             ])
@@ -850,7 +901,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             ->addSelect(['latest_record_status' => PaymentRecord::select('status')
                 ->whereColumn('payable_id', 'payment_renewals.id')
                 ->where('payable_type', 'renewal')
-                ->whereIn('status', ['pending', 'approved'])
+                ->whereIn('status', self::OPEN_RECORD_STATUSES)
                 ->orderByDesc('id')
                 ->limit(1),
             ])
@@ -965,7 +1016,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             ->addSelect(['latest_record_status' => PaymentRecord::select('status')
                 ->whereColumn('payable_id', 'payment_invoices.id')
                 ->where('payable_type', 'invoice')
-                ->whereIn('status', ['pending', 'approved'])
+                ->whereIn('status', self::OPEN_RECORD_STATUSES)
                 ->orderByDesc('id')
                 ->limit(1),
             ])
@@ -2103,7 +2154,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             ->addSelect(['latest_record_status' => PaymentRecord::select('status')
                 ->whereColumn('payable_id', 'payment_weekly_plans.id')
                 ->where('payable_type', 'weekly')
-                ->whereIn('status', ['pending', 'approved'])
+                ->whereIn('status', self::OPEN_RECORD_STATUSES)
                 ->orderByDesc('id')
                 ->limit(1),
             ]);
@@ -2190,7 +2241,15 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
 
     protected function recordsList(Request $request)
     {
-        $query = PaymentRecord::with(['vendor:id,name', 'payer:id,name', 'approvals.user:id,name']);
+        $query = PaymentRecord::with([
+            'vendor:id,name',
+            'payer:id,name',
+            'approvals.user:id,name',
+            'tenders' => fn ($q) => $q
+                ->select('id', 'payment_record_id', 'kind', 'mode', 'amount', 'share_percent', 'paid_on', 'reference_no', 'details')
+                ->orderBy('kind')
+                ->orderBy('id'),
+        ]);
 
         if ($s = $request->get('search')) {
             $query->where(function ($q) use ($s) {
@@ -2208,6 +2267,9 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         if ($v = $request->get('rec_vendor_id')) {
             $query->where('vendor_id', $v);
         }
+        if ($mode = $request->get('rec_mode')) {
+            $query->whereHas('tenders', fn ($q) => $q->where('mode', $mode));
+        }
         return $query->orderByDesc('id')
             ->paginate($request->get('per_page', 15), ['*'], 'rec_page')
             ->withQueryString();
@@ -2220,7 +2282,25 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             'payable_id' => 'required|integer',
             'amount' => 'required|numeric|min:0',
             'remarks' => 'nullable|string',
+            // Optional at submission — the requester may not know the tender yet.
+            'planned_tenders' => 'nullable|array|max:10',
+            'planned_tenders.*.mode' => 'required|string|max:100',
+            'planned_tenders.*.amount' => 'required|numeric|min:0.01',
+            'planned_tenders.*.remarks' => 'nullable|string|max:255',
         ]);
+
+        $plannedTenders = $this->normalizeTenderLines($data['planned_tenders'] ?? []);
+
+        if ($plannedTenders) {
+            $this->assertKnownModes($plannedTenders);
+            $plannedTotal = round(array_sum(array_column($plannedTenders, 'amount')), 2);
+            if (abs($plannedTotal - round((float) $data['amount'], 2)) > 0.01) {
+                return redirect()->back()->withErrors([
+                    'planned_tenders' => 'The planned split ('.number_format($plannedTotal, 2)
+                        .') must equal the payment amount ('.number_format((float) $data['amount'], 2).').',
+                ]);
+            }
+        }
 
         $payable = $this->resolvePayable($data['payable_type'], $data['payable_id']);
         if (!$payable) {
@@ -2233,7 +2313,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
 
         $alreadyOpen = PaymentRecord::where('payable_type', $data['payable_type'])
             ->where('payable_id', $data['payable_id'])
-            ->whereIn('status', ['pending', 'approved'])
+            ->whereIn('status', self::OPEN_RECORD_STATUSES)
             ->exists();
         if ($alreadyOpen) {
             return redirect()->back()->withErrors(['payable_id' => 'A payment record is already in progress for this item.']);
@@ -2247,24 +2327,44 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         }
 
         $settings = PaymentSetting::current();
+        $userId = $request->user()->id;
 
-        $record = PaymentRecord::create([
-            'payable_type' => $data['payable_type'],
-            'payable_id' => $data['payable_id'],
-            'vendor_id' => $payable->vendor_id,
-            'amount' => $data['amount'],
-            'status' => 'pending',
-            'current_approval_level' => 0,
-            'approver_data' => [
-                'levels' => (int) ($settings->approval_levels ?? 2),
-                'approvers' => $settings->approver_user_ids ?? [],
-            ],
-            'remarks' => $data['remarks'] ?? null,
-            'created_by' => $request->user()->id,
-            'updated_by' => $request->user()->id,
-        ]);
+        $record = DB::transaction(function () use ($data, $payable, $settings, $userId, $plannedTenders) {
+            $record = PaymentRecord::create([
+                'payable_type' => $data['payable_type'],
+                'payable_id' => $data['payable_id'],
+                'vendor_id' => $payable->vendor_id,
+                'amount' => $data['amount'],
+                'paid_amount' => 0,
+                'status' => 'pending',
+                'current_approval_level' => 0,
+                'approver_data' => [
+                    'levels' => (int) ($settings->approval_levels ?? 2),
+                    'approvers' => $settings->approver_user_ids ?? [],
+                ],
+                'remarks' => $data['remarks'] ?? null,
+                'created_by' => $userId,
+                'updated_by' => $userId,
+            ]);
 
-        $this->notifyPaymentApprovers($record, $request->user()->id);
+            foreach ($plannedTenders as $tender) {
+                PaymentRecordTender::create([
+                    'payment_record_id' => $record->id,
+                    'kind' => PaymentRecordTender::KIND_PLANNED,
+                    'mode' => $tender['mode'],
+                    'amount' => $tender['amount'],
+                    'share_percent' => (float) $data['amount'] > 0
+                        ? round($tender['amount'] / (float) $data['amount'] * 100, 4)
+                        : null,
+                    'remarks' => $tender['remarks'] ?? null,
+                    'created_by' => $userId,
+                ]);
+            }
+
+            return $record;
+        });
+
+        $this->notifyPaymentApprovers($record, $userId);
 
         return redirect()->back()->with('success', "Payment record #{$record->id} submitted for approval");
     }
@@ -2372,41 +2472,93 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
         );
     }
 
+    /**
+     * Post a payment against an approved record. One posting carries one or more
+     * tender lines (e.g. 50% Cheque + 50% Credit Card) and may settle the record
+     * only partially — the balance can be posted later.
+     */
     public function markPaid(Request $request, PaymentRecord $record)
     {
-        if ($record->status !== 'approved') {
+        if (! in_array($record->status, self::POSTABLE_RECORD_STATUSES, true)) {
             return redirect()->back()->withErrors(['record' => 'Record must be approved before marking paid']);
         }
+
         $data = $request->validate([
             'paid_on' => 'required|date',
             'reference_no' => 'nullable|string|max:100',
+            'tenders' => 'required|array|min:1|max:10',
+            'tenders.*.mode' => 'required|string|max:100',
+            'tenders.*.amount' => 'required|numeric|min:0.01',
+            'tenders.*.paid_on' => 'nullable|date',
+            'tenders.*.reference_no' => 'nullable|string|max:100',
+            'tenders.*.details' => 'nullable|array',
+            'tenders.*.remarks' => 'nullable|string|max:255',
         ]);
+
+        $tenders = $this->normalizeTenderLines($data['tenders']);
+        $this->assertKnownModes($tenders);
+
+        if ($errors = $this->tenderDetailErrors($tenders)) {
+            return redirect()->back()->withErrors($errors);
+        }
+
+        $remaining = $record->remainingBalance();
+        $posting = round(array_sum(array_column($tenders, 'amount')), 2);
+
+        if ($posting > $remaining + 0.01) {
+            return redirect()->back()->withErrors([
+                'tenders' => 'The split total ('.number_format($posting, 2)
+                    .') exceeds the remaining balance of '.number_format($remaining, 2).'.',
+            ]);
+        }
+
         $user = $request->user();
 
-        DB::transaction(function () use ($record, $data, $user) {
-            $record->update([
-                'status' => 'posted',
-                'paid_on' => $data['paid_on'],
-                'reference_no' => $data['reference_no'] ?? null,
-                'paid_by' => $user->id,
-                'updated_by' => $user->id,
-            ]);
-            // Apply to underlying payable
+        DB::transaction(function () use ($record, $data, $tenders, $posting, $user) {
+            foreach ($tenders as $tender) {
+                PaymentRecordTender::create([
+                    'payment_record_id' => $record->id,
+                    'kind' => PaymentRecordTender::KIND_ACTUAL,
+                    'mode' => $tender['mode'],
+                    'amount' => $tender['amount'],
+                    'share_percent' => (float) $record->amount > 0
+                        ? round($tender['amount'] / (float) $record->amount * 100, 4)
+                        : null,
+                    'paid_on' => $tender['paid_on'] ?: $data['paid_on'],
+                    'reference_no' => $tender['reference_no'] ?: ($data['reference_no'] ?? null),
+                    'details' => PaymentRecordTender::sanitizeDetails($tender['mode'], $tender['details'] ?? null),
+                    'remarks' => $tender['remarks'] ?? null,
+                    'created_by' => $user->id,
+                ]);
+            }
+
+            $record->paid_amount = round((float) $record->paid_amount + $posting, 2);
+            $fullySettled = $record->isFullyPaid();
+
+            $record->status = $fullySettled ? 'posted' : 'partially_paid';
+            $record->paid_on = $data['paid_on'];
+            $record->reference_no = ($data['reference_no'] ?? null) ?: $record->reference_no;
+            $record->paid_by = $user->id;
+            $record->updated_by = $user->id;
+            $record->save();
+
+            // Apply to the underlying payable. Invoices decrement per posting;
+            // renewals and weekly rows only settle once the record is fully paid.
             if ($record->payable_type === 'invoice') {
                 $inv = PaymentInvoice::find($record->payable_id);
                 if ($inv) {
-                    $inv->outstanding_amount = max(0, (float) $inv->outstanding_amount - (float) $record->amount);
-                    if ((float) $inv->outstanding_amount === 0.0) {
+                    $inv->outstanding_amount = max(0, round((float) $inv->outstanding_amount - $posting, 2));
+                    if ((float) $inv->outstanding_amount <= 0.0) {
                         $inv->status = 'Paid';
                     }
                     $inv->save();
                 }
-            } elseif ($record->payable_type === 'renewal') {
+            } elseif ($fullySettled && $record->payable_type === 'renewal') {
                 $r = PaymentRenewal::find($record->payable_id);
                 if ($r) {
                     $r->advanceCycle();
                 }
-            } elseif ($record->payable_type === 'weekly') {
+            } elseif ($fullySettled && $record->payable_type === 'weekly') {
                 $w = PaymentWeeklyPlan::find($record->payable_id);
                 if ($w) {
                     $w->status = 'Paid';
@@ -2415,7 +2567,127 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             }
         });
 
-        return redirect()->back()->with('success', 'Payment posted');
+        $record->refresh();
+
+        return redirect()->back()->with(
+            'success',
+            $record->status === 'posted'
+                ? 'Payment posted in full'
+                : 'Partial payment posted — '.number_format($record->remainingBalance(), 2).' still outstanding'
+        );
+    }
+
+    /**
+     * Trim and coerce raw tender input into a predictable shape.
+     * Blank rows (no mode / zero amount) are dropped.
+     */
+    protected function normalizeTenderLines(array $lines): array
+    {
+        $clean = [];
+
+        foreach ($lines as $line) {
+            $mode = trim((string) ($line['mode'] ?? ''));
+            $amount = round((float) ($line['amount'] ?? 0), 2);
+
+            if ($mode === '' || $amount <= 0) {
+                continue;
+            }
+
+            $clean[] = [
+                'mode' => $mode,
+                'amount' => $amount,
+                'paid_on' => $line['paid_on'] ?? null,
+                'reference_no' => trim((string) ($line['reference_no'] ?? '')) ?: null,
+                'details' => is_array($line['details'] ?? null) ? $line['details'] : null,
+                'remarks' => trim((string) ($line['remarks'] ?? '')) ?: null,
+            ];
+        }
+
+        return $clean;
+    }
+
+    /**
+     * Modes must come from the reference list. Fails open when the list is empty
+     * so a fresh install without seeded modes isn't locked out.
+     */
+    protected function assertKnownModes(array $tenders): void
+    {
+        $known = \App\Models\ReferenceOption::valuesOfType('payment_mode');
+        if (empty($known)) {
+            return;
+        }
+
+        $lookup = array_map('mb_strtolower', $known);
+
+        foreach ($tenders as $index => $tender) {
+            if (! in_array(mb_strtolower($tender['mode']), $lookup, true)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    "tenders.$index.mode" => "Unknown payment mode \"{$tender['mode']}\".",
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Enforce the required detail fields of each mode (cheque no., approval code, ...).
+     */
+    protected function tenderDetailErrors(array $tenders): array
+    {
+        $errors = [];
+
+        foreach ($tenders as $index => $tender) {
+            foreach (PaymentRecordTender::fieldsFor($tender['mode']) as $field) {
+                if (empty($field['required'])) {
+                    continue;
+                }
+                if (trim((string) ($tender['details'][$field['key']] ?? '')) === '') {
+                    $errors["tenders.$index.details.{$field['key']}"] =
+                        $field['label'].' is required for '.$tender['mode'].'.';
+                }
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Per-vendor default payment mode / split used to pre-fill the tender editor.
+     */
+    public function updateVendorPaymentDefaults(Request $request, Vendor $vendor)
+    {
+        $data = $request->validate([
+            'split' => 'nullable|array|max:10',
+            'split.*.mode' => 'required|string|max:100',
+            'split.*.share_percent' => 'required|numeric|min:0.01|max:100',
+        ]);
+
+        $split = [];
+        foreach ($data['split'] ?? [] as $line) {
+            $mode = trim((string) $line['mode']);
+            $share = round((float) $line['share_percent'], 4);
+            if ($mode === '' || $share <= 0) {
+                continue;
+            }
+            $split[] = ['mode' => $mode, 'share_percent' => $share];
+        }
+
+        if ($split) {
+            $this->assertKnownModes(array_map(fn ($l) => ['mode' => $l['mode']], $split));
+
+            $total = round(array_sum(array_column($split, 'share_percent')), 2);
+            if (abs($total - 100.0) > 0.01) {
+                return redirect()->back()->withErrors([
+                    'split' => 'The default split must total 100% (currently '.number_format($total, 2).'%).',
+                ]);
+            }
+        }
+
+        $vendor->update([
+            'default_payment_mode' => $split ? $split[0]['mode'] : null,
+            'default_payment_split' => $split ?: null,
+        ]);
+
+        return redirect()->back()->with('success', "Payment defaults saved for {$vendor->name}");
     }
 
     protected function resolvePayable(string $type, int $id)
@@ -2433,7 +2705,7 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
     {
         return PaymentRecord::where('payable_type', $type)
             ->where('payable_id', $id)
-            ->where('status', 'approved')
+            ->whereIn('status', self::POSTABLE_RECORD_STATUSES)
             ->exists();
     }
 
@@ -2565,6 +2837,8 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             ->sortBy('due_date')
             ->values();
 
+        $items = $this->attachScheduleModes($items, $yearStart, $yearEnd);
+
         $monthly = $items
             ->groupBy(fn ($item) => Carbon::parse($item['due_date'])->format('Y-m'))
             ->map(fn ($group, $month) => [
@@ -2575,6 +2849,8 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
                 'renewal_total' => round((float) $group->where('source_type', 'renewal')->sum('amount'), 2),
                 'weekly_total' => round((float) $group->where('source_type', 'weekly')->sum('amount'), 2),
                 'service_total' => round((float) $group->where('source_type', 'service')->sum('amount'), 2),
+                'modes' => $group->flatMap(fn ($item) => array_column($item['modes'] ?? [], 'mode'))
+                    ->unique()->values()->all(),
             ])
             ->values();
 
@@ -2617,6 +2893,62 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             'calendar' => $calendar,
             'total' => round((float) $items->sum('amount'), 2),
         ];
+    }
+
+    /**
+     * Tag every scheduled outflow with the payment mode(s) behind it:
+     * what was actually posted, else the split planned at submission,
+     * else the vendor's default mode.
+     */
+    protected function attachScheduleModes($items, Carbon $yearStart, Carbon $yearEnd)
+    {
+        $grouped = fn ($rows) => $rows
+            ->groupBy(fn ($row) => $row->payable_type.':'.$row->payable_id)
+            ->map(fn ($rows) => $rows
+                ->map(fn ($row) => ['mode' => $row->mode, 'total' => round((float) $row->total, 2)])
+                ->values()
+                ->all());
+
+        $tenderQuery = fn (string $kind) => PaymentRecordTender::query()
+            ->join('payment_records', 'payment_records.id', '=', 'payment_record_tenders.payment_record_id')
+            ->where('payment_record_tenders.kind', $kind)
+            ->selectRaw('payment_records.payable_type, payment_records.payable_id, payment_record_tenders.mode, SUM(payment_record_tenders.amount) as total')
+            ->groupBy('payment_records.payable_type', 'payment_records.payable_id', 'payment_record_tenders.mode');
+
+        $actual = $grouped(
+            $tenderQuery(PaymentRecordTender::KIND_ACTUAL)
+                ->whereBetween('payment_record_tenders.paid_on', [$yearStart->toDateString(), $yearEnd->toDateString()])
+                ->get()
+        );
+
+        $planned = $grouped(
+            $tenderQuery(PaymentRecordTender::KIND_PLANNED)
+                ->whereIn('payment_records.status', self::OPEN_RECORD_STATUSES)
+                ->get()
+        );
+
+        $vendorDefaults = Vendor::whereNotNull('default_payment_mode')
+            ->pluck('default_payment_mode', 'id');
+
+        return $items->map(function ($item) use ($actual, $planned, $vendorDefaults) {
+            $key = $item['source_type'].':'.$item['source_id'];
+
+            if (! empty($actual[$key])) {
+                $item['modes'] = $actual[$key];
+                $item['mode_source'] = 'actual';
+            } elseif (! empty($planned[$key])) {
+                $item['modes'] = $planned[$key];
+                $item['mode_source'] = 'planned';
+            } elseif ($default = $vendorDefaults[$item['vendor_id']] ?? null) {
+                $item['modes'] = [['mode' => $default, 'total' => null]];
+                $item['mode_source'] = 'default';
+            } else {
+                $item['modes'] = [];
+                $item['mode_source'] = null;
+            }
+
+            return $item;
+        })->values();
     }
 
     protected function findMatchingInvoice(int $vendorId, ?string $apvNo, ?string $siNumber): ?PaymentInvoice
