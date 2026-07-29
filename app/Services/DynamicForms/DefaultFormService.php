@@ -653,6 +653,13 @@ class DefaultFormService implements FormServiceContract
             'store_id'     => $ticketStore->id,
             'type'         => 'task',
             'created_at'   => now('Asia/Manila'),
+            // A published form IS a department's service (it is what the Services
+            // hub lists), so the form's owner is the desk that must deliver this.
+            // Until now that ownership stopped at the catalogue and the resulting
+            // ticket landed in the shared intake pool with no department at all.
+            'serving_department_id' => $formDefinition->department_id,
+            // Requester side: the department of whoever submitted the form.
+            'department_id' => $creator?->department_id,
         ]);
 
         $record->update(['ticket_id' => $ticket->id]);

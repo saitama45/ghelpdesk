@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Mail\NewTicketCreated;
 use App\Mail\TicketCommentAdded;
 use App\Models\Company;
 use App\Models\Setting;
@@ -613,6 +614,366 @@ class EmailTicketThreadingTest extends TestCase
         Mail::assertSent(TicketCommentAdded::class, fn ($mail) => $mail->hasTo($vendor->email));
         Mail::assertSent(TicketCommentAdded::class, fn ($mail) => $mail->hasTo($creator->email));
         Mail::assertNotSent(TicketCommentAdded::class, fn ($mail) => $mail->hasTo('customer@example.test'));
+    }
+
+    // ---------------------------------------------------------------------
+    // Department mail routing — departmental addresses aliased into the one
+    // support mailbox. The app matches whole addresses, so it does not care
+    // whether the department name leads (scm@domain, needing a real alias) or
+    // trails (support+scm@domain, riding the mailbox as a sub-address).
+    // ---------------------------------------------------------------------
+
+    public function test_mail_to_a_department_address_routes_the_ticket_to_that_department(): void
+    {
+        $department = $this->makeDepartment('SCM', 'scm@example.test');
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<scm-request@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Purchase order not reflecting in the system',
+            body: 'The purchase order we submitted last week is still not visible in the portal.',
+            toRecipients: ['scm@example.test'],
+        ));
+
+        $this->assertSame($department->id, Ticket::firstOrFail()->serving_department_id);
+    }
+
+    public function test_mail_to_the_base_support_address_is_pooled_while_no_department_has_one(): void
+    {
+        // Before any department is given an address, routing cannot be enforced,
+        // so the shared mailbox behaves exactly as it always did.
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<general-request@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'General question about our account',
+            body: 'We would like to understand how to request additional equipment.',
+            toRecipients: ['support@example.test'],
+        ));
+
+        $this->assertNull(Ticket::firstOrFail()->serving_department_id);
+    }
+
+    public function test_a_sub_addressed_department_address_routes_the_same_way(): void
+    {
+        // The other valid shape: department name AFTER the "+", delivered as a
+        // sub-address of the existing mailbox instead of needing its own alias.
+        $department = $this->makeDepartment('Facilities', 'support+fm@example.test');
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<subaddressed@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Broken door handle at the stockroom',
+            body: 'The stockroom door handle has come loose and no longer latches shut.',
+            toRecipients: ['support+fm@example.test'],
+        ));
+
+        $this->assertSame($department->id, Ticket::firstOrFail()->serving_department_id);
+    }
+
+    public function test_mail_to_an_unknown_address_is_skipped_and_marked_seen(): void
+    {
+        $this->makeDepartment('SCM', 'scm@example.test');
+
+        $message = new FakeEmailMessage(
+            messageId: '<stranger@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Unrelated mail',
+            body: 'This message was never addressed to the helpdesk at all.',
+            toRecipients: ['nosuchdesk@example.test'],
+        );
+
+        $processed = $this->service->processFake($message);
+
+        $this->assertFalse($processed);
+        $this->assertTrue($message->seen);
+        $this->assertSame(0, Ticket::count());
+    }
+
+    public function test_a_department_address_wins_over_the_base_address_on_the_same_message(): void
+    {
+        $department = $this->makeDepartment('Facilities', 'fm@example.test');
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<both-addresses@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Aircon leaking in the stockroom',
+            body: 'Water is dripping from the aircon unit above the stockroom shelves.',
+            toRecipients: ['fm@example.test'],
+            ccRecipients: ['support@example.test'],
+        ));
+
+        $this->assertSame($department->id, Ticket::firstOrFail()->serving_department_id);
+    }
+
+    public function test_a_reply_adopts_a_department_only_when_the_ticket_has_none(): void
+    {
+        $scm = $this->makeDepartment('SCM', 'scm@example.test');
+        $facilities = $this->makeDepartment('Facilities', 'fm@example.test');
+        $body = 'The delivery van has not arrived at the branch as scheduled today.';
+
+        // An unrouted ticket, as the web form / POS / kiosk paths still produce:
+        // raised without a serving department, sitting in the shared intake pool.
+        $ticket = Ticket::create([
+            'ticket_key' => 'TBG-500',
+            'title' => 'Delivery delay',
+            'status' => 'open',
+            'sender_email' => 'customer@example.test',
+            'company_id' => Company::firstOrFail()->id,
+        ]);
+        $this->assertNull($ticket->serving_department_id);
+
+        // A reply on SCM's address claims it (matched by ticket key in the subject).
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<claimed@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Re: [TBG-500] Delivery delay',
+            body: $body,
+            toRecipients: ['scm@example.test'],
+        ));
+
+        $this->assertSame($scm->id, $ticket->fresh()->serving_department_id);
+
+        // A later reply on another desk's address must NOT hand the ticket away.
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<hijack@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Re: [TBG-500] Delivery delay',
+            body: 'Following up again on the delayed delivery to our branch this week.',
+            toRecipients: ['fm@example.test'],
+        ));
+
+        $this->assertSame($scm->id, $ticket->fresh()->serving_department_id);
+        $this->assertNotSame($facilities->id, $ticket->fresh()->serving_department_id);
+    }
+
+    public function test_departmental_addresses_are_never_auto_added_as_ticket_ccs(): void
+    {
+        $this->makeDepartment('SCM', 'scm@example.test');
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<cc-loop@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Stock discrepancy at the branch',
+            body: 'The stock count in the system does not match what is physically on the shelf.',
+            toRecipients: ['scm@example.test'],
+            ccRecipients: ['support@example.test', 'colleague@example.test'],
+        ));
+
+        $ccs = Ticket::firstOrFail()->ccs()->pluck('email')->all();
+
+        // Our own addresses would mail the inbox back on every notification.
+        $this->assertNotContains('scm@example.test', $ccs);
+        $this->assertNotContains('support@example.test', $ccs);
+        $this->assertContains('colleague@example.test', $ccs);
+    }
+
+    public function test_outbound_mail_uses_the_serving_departments_identity(): void
+    {
+        $department = $this->makeDepartment('SCM', 'scm@example.test', fromName: 'SCM Service Desk');
+        Setting::set('mail_from_name', 'TAS Service Center', 'mail');
+        config(['mail.from.address' => 'noreply@example.test']);
+
+        $ticket = Ticket::create([
+            'ticket_key' => 'TBG-900',
+            'title' => 'Outbound identity check',
+            'status' => 'open',
+            'serving_department_id' => $department->id,
+            'company_id' => Company::firstOrFail()->id,
+        ]);
+
+        // Sent for real through the array transport (phpunit.xml sets MAIL_MAILER=array)
+        // rather than Mail::fake(), because the From/Reply-To under test are applied
+        // when the Symfony message is built — which a fake never does.
+        Mail::to('customer@example.test')->send(new NewTicketCreated($ticket, 'Customer'));
+
+        $sent = $this->lastSentMessage();
+
+        // Address stays global (DKIM alignment); only the display name is the desk's.
+        $this->assertSame('noreply@example.test', $sent->getFrom()[0]->getAddress());
+        $this->assertSame('SCM Service Desk', $sent->getFrom()[0]->getName());
+
+        // Exactly one From and one Reply-To — appending instead of replacing would
+        // produce an invalid message and split where replies land.
+        $this->assertCount(1, $sent->getFrom());
+        $this->assertCount(1, $sent->getReplyTo());
+        $this->assertSame('scm@example.test', $sent->getReplyTo()[0]->getAddress());
+    }
+
+    public function test_outbound_mail_for_an_unrouted_ticket_uses_the_global_identity(): void
+    {
+        Setting::set('mail_from_name', 'TAS Service Center', 'mail');
+        config(['mail.from.address' => 'noreply@example.test']);
+
+        $ticket = Ticket::create([
+            'ticket_key' => 'TBG-901',
+            'title' => 'Unrouted identity check',
+            'status' => 'open',
+            'company_id' => Company::firstOrFail()->id,
+        ]);
+
+        Mail::to('customer@example.test')->send(new NewTicketCreated($ticket, 'Customer'));
+
+        $sent = $this->lastSentMessage();
+
+        $this->assertSame('TAS Service Center', $sent->getFrom()[0]->getName());
+        $this->assertSame('support@example.test', $sent->getReplyTo()[0]->getAddress());
+    }
+
+    private function lastSentMessage(): \Symfony\Component\Mime\Email
+    {
+        $messages = app('mailer')->getSymfonyTransport()->messages();
+
+        $this->assertNotEmpty($messages, 'No message was sent through the array transport.');
+
+        return $messages[count($messages) - 1]->getOriginalMessage();
+    }
+
+    public function test_a_department_without_an_address_falls_back_to_the_global_identity(): void
+    {
+        $department = $this->makeDepartment('Legal', null);
+        Setting::set('mail_from_name', 'TAS Service Center', 'mail');
+
+        $router = app(\App\Services\DepartmentMailRouter::class);
+
+        $this->assertNull($router->addressFor($department->id));
+        $this->assertSame('support@example.test', $router->replyToFor($department->id));
+        $this->assertSame('TAS Service Center', $router->fromNameFor($department->id));
+    }
+
+    // ---------------------------------------------------------------------
+    // Requiring a departmental address for NEW requests
+    // ---------------------------------------------------------------------
+
+    public function test_new_request_on_the_shared_mailbox_is_rejected_with_a_directory_reply(): void
+    {
+        $this->makeDepartment('SCM', 'scm@example.test');
+        $this->makeDepartment('Facilities', 'fm@example.test');
+        Mail::fake();
+
+        $message = new FakeEmailMessage(
+            messageId: '<misaddressed@example.test>',
+            senderEmail: 'customer@example.test',
+            senderName: 'Store Manager',
+            subject: 'Aircon not working',
+            body: 'The aircon in our branch stockroom has stopped cooling since this morning.',
+            toRecipients: ['support@example.test'],
+        );
+
+        $processed = $this->service->processFake($message);
+
+        $this->assertFalse($processed);
+        $this->assertTrue($message->seen);
+        $this->assertSame(0, Ticket::count(), 'No ticket may be raised for a rejected message.');
+
+        Mail::assertSent(\App\Mail\DepartmentAddressDirectory::class, function ($mail) {
+            return $mail->hasTo('customer@example.test')
+                && $mail->departments === ['Facilities' => 'fm@example.test', 'SCM' => 'scm@example.test']
+                && $mail->sharedAddress === 'support@example.test';
+        });
+    }
+
+    public function test_a_reply_to_an_existing_ticket_on_the_shared_mailbox_still_threads(): void
+    {
+        $this->makeDepartment('SCM', 'scm@example.test');
+        $body = 'The delivery for our branch has still not arrived as scheduled.';
+
+        // Raised properly on SCM's address before enforcement is switched on.
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<properly-addressed@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Delivery delay',
+            body: $body,
+            toRecipients: ['scm@example.test'],
+        ));
+
+        $ticket = Ticket::firstOrFail();
+        Mail::fake();
+
+        // The requester hits Reply, which goes to the shared address.
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<reply-to-shared@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Re: Delivery delay',
+            body: $body,
+            toRecipients: ['support@example.test'],
+        ));
+
+        $this->assertSame(1, Ticket::count());
+        $this->assertDatabaseHas('ticket_comments', [
+            'ticket_id' => $ticket->id,
+            'message_id' => 'reply-to-shared@example.test',
+        ]);
+        Mail::assertNotSent(\App\Mail\DepartmentAddressDirectory::class);
+    }
+
+    public function test_enforcement_is_ignored_when_no_department_has_an_address(): void
+    {
+        // The safety interlock: enforcing with an empty directory would reject
+        // every message and point the sender at nothing.
+        Mail::fake();
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<no-directory@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Printer jam at the counter',
+            body: 'The receipt printer keeps jamming whenever we print a long order.',
+            toRecipients: ['support@example.test'],
+        ));
+
+        $this->assertSame(1, Ticket::count());
+        Mail::assertNotSent(\App\Mail\DepartmentAddressDirectory::class);
+    }
+
+    public function test_directory_reply_is_sent_once_per_sender_per_day(): void
+    {
+        $this->makeDepartment('SCM', 'scm@example.test');
+        Mail::fake();
+
+        foreach (['<first@example.test>', '<second@example.test>'] as $id) {
+            $this->service->processFake(new FakeEmailMessage(
+                messageId: $id,
+                senderEmail: 'customer@example.test',
+                subject: 'Another misaddressed request ' . $id,
+                body: 'This is a distinct message body for ' . $id . ' so it cannot match by hash.',
+                toRecipients: ['support@example.test'],
+            ));
+        }
+
+        // Second one is throttled: an auto-responder on the far end would otherwise
+        // keep this exchange going indefinitely.
+        Mail::assertSentCount(1);
+        $this->assertSame(0, Ticket::count());
+    }
+
+    public function test_routing_is_mandatory_and_cannot_be_switched_off(): void
+    {
+        $this->makeDepartment('SCM', 'scm@example.test');
+        // No setting exists to disable this — once a department can receive mail,
+        // the shared mailbox stops accepting new requests, full stop.
+        Setting::set('mail_require_department_address', '0', 'mail');
+        Mail::fake();
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<pooled@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'General question about equipment',
+            body: 'We would like to know the process for requesting additional equipment.',
+            toRecipients: ['support@example.test'],
+        ));
+
+        $this->assertSame(0, Ticket::count(), 'The stale setting must not re-enable the shared mailbox.');
+        Mail::assertSent(\App\Mail\DepartmentAddressDirectory::class);
+    }
+
+    private function makeDepartment(string $name, ?string $address, ?string $fromName = null): \App\Models\Department
+    {
+        return \App\Models\Department::create([
+            'name' => $name,
+            'code' => strtoupper(substr(str_replace(' ', '', $name), 0, 4)),
+            'mail_address' => $address,
+            'mail_from_name' => $fromName,
+            'is_active' => true,
+        ]);
     }
 
     private function makeVendorChild(): array

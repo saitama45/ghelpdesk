@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
+use App\Models\Department;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\DepartmentMailRouter;
 use App\Services\OrganizationReferenceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -48,13 +50,116 @@ class SettingsController extends Controller implements HasMiddleware
             'assignableStaff' => $assignableStaff,
             'companies' => $companies,
             'stores' => $stores,
+            'departmentMailboxes' => $this->departmentMailboxes(),
+            'supportBaseAddress' => app(DepartmentMailRouter::class)->baseAddress(),
         ]);
+    }
+
+    /**
+     * Per-department inbound address and outbound display name, for the Mail
+     * Configuration tab.
+     */
+    private function departmentMailboxes(): \Illuminate\Support\Collection
+    {
+        $router = app(DepartmentMailRouter::class);
+
+        return Department::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'code', 'mail_address', 'mail_from_name'])
+            ->map(fn (Department $department) => [
+                'id' => $department->id,
+                'name' => $department->name,
+                'code' => $department->code,
+                'mail_address' => $department->mail_address,
+                'mail_from_name' => $department->mail_from_name,
+                // Advisory only: an address on another domain is legitimate, it
+                // just needs forwarding, so the UI hints rather than blocks.
+                'shares_domain' => $router->sharesDomainWithMailbox($department->mail_address),
+            ]);
+    }
+
+    /**
+     * Saves the per-department mail identity, as part of the single Settings save.
+     *
+     * Separate method rather than inline because these are department ROWS, not
+     * key-value settings — the caller strips them out of the flat writer first.
+     * A null/absent payload means the page never sent them, so leave them alone.
+     */
+    private function saveDepartmentMailboxes($mailboxes, ?string $submittedSupportAddress = null): void
+    {
+        if (! is_array($mailboxes)) {
+            return;
+        }
+
+        $validated = validator(
+            ['mailboxes' => $mailboxes],
+            [
+                'mailboxes' => 'array',
+                'mailboxes.*.id' => 'required|exists:departments,id',
+                'mailboxes.*.mail_address' => 'nullable|email|max:255',
+                'mailboxes.*.mail_from_name' => 'nullable|string|max:100',
+            ],
+            ['mailboxes.*.mail_address.email' => 'Enter a complete email address, e.g. fm@tablegroup.com.']
+        )->validate();
+
+        $rows = collect($validated['mailboxes'] ?? [])
+            ->map(function (array $row) {
+                // Addresses are matched case-insensitively against inbound headers,
+                // so normalise on the way in rather than at every comparison.
+                $row['mail_address'] = strtolower(trim((string) ($row['mail_address'] ?? ''))) ?: null;
+                $row['mail_from_name'] = trim((string) ($row['mail_from_name'] ?? '')) ?: null;
+
+                return $row;
+            });
+
+        // A duplicate would silently route two departments' mail to whichever row
+        // the routing map happened to build last.
+        $addresses = $rows->pluck('mail_address')->filter();
+        if ($addresses->count() !== $addresses->unique()->count()) {
+            throw ValidationException::withMessages([
+                'mailboxes' => 'Each department needs a distinct address — two departments cannot share one inbox address.',
+            ]);
+        }
+
+        // The support mailbox is the catch-all; handing it to a department would
+        // make every unrouted message land on that desk instead of the pool.
+        //
+        // Compared against the SUBMITTED support address, not the stored one: this
+        // runs before the settings write, so a user changing the mailbox and
+        // assigning its old value to a department in the same save would otherwise
+        // slip past.
+        $base = strtolower(trim((string) ($submittedSupportAddress ?? '')))
+            ?: app(DepartmentMailRouter::class)->baseAddress();
+
+        if ($base !== '' && $addresses->contains($base)) {
+            throw ValidationException::withMessages([
+                'mailboxes' => "{$base} is the shared support mailbox and cannot be assigned to a single department.",
+            ]);
+        }
+
+        foreach ($rows as $row) {
+            Department::whereKey($row['id'])->update([
+                'mail_address' => $row['mail_address'],
+                'mail_from_name' => $row['mail_from_name'],
+            ]);
+        }
+
+        // whereKey()->update() bypasses model events, so flush explicitly.
+        DepartmentMailRouter::flush();
     }
 
     public function update(Request $request)
     {
         $this->validateHealthThresholds($request);
         $settings = $request->all();
+
+        // Department mailboxes ride along in the same submit so the page has ONE
+        // save button, but they are department ROWS rather than key-value settings
+        // — pull them out before the mass-assign loop below, which would otherwise
+        // json_encode the whole array into a bogus `mailboxes` setting.
+        $this->saveDepartmentMailboxes($request->input('mailboxes'), $request->input('imap_username'));
+        unset($settings['mailboxes']);
 
         foreach ($settings as $key => $value) {
             // Skip internal inertia/laravel keys if any
@@ -99,6 +204,9 @@ class SettingsController extends Controller implements HasMiddleware
 
         Cache::forget('app_mail_settings');
         Cache::forget('sidebar_layout_config');
+        // Departmental addresses are derived from the support mailbox, so a change
+        // to imap_username re-points every one of them.
+        DepartmentMailRouter::flush();
 
         return redirect()->back()->with('success', 'Settings updated successfully.');
     }

@@ -54,10 +54,9 @@ class RecalculateSlaMetrics extends Command
                     continue;
                 }
 
-                $assignee = $ticket->assignee_id ? User::find($ticket->assignee_id) : null;
-                $subUnit = $assignee?->org_path;
-                $departmentId = $assignee?->department_id;
-                $departmentNodeId = $assignee?->department_node_id;
+                // Serving department first, assignee's as fallback — same rule the
+                // observer applies, so a recalc can never disagree with live writes.
+                [$subUnit, $departmentId, $departmentNodeId] = $ticket->slaScope();
 
                 // SlaService handles null item_id by defaulting to 'medium' priority
                 $newResponseTarget   = SlaService::calculateTarget($ticket->created_at, $ticket->item_id, 'response', $subUnit, $departmentId, $departmentNodeId);

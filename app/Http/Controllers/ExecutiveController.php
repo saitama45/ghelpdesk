@@ -74,7 +74,10 @@ class ExecutiveController extends Controller
         $ticket = fn () => Ticket::query()->withoutGlobalScope(ActiveEntityScope::class);
 
         $rows = $departments->map(function (Department $d) use ($ticket, $monthStart) {
-            $base = fn () => (clone $ticket())->where('department_id', $d->id);
+            // The work a department DELIVERED, not what it raised. This filtered
+            // on department_id — the requester's department — so every figure
+            // below counted a department's own incoming requests as its output.
+            $base = fn () => (clone $ticket())->ownedByDepartment($d->id, includeUnassigned: false);
             $open = (clone $base())->whereNotIn('status', self::CLOSED)->count();
             $highUrgent = (clone $base())->whereNotIn('status', self::CLOSED)->whereIn('priority', ['high', 'urgent'])->count();
             $resolvedMtd = (clone $base())->whereIn('status', self::CLOSED)->where('updated_at', '>=', $monthStart)->count();

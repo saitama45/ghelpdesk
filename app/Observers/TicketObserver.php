@@ -240,12 +240,12 @@ class TicketObserver
     public function created(Ticket $ticket): void
     {
         $now = Carbon::now();
-        $assignee = $ticket->assignee_id ? User::find($ticket->assignee_id) : null;
+        [$subUnit, $departmentId, $departmentNodeId] = $ticket->slaScope();
 
         $metric = TicketSlaMetric::create([
             'ticket_id' => $ticket->id,
-            'response_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'response', $assignee?->org_path, $assignee?->department_id, $assignee?->department_node_id),
-            'resolution_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'resolution', $assignee?->org_path, $assignee?->department_id, $assignee?->department_node_id),
+            'response_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'response', $subUnit, $departmentId, $departmentNodeId),
+            'resolution_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'resolution', $subUnit, $departmentId, $departmentNodeId),
         ]);
 
         if (in_array($ticket->status, ['waiting_service_provider', 'waiting_client_feedback', 'for_schedule'])) {
@@ -264,10 +264,7 @@ class TicketObserver
         }
 
         $metric = $ticket->slaMetric;
-        $assignee = $ticket->assignee_id ? User::find($ticket->assignee_id) : null;
-        $subUnit = $assignee?->org_path;
-        $departmentId = $assignee?->department_id;
-        $departmentNodeId = $assignee?->department_node_id;
+        [$subUnit, $departmentId, $departmentNodeId] = $ticket->slaScope();
 
         if (!$metric) {
             // Try to create it if it doesn't exist

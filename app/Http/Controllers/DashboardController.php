@@ -449,7 +449,10 @@ class DashboardController extends Controller
     private function applyAssigneeScopeFilters($query, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter)
     {
         if ($departmentIdFilter) {
-            $query->whereHas('assignee', fn ($q) => $q->where('department_id', $departmentIdFilter));
+            // Same definition of "this department's work" as /tickets and the Hub.
+            // includeUnassigned stays false: this is a narrowing filter, so an
+            // unclaimed ticket must not appear under every department.
+            $query->ownedByDepartment((int) $departmentIdFilter, includeUnassigned: false);
         }
 
         if ($departmentNodeIdFilter) {

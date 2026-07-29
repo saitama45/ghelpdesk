@@ -377,12 +377,11 @@ class HubController extends Controller
 
         $requestsTo = null;
         if ($homeId) {
-            $homeUserIds = User::where('department_id', $homeId)->pluck('id');
             // Requests my department sent to THIS department. Unassigned tickets
             // are excluded: nothing ties them to the department being visited.
             $toBase = fn () => Ticket::query()
                 ->ownedByDepartment($viewedId, includeUnassigned: false)
-                ->whereIn('reporter_id', $homeUserIds);
+                ->requestedByDepartment($homeId);
             $requestsTo = [
                 'active' => (clone $toBase())->whereNotIn('status', self::CLOSED_STATUSES)->count(),
                 'completed_mtd' => (clone $toBase())->whereIn('status', self::CLOSED_STATUSES)->where('updated_at', '>=', $monthStart)->count(),

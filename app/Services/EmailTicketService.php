@@ -203,12 +203,21 @@ class EmailTicketService
             }
         }
 
-        // 3. Recipient Check
-        if (!$this->messageIsAddressedToSupportEmail($message, $supportEmail)) {
+        // 3. Recipient Check — also decides WHICH DEPARTMENT the message routes to.
+        // A hit on a departmental plus-address (support+scm@) names the serving
+        // department; a hit on the bare support address is the catch-all and
+        // leaves it null, exactly as before routing existed.
+        $route = app(DepartmentMailRouter::class)->resolve(
+            array_keys($this->collectRoutableRecipientAddresses($message))
+        );
+
+        if (!$route['matched']) {
             Log::info("EmailTicketService: Skipping message {$messageId} - Not for support email {$supportEmail}.");
             $message->setFlag('Seen');
             return false;
         }
+
+        $servingDepartmentId = $route['department_id'];
 
 
         $subject = $this->decodeMimeHeader($message->getSubject());
@@ -222,10 +231,30 @@ class EmailTicketService
         $existingTicket = $this->findExistingTicketForMessage($message, $subject, $senderEmail, $emailBodyHash);
 
         if ($existingTicket) {
+            // A reply can adopt a department for a ticket that never had one, but
+            // must never re-route one that does: a requester CC'ing another desk
+            // on an in-flight thread would otherwise hand the ticket away.
+            if ($servingDepartmentId && !$existingTicket->serving_department_id) {
+                $existingTicket->update(['serving_department_id' => $servingDepartmentId]);
+            }
+
             return $this->addEmailAsComment($existingTicket, $message, $user, $cleanBody, $emailBodyHash, $messageId, $richBody);
         }
 
-        return DB::transaction(function () use ($message, $subject, $senderEmail, $senderName, $messageId, $user, $cleanBody, $emailBodyHash, $richBody) {
+        // NEW request on the shared mailbox while departmental addressing is
+        // required: raise nothing and tell the sender where to write instead.
+        //
+        // Deliberately placed AFTER the threading lookup — a reply on an existing
+        // conversation must still be accepted here, or every thread would break
+        // the moment a requester used Reply on an older message.
+        if ($servingDepartmentId === null && app(DepartmentMailRouter::class)->requiresDepartmentAddress()) {
+            $this->sendDepartmentDirectory($senderEmail, $senderName, $subject);
+            $message->setFlag('Seen');
+
+            return false;
+        }
+
+        return DB::transaction(function () use ($message, $subject, $senderEmail, $senderName, $messageId, $user, $cleanBody, $emailBodyHash, $richBody, $servingDepartmentId) {
             // Email tickets default to the TGI entity (same product decision as
             // dynamic forms). 'TBG' predates the company-code cleanup and matches
             // no row, which used to silently fall through to Company::first().
@@ -266,6 +295,13 @@ class EmailTicketService
                 'source_message_id' => $this->originalMessageIdForThreading($message),
                 'email_body_hash' => $emailBodyHash,
                 'company_id' => $companyId,
+                // Null when the mail came to the general inbox: the shared intake
+                // pool, claimed as soon as someone from a desk is assigned.
+                'serving_department_id' => $servingDepartmentId,
+                // The requester's own department, when the sender is a known user.
+                // Distinct from the serving department above — this is the
+                // internal CUSTOMER side of the axis.
+                'department_id' => $user?->department_id,
             ]);
 
             // Auto-assign based on sender email rules (may also set company/entity)
@@ -409,6 +445,43 @@ class EmailTicketService
     }
 
     /**
+     * Tell a sender their message was not logged and list the departmental
+     * addresses they should use instead.
+     *
+     * Throttled per sender: without it, any far-end auto-responder that replies to
+     * this reply produces a fresh "new request on the shared mailbox" every cycle,
+     * and the two systems mail each other indefinitely. One per sender per day is
+     * enough to inform a human without sustaining a loop.
+     *
+     * Never lets an SMTP failure abort the sync — the message is already flagged
+     * Seen by the caller, and a stuck mailbox is worse than a missed notice.
+     */
+    protected function sendDepartmentDirectory(string $senderEmail, string $senderName, string $subject): void
+    {
+        $router = app(DepartmentMailRouter::class);
+        $throttleKey = 'department_directory_sent:' . strtolower(trim($senderEmail));
+
+        if (\Illuminate\Support\Facades\Cache::has($throttleKey)) {
+            Log::info("EmailTicketService: directory reply already sent to {$senderEmail} today, skipping.");
+            return;
+        }
+
+        try {
+            Mail::to($senderEmail)->send(new \App\Mail\DepartmentAddressDirectory(
+                $senderName !== '' ? $senderName : $senderEmail,
+                $subject,
+                $router->directory(),
+                $router->baseAddress()
+            ));
+
+            \Illuminate\Support\Facades\Cache::put($throttleKey, true, now()->addDay());
+            Log::info("EmailTicketService: sent department directory to {$senderEmail} (no departmental address used).");
+        } catch (\Throwable $e) {
+            Log::error("EmailTicketService: failed sending department directory to {$senderEmail}: {$e->getMessage()}");
+        }
+    }
+
+    /**
      * Fan an inbound child-ticket reply back out to thread participants who did
      * not already receive it directly. Import success is never coupled to SMTP.
      */
@@ -418,12 +491,11 @@ class EmailTicketService
             return;
         }
 
-        $supportEmail = $this->normalizeEmailAddress(
-            Setting::get('imap_username', config('imap.accounts.default.username'))
-        );
+        $router = app(DepartmentMailRouter::class);
+
         $excluded = collect(array_keys($this->collectRecipientAddresses($message)))
             ->push($this->normalizeEmailAddress($senderEmail))
-            ->push($supportEmail)
+            ->merge($router->allAddresses())
             ->filter()
             ->unique()
             ->all();
@@ -436,10 +508,9 @@ class EmailTicketService
             }
 
             try {
+                // From name / Reply-To are stamped by ThreadsTicketMail from the
+                // ticket's serving department — see applyTicketDepartmentIdentity.
                 $mail = new TicketCommentAdded($ticket, $comment, $recipient['name'], $comment->attachments);
-                if ($supportEmail) {
-                    $mail->replyTo($supportEmail);
-                }
 
                 Mail::to($recipient['email'])->send($mail);
             } catch (\Throwable $e) {
@@ -771,7 +842,11 @@ class EmailTicketService
             return;
         }
 
-        $supportEmail = $this->normalizeEmailAddress(Setting::get('imap_username', config('imap.accounts.default.username')));
+        // EVERY address of ours, not just the base inbox. A departmental
+        // plus-address (support+scm@) is a recipient like any other as far as the
+        // header parser is concerned, so without this it gets auto-CC'd onto its
+        // own tickets and each outbound notification mails the inbox back.
+        $ourAddresses = app(DepartmentMailRouter::class)->allAddresses();
         $senderEmail = $this->normalizeEmailAddress($senderEmail);
         $assigneeEmail = $owner->assignee_id
             ? $this->normalizeEmailAddress((string) User::where('id', $owner->assignee_id)->value('email'))
@@ -789,7 +864,7 @@ class EmailTicketService
             ->all();
 
         foreach ($candidates as $email => $name) {
-            if ($email === $supportEmail || $email === $senderEmail || $email === $assigneeEmail) {
+            if (in_array($email, $ourAddresses, true) || $email === $senderEmail || $email === $assigneeEmail) {
                 continue;
             }
             if ($this->isAutomatedAddress($email)) {
@@ -870,28 +945,50 @@ class EmailTicketService
         return false;
     }
 
-    protected function messageIsAddressedToSupportEmail($message, string $supportEmail): bool
+    /**
+     * Every address the message was delivered to, as a normalized [email => true]
+     * set — the input DepartmentMailRouter needs to decide both "is this ours?"
+     * and "whose desk is it?".
+     *
+     * This replaces the old single-address messageIsAddressedToSupportEmail()
+     * check: with plus-address routing there is no longer one expected recipient
+     * to compare against, so we collect them all and let the router match.
+     *
+     * Scans the same surfaces the old gate did, and for the same reason — the
+     * Webklex parsed address objects are unreliable in this IMAP setup, and the
+     * envelope headers (delivered_to, x_original_to) are frequently the ONLY
+     * place a plus-address survives when mail has been forwarded or aliased.
+     */
+    protected function collectRoutableRecipientAddresses($message): array
     {
+        $addresses = [];
+
         foreach ([$message->getTo(), $message->getCc(), $message->getBcc()] as $recipients) {
             foreach ($recipients ?: [] as $recipient) {
-                if (isset($recipient->mail) && $this->normalizeEmailAddress($recipient->mail) === $supportEmail) {
-                    return true;
+                $email = $this->normalizeEmailAddress($recipient->mail ?? '');
+                if ($email !== '') {
+                    $addresses[$email] = true;
                 }
             }
         }
 
         $headers = $this->messageHeaders($message);
         if (!$headers) {
-            return false;
+            return $addresses;
         }
 
         foreach ($this->supportRecipientHeaderNames() as $headerName) {
-            if ($this->headerContainsEmailAddress($headers->get($headerName), $supportEmail)) {
-                return true;
+            foreach ($this->flattenHeaderValues($headers->get($headerName)) as $value) {
+                foreach ($this->extractEmailAddresses((string) $value) as $email) {
+                    $email = $this->normalizeEmailAddress($email);
+                    if ($email !== '') {
+                        $addresses[$email] = true;
+                    }
+                }
             }
         }
 
-        return false;
+        return $addresses;
     }
 
     protected function messageHeaders($message)
@@ -917,19 +1014,6 @@ class EmailTicketService
             'envelope_to',
             'original_to',
         ];
-    }
-
-    protected function headerContainsEmailAddress($header, string $expectedEmail): bool
-    {
-        foreach ($this->flattenHeaderValues($header) as $value) {
-            foreach ($this->extractEmailAddresses((string) $value) as $email) {
-                if ($this->normalizeEmailAddress($email) === $expectedEmail) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     protected function extractEmailAddresses(string $value): array

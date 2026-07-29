@@ -214,10 +214,10 @@ class TicketController extends Controller
 
         if ($homeId) {
             // Your department's requests to them — a manager sees their team's.
-            $query->whereIn(
-                'tickets.reporter_id',
-                User::where('department_id', $homeId)->pluck('id')
-            );
+            // Uses the requester-department column rather than materialising every
+            // user id in the department, which broke past SQL Server's 2100
+            // parameter ceiling on the larger departments.
+            $query->requestedByDepartment($homeId);
         } else {
             // No home department to speak for you: your own requests only.
             $query->where('tickets.reporter_id', $user->id);
@@ -843,6 +843,9 @@ class TicketController extends Controller
                 $data['sender_name'] = null;
                 $data['sender_email'] = null;
                 $data['department'] = auth()->user()->department;
+                // Requester side of the department axis, as an FK rather than the
+                // free-text string above (which stays for legacy display).
+                $data['department_id'] = auth()->user()->department_id;
             } else {
                 $data['reporter_id'] = null;
                 // sender_name, sender_email, and department are already in $data
@@ -883,6 +886,13 @@ class TicketController extends Controller
                         $data['store_id'] = $resolved['store_id'];
                     }
                 }
+            }
+
+            // Route to a servicing desk. An explicit "Route to" choice wins;
+            // otherwise adopt the assignee's department so the column is populated
+            // at creation rather than leaning on the scope's fallback forever.
+            if (empty($data['serving_department_id']) && !empty($data['assignee_id'])) {
+                $data['serving_department_id'] = User::where('id', $data['assignee_id'])->value('department_id');
             }
 
             $ticket = Ticket::create($data);
@@ -1641,6 +1651,8 @@ class TicketController extends Controller
                 'sub_category_id' => $ticket->sub_category_id,
                 'item_id' => $ticket->item_id,
                 'department' => $ticket->department,
+                'department_id' => $ticket->department_id,
+                'serving_department_id' => $ticket->serving_department_id,
                 'parent_id' => $ticket->id,
                 'created_at' => now('Asia/Manila'),
             ]);
@@ -1750,6 +1762,10 @@ class TicketController extends Controller
                 'sub_category_id' => $ticket->sub_category_id,
                 'item_id' => $ticket->item_id,
                 'department' => $ticket->department,
+                'department_id' => $ticket->department_id,
+                // The escalating desk still owns delivery even though the vendor
+                // holds the work, so the child stays on their queue and SLA.
+                'serving_department_id' => $ticket->serving_department_id,
                 'vendor_id' => $vendor->id,
                 'parent_id' => $ticket->id,
                 // Pin the thread identity so vendor replies land on THIS child.
@@ -1785,7 +1801,6 @@ class TicketController extends Controller
 
         // Send the vendor email outside the transaction so an SMTP failure does not
         // roll back the escalation — the record stands and we surface a warning.
-        $supportEmail = \App\Models\Setting::get('imap_username');
         $attachments = $request->boolean('attach_parent_files', true)
             ? $ticket->attachments()->whereNull('comment_id')->get()
             : collect();
@@ -1800,9 +1815,8 @@ class TicketController extends Controller
                 $attachments
             );
 
-            if ($supportEmail) {
-                $mail->replyTo($supportEmail);
-            }
+            // Reply-To is set centrally by ThreadsTicketMail from the child's
+            // serving department, so vendor replies come back to that desk.
 
             $pending = Mail::to($vendor->email);
 
@@ -2124,6 +2138,8 @@ class TicketController extends Controller
                 'sender_name'     => $ticket->sender_name,
                 'sender_email'    => $ticket->sender_email,
                 'department'      => $ticket->department,
+                'department_id'   => $ticket->department_id,
+                'serving_department_id' => $ticket->serving_department_id,
                 'created_at'      => now('Asia/Manila'),
             ]);
         });
@@ -2800,18 +2816,14 @@ class TicketController extends Controller
             return true;
         })->unique('email');
 
-        $supportEmail = \App\Models\Setting::get('imap_username');
-
         \Illuminate\Support\Facades\Log::info("Notifying recipients for comment on ticket {$ticket->ticket_key}: " . $recipients->pluck('email')->implode(', '));
 
         $recipientList = $recipients->values()->all();
 
         foreach ($recipientList as $recipient) {
+            // Reply-To comes from ThreadsTicketMail (the ticket's serving
+            // department), so a reply returns to the desk that answered.
             $mail = new TicketCommentAdded($ticket, $comment, $recipient['name'], $attachments);
-
-            if ($supportEmail) {
-                $mail->replyTo($supportEmail);
-            }
 
             $pending = Mail::to($recipient['email']);
             $pending->send($mail);

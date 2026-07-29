@@ -37,6 +37,7 @@ class Ticket extends Model
         'sender_name',
         'department',
         'department_id',
+        'serving_department_id',
         'message_id',
         'source_message_id',
         'email_body_hash',
@@ -82,30 +83,96 @@ class Ticket extends Model
     }
 
     /**
-     * The tickets a department is responsible for.
+     * The tickets a department is responsible for — the PROVIDER side.
      *
-     * Ownership follows the ASSIGNEE's department — the people who actually do
-     * the work — not `tickets.department`/`department_id`, which began life as
-     * free text and was only backfilled by name match, so it disagrees with the
-     * real owner on a large share of rows.
+     * Resolution order:
      *
-     * Unassigned tickets are the shared intake pool: nobody has taken ownership,
-     * so every department's desk sees them until someone does. Set
-     * `$includeUnassigned` to false where the department must be certain — e.g.
-     * the internal-customer view, which would otherwise repeat the same
+     * 1. `serving_department_id` when set. This is the explicit route: the
+     *    inbound plus-address the mail arrived on, the department that owns the
+     *    form the request came from, or a staff override.
+     * 2. Otherwise the ASSIGNEE's department, the signal this scope used
+     *    exclusively before routing existed. Kept for rows the backfill could not
+     *    resolve (assignee has no department) and for anything created by a path
+     *    that does not set a route yet.
+     * 3. Otherwise, if `$includeUnassigned`, the shared intake pool: unrouted AND
+     *    unassigned, so nobody has claimed it and every desk should see it.
+     *
+     * Note `department_id` is deliberately NOT consulted — that column is the
+     * REQUESTER's department (the internal customer), not the servicing desk.
+     * Reading it here is the mistake that made ExecutiveController report the
+     * tickets a department raised as the work it delivered.
+     *
+     * Pass `$includeUnassigned: false` where the department must be certain —
+     * e.g. the internal-customer view, which would otherwise repeat the same
      * unclaimed ticket under every department tab.
      *
-     * The OR is grouped so the unassigned branch cannot escape the surrounding
-     * constraints on the query.
+     * Every OR is grouped so no branch can escape the surrounding constraints.
      */
     public function scopeOwnedByDepartment(Builder $query, int $departmentId, bool $includeUnassigned = true): Builder
     {
         return $query->where(function (Builder $q) use ($departmentId, $includeUnassigned) {
-            $q->whereHas('assignee', fn ($a) => $a->where('department_id', $departmentId));
+            $q->where('tickets.serving_department_id', $departmentId)
+                ->orWhere(function (Builder $byAssignee) use ($departmentId) {
+                    $byAssignee->whereNull('tickets.serving_department_id')
+                        ->whereHas('assignee', fn ($a) => $a->where('department_id', $departmentId));
+                });
 
             if ($includeUnassigned) {
-                $q->orWhereNull('assignee_id');
+                $q->orWhere(function (Builder $pool) {
+                    $pool->whereNull('tickets.serving_department_id')
+                        ->whereNull('tickets.assignee_id');
+                });
             }
+        });
+    }
+
+    /**
+     * The scope SLA business hours are measured against: the department whose
+     * working day the clock should follow.
+     *
+     * That is the SERVING department — the desk held to the target — falling back
+     * to the assignee's department when the ticket carries no route.
+     *
+     * The finer-grained sub-unit values (org_path, department_node_id) can only
+     * come from the assignee, and are only safe when the assignee actually sits
+     * in the resolved department. Passing a node from a different department
+     * would resolve business hours for a sub-unit of the wrong org.
+     *
+     * @return array{0: ?string, 1: ?int, 2: ?int} [orgPath, departmentId, departmentNodeId]
+     */
+    public function slaScope(?User $assignee = null): array
+    {
+        $assignee ??= $this->assignee_id ? User::find($this->assignee_id) : null;
+
+        $departmentId = $this->serving_department_id ?: $assignee?->department_id;
+
+        $assigneeMatchesDepartment = $assignee
+            && $departmentId
+            && (int) $assignee->department_id === (int) $departmentId;
+
+        return [
+            $assigneeMatchesDepartment ? $assignee->org_path : null,
+            $departmentId ? (int) $departmentId : null,
+            $assigneeMatchesDepartment ? $assignee->department_node_id : null,
+        ];
+    }
+
+    /**
+     * The tickets a department RAISED — the customer side of the axis.
+     *
+     * Counterpart to {@see scopeOwnedByDepartment()}. Uses the requester's
+     * department FK, falling back to the reporter's current department for rows
+     * predating the column (it was only ever written from the free-text
+     * `department` string, so a large share of history is null).
+     */
+    public function scopeRequestedByDepartment(Builder $query, int $departmentId): Builder
+    {
+        return $query->where(function (Builder $q) use ($departmentId) {
+            $q->where('tickets.department_id', $departmentId)
+                ->orWhere(function (Builder $byReporter) use ($departmentId) {
+                    $byReporter->whereNull('tickets.department_id')
+                        ->whereHas('reporter', fn ($r) => $r->where('department_id', $departmentId));
+                });
         });
     }
 
@@ -387,12 +454,30 @@ class Ticket extends Model
     }
 
     /**
-     * The owning department. Nullable — legacy rows may only carry the free-text
-     * {@see $department} string, which remains the display fallback.
+     * The REQUESTER's department — the internal customer who raised this. Not
+     * the department doing the work; see {@see servingDepartment()} for that.
+     *
+     * Nullable — legacy rows may only carry the free-text {@see $department}
+     * string, which remains the display fallback.
      */
     public function departmentRef()
     {
         return $this->belongsTo(Department::class, 'department_id');
+    }
+
+    /**
+     * The department RESPONSIBLE for the work — the service provider side of the
+     * department axis, and what {@see scopeOwnedByDepartment()} resolves.
+     *
+     * Set explicitly by the routing sources: the inbound plus-address
+     * (App\Services\DepartmentMailRouter), the owning department of the form a
+     * request came from (form_definitions.department_id), or a staff override.
+     * Nullable — an unrouted ticket sits in the shared intake pool until someone
+     * takes it, and the assignee's department is the fallback signal.
+     */
+    public function servingDepartment()
+    {
+        return $this->belongsTo(Department::class, 'serving_department_id');
     }
 
     public function store()

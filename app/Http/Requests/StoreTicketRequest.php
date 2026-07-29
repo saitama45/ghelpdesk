@@ -26,6 +26,9 @@ class StoreTicketRequest extends FormRequest
             'sender_name' => 'nullable|required_if:is_self_requester,false|string|max:255',
             'sender_email' => 'nullable|required_if:is_self_requester,false|email|max:255',
             'department' => 'nullable|string|max:255',
+            // Which department SERVICES this request. Optional: left blank it is
+            // derived from the assignee, so intake paths that don't ask stay valid.
+            'serving_department_id' => 'nullable|exists:departments,id',
             'notify_requester' => 'boolean',
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',

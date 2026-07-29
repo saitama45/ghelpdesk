@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { Head, useForm, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -37,6 +37,8 @@ const props = defineProps({
     assignableStaff: Array,
     companies: Array,
     stores: Array,
+    departmentMailboxes: { type: Array, default: () => [] },
+    supportBaseAddress: { type: String, default: '' },
 });
 
 const requestedTab = new URLSearchParams(window.location.search).get('tab');
@@ -465,6 +467,17 @@ const getInitialFormData = () => {
     // so the form carries just the base threshold_* keys above. Per-department
     // threshold overrides are intentionally not editable here.
 
+    // Department mailboxes are department ROWS, not key-value settings, but they
+    // ride in this same form so the page has one Save button. The controller
+    // pulls them out before writing the flat settings.
+    data.mailboxes = props.departmentMailboxes.map((d) => ({
+        id: d.id,
+        name: d.name,
+        code: d.code,
+        mail_address: d.mail_address || '',
+        mail_from_name: d.mail_from_name || '',
+    }));
+
     return data;
 };
 
@@ -495,6 +508,66 @@ const submit = () => {
 const testingConnection = ref(false);
 const syncingEmails = ref(false);
 const testResult = ref(null);
+
+// Matched case-insensitively server-side; normalise here so what you see is what
+// will be stored and compared against inbound headers.
+const normalizeAddress = (address) => (address || '').toLowerCase().trim();
+
+const supportMailbox = computed(() => normalizeAddress(form.imap_username || props.supportBaseAddress));
+
+const domainOf = (address) => {
+    const at = normalizeAddress(address).lastIndexOf('@');
+    return at === -1 ? '' : normalizeAddress(address).slice(at + 1);
+};
+
+const addressIsValid = (address) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeAddress(address));
+
+const duplicateAddresses = computed(() => {
+    const seen = new Map();
+    form.mailboxes.forEach((m) => {
+        const clean = normalizeAddress(m.mail_address);
+        if (clean) seen.set(clean, (seen.get(clean) || 0) + 1);
+    });
+    return new Set([...seen.entries()].filter(([, count]) => count > 1).map(([address]) => address));
+});
+
+/**
+ * Per-row problem, or null. Ordered by severity so only the blocking one shows.
+ * A different domain is NOT an error — it just needs forwarding — so it is
+ * reported separately as a hint.
+ */
+const addressProblem = (mailbox) => {
+    const clean = normalizeAddress(mailbox.mail_address);
+    if (!clean) return null;
+    if (!addressIsValid(clean)) return 'Enter a complete address, e.g. fm@tablegroup.com';
+    if (clean === supportMailbox.value) return 'This is the shared support mailbox';
+    if (duplicateAddresses.value.has(clean)) return 'Already used by another department';
+    return null;
+};
+
+const addressHint = (mailbox) => {
+    const clean = normalizeAddress(mailbox.mail_address);
+    if (!clean || addressProblem(mailbox)) return null;
+    if (domainOf(clean) !== domainOf(supportMailbox.value)) {
+        return `Forward ${clean} to ${supportMailbox.value}`;
+    }
+    return null;
+};
+
+const mailboxesHaveProblems = computed(() => form.mailboxes.some((m) => addressProblem(m) !== null));
+
+// Mirrors DepartmentMailRouter::requiresDepartmentAddress — routing switches on
+// as soon as anywhere exists to redirect senders to, and there is no opt-out.
+const departmentRoutingActive = computed(() =>
+    form.mailboxes.some((m) => normalizeAddress(m.mail_address) !== '' && !addressProblem(m))
+);
+
+// These departments are unreachable by email while routing is on: they are absent
+// from the directory reply, so nobody can be told how to contact them.
+const departmentsWithoutAddress = computed(() =>
+    form.mailboxes.filter((m) => normalizeAddress(m.mail_address) === '').map((m) => m.name)
+);
+
 
 const testConnection = () => {
     testingConnection.value = true;
@@ -743,6 +816,136 @@ const syncEmails = () => {
                                             </div>
                                         </div>
                                     </div>
+                                </section>
+
+                                <!-- Department Mailboxes -->
+                                <section>
+                                    <div class="flex items-center justify-between mb-2">
+                                        <h3 class="text-xs font-black text-blue-600 uppercase tracking-widest flex items-center">
+                                            <UserGroupIcon class="w-4 h-4 mr-2" />
+                                            Department Mailboxes
+                                        </h3>
+                                    </div>
+
+                                    <p class="text-[11px] text-gray-500 dark:text-gray-400 mb-6 leading-relaxed max-w-3xl">
+                                        Give a department its own address and mail sent there is routed straight to that department's
+                                        queue, with replies coming back to the same address so the thread stays with them. Each address
+                                        must be an alias or forward that <span class="font-bold">delivers into the support mailbox
+                                        above</span> — the app polls that one inbox and routes on whichever address the message was
+                                        sent to. That keeps one set of credentials and one IMAP connection no matter how many
+                                        departments you add. Outgoing mail always sends from the single sender address, so
+                                        deliverability stays intact; only the display name changes. Leave an address blank and that
+                                        department simply uses the shared inbox.
+                                    </p>
+
+                                    <!-- Status, not a setting: routing is mandatory, and this
+                                         states which of its two modes is currently in force. -->
+                                    <div
+                                        class="mb-6 rounded-lg border p-3 text-[11px] leading-relaxed"
+                                        :class="departmentRoutingActive
+                                            ? 'border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200'
+                                            : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200'"
+                                    >
+                                        <template v-if="departmentRoutingActive">
+                                            <span class="font-bold">Department routing is active.</span>
+                                            New mail sent to <span class="font-mono">{{ supportMailbox }}</span> is not turned
+                                            into a ticket — the sender is emailed the list of department addresses below and
+                                            asked to resend. Replies on existing tickets are unaffected and still arrive normally.
+                                            <span v-if="departmentsWithoutAddress.length" class="mt-2 block font-bold">
+                                                {{ departmentsWithoutAddress.length }}
+                                                {{ departmentsWithoutAddress.length === 1 ? 'department has' : 'departments have' }}
+                                                no address and cannot be reached by email:
+                                                {{ departmentsWithoutAddress.join(', ') }}.
+                                            </span>
+                                        </template>
+                                        <template v-else>
+                                            <span class="font-bold">Department routing is not active yet.</span>
+                                            No department has an address, so there is nowhere to redirect senders — mail to
+                                            <span class="font-mono">{{ supportMailbox || 'the support mailbox' }}</span> is still
+                                            accepted and pooled for manual assignment. Give a department an address below to
+                                            switch routing on.
+                                        </template>
+                                    </div>
+
+                                    <div v-if="!form.mailboxes.length" class="text-xs text-gray-400 italic">
+                                        No active departments to configure.
+                                    </div>
+
+                                    <div v-else class="overflow-x-auto">
+                                        <table class="min-w-full text-sm">
+                                            <thead>
+                                                <tr class="text-left text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                                    <th class="pb-3 pr-4">Department</th>
+                                                    <th class="pb-3 pr-4">Receives Mail At</th>
+                                                    <th class="pb-3">Sends As (Display Name)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                                <tr v-for="mailbox in form.mailboxes" :key="mailbox.id">
+                                                    <td class="py-3 pr-4 align-top">
+                                                        <div class="font-bold text-gray-800 dark:text-gray-200">{{ mailbox.name }}</div>
+                                                        <div v-if="mailbox.code" class="text-[10px] font-bold text-gray-400">{{ mailbox.code }}</div>
+                                                    </td>
+                                                    <td class="py-3 pr-4 align-top">
+                                                        <!-- autocomplete off + a non-email-looking name: Chrome
+                                                             otherwise heuristically fills the SIGNED-IN USER'S
+                                                             address here, silently pointing a department's
+                                                             support mail at someone's personal inbox. -->
+                                                        <TextInput
+                                                            type="text"
+                                                            class="block w-full max-w-xs font-mono text-xs"
+                                                            v-model="mailbox.mail_address"
+                                                            :placeholder="`${(mailbox.code || 'dept').toLowerCase()}@${domainOf(supportMailbox) || 'yourdomain.com'}`"
+                                                            :aria-label="`Inbound address for ${mailbox.name}`"
+                                                            :name="`dept-inbox-${mailbox.id}`"
+                                                            autocomplete="off"
+                                                            data-lpignore="true"
+                                                            data-1p-ignore
+                                                        />
+                                                        <p
+                                                            v-if="addressProblem(mailbox)"
+                                                            class="mt-1 text-[10px] font-bold text-red-600"
+                                                        >
+                                                            {{ addressProblem(mailbox) }}
+                                                        </p>
+                                                        <p
+                                                            v-else-if="addressHint(mailbox)"
+                                                            class="mt-1 text-[10px] font-bold text-amber-600"
+                                                        >
+                                                            {{ addressHint(mailbox) }}
+                                                        </p>
+                                                        <p
+                                                            v-else-if="!mailbox.mail_address"
+                                                            class="mt-1 text-[10px] italic"
+                                                            :class="departmentRoutingActive ? 'text-amber-600 font-bold not-italic' : 'text-gray-400'"
+                                                        >
+                                                            <template v-if="departmentRoutingActive">
+                                                                No address — cannot receive email
+                                                            </template>
+                                                            <template v-else>
+                                                                Uses the shared support inbox
+                                                            </template>
+                                                        </p>
+                                                    </td>
+                                                    <td class="py-3 align-top">
+                                                        <TextInput
+                                                            type="text"
+                                                            class="block w-full"
+                                                            v-model="mailbox.mail_from_name"
+                                                            :placeholder="form.mail_from_name || 'Service Center'"
+                                                            :aria-label="`Sender name for ${mailbox.name}`"
+                                                            :name="`dept-sender-${mailbox.id}`"
+                                                            autocomplete="off"
+                                                            data-lpignore="true"
+                                                            data-1p-ignore
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <InputError class="mt-3" :message="form.errors.mailboxes" />
                                 </section>
                             </div>
 
@@ -1633,13 +1836,23 @@ const syncEmails = () => {
                                         Changes saved!
                                     </div>
                                 </Transition>
-                                <div v-if="!form.recentlySuccessful" class="text-[10px] text-gray-400 italic dark:text-gray-400">
+                                <!-- Saving is blocked from any tab, so say WHY and where -
+                                     otherwise the button just looks broken from, say, SLA Targets. -->
+                                <button
+                                    v-if="mailboxesHaveProblems"
+                                    type="button"
+                                    @click="activeTab = 'mail'"
+                                    class="text-[10px] font-bold text-red-600 underline decoration-dotted underline-offset-2 hover:text-red-700"
+                                >
+                                    Fix the department mailbox address in Mail Configuration to save
+                                </button>
+                                <div v-else-if="!form.recentlySuccessful" class="text-[10px] text-gray-400 italic dark:text-gray-400">
                                     * All changes are applied instantly after saving.
                                 </div>
                             </div>
-                            <PrimaryButton 
-                                :class="{ 'opacity-25': form.processing }" 
-                                :disabled="form.processing"
+                            <PrimaryButton
+                                :class="{ 'opacity-25': form.processing || mailboxesHaveProblems }"
+                                :disabled="form.processing || mailboxesHaveProblems"
                                 class="!px-8 !py-3 shadow-lg shadow-blue-100 font-black uppercase tracking-widest text-xs !bg-blue-600 hover:!bg-blue-700 text-white"
                             >
                                 <span v-if="form.processing">Saving...</span>
