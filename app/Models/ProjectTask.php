@@ -16,6 +16,8 @@ class ProjectTask extends Model
     protected $fillable = [
         'project_id',
         'parent_task_id',
+        'depends_on_task_id',
+        'can_run_parallel',
         'name',
         'category',
         'milestone_order',
@@ -45,6 +47,8 @@ class ProjectTask extends Model
     protected $casts = [
         'project_id' => 'integer',
         'parent_task_id' => 'integer',
+        'depends_on_task_id' => 'integer',
+        'can_run_parallel' => 'boolean',
         'milestone_order' => 'integer',
         'assigned_to' => 'integer',
         'support_by' => 'integer',
@@ -68,6 +72,12 @@ class ProjectTask extends Model
     public function parentTask(): BelongsTo
     {
         return $this->belongsTo(ProjectTask::class, 'parent_task_id');
+    }
+
+    /** The requisite row this one starts after. NULL = follow the previous row. */
+    public function dependsOn(): BelongsTo
+    {
+        return $this->belongsTo(ProjectTask::class, 'depends_on_task_id');
     }
 
     public function subTasks(): HasMany

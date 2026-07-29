@@ -22,7 +22,8 @@ class ProjectController extends Controller
     public function __construct(
         private ProjectTaskBoardSyncService $projectTaskBoards,
         private OrganizationReferenceService $organizationReferenceService,
-        private ProjectProgressChartService $progressChart
+        private ProjectProgressChartService $progressChart,
+        private \App\Services\ProjectScheduler $scheduler
     ) {
     }
 
@@ -183,6 +184,7 @@ class ProjectController extends Controller
             'turn_over_to_franchisee_date' => 'nullable|date',
             'target_go_live' => 'nullable|date',
             'day1_date'      => 'nullable|date',
+            'schedule_day_mode' => 'nullable|in:working,calendar',
             'board_month'    => 'nullable|integer|min:1|max:12',
             'board_year'     => 'nullable|integer|min:2000|max:2100',
             'remarks'        => 'nullable|string',
@@ -281,6 +283,7 @@ class ProjectController extends Controller
             'turn_over_to_franchisee_date' => 'nullable|date',
             'target_go_live' => 'nullable|date',
             'day1_date'      => 'nullable|date',
+            'schedule_day_mode' => 'nullable|in:working,calendar',
             'board_month'    => 'nullable|integer|min:1|max:12',
             'board_year'     => 'nullable|integer|min:2000|max:2100',
             'remarks'        => 'nullable|string',
@@ -288,8 +291,20 @@ class ProjectController extends Controller
 
         $validated['updated_by'] = $request->user()->id;
 
+        // Day 1 and the day-counting mode are the two inputs every row's dates
+        // are derived from — changing either has to re-chain the whole plan.
+        $scheduleChanged = (array_key_exists('day1_date', $validated)
+                && ($validated['day1_date'] ?: null) !== $project->day1_date?->toDateString())
+            || (array_key_exists('schedule_day_mode', $validated)
+                && \App\Services\ScheduleCalculator::normalizeMode($validated['schedule_day_mode'])
+                    !== \App\Services\ScheduleCalculator::normalizeMode($project->schedule_day_mode));
+
         $project->update($validated);
         $project->recalculateStatus();
+
+        if ($scheduleChanged) {
+            $this->scheduler->reschedule($project->fresh());
+        }
 
         if ($request->boolean('auto_create_monthly_boards')) {
             $this->projectTaskBoards->syncProject($project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, true);

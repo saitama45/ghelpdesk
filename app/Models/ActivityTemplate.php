@@ -12,6 +12,8 @@ class ActivityTemplate extends Model
     protected $fillable = [
         'project_template_id',
         'parent_activity_template_id',
+        'depends_on_template_id',
+        'can_run_parallel',
         'activity',
         'milestone',
         'milestone_order',
@@ -28,6 +30,8 @@ class ActivityTemplate extends Model
     protected $casts = [
         'project_template_id' => 'integer',
         'parent_activity_template_id' => 'integer',
+        'depends_on_template_id' => 'integer',
+        'can_run_parallel' => 'boolean',
         'default_duration_days' => 'integer',
         'milestone_order' => 'integer',
         'order' => 'float',
@@ -42,6 +46,12 @@ class ActivityTemplate extends Model
     public function parentActivity()
     {
         return $this->belongsTo(ActivityTemplate::class, 'parent_activity_template_id');
+    }
+
+    /** The requisite row this one starts after. NULL = follow the previous row. */
+    public function dependsOn()
+    {
+        return $this->belongsTo(ActivityTemplate::class, 'depends_on_template_id');
     }
 
     public function subActivities()

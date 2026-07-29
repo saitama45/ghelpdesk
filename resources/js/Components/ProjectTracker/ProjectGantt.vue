@@ -22,6 +22,7 @@ import { useConfirm } from '@/Composables/useConfirm.js';
 import Modal from '@/Components/Modal.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
+import Autocomplete from '@/Components/Autocomplete.vue';
 
 const props = defineProps({
     project: Object,
@@ -105,6 +106,8 @@ const form = useForm({
     start_date: '',
     end_date: '',
     lead_time_days: 1,
+    depends_on_task_id: null,
+    can_run_parallel: false,
     milestone_order: null,
     order: null,
     unpin_start: false,
@@ -119,10 +122,12 @@ const isTaskDone = computed({
     set: (done) => { form.task_progress = done ? 100 : 0; },
 });
 
-// Working-day maths, mirroring ProjectTaskController: a lead time of N days is
-// N working days *after* the start date, and no row starts or ends on a weekend
-// or a non-working holiday.
-const isNonWorkingDay = (date) => isWeekend(date) || isHoliday(date);
+// Day maths, mirroring App\Services\ScheduleCalculator: a lead time of N days is
+// N days *after* the start date. In 'working' mode no row starts or ends on a
+// weekend or a non-working holiday; in 'calendar' mode every day counts.
+const countsEveryDay = computed(() => props.project.schedule_day_mode === 'calendar');
+
+const isNonWorkingDay = (date) => !countsEveryDay.value && (isWeekend(date) || isHoliday(date));
 
 const toWorkingDay = (date) => {
     const shifted = new Date(date.getTime());
@@ -227,6 +232,8 @@ const resetTaskForm = () => {
     form.start_date = '';
     form.end_date = '';
     form.lead_time_days = 1;
+    form.depends_on_task_id = null;
+    form.can_run_parallel = false;
     form.milestone_order = null;
     form.order = null;
     form.unpin_start = false;
@@ -420,6 +427,8 @@ const editTask = (task) => {
     form.start_date = task.start_date ? task.start_date.split('T')[0] : '';
     form.end_date = task.end_date ? task.end_date.split('T')[0] : '';
     form.lead_time_days = task.lead_time_days || 1;
+    form.depends_on_task_id = task.depends_on_task_id || null;
+    form.can_run_parallel = Boolean(task.can_run_parallel);
     form.order = task.order;
     form.unpin_start = false;
     progressMode.value = 'done';
@@ -722,6 +731,25 @@ const editingTask = computed(() => {
     return localTasks.value.find(task => Number(task.id) === Number(editingTaskId.value)) || null;
 });
 
+/**
+ * Every other row in the plan, so a requisite can point anywhere — including
+ * back into an earlier milestone, which is the whole point of a parallel row.
+ */
+const requisiteOptions = computed(() => {
+    const editingId = editingTask.value?.id;
+
+    return (localTasks.value || []).flatMap(task => {
+        const rows = [task, ...(task.subTasks || [])];
+
+        return rows
+            .filter(row => row.id !== editingId)
+            .map(row => ({
+                value: row.id,
+                label: `${row.parent_task_id ? '↳ ' : ''}${row.name} · ${row.category || 'General'}`,
+            }));
+    });
+});
+
 const isStartPinned = computed(() => Boolean(editingTask.value?.start_anchor_date) && !form.unpin_start);
 
 const unpinStart = () => {
@@ -990,6 +1018,29 @@ const isWeekend = (date) => {
                         </p>
                         <p v-else-if="isEditing && project.day1_date" class="mt-1 ml-1 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">Saving will re-chain every row's dates from Day 1.</p>
                         <p v-else-if="isEditing" class="mt-1 ml-1 text-[9px] font-semibold text-amber-600 dark:text-amber-400">No Day 1 Date set on this project — dates won't auto-schedule.</p>
+                    </div>
+                    <div class="md:col-span-2" v-if="formMode !== 'milestone'">
+                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Dependency (Requisite)</label>
+                        <Autocomplete
+                            :model-value="form.depends_on_task_id"
+                            @update:model-value="value => form.depends_on_task_id = value"
+                            :options="requisiteOptions"
+                            size="sm"
+                            placeholder="Previous row"
+                        />
+                        <p class="mt-1 ml-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">Leave empty to follow the row above.</p>
+                        <div v-if="form.errors.depends_on_task_id" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.depends_on_task_id }}</div>
+                    </div>
+                    <div class="md:col-span-1" v-if="formMode !== 'milestone'">
+                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Can Run Parallel?</label>
+                        <button type="button" @click="form.can_run_parallel = !form.can_run_parallel"
+                                :title="form.can_run_parallel ? 'Starts off its requisite only — may overlap rows that are still running' : 'Waits for its requisite AND the row above it'"
+                                class="h-[38px] w-full rounded-xl border text-xs font-black uppercase tracking-wider transition-colors"
+                                :class="form.can_run_parallel
+                                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                    : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'">
+                            {{ form.can_run_parallel ? 'Yes' : 'No' }}
+                        </button>
                     </div>
                     <div class="md:col-span-2">
                         <div class="flex items-center justify-between mb-1.5 ml-1">
@@ -1287,7 +1338,7 @@ const isWeekend = (date) => {
                 <div class="space-y-4">
                     <p class="text-sm text-slate-600 dark:text-slate-300">Select a predefined activity blueprint to apply to this project. This will automatically create the associated tasks.</p>
                     <p v-if="project.day1_date" class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                        Start/End dates will be auto-scheduled from Day 1 Date ({{ formatDisplayDate(project.day1_date) }}) using each row's lead time.
+                        Start/End dates will be auto-scheduled from Day 1 Date ({{ formatDisplayDate(project.day1_date) }}) using each row's lead time, counted in {{ countsEveryDay ? 'calendar days (every day)' : 'working days (weekends and PH holidays skipped)' }}.
                     </p>
                     <p v-else class="text-xs font-semibold text-amber-600 dark:text-amber-400">
                         No Day 1 Date is set for this project — applied activities won't get Start/End dates. Set it under Edit Project first to auto-schedule.

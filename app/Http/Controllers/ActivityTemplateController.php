@@ -94,8 +94,11 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         $headers = $this->importHeaders();
         $sheet->fromArray($headers, null, 'A1');
         $sheet->fromArray([
-            ['New Store Opening', $projectTypes->first(), $storeClasses->first(), 'ACT-1', null, 'Prepare site', 'Preparation', 1, null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 2, 1],
-            ['New Store Opening', $projectTypes->first(), $storeClasses->first(), 'SUB-1', 'ACT-1', 'Confirm site readiness', 'Preparation', 1, null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 1, 1],
+            ['New Store Opening', $projectTypes->first(), $storeClasses->first(), 'ACT-1', null, 'Prepare site', 'Preparation', 1, null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 2, 1, null, 'No'],
+            ['New Store Opening', $projectTypes->first(), $storeClasses->first(), 'SUB-1', 'ACT-1', 'Confirm site readiness', 'Preparation', 1, null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 1, 1, null, 'No'],
+            // A requisite + Yes: this row starts once ACT-1 finishes and is free
+            // to overlap whatever else is still running.
+            ['New Store Opening', $projectTypes->first(), $storeClasses->first(), 'ACT-2', null, 'Order signage', 'Preparation', 1, null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 3, 2, 'ACT-1', 'Yes'],
         ], null, 'A2');
 
         $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
@@ -147,8 +150,13 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             $headerIndexes[$this->normalizeImportValue($header)] = $index;
         }
 
+        $optional = collect($this->optionalImportHeaders())
+            ->map(fn (string $header) => $this->normalizeImportValue($header))
+            ->all();
+
         $missingHeaders = collect($this->importHeaders())
-            ->reject(fn (string $header) => array_key_exists($this->normalizeImportValue($header), $headerIndexes))
+            ->reject(fn (string $header) => array_key_exists($this->normalizeImportValue($header), $headerIndexes)
+                || in_array($this->normalizeImportValue($header), $optional, true))
             ->values()
             ->all();
 
@@ -171,7 +179,10 @@ class ActivityTemplateController extends Controller implements HasMiddleware
 
             $data = [];
             foreach ($this->importHeaders() as $header) {
-                $value = $row[$headerIndexes[$this->normalizeImportValue($header)]] ?? null;
+                // An older workbook simply has no column for the optional
+                // headers, so there is no index to look up.
+                $columnIndex = $headerIndexes[$this->normalizeImportValue($header)] ?? null;
+                $value = $columnIndex !== null ? ($row[$columnIndex] ?? null) : null;
                 $data[$header] = is_string($value) ? trim($value) : $value;
             }
 
@@ -291,6 +302,8 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 $activity->sub_unit,
                 $activity->default_duration_days,
                 $activity->order,
+                $activity->depends_on_template_id ? 'ACT-'.$activity->depends_on_template_id : null,
+                $activity->can_run_parallel ? 'Yes' : 'No',
             ];
         })->all();
 
@@ -342,7 +355,9 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'activities.*.milestone_order' => 'nullable|integer|min:0',
             'activities.*.asset_item' => 'nullable|string|max:255',
             'activities.*.model_specs' => 'nullable|string|max:255',
-            'activities.*.qty' => 'required|integer|min:1',
+            'activities.*.qty' => 'nullable|integer|min:1',
+            'activities.*.depends_on_client_key' => 'nullable|string|max:255',
+            'activities.*.can_run_parallel' => 'nullable|boolean',
             'activities.*.responsible' => 'nullable|string|max:255',
             'activities.*.department' => 'nullable|string|max:255',
             'activities.*.sub_unit' => 'nullable|string|max:255',
@@ -382,7 +397,9 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'activities.*.milestone_order' => 'nullable|integer|min:0',
             'activities.*.asset_item' => 'nullable|string|max:255',
             'activities.*.model_specs' => 'nullable|string|max:255',
-            'activities.*.qty' => 'required|integer|min:1',
+            'activities.*.qty' => 'nullable|integer|min:1',
+            'activities.*.depends_on_client_key' => 'nullable|string|max:255',
+            'activities.*.can_run_parallel' => 'nullable|boolean',
             'activities.*.responsible' => 'nullable|string|max:255',
             'activities.*.department' => 'nullable|string|max:255',
             'activities.*.sub_unit' => 'nullable|string|max:255',
@@ -420,6 +437,9 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 $activity['parent_client_key'] = filled($activity['parent_client_key'] ?? null)
                     ? (string) $activity['parent_client_key']
                     : null;
+                $activity['depends_on_client_key'] = filled($activity['depends_on_client_key'] ?? null)
+                    ? (string) $activity['depends_on_client_key']
+                    : null;
 
                 return $activity;
             });
@@ -432,6 +452,11 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         $removedIds = array_values(array_diff($existingIds, $submittedIds));
 
         if (!empty($removedIds)) {
+            // Template rows hard-delete, so anything still pointing at a removed
+            // row would trip the requisite FK — unpoint them first.
+            ActivityTemplate::whereIn('depends_on_template_id', $removedIds)
+                ->update(['depends_on_template_id' => null]);
+
             $projectTemplate->activities()
                 ->whereIn('id', $removedIds)
                 ->whereNotNull('parent_activity_template_id')
@@ -464,6 +489,25 @@ class ActivityTemplateController extends Controller implements HasMiddleware
 
             $model = $this->saveActivity($projectTemplate, $activity, $parent->id);
             $savedByClientKey[$activity['client_key']] = $model;
+        }
+
+        // A requisite may point at any row, including one further down the
+        // grid, so it can only be wired once every row has an id.
+        foreach ($activities as $activity) {
+            $model = $savedByClientKey[$activity['client_key']] ?? null;
+
+            if (!$model) {
+                continue;
+            }
+
+            $requisiteKey = $activity['depends_on_client_key'] ?? null;
+            $requisite = $requisiteKey && $requisiteKey !== $activity['client_key']
+                ? ($savedByClientKey[$requisiteKey] ?? null)
+                : null;
+
+            if ((int) $model->depends_on_template_id !== (int) $requisite?->id) {
+                $model->update(['depends_on_template_id' => $requisite?->id]);
+            }
         }
     }
 
@@ -550,11 +594,15 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'milestone_order' => $activity['milestone_order'] ?? null,
             'asset_item' => $activity['asset_item'] ?? null,
             'model_specs' => $activity['model_specs'] ?? null,
-            'qty' => $activity['qty'],
+            // Qty left the template grid when Start/Finish took its column, but
+            // it still feeds ProjectTask asset rows — default it rather than
+            // letting a NULL through.
+            'qty' => $activity['qty'] ?? 1,
             'responsible' => $activity['responsible'] ?? null,
             'department' => blank($activity['department'] ?? null) ? null : $activity['department'],
             'sub_unit' => blank($activity['sub_unit'] ?? null) ? null : $activity['sub_unit'],
             'default_duration_days' => $activity['default_duration_days'],
+            'can_run_parallel' => (bool) ($activity['can_run_parallel'] ?? false),
             'order' => $activity['order'],
         ];
 
@@ -587,7 +635,25 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'Sub Unit',
             'Duration Days',
             'Order',
+            'Requisite Row Key',
+            'Can Run Parallel',
         ];
+    }
+
+    /**
+     * Headers added after the import format shipped. They are written into every
+     * export and blank template, but a workbook saved before they existed must
+     * still import cleanly — so they are never required.
+     */
+    private function optionalImportHeaders(): array
+    {
+        return ['Requisite Row Key', 'Can Run Parallel'];
+    }
+
+    /** Excel carries Yes/No; the column is a boolean underneath. */
+    private function parseImportBoolean(mixed $value): bool
+    {
+        return in_array($this->normalizeImportValue($value), ['yes', 'y', 'true', '1'], true);
     }
 
     private function normalizeImportValue(mixed $value): string
@@ -627,6 +693,8 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 'sub_unit' => blank($data['Sub Unit']) ? null : $data['Sub Unit'],
                 'default_duration_days' => $data['Duration Days'],
                 'order' => $data['Order'],
+                'depends_on_client_key' => blank($data['Requisite Row Key']) ? null : $data['Requisite Row Key'],
+                'can_run_parallel' => $this->parseImportBoolean($data['Can Run Parallel']),
             ];
 
             $validator = Validator::make($activity, [
@@ -637,12 +705,14 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 'milestone_order' => 'nullable|integer|min:0',
                 'asset_item' => 'nullable|string|max:255',
                 'model_specs' => 'nullable|string|max:255',
-                'qty' => 'required|integer|min:1',
+                'qty' => 'nullable|integer|min:1',
                 'responsible' => 'nullable|string|max:255',
                 'department' => 'nullable|string|max:255',
                 'sub_unit' => 'nullable|string|max:255',
                 'default_duration_days' => 'required|integer|min:1',
                 'order' => 'required|numeric|min:1',
+                'depends_on_client_key' => 'nullable|string|max:255',
+                'can_run_parallel' => 'boolean',
             ], [], [
                 'client_key' => 'Row Key',
                 'parent_client_key' => 'Parent Row Key',
@@ -657,6 +727,8 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 'sub_unit' => 'Sub Unit',
                 'default_duration_days' => 'Duration Days',
                 'order' => 'Order',
+                'depends_on_client_key' => 'Requisite Row Key',
+                'can_run_parallel' => 'Can Run Parallel',
             ]);
 
             if ($validator->fails()) {
@@ -677,6 +749,9 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             $activity['parent_client_key'] = $activity['parent_client_key'] === null
                 ? null
                 : $this->normalizeImportValue($activity['parent_client_key']);
+            $activity['depends_on_client_key'] = $activity['depends_on_client_key'] === null
+                ? null
+                : $this->normalizeImportValue($activity['depends_on_client_key']);
             $activities[] = $activity;
         }
 

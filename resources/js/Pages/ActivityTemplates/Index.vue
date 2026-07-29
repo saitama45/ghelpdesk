@@ -264,8 +264,11 @@
                                                 <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[220px] dark:text-slate-300">Activity / Sub-task</th>
                                                 <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[150px] dark:text-slate-300">Department</th>
                                                 <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[150px] dark:text-slate-300">Sub-Unit</th>
-                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-20 dark:text-slate-300">Qty</th>
                                                 <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-28 dark:text-slate-300">Lead Time Days</th>
+                                                <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-20 dark:text-slate-300" title="Day number counted from Day 1, worked out from the lead times and requisites below">Start<span class="block font-bold normal-case tracking-normal text-gray-400">(days)</span></th>
+                                                <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-20 dark:text-slate-300" title="Day number counted from Day 1, worked out from the lead times and requisites below">Finish<span class="block font-bold normal-case tracking-normal text-gray-400">(days)</span></th>
+                                                <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[190px] dark:text-slate-300">Dependency<span class="block font-bold normal-case tracking-normal text-gray-400">(requisite)</span></th>
+                                                <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-28 dark:text-slate-300">Can Run<br>Parallel?</th>
                                                 <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-24 dark:text-slate-300"></th>
                                             </tr>
                                         </thead>
@@ -311,11 +314,35 @@
                                                         </select>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="act.qty" type="number" min="1" @keydown.backspace="preventLastDigitBackspace" @input="ensureNumericValue(act, 'qty', $event)" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
+                                                        <input v-model="act.default_duration_days" type="number" min="1" :disabled="subTasksFor(act).length > 0" @keydown.backspace="preventLastDigitBackspace" @input="ensureNumericValue(act, 'default_duration_days', $event)" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:disabled:bg-gray-800">
+                                                        <span v-if="subTasksFor(act).length" class="block mt-0.5 text-[9px] font-black text-blue-400 uppercase tracking-wider">Sub-task span</span>
+                                                    </td>
+                                                    <td class="px-2 py-2 text-center">
+                                                        <span class="text-xs font-mono font-bold" :class="offsetFor(act).start === 1 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'">
+                                                            {{ offsetFor(act).start === 1 ? 'Day 1' : offsetFor(act).start }}
+                                                        </span>
+                                                    </td>
+                                                    <td class="px-2 py-2 text-center">
+                                                        <span class="text-xs font-mono font-bold text-gray-500 dark:text-gray-400">{{ offsetFor(act).finish }}</span>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="act.default_duration_days" type="number" min="1" @keydown.backspace="preventLastDigitBackspace" @input="ensureNumericValue(act, 'default_duration_days', $event)" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
-                                                        <span v-if="subTasksFor(act).length" class="block mt-0.5 text-[9px] font-black text-blue-400 uppercase tracking-wider">Σ {{ subTaskLeadTimeSum(act) }} days</span>
+                                                        <Autocomplete
+                                                            :model-value="act.depends_on_client_key"
+                                                            @update:model-value="value => act.depends_on_client_key = value"
+                                                            :options="requisiteOptionsFor(act)"
+                                                            size="sm"
+                                                            placeholder="Previous row"
+                                                        />
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <button type="button" @click="act.can_run_parallel = !act.can_run_parallel"
+                                                                :title="act.can_run_parallel ? 'Starts off its requisite only — may overlap other rows' : 'Waits for its requisite AND the row above it'"
+                                                                class="w-full text-[10px] font-black uppercase tracking-wider rounded px-2 py-1 border transition-colors"
+                                                                :class="act.can_run_parallel
+                                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
+                                                                    : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'">
+                                                            {{ act.can_run_parallel ? 'Yes' : 'No' }}
+                                                        </button>
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <div class="flex justify-center gap-1">
@@ -387,10 +414,32 @@
                                                         </select>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="subTask.qty" type="number" min="1" @keydown.backspace="preventLastDigitBackspace" @input="ensureNumericValue(subTask, 'qty', $event)" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
+                                                        <input v-model="subTask.default_duration_days" type="number" min="1" @keydown.backspace="preventLastDigitBackspace" @input="ensureNumericValue(subTask, 'default_duration_days', $event)" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
+                                                    </td>
+                                                    <td class="px-2 py-2 text-center">
+                                                        <span class="text-xs font-mono text-gray-400">{{ offsetFor(subTask).start }}</span>
+                                                    </td>
+                                                    <td class="px-2 py-2 text-center">
+                                                        <span class="text-xs font-mono text-gray-400">{{ offsetFor(subTask).finish }}</span>
                                                     </td>
                                                     <td class="px-2 py-2">
-                                                        <input v-model="subTask.default_duration_days" type="number" min="1" @keydown.backspace="preventLastDigitBackspace" @input="ensureNumericValue(subTask, 'default_duration_days', $event)" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900">
+                                                        <Autocomplete
+                                                            :model-value="subTask.depends_on_client_key"
+                                                            @update:model-value="value => subTask.depends_on_client_key = value"
+                                                            :options="requisiteOptionsFor(subTask)"
+                                                            size="sm"
+                                                            placeholder="Previous sub-task"
+                                                        />
+                                                    </td>
+                                                    <td class="px-2 py-2">
+                                                        <button type="button" @click="subTask.can_run_parallel = !subTask.can_run_parallel"
+                                                                :title="subTask.can_run_parallel ? 'Starts off its requisite only — may overlap other sub-tasks' : 'Waits for its requisite AND the sub-task above it'"
+                                                                class="w-full text-[10px] font-black uppercase tracking-wider rounded px-2 py-1 border transition-colors"
+                                                                :class="subTask.can_run_parallel
+                                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
+                                                                    : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'">
+                                                            {{ subTask.can_run_parallel ? 'Yes' : 'No' }}
+                                                        </button>
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <div class="flex justify-center">
@@ -410,13 +459,16 @@
                                         </tbody>
                                         <tfoot class="bg-gray-50 dark:bg-gray-900/50">
                                             <tr>
-                                                <td colspan="6" class="px-3 py-2 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">
+                                                <td colspan="5" class="px-3 py-2 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">
                                                     Milestone Total
                                                 </td>
                                                 <td class="px-2 py-2">
                                                     <span class="block text-xs font-black text-blue-700 dark:text-blue-300">{{ milestoneLeadTimeSum(activities) }} days</span>
                                                 </td>
-                                                <td></td>
+                                                <td colspan="2" class="px-2 py-2 text-center text-[10px] font-black text-blue-700 dark:text-blue-300">
+                                                    Day {{ milestoneSpan(activities).start }}–{{ milestoneSpan(activities).finish }}
+                                                </td>
+                                                <td colspan="3"></td>
                                             </tr>
                                         </tfoot>
                                     </table>
@@ -531,6 +583,7 @@ import InputLabel from '@/Components/InputLabel.vue'
 import InputError from '@/Components/InputError.vue'
 import PrimaryButton from '@/Components/PrimaryButton.vue'
 import ManageableAutocomplete from '@/Components/ManageableAutocomplete.vue'
+import Autocomplete from '@/Components/Autocomplete.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { usePagination } from '@/Composables/usePagination'
@@ -694,6 +747,8 @@ const createActivityRow = (overrides = {}) => ({
     department: '',
     sub_unit: '',
     default_duration_days: 1,
+    depends_on_client_key: null,
+    can_run_parallel: false,
     order: 1,
     ...overrides
 })
@@ -831,6 +886,8 @@ const normalizeTemplateActivities = (activities) => {
                 department: activity.department || '',
                 sub_unit: activity.sub_unit || '',
                 default_duration_days: activity.default_duration_days,
+                depends_on_client_key: activity.depends_on_template_id ? (keyById.get(activity.depends_on_template_id) || null) : null,
+                can_run_parallel: Boolean(activity.can_run_parallel),
                 order: activity.order
             })
         })
@@ -1004,39 +1061,209 @@ const removeActivity = (activity) => {
 
     form.activities = form.activities.filter(candidate => !keysToRemove.has(candidate.client_key))
 
+    // Rows queued behind a deleted one fall back to following whatever now sits
+    // above them, rather than keeping a pointer at something that is gone.
+    form.activities.forEach(candidate => {
+        if (keysToRemove.has(candidate.depends_on_client_key)) {
+            candidate.depends_on_client_key = null
+        }
+    })
+
     if (form.activities.length === 0) {
         form.activities = [createActivityRow()]
     }
 }
 
-// Only root activities are counted: a parent's lead time is already the sum of
-// its own sub-tasks (kept in sync by the watcher below), so adding sub-task days
+// ── Start / Finish day numbers ────────────────────────────────────────────────
+// A live preview of what the backend chain (App\Services\ScheduleChain) will do
+// once the template is applied to a project, expressed as plain day numbers off
+// Day 1 rather than dates — a template has no Day 1 of its own. The rules are
+// deliberately identical to the PHP:
+//
+//   No  → start after BOTH the requisite and the row above have finished
+//   Yes → start after the requisite alone, so the row may overlap others
+//         (with no requisite, it runs alongside the row above instead)
+//
+// Lead time is counted AFTER the start day, matching endOfSpan() — a 10-day row
+// starting on day 1 finishes on day 11.
+const scheduleOffsets = computed(() => {
+    const rows = form.activities
+    const byKey = new Map(rows.map(row => [row.client_key, row]))
+
+    const byOrder = (a, b) => (Number(a.order) || 0) - (Number(b.order) || 0)
+    const roots = rows
+        .filter(row => !row.parent_client_key || !byKey.has(row.parent_client_key))
+        .sort((a, b) => {
+            const am = Number(a.milestone_order) || 0
+            const bm = Number(b.milestone_order) || 0
+            return am !== bm ? am - bm : byOrder(a, b)
+        })
+
+    const childrenByParent = new Map()
+    rows.forEach(row => {
+        if (!row.parent_client_key || !byKey.has(row.parent_client_key)) return
+        if (!childrenByParent.has(row.parent_client_key)) childrenByParent.set(row.parent_client_key, [])
+        childrenByParent.get(row.parent_client_key).push(row)
+    })
+    childrenByParent.forEach(list => list.sort(byOrder))
+
+    // The row each one queues behind: previous root, or previous sibling.
+    const predecessor = new Map()
+    roots.forEach((row, index) => predecessor.set(row.client_key, index ? roots[index - 1].client_key : null))
+    childrenByParent.forEach(list => {
+        list.forEach((row, index) => predecessor.set(row.client_key, index ? list[index - 1].client_key : null))
+    })
+
+    const requisiteOf = (row) => {
+        const key = row.depends_on_client_key
+        return key && key !== row.client_key && byKey.has(key) ? key : null
+    }
+
+    const resolved = {}
+    const spanOf = (key) => resolved[key] || null
+
+    const startFor = (row, fallback) => {
+        const requisite = spanOf(requisiteOf(row))
+        const previous = spanOf(predecessor.get(row.client_key))
+
+        if (row.can_run_parallel) {
+            if (requisite) return requisite.finish + 1
+            // Nothing to anchor to — run alongside the row above.
+            return previous ? previous.start : fallback
+        }
+
+        const blockers = [requisite, previous].filter(Boolean).map(span => span.finish)
+        return blockers.length ? Math.max(...blockers) + 1 : fallback
+    }
+
+    const isReady = (row) => {
+        const requisite = requisiteOf(row)
+        if (requisite && !resolved[requisite]) return false
+
+        const previous = predecessor.get(row.client_key)
+        const needsPrevious = !(row.can_run_parallel && requisite)
+        return !(needsPrevious && previous && !resolved[previous])
+    }
+
+    const place = (row, fallback) => {
+        const start = startFor(row, fallback)
+        resolved[row.client_key] = { start, finish: start + Math.max(1, Number(row.default_duration_days) || 1) }
+    }
+
+    const resolveGroup = (root) => {
+        place(root, 1)
+        const children = childrenByParent.get(root.client_key) || []
+        if (!children.length) return
+
+        // Sub-tasks may point at a later sibling, so sweep rather than march.
+        const parentStart = resolved[root.client_key].start
+        let pending = [...children]
+        let guard = children.length + 1
+
+        while (pending.length && guard--) {
+            const ready = pending.filter(isReady)
+            if (!ready.length) break
+            ready.forEach(child => place(child, parentStart))
+            pending = pending.filter(child => !resolved[child.client_key])
+        }
+        pending.forEach(child => place(child, parentStart))
+
+        // A parent owns no span of its own — it covers whatever its sub-tasks span.
+        resolved[root.client_key] = {
+            start: Math.min(...children.map(child => resolved[child.client_key].start)),
+            finish: Math.max(...children.map(child => resolved[child.client_key].finish)),
+        }
+    }
+
+    // Requisite-first, not top-to-bottom: a row may depend on one further down.
+    let pending = [...roots]
+    let guard = roots.length + 1
+
+    while (pending.length && guard--) {
+        const ready = pending.filter(root => [root, ...(childrenByParent.get(root.client_key) || [])]
+            .every(row => {
+                const requisite = requisiteOf(row)
+                const previous = predecessor.get(row.client_key)
+                const inGroup = (key) => key === root.client_key
+                    || (childrenByParent.get(root.client_key) || []).some(child => child.client_key === key)
+
+                if (requisite && !resolved[requisite] && !inGroup(requisite)) return false
+                if (!(row.can_run_parallel && requisite) && previous && !resolved[previous] && !inGroup(previous)) return false
+                return true
+            }))
+
+        if (!ready.length) break
+        ready.forEach(resolveGroup)
+        pending = pending.filter(root => !resolved[root.client_key])
+    }
+    // Anything left is in a cycle — lay it down in plain list order.
+    pending.forEach(resolveGroup)
+
+    return resolved
+})
+
+const offsetFor = (activity) => scheduleOffsets.value[activity.client_key] || { start: 1, finish: 1 }
+
+/** Every other row, so a requisite can point anywhere in the template. */
+const requisiteOptionsFor = (activity) => {
+    return form.activities
+        .filter(candidate => candidate.client_key !== activity.client_key)
+        .map(candidate => ({
+            value: candidate.client_key,
+            label: `${candidate.parent_client_key ? '↳ ' : ''}${candidate.activity || '(unnamed)'} · ${candidate.milestone || 'General'}`,
+        }))
+}
+
+/** The day range a whole milestone covers, parallel rows included. */
+const milestoneSpan = (activities) => {
+    const keys = activities.flatMap(activity => [activity.client_key, ...subTasksFor(activity).map(sub => sub.client_key)])
+    const spans = keys.map(key => scheduleOffsets.value[key]).filter(Boolean)
+
+    if (!spans.length) return { start: 1, finish: 1 }
+
+    return {
+        start: Math.min(...spans.map(span => span.start)),
+        finish: Math.max(...spans.map(span => span.finish)),
+    }
+}
+
+// Only root activities are counted: a parent's lead time is already its
+// sub-tasks' span (kept in sync by the watcher below), so adding sub-task days
 // on top would double-count them.
 const milestoneLeadTimeSum = (activities) => {
     return activities.reduce((sum, activity) => sum + (Number(activity.default_duration_days) || 0), 0)
 }
 
+/** How long the whole plan runs — the last finish, not the sum of the rows. */
 const grandTotalLeadTimeDays = computed(() => {
-    return form.activities
-        .filter(activity => !activity.parent_client_key)
-        .reduce((sum, activity) => sum + (Number(activity.default_duration_days) || 0), 0)
+    const spans = Object.values(scheduleOffsets.value)
+
+    return spans.length ? Math.max(...spans.map(span => span.finish)) - 1 : 0
 })
 
-const subTaskLeadTimeSum = (activity) => {
-    return form.activities
-        .filter(a => a.parent_client_key === activity.client_key)
-        .reduce((sum, a) => sum + (Number(a.default_duration_days) || 0), 0)
-}
-
 watch(
-    () => form.activities.map(a => ({ key: a.parent_client_key, days: a.default_duration_days })),
+    () => form.activities.map(a => ({
+        key: a.parent_client_key,
+        days: a.default_duration_days,
+        dep: a.depends_on_client_key,
+        parallel: a.can_run_parallel,
+        order: a.order,
+    })),
     () => {
+        // A parent's lead time is the stretch its sub-tasks cover. With parallel
+        // sub-tasks that is no longer their sum, so read it off the schedule.
         form.activities.forEach(activity => {
-            if (!activity.parent_client_key) {
-                const subs = form.activities.filter(a => a.parent_client_key === activity.client_key)
-                if (subs.length) {
-                    activity.default_duration_days = subs.reduce((sum, a) => sum + (Number(a.default_duration_days) || 0), 0)
-                }
+            if (activity.parent_client_key) return
+
+            const subs = form.activities.filter(a => a.parent_client_key === activity.client_key)
+            if (!subs.length) return
+
+            const span = scheduleOffsets.value[activity.client_key]
+            if (!span) return
+
+            const days = Math.max(1, span.finish - span.start)
+            if (Number(activity.default_duration_days) !== days) {
+                activity.default_duration_days = days
             }
         })
     },

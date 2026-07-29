@@ -50,10 +50,18 @@ const form = useForm({
     turn_over_to_franchisee_date: '',
     target_go_live:               '',
     day1_date:                    '',
+    schedule_day_mode:            'working',
     board_month: now.getMonth() + 1,
     board_year:  now.getFullYear(),
     remarks:     ''
 });
+
+// Working days skip weekends + PH holidays (the tracker's long-standing
+// behaviour); calendar days count straight through.
+const scheduleDayModes = [
+    { value: 'working', label: 'Working Days', hint: 'Skips weekends and PH holidays' },
+    { value: 'calendar', label: 'Calendar Days', hint: 'Counts every day, weekends included' },
+];
 
 const isStoreOpening   = computed(() => form.project_type === 'Store Opening');
 const isVendorProject  = computed(() => form.project_type === 'Vendor Project');
@@ -239,6 +247,25 @@ const submit = () => {
                             <input v-model="form.day1_date" type="date" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">When an activity template is applied, each milestone/activity/sub-task's Start and End Date is auto-scheduled from this date using the template's lead time (days).</p>
                             <div v-if="form.errors.day1_date" class="mt-1 text-xs text-red-500">{{ form.errors.day1_date }}</div>
+
+                            <label class="mb-1 mt-4 block text-sm font-semibold text-blue-700 dark:text-blue-300">Count Lead Times In</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button
+                                    v-for="mode in scheduleDayModes"
+                                    :key="mode.value"
+                                    type="button"
+                                    @click="form.schedule_day_mode = mode.value"
+                                    class="rounded-lg border px-3 py-2 text-left transition-colors"
+                                    :class="form.schedule_day_mode === mode.value
+                                        ? 'border-blue-500 bg-white ring-2 ring-blue-200 dark:bg-gray-800 dark:ring-blue-900'
+                                        : 'border-gray-200 bg-white/60 hover:border-blue-300 dark:border-gray-700 dark:bg-gray-800/60'"
+                                >
+                                    <span class="block text-xs font-bold uppercase tracking-wider" :class="form.schedule_day_mode === mode.value ? 'text-blue-700 dark:text-blue-300' : 'text-gray-600 dark:text-gray-300'">{{ mode.label }}</span>
+                                    <span class="mt-0.5 block text-[11px] leading-tight text-gray-500 dark:text-gray-400">{{ mode.hint }}</span>
+                                </button>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Applies to every milestone, activity and sub-task in this project.</p>
+                            <div v-if="form.errors.schedule_day_mode" class="mt-1 text-xs text-red-500">{{ form.errors.schedule_day_mode }}</div>
                         </div>
                         <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
                             <div>

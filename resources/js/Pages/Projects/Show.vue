@@ -169,10 +169,18 @@ const editForm = useForm({
     turn_over_to_franchisee_date: formatDateForInput(props.project.turn_over_to_franchisee_date),
     target_go_live: formatDateForInput(props.project.target_go_live),
     day1_date: formatDateForInput(props.project.day1_date),
+    schedule_day_mode: props.project.schedule_day_mode || 'working',
     board_month: props.project.board_month || now.getMonth() + 1,
     board_year: props.project.board_year || now.getFullYear(),
     remarks: props.project.remarks,
 });
+
+// Working days skip weekends + PH holidays (the tracker's long-standing
+// behaviour); calendar days count straight through.
+const scheduleDayModes = [
+    { value: 'working', label: 'Working Days', hint: 'Skips weekends and PH holidays' },
+    { value: 'calendar', label: 'Calendar Days', hint: 'Counts every day, weekends included' },
+];
 
 const monthOptions = [
     { value: 1, label: 'January' },
@@ -310,6 +318,7 @@ const openEditModal = () => {
     editForm.turn_over_to_franchisee_date = formatDateForInput(props.project.turn_over_to_franchisee_date);
     editForm.target_go_live = formatDateForInput(props.project.target_go_live);
     editForm.day1_date = formatDateForInput(props.project.day1_date);
+    editForm.schedule_day_mode = props.project.schedule_day_mode || 'working';
     editForm.board_month = props.project.board_month || now.getMonth() + 1;
     editForm.board_year = props.project.board_year || now.getFullYear();
     editForm.remarks = props.project.remarks;
@@ -551,6 +560,25 @@ const getStatusColor = (status) => {
                                 <TextInput id="edit_day1_date" type="date" v-model="editForm.day1_date" class="w-full" />
                                 <InputError :message="editForm.errors.day1_date" />
                                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Anchor date used to auto-schedule Start/End dates when an activity template is applied.</p>
+
+                                <InputLabel value="Count Lead Times In" class="mt-3 text-blue-700 dark:text-blue-300" />
+                                <div class="mt-1 grid grid-cols-2 gap-2">
+                                    <button
+                                        v-for="mode in scheduleDayModes"
+                                        :key="mode.value"
+                                        type="button"
+                                        @click="editForm.schedule_day_mode = mode.value"
+                                        class="rounded-lg border px-3 py-2 text-left transition-colors"
+                                        :class="editForm.schedule_day_mode === mode.value
+                                            ? 'border-blue-500 bg-white ring-2 ring-blue-200 dark:bg-gray-800 dark:ring-blue-900'
+                                            : 'border-gray-200 bg-white/60 hover:border-blue-300 dark:border-gray-700 dark:bg-gray-800/60'"
+                                    >
+                                        <span class="block text-xs font-black uppercase tracking-wider" :class="editForm.schedule_day_mode === mode.value ? 'text-blue-700 dark:text-blue-300' : 'text-gray-600 dark:text-gray-300'">{{ mode.label }}</span>
+                                        <span class="mt-0.5 block text-[11px] leading-tight text-gray-500 dark:text-gray-400">{{ mode.hint }}</span>
+                                    </button>
+                                </div>
+                                <InputError :message="editForm.errors.schedule_day_mode" />
+                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Applies to every milestone, activity and sub-task in this project. Saving re-chains all dates.</p>
                             </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div>

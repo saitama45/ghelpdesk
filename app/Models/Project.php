@@ -19,6 +19,13 @@ class Project extends Model
      * reference_options table (type = project_type) — use projectTypes().
      * This constant is only used to seed / recover when that table is empty.
      */
+    /**
+     * How lead times are counted into calendar spans. 'working' skips weekends
+     * and non-working PH holidays; 'calendar' counts every day. Applies to every
+     * milestone / activity / sub-task in the project.
+     */
+    const SCHEDULE_DAY_MODES = ['working', 'calendar'];
+
     const PROJECT_TYPES = [
         'Store Opening',
         'IT Deployment',
@@ -53,6 +60,7 @@ class Project extends Model
         'turn_over_to_franchisee_date',
         'target_go_live',
         'day1_date',
+        'schedule_day_mode',
         'board_month',
         'board_year',
         'remarks',

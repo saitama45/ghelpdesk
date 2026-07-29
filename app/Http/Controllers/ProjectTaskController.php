@@ -15,7 +15,7 @@ class ProjectTaskController extends Controller
     public function __construct(
         private ProjectTaskBoardSyncService $projectTaskBoards,
         private \App\Services\NotificationService $notifications,
-        private \App\Services\HolidayCalendar $holidays
+        private \App\Services\ProjectScheduler $scheduler
     )
     {
     }
@@ -38,7 +38,7 @@ class ProjectTaskController extends Controller
         }
 
         $actorId = $request->user()->id;
-        $schedule = $this->buildTemplateSchedule($activities, $project->day1_date);
+        $schedule = $this->buildTemplateSchedule($activities, $project);
 
         [$addedCount, $reorderedCount] = DB::transaction(function () use ($project, $activities, $actorId, $schedule) {
             $addedCount = 0;
@@ -76,6 +76,7 @@ class ProjectTaskController extends Controller
                         'start_date' => $dates['start'] ?? null,
                         'end_date' => $dates['end'] ?? null,
                         'lead_time_days' => $activity->default_duration_days,
+                        'can_run_parallel' => (bool) $activity->can_run_parallel,
                         'created_by' => $actorId,
                         'updated_by' => $actorId,
                     ]);
@@ -92,6 +93,7 @@ class ProjectTaskController extends Controller
                             'start_date' => $dates['start'],
                             'end_date' => $dates['end'],
                             'lead_time_days' => $activity->default_duration_days,
+                            'can_run_parallel' => (bool) $activity->can_run_parallel,
                         ]);
                     } elseif ($changedOrder) {
                         $task->update([
@@ -123,7 +125,7 @@ class ProjectTaskController extends Controller
                     ->first();
 
                 if (!$task) {
-                    ProjectTask::create([
+                    $task = ProjectTask::create([
                         'project_id' => $project->id,
                         'parent_task_id' => $parentTask->id,
                         'name' => $activity->activity,
@@ -139,6 +141,7 @@ class ProjectTaskController extends Controller
                         'start_date' => $dates['start'] ?? null,
                         'end_date' => $dates['end'] ?? null,
                         'lead_time_days' => $activity->default_duration_days,
+                        'can_run_parallel' => (bool) $activity->can_run_parallel,
                         'created_by' => $actorId,
                         'updated_by' => $actorId,
                     ]);
@@ -155,6 +158,7 @@ class ProjectTaskController extends Controller
                             'start_date' => $dates['start'],
                             'end_date' => $dates['end'],
                             'lead_time_days' => $activity->default_duration_days,
+                            'can_run_parallel' => (bool) $activity->can_run_parallel,
                         ]);
                     } elseif ($changedOrder) {
                         $task->update([
@@ -162,6 +166,27 @@ class ProjectTaskController extends Controller
                             'order' => $activity->order,
                         ]);
                     }
+                }
+
+                $projectTasksByTemplateActivity[$activity->id] = $task->fresh();
+            }
+
+            // Requisites can point at any row, so they can only be wired once
+            // every activity in the template has a task to point at.
+            foreach ($activities as $activity) {
+                $task = $projectTasksByTemplateActivity[$activity->id] ?? null;
+                $requisite = $activity->depends_on_template_id
+                    ? ($projectTasksByTemplateActivity[$activity->depends_on_template_id] ?? null)
+                    : null;
+
+                if (!$task) {
+                    continue;
+                }
+
+                $requisiteId = $requisite?->id;
+
+                if ((int) $task->depends_on_task_id !== (int) $requisiteId) {
+                    $task->update(['depends_on_task_id' => $requisiteId]);
                 }
             }
 
@@ -212,263 +237,46 @@ class ProjectTaskController extends Controller
         return redirect()->back()->with($type, $message);
     }
 
-    /**
-     * A day nobody works: a weekend, or a non-working Philippine holiday from
-     * the /holidays calendar.
-     */
-    private function isNonWorkingDay(\Carbon\Carbon $date): bool
+    private function calculatorFor(?Project $project): \App\Services\ScheduleCalculator
     {
-        return $date->isWeekend() || $this->holidays->isHoliday($date);
+        return $this->scheduler->calculatorFor($project);
     }
 
     /**
-     * Advances $date off a weekend or holiday onto the next working day.
+     * Unpoints every requisite aimed at $taskIds. Tasks soft-delete, so the FK
+     * would survive either way — but a pointer at a row nobody can see any more
+     * shows up as a blank requisite on the Gantt, so clear it properly.
      */
-    private function toWorkingDay(\Carbon\Carbon $date): \Carbon\Carbon
+    private function releaseRequisitePointers(\Illuminate\Support\Collection $taskIds): void
     {
-        while ($this->isNonWorkingDay($date)) {
-            $date->addDay();
-        }
-
-        return $date;
-    }
-
-    /** Adds $days working days to $date, skipping weekends and holidays. */
-    private function addWorkingDays(\Carbon\Carbon $date, int $days): \Carbon\Carbon
-    {
-        $result = $this->toWorkingDay($date->copy());
-
-        for ($i = 0; $i < $days; $i++) {
-            do {
-                $result->addDay();
-            } while ($this->isNonWorkingDay($result));
-        }
-
-        return $result;
-    }
-
-    /**
-     * The end of a span beginning on $start and running $days working days: the
-     * days are counted *after* the start date, so a 4-day row starting Wed 29
-     * Jul ends Tue 4 Aug. The next row then starts Wed 5 Aug — the chain stays
-     * continuous with no shared day between bars.
-     */
-    private function endOfSpan(\Carbon\Carbon $start, int $days): \Carbon\Carbon
-    {
-        return $this->addWorkingDays($start, max(1, $days));
-    }
-
-    /**
-     * The working day after $date — where the next row in the chain begins, so
-     * consecutive bars never share a day.
-     */
-    private function nextWorkingDay(\Carbon\Carbon $date): \Carbon\Carbon
-    {
-        return $this->toWorkingDay($date->copy()->addDay());
-    }
-
-    /**
-     * Working days in a span, counted the same way endOfSpan() lays one out —
-     * used to turn a hand-edited Start/End range back into a lead time so the
-     * rest of the chain can be re-derived from it.
-     */
-    private function workingDaysBetween(\Carbon\Carbon $start, \Carbon\Carbon $end): int
-    {
-        $cursor = $this->toWorkingDay($start->copy())->startOfDay();
-        $target = $end->copy()->startOfDay();
-        $days = 0;
-
-        while ($cursor->lt($target)) {
-            $cursor->addDay();
-
-            if (!$this->isNonWorkingDay($cursor)) {
-                $days++;
-            }
-        }
-
-        return max(1, $days);
-    }
-
-    /**
-     * Chain each template row's Start/End Date from the project's Day 1 Date,
-     * back-to-back in template order (milestone_order, then order): root
-     * activities first, each immediately followed by its own sub-tasks before
-     * the next root activity begins. Returns [] when no Day 1 Date is set.
-     *
-     * @return array<int, array{start: string, end: string}>
-     */
-    private function buildTemplateSchedule($activities, $day1Date): array
-    {
-        if (!$day1Date) {
-            return [];
-        }
-
-        $roots = $activities->filter(fn ($activity) => empty($activity->parent_activity_template_id))
-            ->sortBy([
-                ['milestone_order', 'asc'],
-                ['order', 'asc'],
-                ['id', 'asc'],
-            ]);
-
-        $childrenByParent = $activities->filter(fn ($activity) => !empty($activity->parent_activity_template_id))
-            ->groupBy('parent_activity_template_id');
-
-        $cursor = $this->toWorkingDay(\Carbon\Carbon::parse($day1Date)->startOfDay());
-        $schedule = [];
-
-        foreach ($roots as $root) {
-            $start = $this->toWorkingDay($cursor->copy());
-            $end = $this->endOfSpan($start, (int) $root->default_duration_days);
-
-            // Sub-tasks run *inside* their parent's span: the chain starts on the
-            // parent's own start date instead of after its end, and the parent's
-            // bar stretches to cover whatever its sub-tasks actually span.
-            $children = ($childrenByParent[$root->id] ?? collect())->sortBy([
-                ['order', 'asc'],
-                ['id', 'asc'],
-            ]);
-
-            $childCursor = $start->copy();
-
-            foreach ($children as $child) {
-                $childStart = $this->toWorkingDay($childCursor->copy());
-                $childEnd = $this->endOfSpan($childStart, (int) $child->default_duration_days);
-
-                $schedule[$child->id] = ['start' => $childStart->toDateString(), 'end' => $childEnd->toDateString()];
-
-                if ($childEnd->gt($end)) {
-                    $end = $childEnd->copy();
-                }
-
-                $childCursor = $this->nextWorkingDay($childEnd);
-            }
-
-            $schedule[$root->id] = ['start' => $start->toDateString(), 'end' => $end->toDateString()];
-
-            $cursor = $this->nextWorkingDay($end);
-        }
-
-        return $schedule;
-    }
-
-    /**
-     * An activity with sub-tasks owns no figures of its own: its lead time is the
-     * sum of its sub-tasks' and its progress is their lead-time-weighted average.
-     * Runs before any re-chain so the parent's span already matches its children.
-     */
-    private function syncParentRollups(Project $project): void
-    {
-        $tasks = ProjectTask::where('project_id', $project->id)->get();
-        $childrenByParent = $tasks->filter(fn ($task) => !empty($task->parent_task_id))->groupBy('parent_task_id');
-
-        foreach ($tasks->filter(fn ($task) => empty($task->parent_task_id)) as $parent) {
-            $children = $childrenByParent[$parent->id] ?? collect();
-
-            if ($children->isEmpty()) {
-                continue;
-            }
-
-            $leadTime = $children->sum(fn ($child) => max(1, (int) ($child->lead_time_days ?? 1)));
-            $progress = $leadTime > 0
-                ? (int) round($children->sum(fn ($child) => max(1, (int) ($child->lead_time_days ?? 1)) * (int) $child->progress) / $leadTime)
-                : 0;
-
-            $status = $progress >= 100 ? 'Done' : ($progress > 0 ? 'Ongoing' : 'Pending');
-
-            if ((int) $parent->lead_time_days !== $leadTime || (int) $parent->progress !== $progress || $parent->status !== $status) {
-                $parent->update([
-                    'lead_time_days' => $leadTime,
-                    'progress' => $progress,
-                    'status' => $status,
-                ]);
-            }
-        }
-    }
-
-    /**
-     * Re-chain every task's Start/End Date in $project from its Day 1 Date, using
-     * each row's own lead_time_days — the live-Gantt counterpart of
-     * buildTemplateSchedule(). Same ordering rule: root tasks by (milestone_order,
-     * order), each immediately followed by its own sub-tasks. No-op without a
-     * Day 1 Date.
-     */
-    private function rescheduleProjectTasks(Project $project): void
-    {
-        $this->syncParentRollups($project);
-
-        if (!$project->day1_date) {
+        if ($taskIds->isEmpty()) {
             return;
         }
 
-        $tasks = ProjectTask::where('project_id', $project->id)->get();
-
-        $roots = $tasks->filter(fn ($task) => empty($task->parent_task_id))
-            ->sortBy([
-                ['milestone_order', 'asc'],
-                ['order', 'asc'],
-                ['id', 'asc'],
-            ]);
-
-        $childrenByParent = $tasks->filter(fn ($task) => !empty($task->parent_task_id))
-            ->groupBy('parent_task_id');
-
-        $cursor = $this->toWorkingDay(\Carbon\Carbon::parse($project->day1_date)->startOfDay());
-
-        foreach ($roots as $root) {
-            $start = $this->startFor($root, $cursor);
-            $end = $this->endOfSpan($start, (int) ($root->lead_time_days ?? 1));
-
-            // Sub-tasks overlap their parent rather than trailing it — see
-            // buildTemplateSchedule() for the same rule on the template side.
-            $children = ($childrenByParent[$root->id] ?? collect())->sortBy([
-                ['order', 'asc'],
-                ['id', 'asc'],
-            ]);
-
-            $childCursor = $start->copy();
-
-            foreach ($children as $child) {
-                $childStart = $this->startFor($child, $childCursor);
-                $childEnd = $this->endOfSpan($childStart, (int) ($child->lead_time_days ?? 1));
-
-                $this->applyTaskDates($child, $childStart, $childEnd);
-
-                // A sub-task pinned outside its parent's own span drags the
-                // parent's bar so the parent still covers all its children.
-                if ($childStart->lt($start)) {
-                    $start = $childStart->copy();
-                }
-
-                if ($childEnd->gt($end)) {
-                    $end = $childEnd->copy();
-                }
-
-                $childCursor = $this->nextWorkingDay($childEnd);
-            }
-
-            $this->applyTaskDates($root, $start, $end);
-
-            $cursor = $this->nextWorkingDay($end);
-        }
+        ProjectTask::whereIn('depends_on_task_id', $taskIds)
+            ->update(['depends_on_task_id' => null]);
     }
 
     /**
-     * Where a row begins: its pinned Start Date when the user set one, otherwise
-     * wherever the chain's cursor has reached.
+     * Chain each template row's Start/End Date from the project's Day 1 Date.
+     * Rows are placed requisite-first — see ScheduleChain for the Can Run
+     * Parallel rule. Returns [] when no Day 1 Date is set.
+     *
+     * @return array<int, array{start: string, end: string, days: int}>
      */
-    private function startFor(ProjectTask $task, \Carbon\Carbon $cursor): \Carbon\Carbon
+    private function buildTemplateSchedule($activities, ?Project $project): array
     {
-        return $this->toWorkingDay(
-            $task->start_anchor_date ? $task->start_anchor_date->copy() : $cursor->copy()
-        );
+        return $this->scheduler->scheduleForTemplate($activities, $project);
     }
 
-    /** Persists $task's span only when it actually moved. */
-    private function applyTaskDates(ProjectTask $task, \Carbon\Carbon $start, \Carbon\Carbon $end): void
+    private function syncParentRollups(Project $project): void
     {
-        if ($task->start_date?->toDateString() !== $start->toDateString() || $task->end_date?->toDateString() !== $end->toDateString()) {
-            $task->update(['start_date' => $start->toDateString(), 'end_date' => $end->toDateString()]);
-        }
+        $this->scheduler->syncParentRollups($project);
+    }
+
+    private function rescheduleProjectTasks(Project $project): void
+    {
+        $this->scheduler->reschedule($project);
     }
 
     private function withResolvedMilestoneOrders($activities)
@@ -509,6 +317,8 @@ class ProjectTaskController extends Controller
         $validated = $request->validate([
             'project_id' => 'required|exists:projects,id',
             'parent_task_id' => 'nullable|exists:project_tasks,id',
+            'depends_on_task_id' => 'nullable|exists:project_tasks,id',
+            'can_run_parallel' => 'nullable|boolean',
             'name' => 'required|string|max:255',
             'category' => 'nullable|string|max:255',
             'milestone_order' => 'nullable|integer|min:0',
@@ -528,7 +338,19 @@ class ProjectTaskController extends Controller
 
         // Convert empty strings to null for database foreign keys
         $validated['parent_task_id'] = ($validated['parent_task_id'] ?? null) ?: null;
+        $validated['depends_on_task_id'] = ($validated['depends_on_task_id'] ?? null) ?: null;
         $validated['support_by'] = ($validated['support_by'] ?? null) ?: null;
+        $validated['can_run_parallel'] = (bool) ($validated['can_run_parallel'] ?? false);
+
+        if ($validated['depends_on_task_id']) {
+            $requisite = ProjectTask::findOrFail($validated['depends_on_task_id']);
+
+            if ((int) $requisite->project_id !== (int) $validated['project_id']) {
+                throw ValidationException::withMessages([
+                    'depends_on_task_id' => 'The requisite task does not belong to this project.',
+                ]);
+            }
+        }
 
         if ($validated['parent_task_id']) {
             $parentTask = ProjectTask::findOrFail($validated['parent_task_id']);
@@ -621,6 +443,8 @@ class ProjectTaskController extends Controller
             'category' => 'sometimes|nullable|string|max:255',
             'milestone_order' => 'sometimes|nullable|integer|min:0',
             'parent_task_id' => 'sometimes|nullable|exists:project_tasks,id',
+            'depends_on_task_id' => 'sometimes|nullable|exists:project_tasks,id',
+            'can_run_parallel' => 'sometimes|nullable|boolean',
             'status' => 'sometimes|required|string',
             'progress' => 'sometimes|integer|min:0|max:100',
             'start_date' => 'nullable|date',
@@ -665,6 +489,30 @@ class ProjectTaskController extends Controller
 
         if (array_key_exists('support_by', $validated)) {
             $validated['support_by'] = $validated['support_by'] ?: null;
+        }
+
+        if (array_key_exists('depends_on_task_id', $validated)) {
+            $validated['depends_on_task_id'] = $validated['depends_on_task_id'] ?: null;
+
+            if ($validated['depends_on_task_id']) {
+                $requisite = ProjectTask::findOrFail($validated['depends_on_task_id']);
+
+                if ((int) $requisite->id === (int) $projects_task->id) {
+                    throw ValidationException::withMessages([
+                        'depends_on_task_id' => 'A task cannot be its own requisite.',
+                    ]);
+                }
+
+                if ((int) $requisite->project_id !== (int) $projects_task->project_id) {
+                    throw ValidationException::withMessages([
+                        'depends_on_task_id' => 'The requisite task does not belong to this project.',
+                    ]);
+                }
+            }
+        }
+
+        if (array_key_exists('can_run_parallel', $validated)) {
+            $validated['can_run_parallel'] = (bool) $validated['can_run_parallel'];
         }
 
         if (array_key_exists('assigned_to', $validated)) {
@@ -719,13 +567,17 @@ class ProjectTaskController extends Controller
 
         $movedInChain = (array_key_exists('order', $validated) && (float) $validated['order'] !== (float) $projects_task->order)
             || (array_key_exists('milestone_order', $validated) && (int) $validated['milestone_order'] !== (int) $projects_task->milestone_order)
-            || (array_key_exists('parent_task_id', $validated) && (int) $validated['parent_task_id'] !== (int) $projects_task->parent_task_id);
+            || (array_key_exists('parent_task_id', $validated) && (int) $validated['parent_task_id'] !== (int) $projects_task->parent_task_id)
+            // Repointing a requisite or flipping Can Run Parallel re-derives the
+            // whole plan, not just this row.
+            || (array_key_exists('depends_on_task_id', $validated) && (int) $validated['depends_on_task_id'] !== (int) $projects_task->depends_on_task_id)
+            || (array_key_exists('can_run_parallel', $validated) && (bool) $validated['can_run_parallel'] !== (bool) $projects_task->can_run_parallel);
 
         // Dates are always derived from Day 1 + each row's lead time, so a
         // hand-edited timeline is folded back into the lead time first; the
         // re-chain below then carries the change through every following row.
         if ($datesChanged && !$leadTimeChanged && !empty($validated['start_date']) && !empty($validated['end_date'])) {
-            $validated['lead_time_days'] = $this->workingDaysBetween(
+            $validated['lead_time_days'] = $this->calculatorFor($projects_task->project)->daysBetween(
                 \Carbon\Carbon::parse($validated['start_date']),
                 \Carbon\Carbon::parse($validated['end_date'])
             );
@@ -803,6 +655,10 @@ class ProjectTaskController extends Controller
         $this->projectTaskBoards->archiveProjectTaskCards($taskIds, $request->user());
         $this->projectTaskBoards->removeBoardItemsForProjectTasks($taskIds);
 
+        // Rows queued behind these lose their requisite and fall back to
+        // following whatever now sits above them.
+        $this->releaseRequisitePointers($taskIds);
+
         $projects_task->subTasks()->delete();
         $projects_task->delete();
 
@@ -848,6 +704,7 @@ class ProjectTaskController extends Controller
                 ->values();
 
             $this->projectTaskBoards->archiveProjectTaskCards($taskIds, $request->user());
+            $this->releaseRequisitePointers($taskIds);
 
             ProjectTask::query()
                 ->whereIn('parent_task_id', $topLevelTasks->pluck('id'))
@@ -882,16 +739,19 @@ class ProjectTaskController extends Controller
 
         // Reordering / bulk timeline edits span the whole plan — a management action.
         // Every task in the batch must belong to a project the user manages.
-        $projects = ProjectTask::whereIn('id', collect($validated['tasks'])->pluck('id'))
+        $batch = ProjectTask::whereIn('id', collect($validated['tasks'])->pluck('id'))
             ->with('project')
-            ->get()
-            ->pluck('project')
-            ->filter()
-            ->unique('id');
+            ->get();
+
+        $projects = $batch->pluck('project')->filter()->unique('id');
 
         foreach ($projects as $project) {
             abort_unless($project->isManagedBy($request->user()), 403, 'You do not have permission to reorder tasks in this project.');
         }
+
+        // A resized bar is read back in the project's own counting mode, so a
+        // calendar-day project doesn't get its drag silently rounded off.
+        $projectByTaskId = $batch->mapWithKeys(fn (ProjectTask $task) => [$task->id => $task->project]);
 
         $progressChanges = [];
         $reordered = false;
@@ -909,7 +769,7 @@ class ProjectTaskController extends Controller
             // A dragged/resized bar is a lead-time edit, and where it was dropped
             // pins the row's start. The re-chain below then moves every later row.
             if (!empty($updates['start_date']) && !empty($updates['end_date'])) {
-                $updates['lead_time_days'] = $this->workingDaysBetween(
+                $updates['lead_time_days'] = $this->calculatorFor($projectByTaskId[$taskData['id']] ?? null)->daysBetween(
                     \Carbon\Carbon::parse($updates['start_date']),
                     \Carbon\Carbon::parse($updates['end_date'])
                 );
