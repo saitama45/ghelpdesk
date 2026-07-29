@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Holiday;
 use App\Services\HolidayCalendar;
+use App\Support\PhilippineHolidays;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -97,14 +98,10 @@ class HolidayController extends Controller implements HasMiddleware
     }
 
     /**
-     * Fills in a year's movable holidays in one click.
-     *
-     * Fixed-date holidays never need this — they are stored once with
-     * is_recurring and already apply to every year, 2030 included. What does
-     * change yearly is Holy Week (tied to Easter) and National Heroes Day (last
-     * Monday of August); both are computable, so they are generated here.
-     * Eid'l Fitr / Eid'l Adha / Chinese New Year follow the lunar calendar and
-     * a Malacañang proclamation, so they still have to be added by hand.
+     * Fills in the whole default Philippine calendar for a year in one click —
+     * the fixed regular/special holidays plus that year's movable ones. Safe to
+     * press repeatedly: existing rows are counted as skipped, never duplicated
+     * or overwritten.
      */
     public function generate(Request $request)
     {
@@ -113,88 +110,18 @@ class HolidayController extends Controller implements HasMiddleware
         ]);
 
         $year = (int) $validated['year'];
-        $created = 0;
-        $skipped = 0;
+        ['created' => $created, 'skipped' => $skipped] = PhilippineHolidays::seed($year, $request->user()->id);
 
-        foreach ($this->derivedHolidaysFor($year) as [$name, $type, $date, $description]) {
-            $exists = Holiday::where('name', $name)
-                ->whereYear('date', $year)
-                ->exists();
-
-            if ($exists) {
-                $skipped++;
-                continue;
-            }
-
-            Holiday::create([
-                'name' => $name,
-                'type' => $type,
-                'date' => $date,
-                'is_recurring' => false,
-                'is_active' => true,
-                'description' => $description,
-                'created_by' => $request->user()->id,
-                'updated_by' => $request->user()->id,
-            ]);
-
-            $created++;
+        if ($created === 0) {
+            return redirect()->back()->with('info', "All {$year} default holidays are already on file.");
         }
 
-        HolidayCalendar::flush();
-
-        $message = $created > 0
-            ? "Generated {$created} holiday(s) for {$year}" . ($skipped ? " ({$skipped} already existed)." : '.')
-            : "All computable {$year} holidays already exist.";
+        $note = $skipped ? " ({$skipped} already existed)" : '';
 
         return redirect()->back()->with(
-            $created > 0 ? 'success' : 'info',
-            $message . ' Fixed-date holidays already repeat automatically; add Eid\'l Fitr, Eid\'l Adha and Chinese New Year once proclaimed.'
+            'success',
+            "Added {$created} default holiday(s) for {$year}{$note}. Fixed-date holidays repeat automatically every year."
         );
-    }
-
-    /** @return array<int, array{0: string, 1: string, 2: string, 3: string}> */
-    private function derivedHolidaysFor(int $year): array
-    {
-        $easter = $this->easterSunday($year);
-
-        return [
-            ['Maundy Thursday', Holiday::TYPE_REGULAR, $easter->copy()->subDays(3)->toDateString(), 'Holy Week (generated)'],
-            ['Good Friday', Holiday::TYPE_REGULAR, $easter->copy()->subDays(2)->toDateString(), 'Holy Week (generated)'],
-            ['Black Saturday', Holiday::TYPE_SPECIAL_NON_WORKING, $easter->copy()->subDay()->toDateString(), 'Holy Week (generated)'],
-            ['National Heroes Day', Holiday::TYPE_REGULAR, $this->lastMondayOfAugust($year)->toDateString(), 'Last Monday of August (generated)'],
-        ];
-    }
-
-    /** Anonymous Gregorian (Meeus/Jones/Butcher) algorithm — no ext-calendar needed. */
-    private function easterSunday(int $year): \Carbon\Carbon
-    {
-        $a = $year % 19;
-        $b = intdiv($year, 100);
-        $c = $year % 100;
-        $d = intdiv($b, 4);
-        $e = $b % 4;
-        $f = intdiv($b + 8, 25);
-        $g = intdiv($b - $f + 1, 3);
-        $h = (19 * $a + $b - $d - $g + 15) % 30;
-        $i = intdiv($c, 4);
-        $k = $c % 4;
-        $l = (32 + 2 * $e + 2 * $i - $h - $k) % 7;
-        $m = intdiv($a + 11 * $h + 22 * $l, 451);
-        $month = intdiv($h + $l - 7 * $m + 114, 31);
-        $day = (($h + $l - 7 * $m + 114) % 31) + 1;
-
-        return \Carbon\Carbon::create($year, $month, $day)->startOfDay();
-    }
-
-    private function lastMondayOfAugust(int $year): \Carbon\Carbon
-    {
-        $date = \Carbon\Carbon::create($year, 8, 31)->startOfDay();
-
-        while (!$date->isMonday()) {
-            $date->subDay();
-        }
-
-        return $date;
     }
 
     public function destroy(Holiday $holiday)
@@ -222,12 +149,12 @@ class HolidayController extends Controller implements HasMiddleware
         ];
     }
 
-    /** A window around today, so past and upcoming proclamations are reachable. */
+    /** Starts at the current year and runs forward — planning is always ahead. */
     private function yearOptions(): array
     {
         $current = (int) date('Y');
 
-        return collect(range($current - 2, $current + 5))
+        return collect(range($current, $current + 5))
             ->map(fn ($year) => ['label' => (string) $year, 'value' => $year])
             ->all();
     }
