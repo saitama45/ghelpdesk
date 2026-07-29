@@ -447,14 +447,16 @@ const updateTaskField = async (task, field, value) => {
     });
 };
 
-// Shortcut on the sub-task rows: ticking the box marks it 100% done, unticking
-// sends it back to 0%. Activities are skipped — their progress is rolled up
-// from their sub-tasks.
+// Shortcut on every row that owns its own progress: ticking the box marks it
+// 100% done, unticking sends it back to 0%. Only an activity WITH sub-tasks is
+// excluded — its progress is rolled up from them and is not editable here.
 const isTaskComplete = (task) => Number(task?.progress) >= 100;
 
-const canToggleDone = (task) => Boolean(task?.parent_task_id) && canEditTask(task);
+const hasSubTasks = (task) => (task?.subTasks?.length || 0) > 0;
 
-const toggleSubTaskDone = async (task) => {
+const canToggleDone = (task) => !hasSubTasks(task) && canEditTask(task);
+
+const toggleTaskDone = async (task) => {
     if (!canToggleDone(task)) return;
 
     await updateTaskField(task, 'progress', isTaskComplete(task) ? 0 : 100);
@@ -1150,14 +1152,15 @@ const isWeekend = (date) => {
                                      :class="row.isSubTask ? 'bg-slate-50 group-hover:bg-slate-100/70 dark:bg-slate-900/80 dark:group-hover:bg-slate-800' : 'bg-white group-hover:bg-slate-50 dark:bg-slate-950 dark:group-hover:bg-slate-900'">
                                     <div class="w-1/2 flex items-center space-x-3 py-2" :class="row.isSubTask ? 'pl-9 pr-4' : 'px-4'">
                                         <div class="relative flex-shrink-0" @click.stop>
-                                            <input v-if="row.isSubTask"
+                                            <input v-if="!hasSubTasks(row.task)"
                                                    type="checkbox"
                                                    :checked="isTaskComplete(row.task)"
                                                    :disabled="!canToggleDone(row.task)"
-                                                   @change="toggleSubTaskDone(row.task)"
-                                                   :title="canToggleDone(row.task) ? (isTaskComplete(row.task) ? 'Mark as not done (0%)' : 'Mark as done (100%)') : 'You cannot edit this sub-task'"
+                                                   @change="toggleTaskDone(row.task)"
+                                                   :title="canToggleDone(row.task) ? (isTaskComplete(row.task) ? 'Mark as not done (0%)' : 'Mark as done (100%)') : 'You cannot edit this row'"
                                                    class="w-5 h-5 rounded border-2 border-slate-300 text-emerald-600 cursor-pointer transition-colors focus:ring-2 focus:ring-emerald-500 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900">
                                             <div v-else
+                                                 title="Rolled up from its sub-tasks — tick those instead"
                                                  class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"
                                                  :class="row.task.status === 'Done' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/15' : 'border-slate-200 group-hover:border-indigo-300 dark:border-slate-700 dark:group-hover:border-indigo-400'">
                                                 <CheckCircleIcon v-if="row.task.status === 'Done'" class="w-3.5 h-3.5 text-emerald-600" />
