@@ -182,7 +182,12 @@ class SettingsController extends Controller implements HasMiddleware
                 $group = 'queue';
             }
 
-            if ($key === 'ticket_retention_value') {
+            if ($key === 'mail_require_department_address') {
+                // Stored as an explicit '1'/'0' rather than a raw bool: PHP casts
+                // false to '' on the way into the text column, and (bool) '' works
+                // by luck rather than intent.
+                $value = $request->boolean($key) ? '1' : '0';
+            } elseif ($key === 'ticket_retention_value') {
                 $value = max(1, (int) $value);
             } elseif ($key === 'ticket_retention_unit' && !in_array($value, ['months', 'years'], true)) {
                 $value = 'months';

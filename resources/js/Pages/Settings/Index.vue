@@ -420,6 +420,10 @@ const getInitialFormData = () => {
         mail_encryption: props.settings.mail_encryption || 'tls',
         mail_from_address: props.settings.mail_from_address || '',
         mail_from_name: props.settings.mail_from_name || '',
+        mail_require_department_address:
+            props.settings.mail_require_department_address === '1'
+            || props.settings.mail_require_department_address === 1
+            || props.settings.mail_require_department_address === true,
         google_maps_api_key: props.settings.google_maps_api_key || '',
         threshold_green_min: props.settings.threshold_green_min ?? 0,
         threshold_green_max: props.settings.threshold_green_max || 2,
@@ -556,11 +560,23 @@ const addressHint = (mailbox) => {
 
 const mailboxesHaveProblems = computed(() => form.mailboxes.some((m) => addressProblem(m) !== null));
 
-// Mirrors DepartmentMailRouter::requiresDepartmentAddress — routing switches on
-// as soon as anywhere exists to redirect senders to, and there is no opt-out.
-const departmentRoutingActive = computed(() =>
+// Enforcing with nothing configured would reject every inbound message and point
+// senders at an empty list, so the toggle stays locked until at least one
+// department can actually receive mail. Mirrors the same interlock in
+// DepartmentMailRouter::requiresDepartmentAddress.
+const canRequireDepartmentAddress = computed(() =>
     form.mailboxes.some((m) => normalizeAddress(m.mail_address) !== '' && !addressProblem(m))
 );
+
+// What the server will actually do: the setting AND the interlock.
+const departmentRoutingActive = computed(
+    () => canRequireDepartmentAddress.value && form.mail_require_department_address
+);
+
+// Clearing the last address must not leave enforcement silently switched on.
+watch(canRequireDepartmentAddress, (possible) => {
+    if (!possible) form.mail_require_department_address = false;
+});
 
 // These departments are unreachable by email while routing is on: they are absent
 // from the directory reply, so nobody can be told how to contact them.
@@ -838,34 +854,44 @@ const syncEmails = () => {
                                         department simply uses the shared inbox.
                                     </p>
 
-                                    <!-- Status, not a setting: routing is mandatory, and this
-                                         states which of its two modes is currently in force. -->
-                                    <div
-                                        class="mb-6 rounded-lg border p-3 text-[11px] leading-relaxed"
-                                        :class="departmentRoutingActive
-                                            ? 'border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200'
-                                            : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200'"
+                                    <label
+                                        class="mb-6 flex items-start gap-3 rounded-lg border p-3"
+                                        :class="canRequireDepartmentAddress
+                                            ? 'border-gray-200 dark:border-slate-700'
+                                            : 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30'"
                                     >
-                                        <template v-if="departmentRoutingActive">
-                                            <span class="font-bold">Department routing is active.</span>
-                                            New mail sent to <span class="font-mono">{{ supportMailbox }}</span> is not turned
-                                            into a ticket — the sender is emailed the list of department addresses below and
-                                            asked to resend. Replies on existing tickets are unaffected and still arrive normally.
-                                            <span v-if="departmentsWithoutAddress.length" class="mt-2 block font-bold">
+                                        <input
+                                            type="checkbox"
+                                            class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            v-model="form.mail_require_department_address"
+                                            :disabled="!canRequireDepartmentAddress"
+                                        />
+                                        <span class="text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">
+                                            <span class="font-bold">Require a department address for new requests.</span>
+                                            New mail sent to
+                                            <span class="font-mono">{{ supportMailbox || 'the support mailbox' }}</span>
+                                            is not turned into a ticket — the sender is emailed the list of department addresses
+                                            below and asked to resend. Replies on existing tickets are unaffected and still
+                                            arrive normally.
+
+                                            <span v-if="!canRequireDepartmentAddress" class="mt-2 block font-bold text-amber-700 dark:text-amber-300">
+                                                Department routing is not active yet. No department has an address, so there is
+                                                nowhere to redirect senders — mail to
+                                                <span class="font-mono">{{ supportMailbox || 'the support mailbox' }}</span>
+                                                is still accepted and pooled for manual assignment. Give a department an address
+                                                below to switch routing on.
+                                            </span>
+                                            <span
+                                                v-else-if="departmentRoutingActive && departmentsWithoutAddress.length"
+                                                class="mt-2 block font-bold text-amber-600"
+                                            >
                                                 {{ departmentsWithoutAddress.length }}
                                                 {{ departmentsWithoutAddress.length === 1 ? 'department has' : 'departments have' }}
                                                 no address and cannot be reached by email:
                                                 {{ departmentsWithoutAddress.join(', ') }}.
                                             </span>
-                                        </template>
-                                        <template v-else>
-                                            <span class="font-bold">Department routing is not active yet.</span>
-                                            No department has an address, so there is nowhere to redirect senders — mail to
-                                            <span class="font-mono">{{ supportMailbox || 'the support mailbox' }}</span> is still
-                                            accepted and pooled for manual assignment. Give a department an address below to
-                                            switch routing on.
-                                        </template>
-                                    </div>
+                                        </span>
+                                    </label>
 
                                     <div v-if="!form.mailboxes.length" class="text-xs text-gray-400 italic">
                                         No active departments to configure.

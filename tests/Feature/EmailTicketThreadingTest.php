@@ -638,10 +638,12 @@ class EmailTicketThreadingTest extends TestCase
         $this->assertSame($department->id, Ticket::firstOrFail()->serving_department_id);
     }
 
-    public function test_mail_to_the_base_support_address_is_pooled_while_no_department_has_one(): void
+    public function test_mail_to_the_base_support_address_stays_in_the_shared_intake_pool(): void
     {
-        // Before any department is given an address, routing cannot be enforced,
-        // so the shared mailbox behaves exactly as it always did.
+        // Enforcement is off by default, so the shared mailbox still accepts new
+        // requests and pools them for manual assignment.
+        $this->makeDepartment('SCM', 'scm@example.test');
+
         $this->service->processFake(new FakeEmailMessage(
             messageId: '<general-request@example.test>',
             senderEmail: 'customer@example.test',
@@ -848,6 +850,7 @@ class EmailTicketThreadingTest extends TestCase
     {
         $this->makeDepartment('SCM', 'scm@example.test');
         $this->makeDepartment('Facilities', 'fm@example.test');
+        Setting::set('mail_require_department_address', '1', 'mail');
         Mail::fake();
 
         $message = new FakeEmailMessage(
@@ -887,6 +890,7 @@ class EmailTicketThreadingTest extends TestCase
         ));
 
         $ticket = Ticket::firstOrFail();
+        Setting::set('mail_require_department_address', '1', 'mail');
         Mail::fake();
 
         // The requester hits Reply, which goes to the shared address.
@@ -909,7 +913,9 @@ class EmailTicketThreadingTest extends TestCase
     public function test_enforcement_is_ignored_when_no_department_has_an_address(): void
     {
         // The safety interlock: enforcing with an empty directory would reject
-        // every message and point the sender at nothing.
+        // every message and point the sender at nothing, so the setting alone is
+        // not enough to switch it on.
+        Setting::set('mail_require_department_address', '1', 'mail');
         Mail::fake();
 
         $this->service->processFake(new FakeEmailMessage(
@@ -927,6 +933,7 @@ class EmailTicketThreadingTest extends TestCase
     public function test_directory_reply_is_sent_once_per_sender_per_day(): void
     {
         $this->makeDepartment('SCM', 'scm@example.test');
+        Setting::set('mail_require_department_address', '1', 'mail');
         Mail::fake();
 
         foreach (['<first@example.test>', '<second@example.test>'] as $id) {
@@ -945,11 +952,9 @@ class EmailTicketThreadingTest extends TestCase
         $this->assertSame(0, Ticket::count());
     }
 
-    public function test_routing_is_mandatory_and_cannot_be_switched_off(): void
+    public function test_enforcement_off_still_pools_shared_mailbox_requests(): void
     {
         $this->makeDepartment('SCM', 'scm@example.test');
-        // No setting exists to disable this — once a department can receive mail,
-        // the shared mailbox stops accepting new requests, full stop.
         Setting::set('mail_require_department_address', '0', 'mail');
         Mail::fake();
 
@@ -961,8 +966,9 @@ class EmailTicketThreadingTest extends TestCase
             toRecipients: ['support@example.test'],
         ));
 
-        $this->assertSame(0, Ticket::count(), 'The stale setting must not re-enable the shared mailbox.');
-        Mail::assertSent(\App\Mail\DepartmentAddressDirectory::class);
+        $this->assertSame(1, Ticket::count());
+        $this->assertNull(Ticket::firstOrFail()->serving_department_id);
+        Mail::assertNotSent(\App\Mail\DepartmentAddressDirectory::class);
     }
 
     private function makeDepartment(string $name, ?string $address, ?string $fromName = null): \App\Models\Department

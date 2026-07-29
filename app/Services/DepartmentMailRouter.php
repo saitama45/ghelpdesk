@@ -105,18 +105,18 @@ class DepartmentMailRouter
 
     /**
      * Whether new requests must be addressed to a department rather than the
-     * shared mailbox. Always true once routing is actually usable — there is no
-     * opt-out, because a request nobody owns is the problem this exists to fix.
+     * shared mailbox.
      *
-     * The directory check is a safety interlock, not a preference: with no
-     * departmental addresses configured there is nowhere to redirect anyone, so
-     * enforcing would reject every inbound message and hand the sender an empty
-     * list. Until the first address is set the shared mailbox behaves as it
-     * always did.
+     * The directory check is a safety interlock, not a preference: with the
+     * setting on but no departmental addresses configured, enforcing would reject
+     * every inbound message and hand the sender an empty list. Until the first
+     * address is set the shared mailbox behaves as it always did, whatever the
+     * setting says.
      */
     public function requiresDepartmentAddress(): bool
     {
-        return $this->directory() !== [];
+        return (bool) Setting::get('mail_require_department_address', false)
+            && $this->directory() !== [];
     }
 
     /**
