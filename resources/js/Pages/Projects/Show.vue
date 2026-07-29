@@ -80,6 +80,20 @@ const urlParams = new URLSearchParams(window.location.search);
 const initialTab = urlParams.get('tab');
 const activeTab = ref(initialTab || 'overview');
 
+// Keep ?tab= in sync so a save (or a plain refresh) comes back to the tab the
+// user was working in instead of dropping them on Overview.
+watch(activeTab, (tab) => {
+    const url = new URL(window.location.href);
+
+    if (tab && tab !== 'overview') {
+        url.searchParams.set('tab', tab);
+    } else {
+        url.searchParams.delete('tab');
+    }
+
+    window.history.replaceState({}, '', url);
+});
+
 const { confirm: confirmAction } = useConfirm();
 
 const showManageTeamModal = ref(false);

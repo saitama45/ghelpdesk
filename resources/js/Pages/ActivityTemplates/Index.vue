@@ -196,8 +196,15 @@
                     <!-- Details Repeater -->
                     <div class="space-y-4">
                         <div class="flex items-center justify-between">
-                            <h4 class="text-sm font-black text-gray-900 uppercase tracking-widest dark:text-gray-100">Milestone Activities / Sub-tasks</h4>
-                            <button 
+                            <div class="flex items-center gap-3">
+                                <h4 class="text-sm font-black text-gray-900 uppercase tracking-widest dark:text-gray-100">Milestone Activities / Sub-tasks</h4>
+                                <span class="inline-flex items-center gap-1.5 rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-blue-700 dark:border-blue-900/30 dark:bg-blue-900/20 dark:text-blue-300">
+                                    Grand Total
+                                    <span class="font-mono text-xs">{{ grandTotalLeadTimeDays }}</span>
+                                    days
+                                </span>
+                            </div>
+                            <button
                                 type="button" 
                                 @click="addMilestone"
                                 class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-900/30 dark:hover:bg-blue-900/40"
@@ -233,6 +240,9 @@
                                         >
                                         <span class="px-2 py-0.5 bg-gray-200 text-gray-500 rounded text-[9px] font-black uppercase whitespace-nowrap dark:bg-gray-700 dark:text-gray-300">
                                             {{ activities.reduce((count, activity) => count + 1 + subTasksFor(activity).length, 0) }} rows
+                                        </span>
+                                        <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[9px] font-black uppercase whitespace-nowrap dark:bg-blue-900/30 dark:text-blue-300">
+                                            {{ milestoneLeadTimeSum(activities) }} days
                                         </span>
                                     </div>
                                     <button
@@ -398,6 +408,17 @@
                                                 </tr>
                                             </template>
                                         </tbody>
+                                        <tfoot class="bg-gray-50 dark:bg-gray-900/50">
+                                            <tr>
+                                                <td colspan="6" class="px-3 py-2 text-right text-[10px] font-black text-gray-500 uppercase tracking-wider dark:text-slate-300">
+                                                    Milestone Total
+                                                </td>
+                                                <td class="px-2 py-2">
+                                                    <span class="block text-xs font-black text-blue-700 dark:text-blue-300">{{ milestoneLeadTimeSum(activities) }} days</span>
+                                                </td>
+                                                <td></td>
+                                            </tr>
+                                        </tfoot>
                                     </table>
                                 </div>
                             </div>
@@ -987,6 +1008,19 @@ const removeActivity = (activity) => {
         form.activities = [createActivityRow()]
     }
 }
+
+// Only root activities are counted: a parent's lead time is already the sum of
+// its own sub-tasks (kept in sync by the watcher below), so adding sub-task days
+// on top would double-count them.
+const milestoneLeadTimeSum = (activities) => {
+    return activities.reduce((sum, activity) => sum + (Number(activity.default_duration_days) || 0), 0)
+}
+
+const grandTotalLeadTimeDays = computed(() => {
+    return form.activities
+        .filter(activity => !activity.parent_client_key)
+        .reduce((sum, activity) => sum + (Number(activity.default_duration_days) || 0), 0)
+})
 
 const subTaskLeadTimeSum = (activity) => {
     return form.activities

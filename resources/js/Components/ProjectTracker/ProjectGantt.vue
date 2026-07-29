@@ -90,6 +90,7 @@ const form = useForm({
     lead_time_days: 1,
     milestone_order: null,
     order: null,
+    unpin_start: false,
 });
 
 // Progress entry defaults to a simple Done/Not-done toggle; user can switch to
@@ -100,6 +101,30 @@ const isTaskDone = computed({
     get: () => Number(form.task_progress) >= 100,
     set: (done) => { form.task_progress = done ? 100 : 0; },
 });
+
+// Working-day maths, mirroring ProjectTaskController: a lead time of N days is
+// N working days *after* the start date, and no row starts or ends on a weekend.
+const toWorkingDay = (date) => {
+    const shifted = new Date(date.getTime());
+    while (isWeekend(shifted)) shifted.setDate(shifted.getDate() + 1);
+    return shifted;
+};
+
+const addWorkingDays = (date, days) => {
+    const cursor = toWorkingDay(date);
+    for (let i = 0; i < days; i++) {
+        do { cursor.setDate(cursor.getDate() + 1); } while (isWeekend(cursor));
+    }
+    return cursor;
+};
+
+// End of a span that begins on `date` and runs `days` working days after it.
+const endOfSpan = (date, days) => addWorkingDays(date, Math.max(1, days));
+
+const toDateInput = (date) => {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
 
 // Sync status with progress in the form
 watch(() => form.task_progress, (newProgress) => {
@@ -184,6 +209,7 @@ const resetTaskForm = () => {
     form.lead_time_days = 1;
     form.milestone_order = null;
     form.order = null;
+    form.unpin_start = false;
     progressMode.value = 'done';
 };
 
@@ -375,6 +401,7 @@ const editTask = (task) => {
     form.end_date = task.end_date ? task.end_date.split('T')[0] : '';
     form.lead_time_days = task.lead_time_days || 1;
     form.order = task.order;
+    form.unpin_start = false;
     progressMode.value = 'done';
 };
 
@@ -398,6 +425,19 @@ const updateTaskField = async (task, field, value) => {
     router.put(route('projects-tasks.update', { 'projects_task': task.id, tab: 'gantt' }), data, {
         preserveScroll: true
     });
+};
+
+// Shortcut on the sub-task rows: ticking the box marks it 100% done, unticking
+// sends it back to 0%. Activities are skipped — their progress is rolled up
+// from their sub-tasks.
+const isTaskComplete = (task) => Number(task?.progress) >= 100;
+
+const canToggleDone = (task) => Boolean(task?.parent_task_id) && canEditTask(task);
+
+const toggleSubTaskDone = async (task) => {
+    if (!canToggleDone(task)) return;
+
+    await updateTaskField(task, 'progress', isTaskComplete(task) ? 0 : 100);
 };
 
 const deleteTask = async (taskId) => {
@@ -620,6 +660,66 @@ const visibleTaskCount = (tasks = []) => {
     return tasks.reduce((count, task) => count + 1 + (task.subTasks?.length || 0), 0);
 };
 
+// An activity with sub-tasks carries their summed lead time, so only root rows
+// are totalled — counting sub-tasks as well would double them.
+const effectiveLeadTime = (task) => {
+    const subTasks = task.subTasks || [];
+
+    return subTasks.length
+        ? subTasks.reduce((sum, subTask) => sum + (Number(subTask.lead_time_days) || 0), 0)
+        : (Number(task.lead_time_days) || 0);
+};
+
+const milestoneLeadTime = (tasks = []) => {
+    return tasks.reduce((sum, task) => sum + effectiveLeadTime(task), 0);
+};
+
+const grandTotalLeadTime = computed(() => {
+    return Object.values(groupedTasks.value).reduce((sum, tasks) => sum + milestoneLeadTime(tasks), 0);
+});
+
+const subTasksOfEditingTask = computed(() => {
+    if (!isEditing.value || !editingTaskId.value) return [];
+
+    return localTasks.value.filter(task => Number(task.parent_task_id) === Number(editingTaskId.value));
+});
+
+// Editing an activity that owns sub-tasks: its lead time, progress and timeline
+// are rolled up from them, so those inputs are locked.
+const isRolledUpActivity = computed(() => formMode.value === 'activity' && subTasksOfEditingTask.value.length > 0);
+
+const rolledUpLeadTime = computed(() => {
+    return subTasksOfEditingTask.value.reduce((sum, subTask) => sum + (Number(subTask.lead_time_days) || 0), 0);
+});
+
+// A row whose Start Date the user set by hand keeps it across re-chains until
+// they unpin it.
+const editingTask = computed(() => {
+    if (!isEditing.value || !editingTaskId.value) return null;
+
+    return localTasks.value.find(task => Number(task.id) === Number(editingTaskId.value)) || null;
+});
+
+const isStartPinned = computed(() => Boolean(editingTask.value?.start_anchor_date) && !form.unpin_start);
+
+const unpinStart = () => {
+    form.unpin_start = true;
+    form.start_date = '';
+    form.end_date = '';
+};
+
+// Typing a lead time re-derives the end date live, so the form shows the same
+// span the server will chain on save.
+watch([() => form.lead_time_days, () => form.start_date], () => {
+    if (!isAddingTask.value || isRolledUpActivity.value || !form.start_date) return;
+
+    const start = toWorkingDay(parseLocalDate(form.start_date));
+    const startValue = toDateInput(start);
+    if (form.start_date !== startValue) form.start_date = startValue;
+
+    form.end_date = toDateInput(endOfSpan(start, Math.max(1, Number(form.lead_time_days) || 1)));
+});
+
 const formTitle = computed(() => {
     if (isEditing.value) {
         return formMode.value === 'subtask' ? 'Edit Sub-task' : 'Edit Activity';
@@ -781,6 +881,11 @@ const isWeekend = (date) => {
                     <p class="text-[10px] uppercase tracking-wider font-bold text-emerald-500 dark:text-emerald-300">Done</p>
                     <p class="text-sm font-bold text-slate-900 dark:text-slate-100">{{ stats.completed }}</p>
                 </div>
+                <div class="h-8 w-px bg-slate-100 dark:bg-slate-700"></div>
+                <div class="text-center">
+                    <p class="text-[10px] uppercase tracking-wider font-bold text-indigo-500 dark:text-indigo-300">Grand Total Lead Time</p>
+                    <p class="text-sm font-bold text-slate-900 dark:text-slate-100">{{ grandTotalLeadTime }} {{ grandTotalLeadTime === 1 ? 'day' : 'days' }}</p>
+                </div>
             </div>
 
             <div class="flex items-center space-x-2">
@@ -852,20 +957,31 @@ const isWeekend = (date) => {
                     </div>
                     <div class="md:col-span-1">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Lead Time (Days)</label>
-                        <input v-model.number="form.lead_time_days" type="number" min="1" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        <input :value="isRolledUpActivity ? rolledUpLeadTime : form.lead_time_days"
+                               @input="form.lead_time_days = Number($event.target.value)"
+                               type="number" min="1"
+                               :disabled="isRolledUpActivity"
+                               class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
                         <div v-if="form.errors.lead_time_days" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.lead_time_days }}</div>
-                        <p v-if="isEditing && project.day1_date" class="mt-1 ml-1 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">Saving will re-chain every row's dates from Day 1.</p>
+                        <p v-if="isRolledUpActivity" class="mt-1 ml-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">
+                            Summed from {{ subTasksOfEditingTask.length }} sub-task{{ subTasksOfEditingTask.length === 1 ? '' : 's' }} — edit those instead.
+                        </p>
+                        <p v-else-if="isEditing && project.day1_date" class="mt-1 ml-1 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">Saving will re-chain every row's dates from Day 1.</p>
                         <p v-else-if="isEditing" class="mt-1 ml-1 text-[9px] font-semibold text-amber-600 dark:text-amber-400">No Day 1 Date set on this project — dates won't auto-schedule.</p>
                     </div>
                     <div class="md:col-span-2">
                         <div class="flex items-center justify-between mb-1.5 ml-1">
                             <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest dark:text-indigo-200">Progress</label>
-                            <button type="button" @click="progressMode = progressMode === 'done' ? 'manual' : 'done'"
+                            <button v-if="!isRolledUpActivity" type="button" @click="progressMode = progressMode === 'done' ? 'manual' : 'done'"
                                     class="text-[9px] font-bold text-indigo-500 hover:text-indigo-700 underline dark:text-indigo-300">
                                 {{ progressMode === 'done' ? 'Use %' : 'Use Yes/No' }}
                             </button>
                         </div>
-                        <label v-if="progressMode === 'done'"
+                        <div v-if="isRolledUpActivity"
+                             class="flex h-[38px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
+                            <span class="text-xs font-bold text-slate-500 dark:text-slate-400">{{ form.task_progress }}% from sub-tasks</span>
+                        </div>
+                        <label v-else-if="progressMode === 'done'"
                                class="flex h-[38px] items-center justify-center gap-2 rounded-xl border border-slate-200 cursor-pointer dark:border-slate-700 dark:bg-slate-900">
                             <input type="checkbox" v-model="isTaskDone" class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
                             <span class="text-xs font-bold text-slate-700 dark:text-slate-200">{{ isTaskDone ? 'Done (100%)' : 'Not done' }}</span>
@@ -876,10 +992,20 @@ const isWeekend = (date) => {
                     <div class="md:col-span-3">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Timeline</label>
                         <div class="flex items-center space-x-2">
-                            <input v-model="form.start_date" type="date" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                            <input v-model="form.start_date" type="date" :disabled="isRolledUpActivity" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
                             <span class="text-slate-400 dark:text-slate-300">to</span>
-                            <input v-model="form.end_date" type="date" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                            <input v-model="form.end_date" type="date" :disabled="isRolledUpActivity" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
                         </div>
+                        <p v-if="isRolledUpActivity" class="mt-1 ml-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">
+                            Spans its sub-tasks — set the dates on those.
+                        </p>
+                        <p v-else-if="isStartPinned" class="mt-1 ml-1 text-[9px] font-semibold text-indigo-600 dark:text-indigo-300">
+                            Start Date is pinned — later rows chain from it.
+                            <button type="button" @click="unpinStart" class="underline hover:text-indigo-800 dark:hover:text-indigo-200">Unpin</button>
+                        </p>
+                        <p v-else-if="isEditing" class="mt-1 ml-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">
+                            Setting a Start Date pins this row and shifts every row after it.
+                        </p>
                         <div v-if="form.errors.start_date || form.errors.end_date" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.start_date || form.errors.end_date }}</div>
                     </div>
                     <div class="md:col-span-2 flex items-center space-x-2 pl-4">
@@ -961,6 +1087,10 @@ const isWeekend = (date) => {
                                     <ChevronRightIcon class="w-3 h-3 text-slate-400 transform rotate-90 dark:text-slate-300" />
                                     <span class="text-[11px] font-black text-slate-600 uppercase tracking-wider dark:text-slate-100">{{ category }}</span>
                                     <span class="ml-2 px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[9px] font-bold dark:bg-slate-700 dark:text-slate-200">{{ visibleTaskCount(tasks) }}</span>
+                                    <span class="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[9px] font-black uppercase whitespace-nowrap dark:bg-indigo-500/20 dark:text-indigo-200"
+                                          title="Total Lead Time for this milestone">
+                                        {{ milestoneLeadTime(tasks) }} {{ milestoneLeadTime(tasks) === 1 ? 'day' : 'days' }}
+                                    </span>
                                 </div>
                                 <div v-if="canManage" class="flex items-center gap-1.5">
                                     <button type="button"
@@ -997,8 +1127,16 @@ const isWeekend = (date) => {
                                      :class="row.isSubTask ? 'bg-slate-50 group-hover:bg-slate-100/70 dark:bg-slate-900/80 dark:group-hover:bg-slate-800' : 'bg-white group-hover:bg-slate-50 dark:bg-slate-950 dark:group-hover:bg-slate-900'">
                                     <div class="w-1/2 flex items-center space-x-3 py-2" :class="row.isSubTask ? 'pl-9 pr-4' : 'px-4'">
                                         <div class="relative flex-shrink-0" @click.stop>
-                                            <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"
-                                                  :class="row.task.status === 'Done' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/15' : 'border-slate-200 group-hover:border-indigo-300 dark:border-slate-700 dark:group-hover:border-indigo-400'">
+                                            <input v-if="row.isSubTask"
+                                                   type="checkbox"
+                                                   :checked="isTaskComplete(row.task)"
+                                                   :disabled="!canToggleDone(row.task)"
+                                                   @change="toggleSubTaskDone(row.task)"
+                                                   :title="canToggleDone(row.task) ? (isTaskComplete(row.task) ? 'Mark as not done (0%)' : 'Mark as done (100%)') : 'You cannot edit this sub-task'"
+                                                   class="w-5 h-5 rounded border-2 border-slate-300 text-emerald-600 cursor-pointer transition-colors focus:ring-2 focus:ring-emerald-500 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900">
+                                            <div v-else
+                                                 class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"
+                                                 :class="row.task.status === 'Done' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/15' : 'border-slate-200 group-hover:border-indigo-300 dark:border-slate-700 dark:group-hover:border-indigo-400'">
                                                 <CheckCircleIcon v-if="row.task.status === 'Done'" class="w-3.5 h-3.5 text-emerald-600" />
                                             </div>
                                         </div>
