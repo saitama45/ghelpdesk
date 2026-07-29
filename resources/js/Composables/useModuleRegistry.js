@@ -364,6 +364,15 @@ export const MODULE_REGISTRY = [
                 activeMatch: ['kb-articles.*'],
                 permission: 'kb_articles.view',
             },
+            {
+                id: 'holidays',
+                label: 'Holidays',
+                description: 'Philippine holiday calendar and custom declarations',
+                icon: CalendarDaysIcon,
+                routeName: 'holidays.index',
+                activeMatch: ['holidays.*'],
+                permission: 'holidays.view',
+            },
         ],
     },
     {

@@ -226,6 +226,12 @@ class RolesAndPermissionSeeder extends Seeder
             'vendors.edit'   => 'Edit vendors',
             'vendors.delete' => 'Delete vendors',
 
+            // Holidays
+            'holidays.view' => 'View holidays',
+            'holidays.create' => 'Create holidays',
+            'holidays.edit' => 'Edit holidays',
+            'holidays.delete' => 'Delete holidays',
+
             // Activity Templates
             'activity_templates.view' => 'View activity templates',
             'activity_templates.create' => 'Create activity templates',

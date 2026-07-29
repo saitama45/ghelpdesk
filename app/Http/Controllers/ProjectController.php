@@ -248,6 +248,9 @@ class ProjectController extends Controller
             'boardYears'     => $this->boardYears(),
             'availableBoards' => $availableBoards,
             'taskListTargets' => $this->projectTaskBoards->monthlyTargetPreview($project),
+            // Non-working holidays around the plan, so the Gantt shades them and
+            // its lead-time preview matches the server's scheduling.
+            'holidays'       => $this->ganttHolidays($project),
             'project_templates' => ProjectTemplate::query()
                 ->withCount('activities')
                 ->orderBy('name')
@@ -390,6 +393,24 @@ class ProjectController extends Controller
 
         return redirect()->route('projects.index')
             ->with('success', 'Project permanently deleted.');
+    }
+
+    /**
+     * Non-working holidays spanning the project's plan (plus a year either side
+     * so the Gantt can shade dates the user scrolls to). Recurring holidays are
+     * expanded per year by HolidayCalendar.
+     */
+    private function ganttHolidays(Project $project): array
+    {
+        $dates = $project->tasks->pluck('start_date')
+            ->merge($project->tasks->pluck('end_date'))
+            ->merge([$project->day1_date])
+            ->filter();
+
+        $from = ($dates->min() ? \Carbon\Carbon::parse($dates->min()) : now())->copy()->subYear()->startOfYear();
+        $to = ($dates->max() ? \Carbon\Carbon::parse($dates->max()) : now())->copy()->addYear()->endOfYear();
+
+        return app(\App\Services\HolidayCalendar::class)->between($from, $to);
     }
 
     private function departmentOptions(): array

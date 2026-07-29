@@ -14,7 +14,8 @@ class ProjectTaskController extends Controller
 {
     public function __construct(
         private ProjectTaskBoardSyncService $projectTaskBoards,
-        private \App\Services\NotificationService $notifications
+        private \App\Services\NotificationService $notifications,
+        private \App\Services\HolidayCalendar $holidays
     )
     {
     }
@@ -212,18 +213,27 @@ class ProjectTaskController extends Controller
     }
 
     /**
-     * Advances $date off a Saturday/Sunday onto the next Monday.
+     * A day nobody works: a weekend, or a non-working Philippine holiday from
+     * the /holidays calendar.
+     */
+    private function isNonWorkingDay(\Carbon\Carbon $date): bool
+    {
+        return $date->isWeekend() || $this->holidays->isHoliday($date);
+    }
+
+    /**
+     * Advances $date off a weekend or holiday onto the next working day.
      */
     private function toWorkingDay(\Carbon\Carbon $date): \Carbon\Carbon
     {
-        while ($date->isWeekend()) {
+        while ($this->isNonWorkingDay($date)) {
             $date->addDay();
         }
 
         return $date;
     }
 
-    /** Adds $days working days to $date, skipping Saturdays and Sundays. */
+    /** Adds $days working days to $date, skipping weekends and holidays. */
     private function addWorkingDays(\Carbon\Carbon $date, int $days): \Carbon\Carbon
     {
         $result = $this->toWorkingDay($date->copy());
@@ -231,7 +241,7 @@ class ProjectTaskController extends Controller
         for ($i = 0; $i < $days; $i++) {
             do {
                 $result->addDay();
-            } while ($result->isWeekend());
+            } while ($this->isNonWorkingDay($result));
         }
 
         return $result;
@@ -271,7 +281,7 @@ class ProjectTaskController extends Controller
         while ($cursor->lt($target)) {
             $cursor->addDay();
 
-            if (!$cursor->isWeekend()) {
+            if (!$this->isNonWorkingDay($cursor)) {
                 $days++;
             }
         }

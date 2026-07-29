@@ -33,6 +33,7 @@ export const roleLandingPageOptions = [
             { label: 'Scheduling', value: 'schedules.index' },
             { label: 'Presence', value: 'presence.index' },
             { label: 'KB Articles', value: 'kb-articles.index' },
+            { label: 'Holidays', value: 'holidays.index' },
             { label: 'Service Vehicle Trips', value: 'service-vehicle-trips.index' },
         ]
     },

@@ -284,6 +284,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('stores/{store}/blueprints/{blueprint}', [\App\Http\Controllers\StoreController::class, 'destroyBlueprint'])->name('stores.blueprints.destroy');
     Route::resource('stores', \App\Http\Controllers\StoreController::class)->except(['show', 'create', 'edit']);
     Route::resource('vendors', \App\Http\Controllers\VendorController::class)->except(['show', 'create', 'edit']);
+    Route::post('holidays/generate', [\App\Http\Controllers\HolidayController::class, 'generate'])->name('holidays.generate');
+    Route::resource('holidays', \App\Http\Controllers\HolidayController::class)->except(['show', 'create', 'edit']);
     Route::get('activity-templates/template', [\App\Http\Controllers\ActivityTemplateController::class, 'template'])->name('activity-templates.template');
     Route::post('activity-templates/import', [\App\Http\Controllers\ActivityTemplateController::class, 'import'])->name('activity-templates.import');
     Route::get('activity-templates/{activity_template}/export', [\App\Http\Controllers\ActivityTemplateController::class, 'export'])->name('activity-templates.export');

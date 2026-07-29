@@ -32,7 +32,24 @@ const props = defineProps({
     canManage: { type: Boolean, default: false },
     // The viewer's user id — non-managers may only edit rows assigned to them.
     currentUserId: { type: [Number, String], default: null },
+    // Non-working Philippine holidays ({ date, name, type }) — skipped in the
+    // lead-time maths exactly like weekends, and shaded on the timeline.
+    holidays: { type: Array, default: () => [] },
 });
+
+// Y-m-d -> holiday name, for the working-day helpers and the column tooltips.
+const holidayLookup = computed(() => {
+    const map = new Map();
+    (props.holidays || []).forEach(holiday => map.set(String(holiday.date).split('T')[0], holiday.name));
+    return map;
+});
+
+const holidayNameFor = (date) => {
+    const pad = (n) => String(n).padStart(2, '0');
+    return holidayLookup.value.get(`${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`) || null;
+};
+
+const isHoliday = (date) => holidayNameFor(date) !== null;
 
 // A non-manager may only edit the activity / sub-task assigned to them; managers
 // may edit anything. Structural actions (add/delete/reorder/templates) are
@@ -103,17 +120,20 @@ const isTaskDone = computed({
 });
 
 // Working-day maths, mirroring ProjectTaskController: a lead time of N days is
-// N working days *after* the start date, and no row starts or ends on a weekend.
+// N working days *after* the start date, and no row starts or ends on a weekend
+// or a non-working holiday.
+const isNonWorkingDay = (date) => isWeekend(date) || isHoliday(date);
+
 const toWorkingDay = (date) => {
     const shifted = new Date(date.getTime());
-    while (isWeekend(shifted)) shifted.setDate(shifted.getDate() + 1);
+    while (isNonWorkingDay(shifted)) shifted.setDate(shifted.getDate() + 1);
     return shifted;
 };
 
 const addWorkingDays = (date, days) => {
     const cursor = toWorkingDay(date);
     for (let i = 0; i < days; i++) {
-        do { cursor.setDate(cursor.getDate() + 1); } while (isWeekend(cursor));
+        do { cursor.setDate(cursor.getDate() + 1); } while (isNonWorkingDay(cursor));
     }
     return cursor;
 };
@@ -1046,9 +1066,11 @@ const isWeekend = (date) => {
                         </div>
                         <div class="h-7 flex text-[10px] font-bold text-slate-500 bg-white dark:bg-slate-900 dark:text-slate-300">
                             <div v-for="(day, idx) in timelineDays" :key="idx" 
+                                 :title="holidayNameFor(day) || ''"
                                  class="flex-shrink-0 w-12 flex items-center justify-center border-r border-slate-100 dark:border-slate-800"
                                  :class="[
                                     isWeekend(day) ? 'bg-slate-50/50 text-slate-300 dark:bg-slate-800/60 dark:text-slate-400' : 'text-slate-400 dark:text-slate-300',
+                                    isHoliday(day) && !isToday(day) ? 'bg-rose-50 text-rose-400 dark:bg-rose-500/15 dark:text-rose-300' : '',
                                     isToday(day) ? 'bg-indigo-600 text-white z-20 rounded-t-sm shadow-lg' : ''
                                  ]">
                                 {{ day.getDate() }}
@@ -1066,6 +1088,7 @@ const isWeekend = (date) => {
                              class="flex-shrink-0 w-12 border-r border-slate-100 h-full dark:border-slate-800"
                              :class="[
                                 isWeekend(day) ? 'bg-slate-50/10 dark:bg-slate-800/30' : '',
+                                isHoliday(day) ? 'bg-rose-50/40 dark:bg-rose-500/10' : '',
                                 isToday(day) ? 'bg-indigo-50/20 dark:bg-indigo-500/10' : ''
                              ]">
                         </div>

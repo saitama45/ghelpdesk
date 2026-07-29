@@ -79,6 +79,7 @@ class RoleService
             'schedules',
             'presence',
             'kb articles',
+            'holidays',
             'users',
             'roles',
             'companies',

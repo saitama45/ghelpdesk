@@ -483,7 +483,7 @@ const rolePermissionGroups = computed(() => {
         { name: 'Services', categories: servicesCategories },
         { name: 'Inventory', categories: ['Assets', 'Stock_in', 'Stock_transfer', 'Reports'] },
         { name: 'Monitoring', categories: ['NPC Status', 'CCTV Monitoring', 'ALAGA', 'WIGS', 'Payments & SOA', 'Accounting Documents', 'Mall Hookup'] },
-        { name: 'Administrative', categories: ['Attendance', 'Schedules', 'Presence', 'KB Articles'] },
+        { name: 'Administrative', categories: ['Attendance', 'Schedules', 'Presence', 'KB Articles', 'Holidays'] },
         { name: 'References', categories: ['Companies', 'Departments', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Project Type & Store Class', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Form_builder'] },
         { name: 'Reports', categories: ['Reports'] },
         { name: 'User Management', categories: ['Users', 'Roles'] },

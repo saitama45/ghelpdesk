@@ -45,6 +45,7 @@ const props = defineProps({
     // Whether the viewer may manage the whole project (edit every row, apply
     // templates, add/delete/reorder). Non-managers may only edit their own rows.
     canManageProject: { type: Boolean, default: false },
+    holidays: { type: Array, default: () => [] },
 });
 
 const formatDate = (dateString) => {
@@ -976,6 +977,7 @@ const getStatusColor = (status) => {
                         :taskListTargets="taskListTargets"
                         :canManage="canManageProject"
                         :currentUserId="currentUser?.id"
+                        :holidays="holidays"
                     />
                 </div>
 
