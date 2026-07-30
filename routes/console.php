@@ -9,9 +9,12 @@ Artisan::command('inspire', function () {
     $this->comment(InspiringQuote::quote());
 })->purpose('Display an inspiring quote');
 
+// The overlap mutex expires after 5 minutes instead of the 24-hour default: a run
+// killed mid-flight (recycled container, PHP time limit) would otherwise leave the
+// lock behind and stop ALL inbound mail for a day.
 Schedule::command('tickets:fetch-emails')
     ->everyThirtySeconds()
-    ->withoutOverlapping()
+    ->withoutOverlapping(5)
     ->runInBackground();
 Schedule::command('tickets:auto-close')->hourly();
 Schedule::command('tickets:process-scheduled')->everyMinute();

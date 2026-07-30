@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Mail\TicketCommentAdded;
 use App\Models\Company;
+use App\Models\EmailIntakeLog;
+use App\Models\Scopes\ActiveEntityScope;
 use App\Models\Setting;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
@@ -36,42 +38,12 @@ class EmailTicketService
                 return ['status' => 'skipped', 'message' => 'No inbound support email is configured.'];
             }
 
-            // 2. Configure IMAP from Database Settings
-            $imapConfig = [
-                'imap.accounts.default.host' => Setting::get('imap_host', config('imap.accounts.default.host')),
-                'imap.accounts.default.port' => Setting::get('imap_port', config('imap.accounts.default.port')),
-                'imap.accounts.default.encryption' => Setting::get('imap_encryption', config('imap.accounts.default.encryption')),
-                'imap.accounts.default.username' => $supportEmail,
-                'imap.accounts.default.password' => Setting::get('imap_password', config('imap.accounts.default.password')),
-                'imap.options.fetch_order' => 'desc',
-            ];
-            
-            config($imapConfig);
+            // 2. Configure IMAP from Database Settings and open the inbox
+            [$client, $inbox] = $this->openInbox();
 
-            Log::debug("EmailTicketService: Connecting to " . $imapConfig['imap.accounts.default.host'] . " as " . $imapConfig['imap.accounts.default.username']);
-
-            $client = Client::account('default');
-            $client->connect();
-
-            Log::debug("EmailTicketService: Connected. Available folders: " . $client->getFolders()->map(fn($f) => $f->name)->implode(', '));
-
-            $folders = $client->getFolders();
-            $inbox = null;
-
-            foreach ($folders as $folder) {
-                if (strtolower($folder->name) === 'inbox') {
-                    $inbox = $folder;
-                    break;
-                }
-            }
-
-            if (!$inbox) {
-                Log::error("EmailTicketService: Inbox folder not found.");
-                return ['status' => 'error', 'message' => 'Inbox not found. Available: ' . $client->getFolders()->map(fn($f) => $f->name)->implode(', ')];
-            }
-
-            // Diagnostic: Count unseen messages only
-            $query = $inbox->messages()->unseen();
+            // Pass 1 — unread mail. This is the fast path for everything that
+            // arrives while the fetcher is running normally.
+            $query = $inbox->messages()->unseen()->leaveUnread();
             $messages = $query->get();
             $unseenCount = count($messages);
 
@@ -88,18 +60,15 @@ class EmailTicketService
                 }
             }
             foreach ($messages as $message) {
-                try {
-                    Log::debug("EmailTicketService: Checking message: " . $message->getSubject());
-                    if ($this->processMessage($message)) {
-                        $count++;
-                    }
-                } catch (\Throwable $me) {
-                    $errorMsg = $me->getMessage();
-                    Log::error("EmailTicketService: Message processing error: " . $errorMsg);
-                    $errors[] = "Subject '" . mb_substr($message->getSubject(), 0, 50) . "': " . $errorMsg;
+                if ($this->handleFetchedMessage($message, false, $errors)) {
+                    $count++;
                 }
             }
 
+            // Pass 2 — mail that is no longer unread but that we never recorded a
+            // decision about. Without this, any message a human opened in the
+            // shared mailbox before the fetcher's next pass was lost for good.
+            $count += $this->processCatchUpMessages($inbox, $errors);
 
             // 3. Update Last Sync Time (Using Manila time for display, but Laravel handles the Carbon comparison)
             Setting::set('last_email_sync_at', now()->toDateTimeString(), 'system');
@@ -121,6 +90,407 @@ class EmailTicketService
         }
     }
 
+
+    /**
+     * Connect with the stored mail settings and open the INBOX.
+     *
+     * Shared by the fetcher and `tickets:diagnose-email` so a diagnosis always
+     * looks at exactly the mailbox the fetcher reads.
+     *
+     * @return array{0: \Webklex\PHPIMAP\Client, 1: \Webklex\PHPIMAP\Folder}
+     *
+     * @throws \RuntimeException
+     */
+    public function openInbox(): array
+    {
+        $supportEmail = $this->normalizeEmailAddress(Setting::get('imap_username', config('imap.accounts.default.username')));
+
+        if ($supportEmail === '') {
+            throw new \RuntimeException('No inbound support email is configured.');
+        }
+
+        $imapConfig = [
+            'imap.accounts.default.host' => Setting::get('imap_host', config('imap.accounts.default.host')),
+            'imap.accounts.default.port' => Setting::get('imap_port', config('imap.accounts.default.port')),
+            'imap.accounts.default.encryption' => Setting::get('imap_encryption', config('imap.accounts.default.encryption')),
+            'imap.accounts.default.username' => $supportEmail,
+            'imap.accounts.default.password' => Setting::get('imap_password', config('imap.accounts.default.password')),
+            'imap.options.fetch_order' => 'desc',
+        ];
+
+        config($imapConfig);
+
+        Log::debug('EmailTicketService: Connecting to ' . $imapConfig['imap.accounts.default.host'] . ' as ' . $supportEmail);
+
+        $client = Client::account('default');
+        $client->connect();
+
+        $folders = $client->getFolders();
+        $inbox = null;
+
+        foreach ($folders as $folder) {
+            if (strtolower($folder->name) === 'inbox') {
+                $inbox = $folder;
+                break;
+            }
+        }
+
+        if (! $inbox) {
+            Log::error('EmailTicketService: Inbox folder not found.');
+
+            throw new \RuntimeException('Inbox not found. Available: ' . $folders->map(fn ($f) => $f->name)->implode(', '));
+        }
+
+        return [$client, $inbox];
+    }
+
+    /**
+     * Everything the fetcher knows about one message, without changing anything —
+     * the answer to "why was this email never logged?".
+     *
+     * @return array<string, mixed>
+     */
+    public function inspectMessage($message): array
+    {
+        $messageId = $this->normalizeMessageId($message->getMessageId());
+        $variants = $this->messageIdentifierVariants($message->getMessageId());
+        $senderEmail = $this->normalizeEmailAddress($message->getFrom()[0]->mail ?? '');
+        $subject = $this->decodeMimeHeader((string) $message->getSubject());
+        $recipients = array_keys($this->collectRoutableRecipientAddresses($message));
+        $route = app(DepartmentMailRouter::class)->resolve($recipients);
+
+        $ledger = $this->intakeLogAvailable()
+            ? EmailIntakeLog::where('message_key', $this->intakeKeyFor($message))->first()
+            : null;
+
+        $thread = $this->findExistingTicketForMessage(
+            $message,
+            $subject,
+            $senderEmail,
+            $this->emailBodyHash($this->extractCleanMessageBody($message))
+        );
+
+        return [
+            'uid' => (int) ($message->uid ?? 0),
+            'subject' => $subject,
+            'message_id' => $messageId,
+            'sender' => $senderEmail,
+            'date' => (string) $message->getDate(),
+            'flags' => collect($message->getFlags() ?: [])->values()->implode(', '),
+            'recipients' => $recipients,
+            'routed_department_id' => $route['department_id'],
+            'matched_our_address' => (bool) $route['matched'],
+            'requires_department_address' => app(DepartmentMailRouter::class)->requiresDepartmentAddress(),
+            'already_processed' => $this->messageAlreadyProcessed($variants),
+            'threaded_onto' => $thread?->ticket_key,
+            'threaded_onto_status' => $thread?->status,
+            'ledger_outcome' => $ledger?->outcome,
+            'ledger_processed_at' => (string) $ledger?->processed_at,
+            'ledger_error' => $ledger?->error,
+        ];
+    }
+
+    /**
+     * Ingest a single message on demand (recovery of mail the fetcher missed).
+     *
+     * Runs in catch-up mode by default so a manual backfill never fires courtesy
+     * auto-replies at requesters for days-old mail.
+     */
+    public function ingestMessage($message, bool $recovery = true): array
+    {
+        $errors = [];
+        $handled = $this->handleFetchedMessage($message, $recovery, $errors);
+
+        return [
+            'handled' => $handled,
+            'outcome' => $this->lastOutcome['outcome'] ?? null,
+            'ticket_id' => $this->lastOutcome['ticket_id'] ?? null,
+            'errors' => $errors,
+        ];
+    }
+
+    /**
+     * Process one fetched message and record what happened to it.
+     *
+     * Every decision lands in email_intake_logs — including the skips — so the
+     * fetcher has a memory of its own instead of relying on the mailbox's \Seen
+     * flag, and so "what happened to this email?" is answerable afterwards.
+     *
+     * @param  bool  $recovery  true when the message was picked up by the
+     *                          catch-up scan (already read by a human)
+     */
+    protected function handleFetchedMessage($message, bool $recovery, array &$errors): bool
+    {
+        $subject = '';
+
+        try {
+            $subject = (string) $message->getSubject();
+            Log::debug('EmailTicketService: Checking message: ' . $subject);
+
+            $this->lastOutcome = null;
+            $handled = $this->processMessage($message, $recovery);
+
+            $this->recordIntake(
+                $message,
+                $this->lastOutcome['outcome'] ?? EmailIntakeLog::OUTCOME_CREATED,
+                $this->lastOutcome['ticket_id'] ?? null,
+                $recovery
+            );
+
+            return $handled;
+        } catch (\Throwable $me) {
+            $errorMsg = $me->getMessage();
+            Log::error('EmailTicketService: Message processing error: ' . $errorMsg);
+            $errors[] = "Subject '" . mb_substr($subject, 0, 50) . "': " . $errorMsg;
+
+            // Recorded as an error rather than a decision, so the next pass retries it.
+            $this->recordIntake($message, EmailIntakeLog::OUTCOME_ERROR, null, $recovery, $errorMsg);
+
+            return false;
+        }
+    }
+
+    /**
+     * Ingest recent messages that are no longer unread but that the ledger has no
+     * decision for.
+     *
+     * The mailbox \Seen flag is shared, human-writable state: anyone reading the
+     * support inbox in a mail client marks messages read, and the unread-only
+     * query then skips them permanently. Combined with any gap in the fetcher's
+     * uptime (a killed run, a recycled container, an IMAP outage) that silently
+     * drops requests. This pass closes that hole.
+     *
+     * Cheap by construction: headers only for the window, then a full fetch for
+     * the (normally zero) messages that turn out to be unaccounted for.
+     */
+    protected function processCatchUpMessages($inbox, array &$errors): int
+    {
+        $days = (int) Setting::get('email_fetch_lookback_days', 3);
+
+        // 0 disables the pass; the ledger is what makes it idempotent, so without
+        // the table we stay on unread-only behaviour.
+        if ($days <= 0 || ! $this->intakeLogAvailable()) {
+            return 0;
+        }
+
+        $interval = (int) Setting::get('email_fetch_catchup_interval_seconds', 300);
+        $lastCatchUp = Setting::get('last_email_catchup_at');
+
+        if ($interval > 0 && $lastCatchUp && now()->parse($lastCatchUp)->addSeconds($interval)->isFuture()) {
+            return 0;
+        }
+
+        $limit = max(1, (int) Setting::get('email_fetch_catchup_limit', 25));
+        $count = 0;
+
+        // Never reach back before this pass existed. Without the watermark the very
+        // first run would ticket every read-but-unticketed message in the window —
+        // newsletters and mail people had deliberately left alone included. From
+        // here on it only rescues messages that arrived while we were watching.
+        // (Older mail is still recoverable deliberately: tickets:diagnose-email
+        // --ingest.)
+        $watermark = Setting::get('email_catchup_started_at');
+
+        if (! $watermark) {
+            $watermark = now()->toDateTimeString();
+            Setting::set('email_catchup_started_at', $watermark, 'system');
+            Log::info("EmailTicketService: catch-up watermark initialised at {$watermark}; older mail is not back-filled.");
+        }
+
+        $watermarkAt = now()->parse($watermark);
+
+        try {
+            $headerQuery = $inbox->messages()
+                ->whereSince(now()->subDays($days))
+                ->setFetchBody(false)
+                ->leaveUnread();
+
+            $headers = $headerQuery->get();
+
+            // soft_fail is on: unparseable messages are dropped silently, and a
+            // dropped message is exactly the failure mode this pass exists to
+            // catch — so say so out loud.
+            if ($headerQuery->hasErrors()) {
+                foreach ($headerQuery->getErrors() as $uid => $error) {
+                    Log::warning("EmailTicketService: catch-up could not parse UID {$uid}: " . $error->getMessage());
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error('EmailTicketService: catch-up scan failed: ' . $e->getMessage());
+            $errors[] = 'Catch-up scan failed: ' . $e->getMessage();
+
+            return 0;
+        }
+
+        // IMAP SINCE has day granularity, so the watermark is applied here.
+        $headers = collect($headers)->filter(function ($header) use ($watermarkAt) {
+            try {
+                $date = $header->getDate();
+
+                return $date === null || now()->parse((string) $date)->gte($watermarkAt);
+            } catch (\Throwable $e) {
+                return true;
+            }
+        });
+
+        $pending = $this->unaccountedCatchUpMessages($headers);
+
+        if ($pending->isEmpty()) {
+            Setting::set('last_email_catchup_at', now()->toDateTimeString(), 'system');
+
+            return 0;
+        }
+
+        Log::info('EmailTicketService: catch-up scan found ' . $pending->count() . ' unprocessed read message(s).');
+
+        foreach ($pending->take($limit) as $header) {
+            $uid = (int) $header->uid;
+
+            try {
+                // Headers alone cannot be turned into a ticket — pull the body now.
+                $full = $inbox->messages()->leaveUnread()->getMessageByUid($uid);
+            } catch (\Throwable $e) {
+                Log::error("EmailTicketService: catch-up could not fetch UID {$uid}: " . $e->getMessage());
+                $errors[] = "Catch-up UID {$uid}: " . $e->getMessage();
+                continue;
+            }
+
+            if (! $full) {
+                continue;
+            }
+
+            if ($this->handleFetchedMessage($full, true, $errors)) {
+                $count++;
+            }
+        }
+
+        Setting::set('last_email_catchup_at', now()->toDateTimeString(), 'system');
+
+        return $count;
+    }
+
+    /**
+     * Of the scanned headers, the ones with no settled ledger row and no existing
+     * ticket/comment carrying their Message-ID. Anything already accounted for is
+     * ledgered here (cheaply, from headers alone) so it is never rescanned.
+     */
+    protected function unaccountedCatchUpMessages($headers): \Illuminate\Support\Collection
+    {
+        $headers = collect($headers)->filter();
+
+        if ($headers->isEmpty()) {
+            return collect();
+        }
+
+        $settled = $this->settledIntakeKeys(
+            $headers->map(fn ($header) => $this->intakeKeyFor($header))->filter()->unique()->all()
+        );
+
+        return $headers->reject(function ($header) use ($settled) {
+            $key = $this->intakeKeyFor($header);
+
+            if ($key !== '' && isset($settled[$key])) {
+                return true;
+            }
+
+            // Already a ticket or a comment (processed before the ledger existed):
+            // record the decision so this stops costing a lookup every pass.
+            if ($this->messageAlreadyProcessed($this->messageIdentifierVariants($header->getMessageId()))) {
+                $this->recordIntake($header, EmailIntakeLog::OUTCOME_DUPLICATE, null, true);
+
+                return true;
+            }
+
+            return false;
+        })->values();
+    }
+
+    /**
+     * message_key => true for keys the ledger has a final decision for. Errors are
+     * deliberately absent: a failed message must be retried.
+     */
+    protected function settledIntakeKeys(array $keys): array
+    {
+        if (empty($keys) || ! $this->intakeLogAvailable()) {
+            return [];
+        }
+
+        $settled = [];
+
+        // SQL Server caps a statement at 2100 parameters.
+        foreach (array_chunk($keys, 500) as $chunk) {
+            EmailIntakeLog::whereIn('message_key', $chunk)
+                ->where('outcome', '!=', EmailIntakeLog::OUTCOME_ERROR)
+                ->pluck('message_key')
+                ->each(function ($key) use (&$settled) {
+                    $settled[$key] = true;
+                });
+        }
+
+        return $settled;
+    }
+
+    /**
+     * The ledger key for a message: its normalized Message-ID, or the mailbox UID
+     * when the message carries no Message-ID at all.
+     */
+    protected function intakeKeyFor($message): string
+    {
+        $messageId = $this->normalizeMessageId($message->getMessageId());
+
+        if ($messageId !== '') {
+            return mb_substr($messageId, 0, 255);
+        }
+
+        $uid = (int) ($message->uid ?? 0);
+
+        return $uid > 0 ? "uid:{$uid}" : '';
+    }
+
+    protected function recordIntake($message, string $outcome, ?string $ticketId, bool $recovery, ?string $error = null): void
+    {
+        if (! $this->intakeLogAvailable()) {
+            return;
+        }
+
+        $key = $this->intakeKeyFor($message);
+
+        if ($key === '') {
+            return;
+        }
+
+        try {
+            EmailIntakeLog::updateOrCreate(
+                ['message_key' => $key],
+                [
+                    'uid' => (int) ($message->uid ?? 0) ?: null,
+                    'folder' => 'INBOX',
+                    'subject' => mb_substr($this->decodeMimeHeader((string) $message->getSubject()), 0, 500),
+                    'sender_email' => mb_substr($this->normalizeEmailAddress($message->getFrom()[0]->mail ?? ''), 0, 255) ?: null,
+                    'recipients' => implode(', ', array_keys($this->collectRoutableRecipientAddresses($message))) ?: null,
+                    'outcome' => $outcome,
+                    'error' => $error ? mb_substr($error, 0, 1000) : null,
+                    'ticket_id' => $ticketId,
+                    'is_recovered' => $recovery,
+                    'processed_at' => now(),
+                ]
+            );
+        } catch (\Throwable $e) {
+            // The ledger is bookkeeping: never let it break mail intake.
+            Log::warning("EmailTicketService: could not record intake for {$key}: " . $e->getMessage());
+        }
+    }
+
+    private static ?bool $hasIntakeLog = null;
+
+    protected function intakeLogAvailable(): bool
+    {
+        if (self::$hasIntakeLog === null) {
+            self::$hasIntakeLog = \Illuminate\Support\Facades\Schema::hasTable('email_intake_logs');
+        }
+
+        return self::$hasIntakeLog;
+    }
 
     /**
      * Test the IMAP connection with provided settings or stored settings.
@@ -173,33 +543,59 @@ class EmailTicketService
     }
 
 
-    protected function processMessage($message)
+    /**
+     * The decision the last processMessage() call reached, for the intake ledger.
+     *
+     * @var array{outcome: string, ticket_id: ?string}|null
+     */
+    protected ?array $lastOutcome = null;
+
+    /**
+     * Record the decision reached for the message being processed and return
+     * whether it produced a ticket or comment.
+     */
+    protected function outcome(string $outcome, bool $handled, ?Ticket $ticket = null): bool
+    {
+        $this->lastOutcome = ['outcome' => $outcome, 'ticket_id' => $ticket?->id];
+
+        return $handled;
+    }
+
+    /**
+     * @param  bool  $recovery  true when this message is being ingested late by the
+     *                          catch-up scan. Courtesy auto-replies (the closed-ticket
+     *                          notice, the department directory) are suppressed then:
+     *                          they are only meaningful in real time, and re-sending
+     *                          them for days-old mail confuses requesters.
+     */
+    protected function processMessage($message, bool $recovery = false)
     {
         $messageId = $this->normalizeMessageId($message->getMessageId());
         $messageIdCandidates = $this->messageIdentifierVariants($message->getMessageId());
         $senderEmail = $this->normalizeEmailAddress($message->getFrom()[0]->mail ?? '');
-        Log::debug("EmailTicketService: Processing message {$messageId} from {$senderEmail}");
+        $subjectForLog = mb_substr((string) $message->getSubject(), 0, 80);
+        Log::debug("EmailTicketService: Processing message {$messageId} from {$senderEmail}" . ($recovery ? ' (catch-up)' : ''));
 
         // 1. Deduplication
         if ($this->messageAlreadyProcessed($messageIdCandidates)) {
-            Log::info("EmailTicketService: Skipping message {$messageId} - Ticket already exists.");
+            Log::info("EmailTicketService: Skipping message {$messageId} '{$subjectForLog}' - Ticket already exists.");
             $message->setFlag('Seen');
-            return false;
+            return $this->outcome(EmailIntakeLog::OUTCOME_DUPLICATE, false);
         }
 
         $supportEmail = $this->normalizeEmailAddress(Setting::get('imap_username', ''));
         if ($supportEmail === '') {
             Log::warning("EmailTicketService: Skipping message {$messageId} - No inbound support email is configured.");
-            return false;
+            return $this->outcome(EmailIntakeLog::OUTCOME_NO_SUPPORT_EMAIL, false);
         }
 
         // 2. Ignore Bounce Messages
         $bannedSenders = ['mailer-daemon', 'postmaster', 'no-reply', 'noreply'];
         foreach ($bannedSenders as $banned) {
             if (str_contains($senderEmail, $banned)) {
-                Log::info("EmailTicketService: Skipping message {$messageId} - Banned sender.");
+                Log::info("EmailTicketService: Skipping message {$messageId} '{$subjectForLog}' - Banned sender {$senderEmail}.");
                 $message->setFlag('Seen');
-                return false;
+                return $this->outcome(EmailIntakeLog::OUTCOME_BANNED_SENDER, false);
             }
         }
 
@@ -212,9 +608,9 @@ class EmailTicketService
         );
 
         if (!$route['matched']) {
-            Log::info("EmailTicketService: Skipping message {$messageId} - Not for support email {$supportEmail}.");
+            Log::info("EmailTicketService: Skipping message {$messageId} '{$subjectForLog}' - Not for support email {$supportEmail}.");
             $message->setFlag('Seen');
-            return false;
+            return $this->outcome(EmailIntakeLog::OUTCOME_NOT_ADDRESSED_TO_US, false);
         }
 
         $servingDepartmentId = $route['department_id'];
@@ -238,7 +634,7 @@ class EmailTicketService
                 $existingTicket->update(['serving_department_id' => $servingDepartmentId]);
             }
 
-            return $this->addEmailAsComment($existingTicket, $message, $user, $cleanBody, $emailBodyHash, $messageId, $richBody);
+            return $this->addEmailAsComment($existingTicket, $message, $user, $cleanBody, $emailBodyHash, $messageId, $richBody, $recovery);
         }
 
         // NEW request on the shared mailbox while departmental addressing is
@@ -248,10 +644,15 @@ class EmailTicketService
         // conversation must still be accepted here, or every thread would break
         // the moment a requester used Reply on an older message.
         if ($servingDepartmentId === null && app(DepartmentMailRouter::class)->requiresDepartmentAddress()) {
-            $this->sendDepartmentDirectory($senderEmail, $senderName, $subject);
+            if ($recovery) {
+                Log::info("EmailTicketService: Skipping message {$messageId} '{$subjectForLog}' - shared-mailbox address required (catch-up, no reply sent).");
+            } else {
+                $this->sendDepartmentDirectory($senderEmail, $senderName, $subject);
+            }
+
             $message->setFlag('Seen');
 
-            return false;
+            return $this->outcome(EmailIntakeLog::OUTCOME_DEPARTMENT_DIRECTORY, false);
         }
 
         return DB::transaction(function () use ($message, $subject, $senderEmail, $senderName, $messageId, $user, $cleanBody, $emailBodyHash, $richBody, $servingDepartmentId) {
@@ -261,26 +662,14 @@ class EmailTicketService
             $company = Company::where('code', \App\Support\CompanyContext::DEFAULT_COMPANY_CODE)->first()
                 ?? Company::first();
             $companyId = $company ? $company->id : null;
-            $companyCode = $company ? $company->code : 'EXT';
 
-            // Generate Ticket Key
-            $maxNumber = Ticket::withTrashed()
-                ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
-                ->where('ticket_key', 'LIKE', "{$companyCode}-%")
-                ->get(['ticket_key'])
-                ->map(function ($t) {
-                    if (preg_match('/-(\d+)$/', $t->ticket_key, $matches)) {
-                        return (int) $matches[1];
-                    }
-                    return 0;
-                })
-                ->max();
-
-            $nextNumber = ($maxNumber ?? 0) + 1;
-            $ticketKey = "{$companyCode}-{$nextNumber}";
-
+            // The key is left to TicketObserver::creating on purpose. Its generator
+            // is the only one that also reserves numbers retired by a renumber
+            // (ticket_key_aliases) — a locally computed max+1 can hand a retired
+            // number to a new ticket, and old mail carrying that number would then
+            // thread onto the wrong conversation. It is also a single MAX() instead
+            // of pulling every key for the prefix across the remote link.
             $ticket = Ticket::create([
-                'ticket_key' => $ticketKey,
                 'title' => mb_substr($subject, 0, 255),
                 'description' => $cleanBody,
                 'description_html' => $richBody,
@@ -345,14 +734,14 @@ class EmailTicketService
             });
 
             $message->setFlag('Seen');
-            return true;
+            return $this->outcome(EmailIntakeLog::OUTCOME_CREATED, true, $ticket);
         });
     }
 
     /**
      * Add the incoming email content as a comment to an existing ticket.
      */
-    protected function addEmailAsComment(Ticket $ticket, $message, $user, ?string $cleanBody = null, ?string $emailBodyHash = null, ?string $messageId = null, ?string $richBody = null)
+    protected function addEmailAsComment(Ticket $ticket, $message, $user, ?string $cleanBody = null, ?string $emailBodyHash = null, ?string $messageId = null, ?string $richBody = null, bool $recovery = false)
     {
         $messageId ??= $this->normalizeMessageId($message->getMessageId());
         $senderEmail = $this->normalizeEmailAddress($message->getFrom()[0]->mail ?? '');
@@ -361,13 +750,21 @@ class EmailTicketService
         // LOCK-OUT LOGIC: If ticket is closed, do not allow new comments via email.
         // Send a notification to the customer instead.
         if ($ticket->status === 'closed') {
-            \Illuminate\Support\Facades\Mail::to($senderEmail)->send(
-                new \App\Mail\ClosedTicketReplyNotification($ticket, $senderName)
-            );
-            
-            Log::info("Email stripping: Sent ClosedTicketReplyNotification to {$senderEmail} for ticket {$ticket->ticket_key}");
+            if ($recovery) {
+                // Days-late ingestion: telling the requester now that their reply
+                // was refused would be worse than silence — the ledger row is the
+                // record that this happened.
+                Log::info("Email stripping: closed ticket {$ticket->ticket_key} reply from {$senderEmail} ingested by catch-up, notification suppressed.");
+            } else {
+                \Illuminate\Support\Facades\Mail::to($senderEmail)->send(
+                    new \App\Mail\ClosedTicketReplyNotification($ticket, $senderName)
+                );
+
+                Log::info("Email stripping: Sent ClosedTicketReplyNotification to {$senderEmail} for ticket {$ticket->ticket_key}");
+            }
+
             $message->setFlag('Seen');
-            return true;
+            return $this->outcome(EmailIntakeLog::OUTCOME_CLOSED_TICKET, true, $ticket);
         }
 
         $cleanBody ??= $this->extractCleanMessageBody($message);
@@ -441,7 +838,7 @@ class EmailTicketService
         $this->forwardChildEmailReply($ticket, $comment, $message, $senderEmail);
         $message->setFlag('Seen');
 
-        return true;
+        return $this->outcome(EmailIntakeLog::OUTCOME_COMMENT, true, $ticket);
     }
 
     /**
@@ -524,8 +921,9 @@ class EmailTicketService
     protected function findExistingTicketForMessage($message, string $subject, string $senderEmail, ?string $emailBodyHash): ?Ticket
     {
         // 1. Check In-Reply-To and References headers against tickets and email comments.
+        //    The subject is passed in as a sanity check — see findTicketByMessageIds.
         $references = $this->messageIdsFromHeaders($message->getReferences(), $message->getInReplyTo());
-        $existingTicket = $this->findTicketByMessageIds($references);
+        $existingTicket = $this->findTicketByMessageIds($references, $subject);
 
         if ($existingTicket && $existingTicket->status === 'closed' && $existingTicket->updated_at->addDays(3)->isPast()) {
             Log::info("EmailTicketService: Matched closed ticket {$existingTicket->ticket_key} via message IDs, but it was closed more than 3 days ago. Bypassing to create a new ticket.");
@@ -541,7 +939,7 @@ class EmailTicketService
             $subjectKey = strtoupper($matches[1]);
             // Resolve the live key first; fall back to a retired key (alias) so a
             // reply still carrying an old key after a renumber lands on the same ticket.
-            $existingTicket = Ticket::where('ticket_key', $subjectKey)->first()
+            $existingTicket = $this->intakeTicketQuery()->where('ticket_key', $subjectKey)->first()
                 ?? $this->findTicketByKeyAlias($subjectKey);
 
             if ($existingTicket && $existingTicket->status === 'closed' && $existingTicket->updated_at->addDays(3)->isPast()) {
@@ -561,10 +959,19 @@ class EmailTicketService
         // 3. Fallback: normalized subject match for the same sender.
         $cleanSubject = $this->normalizeEmailSubject($subject);
         if ($cleanSubject !== '') {
-            $existingTicket = Ticket::where('sender_email', $senderEmail)
+            // Columns pinned deliberately: this scans EVERY ticket a sender ever
+            // raised, and tickets carries nvarchar(MAX) columns (description,
+            // form_data) that would otherwise cross the remote link for each row.
+            // The match is re-read in full below.
+            $subjectMatch = $this->intakeTicketQuery()
+                ->where('sender_email', $senderEmail)
                 ->orderBy('created_at', 'desc')
-                ->get()
+                ->get(['id', 'title'])
                 ->first(fn (Ticket $ticket) => $this->normalizeEmailSubject($ticket->title ?? '') === $cleanSubject);
+
+            $existingTicket = $subjectMatch
+                ? $this->intakeTicketQuery()->find($subjectMatch->id)
+                : null;
 
             if ($existingTicket && $existingTicket->status === 'closed' && $existingTicket->updated_at->addDays(3)->isPast()) {
                 Log::info("EmailTicketService: Matched closed ticket {$existingTicket->ticket_key} via subject fallback, but it was closed more than 3 days ago. Bypassing to create a new ticket.");
@@ -592,6 +999,31 @@ class EmailTicketService
     }
 
     /**
+     * Ticket query for mail intake: never entity-scoped.
+     *
+     * The fetcher also runs inside a web request (the Dashboard posts
+     * tickets/sync on load), so ActiveEntityScope is live and would hide every
+     * ticket outside the browsing user's active entity. That scope is a listing
+     * filter, not an auth boundary: applied here it makes dedup miss and turns
+     * every cross-entity reply into a brand-new duplicate ticket.
+     */
+    protected function intakeTicketQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return Ticket::withoutGlobalScope(ActiveEntityScope::class);
+    }
+
+    /**
+     * Comment query for mail intake, with its ticket eager-loaded unscoped — a
+     * scoped eager load resolves $comment->ticket to null across entities.
+     */
+    protected function intakeCommentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return TicketComment::with([
+            'ticket' => fn ($query) => $query->withoutGlobalScope(ActiveEntityScope::class),
+        ]);
+    }
+
+    /**
      * Resolve a ticket by a retired ticket_key (see ticket_key_aliases). Guarded so
      * inbound mail keeps working before the aliases migration has run.
      */
@@ -610,7 +1042,28 @@ class EmailTicketService
         return Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)->find($ticketId);
     }
 
-    protected function findTicketByMessageIds(array $messageIds): ?Ticket
+    /**
+     * Resolve the ticket a message belongs to from its In-Reply-To / References
+     * headers — the strongest threading signal there is, but NOT proof on its own.
+     *
+     * Requesters routinely raise a NEW request by hitting Reply on an unrelated old
+     * thread and typing a new subject. The reference headers still point at the old
+     * conversation, so trusting them blindly files the new request as a comment on
+     * a stale ticket: it never appears as a ticket, and because the comment now
+     * carries the Message-ID, every later re-fetch is skipped as a duplicate. The
+     * request disappears with no trace (this is what happened to
+     * "DAVID – ORDERING – CHANGE UOM (MAPLE SYRUP)" on 2026-07-29, filed onto
+     * TGI-1145 "CHANGE ITEM CODE/ITEM NAME").
+     *
+     * So a header match must also be plausible on subject. When it is not, we
+     * return null and let the remaining strategies (explicit ticket key, exact
+     * subject, identical body) decide — normally ending in a new ticket, which is
+     * the recoverable failure. A visible duplicate beats a swallowed request.
+     *
+     * @param  string|null  $subject  the incoming subject; null skips the check
+     *                                (callers that already know the topic matches)
+     */
+    protected function findTicketByMessageIds(array $messageIds, ?string $subject = null): ?Ticket
     {
         $messageIds = collect($messageIds)
             ->flatMap(fn ($messageId) => $this->messageIdentifierVariants($messageId))
@@ -623,20 +1076,99 @@ class EmailTicketService
             return null;
         }
 
-        $ticket = Ticket::whereIn('message_id', $messageIds)
-            ->orderBy('created_at')
-            ->first();
-
-        if ($ticket) {
-            return $ticket;
-        }
-
-        $comment = TicketComment::with('ticket')
+        // Oldest first: the root of the thread is the conversation's ticket.
+        $candidates = $this->intakeTicketQuery()
             ->whereIn('message_id', $messageIds)
             ->orderBy('created_at')
-            ->first();
+            ->get();
 
-        return $comment?->ticket;
+        $commentTickets = $this->intakeCommentQuery()
+            ->whereIn('message_id', $messageIds)
+            ->orderBy('created_at')
+            ->get()
+            ->pluck('ticket')
+            ->filter();
+
+        $candidates = $candidates->concat($commentTickets)->filter()->unique('id');
+
+        foreach ($candidates as $candidate) {
+            if ($subject === null || $this->subjectBelongsToTicket($subject, $candidate)) {
+                return $candidate;
+            }
+
+            Log::info(
+                "EmailTicketService: reference headers point at {$candidate->ticket_key} "
+                . "('{$candidate->title}') but the subject '{$subject}' is a different topic — "
+                . 'treating it as a new request rather than a comment.'
+            );
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether an incoming subject plausibly belongs to a ticket's conversation.
+     *
+     * Deliberately generous — the cost of being too strict is a duplicate ticket,
+     * the cost of being too loose is a lost request:
+     *  - equal after stripping Re:/Fw: prefixes, or one contained in the other
+     *  - carries the ticket's key (or a retired key) explicitly
+     *  - shares at least 60% of its words (Jaccard) with the ticket title
+     *
+     * An unknown subject on either side (empty after normalization) keeps the old
+     * trust-the-headers behaviour.
+     */
+    protected function subjectBelongsToTicket(string $subject, Ticket $ticket): bool
+    {
+        $incoming = $this->normalizeSubjectForComparison($subject);
+        $existing = $this->normalizeSubjectForComparison((string) $ticket->title);
+
+        if ($incoming === '' || $existing === '') {
+            return true;
+        }
+
+        if ($incoming === $existing
+            || str_contains($incoming, $existing)
+            || str_contains($existing, $incoming)) {
+            return true;
+        }
+
+        if ($ticket->ticket_key && stripos($subject, (string) $ticket->ticket_key) !== false) {
+            return true;
+        }
+
+        return $this->subjectWordOverlap($incoming, $existing) >= 0.6;
+    }
+
+    /**
+     * Subject reduced to comparable words: reply/forward prefixes removed,
+     * lower-cased, punctuation (including the en dashes these senders use) folded
+     * to single spaces.
+     */
+    protected function normalizeSubjectForComparison(string $subject): string
+    {
+        $subject = $this->normalizeEmailSubject($subject);
+        $subject = mb_strtolower($subject, 'UTF-8');
+        $subject = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $subject) ?? $subject;
+
+        return trim(preg_replace('/\s+/u', ' ', $subject) ?? $subject);
+    }
+
+    /**
+     * Jaccard similarity of the two subjects' word sets (0..1).
+     */
+    protected function subjectWordOverlap(string $left, string $right): float
+    {
+        $leftWords = array_unique(explode(' ', $left));
+        $rightWords = array_unique(explode(' ', $right));
+
+        $union = count(array_unique(array_merge($leftWords, $rightWords)));
+
+        if ($union === 0) {
+            return 1.0;
+        }
+
+        return count(array_intersect($leftWords, $rightWords)) / $union;
     }
 
     protected function findTicketBySenderAndBodyHash(string $senderEmail, string $emailBodyHash): ?Ticket
@@ -644,7 +1176,7 @@ class EmailTicketService
         $since = now('Asia/Manila')->subDays(90);
         $candidates = collect();
 
-        $ticketMatches = Ticket::query()
+        $ticketMatches = $this->intakeTicketQuery()
             ->where('sender_email', $senderEmail)
             ->where('email_body_hash', $emailBodyHash)
             ->where('created_at', '>=', $since)
@@ -654,12 +1186,13 @@ class EmailTicketService
             })
             ->get();
 
-        $commentMatches = TicketComment::with('ticket')
+        $commentMatches = $this->intakeCommentQuery()
             ->where('sender_email', $senderEmail)
             ->where('email_body_hash', $emailBodyHash)
             ->where('created_at', '>=', $since)
             ->whereHas('ticket', function ($query) {
-                $query->where('status', '!=', 'closed')
+                $query->withoutGlobalScope(ActiveEntityScope::class)
+                    ->where('status', '!=', 'closed')
                     ->where(function ($ticketQuery) {
                         $ticketQuery->whereNull('is_deleted')->orWhere('is_deleted', false);
                     });
@@ -681,7 +1214,7 @@ class EmailTicketService
 
     protected function findLegacyTicketsBySenderAndBodyHash(string $senderEmail, string $emailBodyHash, $since)
     {
-        $ticketMatches = Ticket::query()
+        $ticketMatches = $this->intakeTicketQuery()
             ->where('sender_email', $senderEmail)
             ->whereNull('email_body_hash')
             ->where('created_at', '>=', $since)
@@ -692,12 +1225,13 @@ class EmailTicketService
             ->get()
             ->filter(fn (Ticket $ticket) => $this->emailBodyHash($ticket->description ?? '') === $emailBodyHash);
 
-        $commentMatches = TicketComment::with('ticket')
+        $commentMatches = $this->intakeCommentQuery()
             ->where('sender_email', $senderEmail)
             ->whereNull('email_body_hash')
             ->where('created_at', '>=', $since)
             ->whereHas('ticket', function ($query) {
-                $query->where('status', '!=', 'closed')
+                $query->withoutGlobalScope(ActiveEntityScope::class)
+                    ->where('status', '!=', 'closed')
                     ->where(function ($ticketQuery) {
                         $ticketQuery->whereNull('is_deleted')->orWhere('is_deleted', false);
                     });
@@ -740,7 +1274,7 @@ class EmailTicketService
             return false;
         }
 
-        return Ticket::whereIn('message_id', $messageIds)->exists()
+        return $this->intakeTicketQuery()->whereIn('message_id', $messageIds)->exists()
             || TicketComment::whereIn('message_id', $messageIds)->exists();
     }
 

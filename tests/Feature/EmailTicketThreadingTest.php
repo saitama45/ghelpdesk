@@ -159,10 +159,14 @@ class EmailTicketThreadingTest extends TestCase
 
         $ticket = Ticket::firstOrFail();
 
+        // Subject stays on-topic on purpose: this test is about resolving a
+        // reference to a COMMENT's Message-ID. An unrelated subject is a different
+        // case entirely — see
+        // test_reply_with_an_unrelated_subject_opens_a_new_ticket_instead_of_hijacking_the_thread.
         $this->service->processFake(new FakeEmailMessage(
             messageId: '<third@example.test>',
             senderEmail: 'customer@example.test',
-            subject: 'Subject changed again',
+            subject: 'Re: Back office concern - one more detail',
             body: 'Adding another detail: this only happens on the cashier profile.',
             references: ['<comment@example.test>'],
         ));
