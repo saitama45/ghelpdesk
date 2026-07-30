@@ -1297,7 +1297,7 @@ class TicketController extends Controller
                         $alreadyNotified = array_merge($alreadyNotified, $cc);
                     } else {
                         // No primary recipient available — CC list still notified directly
-                        $effective = $ticket->effectiveCcs();
+                        $effective = $ticket->deliverableCcs();
                         foreach ($effective as $cc) {
                             if ($cc->email && !in_array($cc->email, $alreadyNotified, true)) {
                                 Mail::to($cc->email)->send(new TicketStatusChanged($ticket, $cc->name ?: 'Subscriber', (string) $oldStatus, (string) $newStatus));
@@ -2073,13 +2073,25 @@ class TicketController extends Controller
             ->values();
 
         DB::transaction(function () use ($ticket, $incoming) {
+            // A bounce flag survives an unrelated edit to the CC list: this save
+            // rewrites every row, and losing the flag would silently resume mailing
+            // a dead address. Removing and re-adding the CC is the deliberate reset.
+            $bounced = $ticket->ccs()
+                ->whereNotNull('undeliverable_at')
+                ->get(['email', 'undeliverable_at', 'undeliverable_reason'])
+                ->keyBy('email');
+
             $ticket->ccs()->delete();
             foreach ($incoming as $cc) {
+                $previous = $bounced->get($cc['email']);
+
                 $ticket->ccs()->create([
                     'email' => $cc['email'],
                     'name' => $cc['name'],
                     'user_id' => $cc['user_id'],
                     'created_by' => auth()->id(),
+                    'undeliverable_at' => $previous?->undeliverable_at,
+                    'undeliverable_reason' => $previous?->undeliverable_reason,
                 ]);
             }
         });
@@ -2094,7 +2106,9 @@ class TicketController extends Controller
     private function attachTicketCcs($pendingMail, Ticket $ticket, array $alreadySentTo = []): array
     {
         $excluded = collect($alreadySentTo)->map(fn ($e) => strtolower((string) $e))->all();
-        $ccEmails = $ticket->effectiveCcs()->pluck('email');
+        // Bounced addresses are skipped: re-CCing them on every update only
+        // generates another bounce (see ticket_ccs.undeliverable_at).
+        $ccEmails = $ticket->deliverableCcs()->pluck('email');
 
         if ($ticket->parent_id && ($requester = $ticket->effectiveRequesterRecipient())) {
             $ccEmails->push($requester['email']);
@@ -2869,7 +2883,7 @@ class TicketController extends Controller
                 return;
             }
 
-            foreach ($ticket->effectiveCcs()->unique('email') as $cc) {
+            foreach ($ticket->deliverableCcs()->unique('email') as $cc) {
                 if ($cc->email) {
                     Mail::to($cc->email)->send(new NewTicketCreated($ticket, $cc->name ?: 'Subscriber'));
                 }

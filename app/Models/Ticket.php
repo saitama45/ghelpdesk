@@ -283,6 +283,19 @@ class Ticket extends Model
     }
 
     /**
+     * The CC list for OUTBOUND EMAIL: effectiveCcs minus addresses the mail server
+     * has permanently rejected (see ticket_ccs.undeliverable_at).
+     *
+     * Kept separate from effectiveCcs on purpose — that one still backs the ticket
+     * page and the in-app bell, so a dead address stays visible and its owner keeps
+     * their notifications. Only the mailing stops.
+     */
+    public function deliverableCcs()
+    {
+        return $this->effectiveCcs()->reject(fn ($cc) => $cc->undeliverable_at !== null)->values();
+    }
+
+    /**
      * The requestor whose concern owns this email thread. Child tickets retain
      * their staff creator as reporter, so their customer/requestor comes from
      * the parent ticket instead.
@@ -353,7 +366,8 @@ class Ticket extends Model
             $recipients->push($requester);
         }
 
-        foreach ($this->effectiveCcs() as $cc) {
+        // Email participants only — a bounced CC is not one.
+        foreach ($this->deliverableCcs() as $cc) {
             $push($cc->email, $cc->name ?: $cc->email, $cc->user_id, 'cc');
         }
 

@@ -495,6 +495,19 @@ const initialCcs = computed(() => (props.ticket.ccs || []).map(c => ({
     user_id: c.user_id || c.user?.id || null,
 })));
 
+// Addresses the mail server permanently rejected. Kept out of the form payload —
+// the flag is set by the mail fetcher, not by this screen — and looked up by email.
+const ccDeliveryIssues = computed(() => {
+    const issues = {};
+    for (const cc of [...(props.ticket.ccs || []), ...(props.ticket.parent?.ccs || [])]) {
+        if (cc.undeliverable_at) {
+            issues[(cc.email || '').toLowerCase()] = cc.undeliverable_reason || 'The mail server rejected this address.';
+        }
+    }
+    return issues;
+});
+const ccIssue = (email) => ccDeliveryIssues.value[(email || '').toLowerCase()] || null;
+
 const ccForm = useForm({ ccs: [] });
 const ccDraftEmail = ref('');
 const ccDraftName = ref('');
@@ -2729,8 +2742,17 @@ const linkify = (text) => {
                                     Parent ticket has no CC recipients.
                                 </div>
                                 <div v-else class="flex flex-wrap gap-1.5">
-                                    <span v-for="cc in inheritedCcs" :key="cc.id" class="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 rounded-md text-[10px] font-bold border border-purple-100">
-                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l9 6 9-6M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                                    <span
+                                        v-for="cc in inheritedCcs"
+                                        :key="cc.id"
+                                        class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold border"
+                                        :class="ccIssue(cc.email)
+                                            ? 'bg-rose-50 text-rose-700 border-rose-200 line-through decoration-rose-400 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-800'
+                                            : 'bg-purple-50 text-purple-700 border-purple-100'"
+                                        :title="ccIssue(cc.email) ? 'Not being emailed — ' + ccIssue(cc.email) : cc.email"
+                                    >
+                                        <svg v-if="ccIssue(cc.email)" class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+                                        <svg v-else class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l9 6 9-6M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                                         {{ cc.name || cc.email }}
                                     </span>
                                 </div>
@@ -2743,9 +2765,18 @@ const linkify = (text) => {
                                     No CC recipients. Add emails below to notify them on comments, status changes, and assignment changes.
                                 </div>
                                 <div v-else class="flex flex-wrap gap-1.5">
-                                    <span v-for="(cc, idx) in ccForm.ccs" :key="cc.email" class="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-md text-[10px] font-bold border border-blue-100">
-                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l9 6 9-6M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                                        <span :title="cc.email">{{ cc.name || cc.email }}</span>
+                                    <span
+                                        v-for="(cc, idx) in ccForm.ccs"
+                                        :key="cc.email"
+                                        class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold border"
+                                        :class="ccIssue(cc.email)
+                                            ? 'bg-rose-50 text-rose-700 border-rose-200 line-through decoration-rose-400 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-800'
+                                            : 'bg-blue-50 text-blue-700 border-blue-100'"
+                                        :title="ccIssue(cc.email) ? 'Not being emailed — ' + ccIssue(cc.email) : cc.email"
+                                    >
+                                        <svg v-if="ccIssue(cc.email)" class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+                                        <svg v-else class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l9 6 9-6M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                                        <span>{{ cc.name || cc.email }}</span>
                                         <button v-if="hasPermission('tickets.edit')" type="button" @click="removeCc(idx)" class="ml-0.5 text-blue-400 hover:text-red-600">
                                             <XMarkIcon class="w-3 h-3" />
                                         </button>

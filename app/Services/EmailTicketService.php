@@ -234,7 +234,9 @@ class EmailTicketService
                 $message,
                 $this->lastOutcome['outcome'] ?? EmailIntakeLog::OUTCOME_CREATED,
                 $this->lastOutcome['ticket_id'] ?? null,
-                $recovery
+                $recovery,
+                // Bounces carry their diagnostic here — it is the point of the row.
+                $this->lastOutcome['error'] ?? null
             );
 
             return $handled;
@@ -589,7 +591,15 @@ class EmailTicketService
             return $this->outcome(EmailIntakeLog::OUTCOME_NO_SUPPORT_EMAIL, false);
         }
 
-        // 2. Ignore Bounce Messages
+        // 2. Bounces. Handled BEFORE the banned-sender gate below, which would
+        //    otherwise drop them: a delivery-status report is the only way we learn
+        //    that a CC address is dead, and re-mailing it forever is worse than the
+        //    small cost of parsing the report.
+        if ($this->messageLooksLikeBounce($message, $senderEmail)) {
+            return $this->processBounceMessage($message, $messageId, $subjectForLog);
+        }
+
+        // 3. Ignore other automated senders
         $bannedSenders = ['mailer-daemon', 'postmaster', 'no-reply', 'noreply'];
         foreach ($bannedSenders as $banned) {
             if (str_contains($senderEmail, $banned)) {
@@ -599,7 +609,7 @@ class EmailTicketService
             }
         }
 
-        // 3. Recipient Check — also decides WHICH DEPARTMENT the message routes to.
+        // 4. Recipient Check — also decides WHICH DEPARTMENT the message routes to.
         // A hit on a departmental plus-address (support+scm@) names the serving
         // department; a hit on the bare support address is the catch-all and
         // leaves it null, exactly as before routing existed.
@@ -839,6 +849,267 @@ class EmailTicketService
         $message->setFlag('Seen');
 
         return $this->outcome(EmailIntakeLog::OUTCOME_COMMENT, true, $ticket);
+    }
+
+    /**
+     * Whether a message is a delivery-status report rather than someone writing in.
+     *
+     * Two signals, both conservative: the RFC 3464 report content type, or a
+     * daemon sender. Subject wording alone is not enough — a requester writing
+     * "my mail is undeliverable" must still open a ticket.
+     */
+    protected function messageLooksLikeBounce($message, string $senderEmail): bool
+    {
+        foreach (['mailer-daemon', 'mail-daemon', 'postmaster'] as $daemon) {
+            if (str_contains($senderEmail, $daemon)) {
+                return true;
+            }
+        }
+
+        $headers = $this->messageHeaders($message);
+
+        if (! $headers) {
+            return false;
+        }
+
+        foreach ($this->flattenHeaderValues($headers->get('content_type')) as $value) {
+            $value = mb_strtolower((string) $value);
+
+            if (str_contains($value, 'multipart/report') || str_contains($value, 'delivery-status')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Record a bounce: which address failed, on which ticket, and permanently or not.
+     *
+     * A permanent failure flags the matching CC row so no further notification is
+     * sent to it (ticket_ccs.undeliverable_at) and writes a history entry on the
+     * ticket, because "someone stopped receiving updates" must be visible to the
+     * assignee. Transient failures (Action: delayed, 4.x.x) are recorded only —
+     * the mail server is still retrying.
+     *
+     * Never creates a ticket, and never throws into the fetch loop: a bounce we
+     * cannot parse is logged and settled, not retried forever.
+     */
+    protected function processBounceMessage($message, string $messageId, string $subjectForLog): bool
+    {
+        $report = $this->bounceReportText($message);
+        $recipients = $this->failedRecipientsFromBounce($report);
+        $permanent = $this->bounceIsPermanent($report, $subjectForLog);
+        $diagnostic = $this->bounceDiagnostic($report);
+        $ticket = $this->ticketForBounce($message, $report);
+
+        $summary = ($recipients === [] ? 'unknown recipient' : implode(', ', $recipients))
+            . ($permanent ? ' (permanent)' : ' (temporary)')
+            . ($diagnostic ? ': ' . $diagnostic : '');
+
+        $flagged = [];
+
+        if ($permanent && $ticket) {
+            foreach ($recipients as $recipient) {
+                if ($this->flagUndeliverableCc($ticket, $recipient, $diagnostic ?? 'Mail server rejected the address')) {
+                    $flagged[] = $recipient;
+                }
+            }
+        }
+
+        if ($ticket) {
+            $this->recordBounceHistory($ticket, $summary, $flagged);
+        }
+
+        Log::warning(
+            "EmailTicketService: bounce {$messageId} for {$summary}"
+            . ($ticket ? " on {$ticket->ticket_key}" : ' (no ticket resolved)')
+            . ($flagged === [] ? '' : ' — CC flagged undeliverable: ' . implode(', ', $flagged))
+        );
+
+        $message->setFlag('Seen');
+        $this->lastOutcome = [
+            'outcome' => EmailIntakeLog::OUTCOME_BOUNCE,
+            'ticket_id' => $ticket?->id,
+            'error' => mb_substr($summary, 0, 1000),
+        ];
+
+        return false;
+    }
+
+    /**
+     * Everything textual in a bounce: both bodies plus attached parts, since the
+     * delivery-status block and the returned original headers usually arrive as
+     * separate MIME parts rather than in the body.
+     */
+    protected function bounceReportText($message): string
+    {
+        $parts = [
+            (string) $message->getTextBody(),
+            $this->htmlEmailBodyToText((string) $message->getHTMLBody()),
+        ];
+
+        try {
+            foreach ($message->getAttachments() as $attachment) {
+                // Capped: a returned original can carry the whole failed message.
+                $parts[] = mb_substr((string) $attachment->getContent(), 0, 20000);
+            }
+        } catch (\Throwable $e) {
+            Log::debug('EmailTicketService: could not read bounce attachments: ' . $e->getMessage());
+        }
+
+        return implode("\n", array_filter($parts));
+    }
+
+    /**
+     * The addresses that failed. RFC 3464 fields first, then the human-readable
+     * phrasing Gmail and Exchange use. Our own mailbox addresses are never
+     * reported as failures.
+     *
+     * @return array<int, string>
+     */
+    protected function failedRecipientsFromBounce(string $report): array
+    {
+        $patterns = [
+            '/^\s*(?:Final|Original)-Recipient:\s*(?:rfc822\s*;)?\s*<?([^\s<>,;]+@[^\s<>,;]+)>?/mi',
+            '/wasn\'?t delivered to\s*<?([^\s<>,;]+@[^\s<>,;]+)>?/i',
+            '/Delivery to the following recipients? failed(?: permanently)?:?\s*<?([^\s<>,;]+@[^\s<>,;]+)>?/i',
+            '/Your message to\s*<?([^\s<>,;]+@[^\s<>,;]+)>?\s*couldn\'?t be delivered/i',
+        ];
+
+        $ours = app(DepartmentMailRouter::class)->allAddresses();
+        $recipients = [];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match_all($pattern, $report, $matches)) {
+                foreach ($matches[1] as $email) {
+                    $email = $this->normalizeEmailAddress(rtrim($email, '.>,;'));
+
+                    if ($email !== '' && ! in_array($email, $ours, true) && ! in_array($email, $recipients, true)) {
+                        $recipients[] = $email;
+                    }
+                }
+            }
+
+            // The structured fields are authoritative — stop as soon as they hit.
+            if ($recipients !== []) {
+                break;
+            }
+        }
+
+        return $recipients;
+    }
+
+    /**
+     * Whether the failure is final. Explicit delay markers win: a 4.x.x deferral is
+     * still being retried by the sending server and must not disable an address.
+     */
+    protected function bounceIsPermanent(string $report, string $subject): bool
+    {
+        $delayed = preg_match('/^\s*Action:\s*delayed/mi', $report)
+            || preg_match('/^\s*Status:\s*4\.\d+\.\d+/mi', $report)
+            || stripos($subject, 'delay') !== false;
+
+        $failed = preg_match('/^\s*Action:\s*failed/mi', $report)
+            || preg_match('/^\s*Status:\s*5\.\d+\.\d+/mi', $report)
+            || preg_match('/\b5[0-9]{2}[ -][45]\.\d\.\d/', $report);
+
+        return (bool) $failed && ! $delayed;
+    }
+
+    protected function bounceDiagnostic(string $report): ?string
+    {
+        if (preg_match('/^\s*Diagnostic-Code:\s*(?:smtp\s*;)?\s*(.+)$/mi', $report, $matches)) {
+            return trim(preg_replace('/\s+/', ' ', $matches[1]) ?? $matches[1]) ?: null;
+        }
+
+        if (preg_match('/\b(5[0-9]{2}[ -][^\n]{0,180})/', $report, $matches)) {
+            return trim(preg_replace('/\s+/', ' ', $matches[1]) ?? $matches[1]) ?: null;
+        }
+
+        return null;
+    }
+
+    /**
+     * The ticket a bounce belongs to.
+     *
+     * A DSN echoes the failed message's headers, so the References/In-Reply-To we
+     * stamped on the outbound mail (the ticket's source_message_id) come back with
+     * it. Subject-similarity checking is skipped deliberately — the subject here is
+     * the daemon's, not the conversation's. Falls back to a ticket key appearing
+     * anywhere in the report.
+     */
+    protected function ticketForBounce($message, string $report): ?Ticket
+    {
+        $ids = $this->messageIdsFromHeaders($message->getReferences(), $message->getInReplyTo());
+
+        if (preg_match_all('/^\s*(?:Message-ID|In-Reply-To|References):\s*(.+)$/mi', $report, $matches)) {
+            $ids = array_merge($ids, $this->messageIdsFromHeaders($matches[1]));
+        }
+
+        if ($ticket = $this->findTicketByMessageIds($ids)) {
+            return $ticket;
+        }
+
+        if (preg_match_all('/\b([A-Z]{2,6}-\d{1,7})\b/', $report, $matches)) {
+            foreach (array_unique($matches[1]) as $candidateKey) {
+                $ticket = $this->intakeTicketQuery()->where('ticket_key', $candidateKey)->first()
+                    ?? $this->findTicketByKeyAlias($candidateKey);
+
+                if ($ticket) {
+                    return $ticket;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Stamp a CC row as undeliverable. Returns whether anything changed, so a
+     * repeated bounce for an address already disabled stays quiet.
+     */
+    protected function flagUndeliverableCc(Ticket $ticket, string $email, string $reason): bool
+    {
+        // CC rows live on the parent for a child ticket (see effectiveCcs).
+        $owner = $ticket->parent_id
+            ? ($ticket->parent ?? $this->intakeTicketQuery()->find($ticket->parent_id))
+            : $ticket;
+
+        if (! $owner) {
+            return false;
+        }
+
+        return $owner->ccs()
+            ->whereNull('undeliverable_at')
+            ->where('email', $email)
+            ->update([
+                'undeliverable_at' => now(),
+                'undeliverable_reason' => mb_substr($reason, 0, 500),
+            ]) > 0;
+    }
+
+    /**
+     * Leave the bounce on the ticket's history — the assignee needs to know a
+     * participant stopped receiving updates, and the ledger alone is not somewhere
+     * they look.
+     */
+    protected function recordBounceHistory(Ticket $ticket, string $summary, array $flagged): void
+    {
+        try {
+            \App\Models\TicketHistory::create([
+                'ticket_id' => $ticket->id,
+                'user_id' => null,
+                'column_changed' => 'email_delivery',
+                'old_value' => null,
+                'new_value' => 'bounced',
+                'changed_at' => now('Asia/Manila'),
+                'remarks' => 'Email delivery failed for ' . $summary
+                    . ($flagged === [] ? '.' : '. Removed from the CC list for future notifications: ' . implode(', ', $flagged) . '.'),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning("EmailTicketService: could not record bounce history for {$ticket->ticket_key}: " . $e->getMessage());
+        }
     }
 
     /**

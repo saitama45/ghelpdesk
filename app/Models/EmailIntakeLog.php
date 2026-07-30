@@ -35,6 +35,7 @@ class EmailIntakeLog extends Model
     public const OUTCOME_COMMENT = 'comment';
     public const OUTCOME_DUPLICATE = 'duplicate';
     public const OUTCOME_BANNED_SENDER = 'banned_sender';
+    public const OUTCOME_BOUNCE = 'bounce';
     public const OUTCOME_NOT_ADDRESSED_TO_US = 'not_addressed_to_us';
     public const OUTCOME_DEPARTMENT_DIRECTORY = 'department_directory';
     public const OUTCOME_CLOSED_TICKET = 'closed_ticket';
