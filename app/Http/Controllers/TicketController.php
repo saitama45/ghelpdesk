@@ -366,7 +366,7 @@ class TicketController extends Controller
             $query->whereIn('store_id', $storeFilters->all());
         }
 
-        // Apply Vendor Escalation filter
+        // Apply Partner Escalation filter
         $vendorFilters = $normalizeFilterValues($request->input('vendor_id'))
             ->map(fn ($id) => (int) $id)
             ->filter();
@@ -760,7 +760,7 @@ class TicketController extends Controller
         $headers = [
             'Ticket ID', 'Title', 'Type', 'Status', 'Priority', 'Severity',
             'Category', 'Sub-Category', 'Item / Concern',
-            'Company', 'Store', 'Vendor', 'Parent Ticket',
+            'Company', 'Store', 'Partner', 'Parent Ticket',
             'Reporter (Created By)', 'Assignee', 'Last Updated By',
             'Created At', 'Updated At',
             'First Response At', 'Resolved At', 'Closed At',
@@ -1717,10 +1717,10 @@ class TicketController extends Controller
 
         $vendor = Vendor::find($validated['vendor_id']);
         if (!$vendor || !$vendor->is_active) {
-            return redirect()->back()->withErrors(['vendor_id' => 'Selected vendor is not available.']);
+            return redirect()->back()->withErrors(['vendor_id' => 'Selected partner is not available.']);
         }
         if (empty($vendor->email)) {
-            return redirect()->back()->withErrors(['vendor_id' => "Vendor \"{$vendor->name}\" has no email address on file. Add one before escalating."]);
+            return redirect()->back()->withErrors(['vendor_id' => "Partner \"{$vendor->name}\" has no email address on file. Add one before escalating."]);
         }
 
         $ticket->loadMissing('company');
@@ -1746,8 +1746,8 @@ class TicketController extends Controller
 
             $child = Ticket::create([
                 'ticket_key' => $childKey,
-                'title' => "Vendor Escalation: {$ticket->title}",
-                'description' => "Escalated to vendor {$vendor->name} from {$ticket->ticket_key}.\n\nReason: {$validated['escalation_reason']}",
+                'title' => "Partner Escalation: {$ticket->title}",
+                'description' => "Escalated to partner {$vendor->name} from {$ticket->ticket_key}.\n\nReason: {$validated['escalation_reason']}",
                 'type' => $ticket->type,
                 'status' => 'open',
                 'priority' => $ticket->priority,
@@ -1790,7 +1790,7 @@ class TicketController extends Controller
                 'old_value' => $ticket->status,
                 'new_value' => 'waiting_service_provider',
                 'changed_at' => now('Asia/Manila'),
-                'remarks' => "Escalated to vendor {$vendor->name} (child {$childKey}).",
+                'remarks' => "Escalated to partner {$vendor->name} (child {$childKey}).",
             ]);
 
             // Parent waits on the external provider while the vendor works the child.
@@ -1832,19 +1832,19 @@ class TicketController extends Controller
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error("VendorEscalation: failed to email vendor for child {$childTicket->ticket_key}: " . $e->getMessage());
 
-            return redirect()->back()->with('warning', "Child ticket {$childTicket->ticket_key} created, but the vendor email could not be sent: {$e->getMessage()}");
+            return redirect()->back()->with('warning', "Child ticket {$childTicket->ticket_key} created, but the partner email could not be sent: {$e->getMessage()}");
         }
 
         // In-app (bell) notification for staff following the parent ticket.
         $this->notifications->notifyTicket(
             $ticket,
             'status',
-            'Escalated to vendor',
+            'Escalated to partner',
             "{$ticket->ticket_key}: escalated to {$vendor->name} as {$childTicket->ticket_key}.",
             auth()->id()
         );
 
-        return redirect()->back()->with('success', "Escalated to vendor {$vendor->name}. Child ticket {$childTicket->ticket_key} created and emailed.");
+        return redirect()->back()->with('success', "Escalated to partner {$vendor->name}. Child ticket {$childTicket->ticket_key} created and emailed.");
     }
 
     /**

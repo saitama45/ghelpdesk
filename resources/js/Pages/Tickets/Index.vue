@@ -1496,7 +1496,7 @@ const getReporterLabel = (ticket) => {
 };
 
 const getTicketResponsibilityLabel = (ticket) => {
-    if (ticket?.vendor?.name) return `Vendor - ${ticket.vendor.name}`;
+    if (ticket?.vendor?.name) return `Partner - ${ticket.vendor.name}`;
     return ticket?.assignee?.name || 'Unassigned';
 };
 
@@ -2086,13 +2086,13 @@ const requesterTabs = computed(() => {
                             </div>
 
                             <div class="flex flex-col gap-1.5">
-                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Vendor Escalation</label>
+                                <label class="hidden sm:block text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">Partner Escalation</label>
                                 <MultiAutocomplete
                                     :model-value="filterVendor"
                                     :options="vendorFilterOptions"
                                     label-key="name"
                                     value-key="id"
-                                    placeholder="Vendor Escalation..."
+                                    placeholder="Partner Escalation..."
                                     :limit="1"
                                     @update:modelValue="handleVendorFilterChange"
                                 />
@@ -2554,14 +2554,14 @@ const requesterTabs = computed(() => {
                                 <div
                                     v-else-if="isVendorEscalated(ticket)"
                                     class="inline-flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 dark:border-amber-700 dark:bg-amber-900/20"
-                                    title="Handled by an external vendor; not tracked against a user's SLA."
+                                    title="Handled by an external partner; not tracked against a user's SLA."
                                 >
                                     <svg class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-2a4 4 0 014-4h4M16 11l2 2 4-4M9 7a4 4 0 108 0 4 4 0 00-8 0z" />
                                     </svg>
                                     <div class="min-w-0">
-                                        <div class="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">Vendor Escalated</div>
-                                        <div class="break-words text-xs font-bold text-slate-700 dark:text-slate-200">{{ ticket.vendor?.name || 'External vendor' }}</div>
+                                        <div class="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">Partner Escalated</div>
+                                        <div class="break-words text-xs font-bold text-slate-700 dark:text-slate-200">{{ ticket.vendor?.name || 'External partner' }}</div>
                                     </div>
                                 </div>
                                 <button
@@ -2746,7 +2746,7 @@ const requesterTabs = computed(() => {
                         </div>
 
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Vendor Escalation</label>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Partner Escalation</label>
                             <MultiAutocomplete
                                 v-model="createVendorSelection"
                                 :options="vendors"

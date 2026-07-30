@@ -347,11 +347,11 @@ const openChildModal = () => {
 const submitChildTicket = () => {
     if (childForm.escalate_to_vendor) {
         if (!childForm.vendor_id) {
-            showError('Please select a vendor to escalate to.');
+            showError('Please select a partner to escalate to.');
             return;
         }
         if (!selectedEscalationVendor.value?.email) {
-            showError('The selected vendor has no email address on file. Add one in the Vendors module first.');
+            showError('The selected partner has no email address on file. Add one in the Vendors module first.');
             return;
         }
         if (!childForm.escalation_reason.trim()) {
@@ -359,7 +359,7 @@ const submitChildTicket = () => {
             return;
         }
         if (!childForm.vendor_message.trim()) {
-            showError('The email message to the vendor cannot be empty.');
+            showError('The email message to the partner cannot be empty.');
             return;
         }
     } else if (isChildLocationRequired.value && !childForm.store_id) {
@@ -389,10 +389,10 @@ const hasSchedule = computed(() => {
 const isVendorEscalationChild = computed(() => !!props.ticket.parent_id && !!props.ticket.vendor_id);
 const escalatedVendorName = computed(() => {
     const id = props.ticket.vendor_id;
-    if (!id) return 'Vendor';
+    if (!id) return 'Partner';
     return props.ticket.vendor?.name
         || (props.vendors || []).find(v => v && v.id === id)?.name
-        || 'Vendor';
+        || 'Partner';
 });
 const canAssignSchedule = computed(() => !!props.ticket.parent_id && !hasSchedule.value && !isVendorEscalationChild.value && isManager.value);
 const canEditSchedule = computed(() => !!props.ticket.parent_id && hasSchedule.value && isManager.value);
@@ -1646,7 +1646,7 @@ const childRequesterName = (child) => child.reporter?.name || child.sender_name 
 const childRequesterEmail = (child) => child.reporter?.email || child.sender_email || '';
 const childItemName = (child) => child.item?.name || child.category?.name || child.sub_category?.name || 'No item selected';
 const ticketResponsibilityLabel = (ticket) => ticket?.vendor?.name
-    ? `Vendor - ${ticket.vendor.name}`
+    ? `Partner - ${ticket.vendor.name}`
     : ticket?.assignee?.name || 'Unassigned';
 const childLocationName = (child) => {
     const company = child.company?.name || '';
@@ -2486,7 +2486,7 @@ const linkify = (text) => {
                                 </div>
 
                                 <div>
-                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Vendor Escalation</label>
+                                    <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Partner Escalation</label>
                                     <Autocomplete
                                         v-model="editForm.vendor_id"
                                         :options="vendors"
@@ -2537,9 +2537,9 @@ const linkify = (text) => {
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Assignee</label>
                             <div class="flex items-center gap-2 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700">
                                 <svg class="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-2a4 4 0 014-4h4M16 11l2 2 4-4M9 7a4 4 0 108 0 4 4 0 00-8 0z" /></svg>
-                                <span class="text-sm font-bold text-gray-800 dark:text-gray-200">Vendor — {{ escalatedVendorName }}</span>
+                                <span class="text-sm font-bold text-gray-800 dark:text-gray-200">Partner — {{ escalatedVendorName }}</span>
                             </div>
-                            <p class="text-[9px] text-gray-500 mt-1 dark:text-gray-400">Handled by the external vendor; not tracked against a user's SLA.</p>
+                            <p class="text-[9px] text-gray-500 mt-1 dark:text-gray-400">Handled by the external partner; not tracked against a user's SLA.</p>
                         </div>
 
                         <div v-else-if="hasPermission('tickets.assign')">
@@ -2903,7 +2903,7 @@ const linkify = (text) => {
                                         <div class="mt-0.5 font-bold text-gray-700 dark:text-gray-300">{{ childItemName(child) }}</div>
                                     </div>
                                     <div class="rounded-lg border border-white bg-white px-3 py-2 dark:bg-gray-800">
-                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ child.vendor ? 'Vendor' : 'Assignee' }}</div>
+                                        <div class="text-[9px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ child.vendor ? 'Partner' : 'Assignee' }}</div>
                                         <div class="mt-0.5 font-bold text-gray-700 dark:text-gray-300">{{ ticketResponsibilityLabel(child) }}</div>
                                     </div>
                                     <div class="rounded-lg border border-white bg-white px-3 py-2 dark:bg-gray-800">
@@ -3657,7 +3657,7 @@ const linkify = (text) => {
             <div class="p-4 sm:p-6">
                 <div class="flex justify-between items-center mb-6">
                     <h3 class="text-lg font-black text-gray-900 leading-none uppercase tracking-widest dark:text-gray-100">
-                        {{ childForm.escalate_to_vendor ? 'Escalate to Vendor' : 'Create Child Ticket' }}
+                        {{ childForm.escalate_to_vendor ? 'Escalate to Partner' : 'Create Child Ticket' }}
                     </h3>
                     <button @click="showChildModal = false" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
                         <XMarkIcon class="w-6 h-6" />
@@ -3677,8 +3677,8 @@ const linkify = (text) => {
                     >
                         <input v-model="childForm.escalate_to_vendor" @change="toggleVendorEscalation" type="checkbox" class="mt-0.5 rounded border-gray-300 text-amber-600 focus:ring-amber-500 dark:border-gray-600">
                         <span>
-                            <span class="block text-xs font-bold text-gray-700 uppercase tracking-wider dark:text-gray-200">Escalate to Vendor</span>
-                            <span class="block text-[10px] text-gray-500 mt-0.5 dark:text-gray-400">Assign this child directly to an external vendor and email them. Replies stay on the child ticket thread for SLA tracking.</span>
+                            <span class="block text-xs font-bold text-gray-700 uppercase tracking-wider dark:text-gray-200">Escalate to Partner</span>
+                            <span class="block text-[10px] text-gray-500 mt-0.5 dark:text-gray-400">Assign this child directly to an external partner and email them. Replies stay on the child ticket thread for SLA tracking.</span>
                         </span>
                     </label>
 
@@ -3757,11 +3757,11 @@ const linkify = (text) => {
                     <template v-else>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Vendor Escalation <span class="text-red-500">*</span></label>
-                                <Autocomplete v-model="childForm.vendor_id" :options="escalationVendors" label-key="name" value-key="id" placeholder="Select vendor..." />
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Partner Escalation <span class="text-red-500">*</span></label>
+                                <Autocomplete v-model="childForm.vendor_id" :options="escalationVendors" label-key="name" value-key="id" placeholder="Select partner..." />
                                 <p v-if="selectedEscalationVendor" class="text-[10px] mt-1 dark:text-gray-300">
                                     <template v-if="selectedEscalationVendor.email">Will email: <span class="font-bold text-gray-700 dark:text-gray-200">{{ selectedEscalationVendor.email }}</span></template>
-                                    <span v-else class="text-red-500 font-bold">No email on file for this vendor — add one in the Vendors module first.</span>
+                                    <span v-else class="text-red-500 font-bold">No email on file for this partner — add one in the Vendors module first.</span>
                                 </p>
                             </div>
                             <div>
@@ -3778,13 +3778,13 @@ const linkify = (text) => {
 
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Escalation Reason <span class="text-red-500">*</span></label>
-                            <textarea v-model="childForm.escalation_reason" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600" placeholder="Why is this being escalated to the vendor?"></textarea>
+                            <textarea v-model="childForm.escalation_reason" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600" placeholder="Why is this being escalated to the partner?"></textarea>
                         </div>
 
                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Email Message to Vendor <span class="text-red-500">*</span></label>
-                            <textarea v-model="childForm.vendor_message" rows="8" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono dark:border-gray-600" placeholder="Message body sent to the vendor..."></textarea>
-                            <p class="text-[10px] text-gray-500 mt-1 dark:text-gray-400">Pre-filled from this ticket — edit as needed. This exact text is emailed to the vendor; their replies are recorded on the child ticket.</p>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Email Message to Partner <span class="text-red-500">*</span></label>
+                            <textarea v-model="childForm.vendor_message" rows="8" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono dark:border-gray-600" placeholder="Message body sent to the partner..."></textarea>
+                            <p class="text-[10px] text-gray-500 mt-1 dark:text-gray-400">Pre-filled from this ticket — edit as needed. This exact text is emailed to the partner; their replies are recorded on the child ticket.</p>
                         </div>
 
                         <label class="inline-flex items-center gap-2 cursor-pointer">
