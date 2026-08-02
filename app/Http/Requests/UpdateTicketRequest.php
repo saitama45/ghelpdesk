@@ -2,16 +2,37 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Ticket;
+use App\Support\TicketAccess;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateTicketRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
+     *
+     * The department axis is checked HERE rather than in the controller so it
+     * answers before validation does: a customer poking at the endpoint should
+     * be told they may not touch the ticket, not handed a field-by-field
+     * critique of their payload.
+     *
+     * The one exception is a requester marking their own request resolved; the
+     * controller then drops every other field from the payload.
      */
     public function authorize(): bool
     {
-        return true;
+        $ticket = $this->route('ticket');
+
+        if (! $ticket instanceof Ticket) {
+            return true;
+        }
+
+        if (! TicketAccess::isCustomerOf($ticket, $this->user())) {
+            return true;
+        }
+
+        return $this->input('status') === 'resolved'
+            && TicketAccess::mayResolveAsCustomer($ticket, $this->user());
     }
 
     /**

@@ -17,6 +17,13 @@ import { ArrowDownTrayIcon, ChatBubbleBottomCenterTextIcon, CheckIcon, ChevronDo
 
 const props = defineProps({
     ticket: Object,
+    // Department axis for THIS ticket: 'provider' when my home department serves
+    // it, 'customer' when another department does. Server-resolved — see
+    // App\Support\TicketAccess.
+    departmentAxis: {
+        type: Object,
+        default: () => ({ accessView: 'provider', readOnly: false, servingDepartment: null, homeDepartment: null }),
+    },
     viewers: {
         type: Array,
         default: () => [],
@@ -51,10 +58,51 @@ const page = usePage();
 const { confirm } = useConfirm();
 const { put, destroy, post } = useErrorHandler();
 const { showSuccess, showError } = useToast();
-const { hasPermission } = usePermission();
+const { hasPermission: hasGrantedPermission } = usePermission();
 const { formatDate, parseDate } = useDateFormatter();
 const authUser = computed(() => page.props.auth.user);
 const isManager = computed(() => !!authUser.value?.is_manager);
+
+// ---------------------------------------------------------------------------
+// Provider vs customer
+// ---------------------------------------------------------------------------
+// When another department serves this ticket I am its internal customer: I can
+// read it and reply to it, but the desk that owns it makes every change. Rather
+// than dressing ~50 controls with an extra condition, the service-desk
+// permissions are withdrawn for the whole page — every control already keys off
+// them, and the server enforces the same rule (App\Support\TicketAccess).
+const isCustomerView = computed(() => props.departmentAxis?.accessView === 'customer');
+const axisServingName = computed(() => props.departmentAxis?.servingDepartment?.name || 'another department');
+const axisHomeName = computed(() => props.departmentAxis?.homeDepartment?.name || null);
+
+// `tickets.resolve` is deliberately NOT here: a requester may close the loop on
+// their own request (see canResolveAsCustomer). Everything else is desk work.
+const DESK_PERMISSIONS = [
+    'tickets.edit',
+    'tickets.assign',
+    'tickets.close',
+    'tickets.delete',
+    'tickets.canned_messages',
+    'tickets.internal_notes',
+];
+
+const hasPermission = (name) => {
+    if (isCustomerView.value && DESK_PERMISSIONS.includes(name)) {
+        return false;
+    }
+
+    return hasGrantedPermission(name);
+};
+
+// A customer holding tickets.resolve may mark their own request resolved. That is
+// the only status they can reach — availableStatuses filters the rest out, since
+// every other transition needs tickets.edit.
+const canResolveAsCustomer = computed(() => isCustomerView.value && hasGrantedPermission('tickets.resolve'));
+
+// The CC list answers "who on my side follows this request", so it stays with the
+// requester as well as the desk — checked against the real grant, not the
+// axis-suppressed one.
+const canManageCcs = computed(() => hasGrantedPermission('tickets.edit'));
 
 // Computed property for available companies based on user roles
 const availableCompanies = computed(() => {
@@ -1004,7 +1052,11 @@ const itemLeaderRows = computed(() => props.itemLeaders || []);
 
 const canResolveTicket = computed(() => availableStatuses.value.includes('resolved'));
 const requiresRcaOnResolve = computed(() => !!selectedItem.value?.requires_rca_on_resolve);
-const requiresResolutionDetails = (targetStatus) => ['resolved', 'closed'].includes(targetStatus);
+// Action Taken (and RCA) is the SERVING desk's record of the work done. A
+// requester resolving their own request has no such record to write, so they are
+// never asked for one — the backend relaxes the same rule.
+const requiresResolutionDetails = (targetStatus) =>
+    !isCustomerView.value && ['resolved', 'closed'].includes(targetStatus);
 const terminalStatusPermissions = {
     resolved: 'tickets.resolve',
     closed: 'tickets.close',
@@ -1069,6 +1121,12 @@ const validateResolutionBeforeSubmit = (newStatus) => {
 
 const canSubmitCurrentComment = () => {
     if (commentForm.comment_text.trim() || commentForm.attachments.length > 0) {
+        return true;
+    }
+
+    // A customer's resolve carries no Action Taken, so an empty body is all there
+    // is to send — the status change itself is the submission.
+    if (canResolveAsCustomer.value && commentForm.status === 'resolved') {
         return true;
     }
 
@@ -1669,8 +1727,18 @@ const buildTicketPayload = (source = editForm.data()) => {
 };
 
 const updateTicket = (options = {}) => {
+    // Customer view: the only save the desk accepts from a requester is the
+    // resolve. Field watchers (store→company auto-follow, the ticket-prop sync)
+    // still fire on load, so swallow them silently rather than firing a PUT the
+    // server refuses and toasting an error the user never asked for.
+    if (isCustomerView.value && !(canResolveAsCustomer.value && editForm.status === 'resolved')) {
+        return;
+    }
+
     if (!canUpdateTicket()) {
-        showError('You do not have permission to update tickets.');
+        showError(isCustomerView.value
+            ? `${axisServingName.value} owns this ticket — you can follow it and reply, but only their desk can change it.`
+            : 'You do not have permission to update tickets.');
         return;
     }
     
@@ -2211,6 +2279,24 @@ const linkify = (text) => {
         </template>
 
         <div>
+            <!-- Role banner: same shape and wording as the Ticket Board, so the
+                 provider/customer distinction reads identically everywhere. -->
+            <div v-if="isCustomerView"
+                 class="mb-6 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-dashed border-slate-300 border-l-4 bg-white px-4 py-3 shadow-sm dark:border-slate-600 dark:bg-slate-900"
+                 :style="{ borderLeftColor: 'var(--dept-accent)' }">
+                <span class="rounded-md px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white"
+                      :style="{ backgroundColor: 'var(--dept-accent)' }">
+                    ↗ Internal Customer
+                </span>
+                <span class="text-sm font-bold text-slate-900 dark:text-white">
+                    <template v-if="axisHomeName">{{ axisHomeName }} request to {{ axisServingName }}</template>
+                    <template v-else>Your request to {{ axisServingName }}</template>
+                </span>
+                <span class="text-xs text-slate-500 dark:text-slate-400">
+                    Read-only — {{ axisServingName }} owns this ticket. You can still reply below and attach files<template v-if="canResolveAsCustomer">, and mark it resolved once you're satisfied</template>.
+                </span>
+            </div>
+
             <div class="flex flex-col lg:grid lg:grid-cols-3 gap-6">
                 <!-- Right Column (Metadata) moved to TOP on mobile -->
                 <div class="lg:col-span-1 space-y-6 order-1 lg:order-2">
@@ -2777,13 +2863,13 @@ const linkify = (text) => {
                                         <svg v-if="ccIssue(cc.email)" class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
                                         <svg v-else class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l9 6 9-6M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                                         <span>{{ cc.name || cc.email }}</span>
-                                        <button v-if="hasPermission('tickets.edit')" type="button" @click="removeCc(idx)" class="ml-0.5 text-blue-400 hover:text-red-600">
+                                        <button v-if="canManageCcs" type="button" @click="removeCc(idx)" class="ml-0.5 text-blue-400 hover:text-red-600">
                                             <XMarkIcon class="w-3 h-3" />
                                         </button>
                                     </span>
                                 </div>
 
-                                <div v-if="hasPermission('tickets.edit')" class="space-y-2 pt-2">
+                                <div v-if="canManageCcs" class="space-y-2 pt-2">
                                     <!-- Search internal users -->
                                     <div class="relative">
                                         <input

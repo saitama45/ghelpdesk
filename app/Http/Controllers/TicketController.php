@@ -21,6 +21,7 @@ use App\Models\Vendor;
 use App\Models\Schedule;
 use App\Services\TicketKnowledgeBaseService;
 use App\Support\DepartmentContext;
+use App\Support\TicketAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -168,10 +169,13 @@ class TicketController extends Controller
      * nobody has claimed. Another department's work never appears here.
      *
      * CUSTOMER (you are on another department's tab) — you are that department's
-     * internal customer, so the list narrows to your OWN department's requests to
-     * them and the page renders read-only. Unassigned tickets are excluded here:
-     * with no assignee there is nothing tying them to the department you are
-     * visiting, and including them would repeat the same ticket under every tab.
+     * internal customer, so the list narrows to the requests YOU are accountable
+     * for and the page renders read-only. That is your own tickets, plus those of
+     * anyone reporting to you: a request is visible to the person who raised it
+     * and to their line upwards, never sideways to a peer. Unassigned tickets are
+     * excluded here: with no assignee there is nothing tying them to the
+     * department you are visiting, and including them would repeat the same
+     * ticket under every tab.
      *
      * Executive ("All") sits above the axis and keeps the unscoped enterprise view.
      *
@@ -211,22 +215,43 @@ class TicketController extends Controller
         }
 
         $query->ownedByDepartment($viewedId, includeUnassigned: false);
-
-        if ($homeId) {
-            // Your department's requests to them — a manager sees their team's.
-            // Uses the requester-department column rather than materialising every
-            // user id in the department, which broke past SQL Server's 2100
-            // parameter ceiling on the larger departments.
-            $query->requestedByDepartment($homeId);
-        } else {
-            // No home department to speak for you: your own requests only.
-            $query->where('tickets.reporter_id', $user->id);
-        }
+        $this->applyCustomerVisibility($query, $user, $homeId);
 
         $payload['accessView'] = 'customer';
         $payload['readOnly'] = true;
 
         return $payload;
+    }
+
+    /**
+     * Narrow the customer view to the requests this user answers for.
+     *
+     * A request belongs to the person who raised it and to their line upwards —
+     * never sideways. So:
+     *
+     *  - everyone sees the tickets they reported themselves;
+     *  - plus the tickets of anyone below them in `manager_user`, however deep,
+     *    which is what lets a lead see their team's requests;
+     *  - a flagged manager (users.is_manager) sees their whole department's
+     *    requests. The reporting chain is only partly filled in, so without this
+     *    a department head with no explicit reports would see nothing but their
+     *    own tickets.
+     *
+     * The department fallback is deliberately a `requestedByDepartment()` column
+     * match rather than a list of member ids: materialising a large department's
+     * users has hit SQL Server's 2100-parameter ceiling before.
+     */
+    private function applyCustomerVisibility($query, User $user, ?int $homeId): void
+    {
+        if ($homeId && $user->is_manager) {
+            $query->requestedByDepartment($homeId);
+
+            return;
+        }
+
+        $visibleReporterIds = array_merge([(int) $user->id], $user->transitiveSubordinateIds());
+
+        $query->whereIn('tickets.reporter_id', $visibleReporterIds);
     }
 
     /**
@@ -1099,6 +1124,10 @@ class TicketController extends Controller
 
         return Inertia::render('Tickets/Edit', [
             'ticket' => $ticket,
+            // Provider vs customer for THIS ticket: another department's work is
+            // followed and replied to, never edited. Enforced server-side too —
+            // see the guards on update/accept/split/schedule/CC.
+            'departmentAxis' => TicketAccess::payload($ticket, auth()->user()),
             'viewers' => $viewers,
             'itemLeaders' => $this->buildItemLeaders($ticket->item_id),
             'staff' => $staff,
@@ -1186,9 +1215,19 @@ class TicketController extends Controller
         $validated = $request->validated();
 
         $this->authorizeTicketStatusChange($validated['status'] ?? null, $ticket->status);
-        
+
+        // Internal customer on another desk's ticket. The request only got here by
+        // being a resolve (see UpdateTicketRequest::authorize) — reduce it to that
+        // one field so nothing else can ride along on a hand-crafted payload, and
+        // skip the requester/classification rewrites below, which are desk work.
+        $customerResolve = TicketAccess::isCustomerOf($ticket, $request->user());
+
+        if ($customerResolve) {
+            $validated = ['status' => 'resolved'];
+        }
+
         // Handle requester options
-        if ($request->has('is_self_requester')) {
+        if (! $customerResolve && $request->has('is_self_requester')) {
             $isSelf = $request->boolean('is_self_requester');
             if ($isSelf) {
                 $validated['reporter_id'] = auth()->id();
@@ -1203,7 +1242,7 @@ class TicketController extends Controller
                     unset($validated['reporter_id'], $validated['sender_name'], $validated['sender_email']);
                 }
             }
-        } elseif ($request->has('department')) {
+        } elseif (! $customerResolve && $request->has('department')) {
             $validated['department'] = $request->input('department');
         }
 
@@ -1315,6 +1354,7 @@ class TicketController extends Controller
     public function accept(Request $request, Ticket $ticket)
     {
         abort_unless($request->user()->can('tickets.assign'), 403);
+        TicketAccess::assertProvider($ticket, $request->user());
 
         $validated = $request->validate([
             'company_id' => ['required', 'exists:companies,id'],
@@ -1475,6 +1515,7 @@ class TicketController extends Controller
     public function destroy(Ticket $ticket)
     {
         abort_unless(auth()->user()->can('tickets.delete'), 403);
+        TicketAccess::assertProvider($ticket, auth()->user());
 
         $count = $this->archiveTickets(collect([$ticket]));
 
@@ -1493,6 +1534,8 @@ class TicketController extends Controller
             'ticket_ids' => 'required|array|min:1',
             'ticket_ids.*' => 'exists:tickets,id',
         ]);
+
+        TicketAccess::assertProviderOfAll($validated['ticket_ids'], $request->user());
 
         // Unscoped, matching destroy(): route binding already lets a user open a ticket
         // outside their active entity, so `tickets.delete` — not the entity scope — is
@@ -1548,6 +1591,8 @@ class TicketController extends Controller
      */
     public function storeChild(Request $request, Ticket $ticket)
     {
+        TicketAccess::assertProvider($ticket, $request->user());
+
         // Allow additional child tickets after the parent moves to For Schedule.
         if (!in_array($ticket->status, ['open', 'in_progress', 'for_schedule', 'waiting_service_provider'], true)) {
             return redirect()->back()->withErrors(['error' => 'Child tickets can only be created for Open, In Progress, For Schedule, or Waiting tickets.']);
@@ -1876,6 +1921,8 @@ class TicketController extends Controller
             abort(403, 'Only managers can assign schedules.');
         }
 
+        TicketAccess::assertProvider($ticket, auth()->user());
+
         $existing = \App\Models\ScheduleStore::where('ticket_id', $ticket->id)->first();
         if ($existing) {
             return redirect()->back()->withErrors(['error' => 'This ticket already has a schedule assigned.']);
@@ -1962,6 +2009,8 @@ class TicketController extends Controller
             abort(403, 'Only managers can edit schedules.');
         }
 
+        TicketAccess::assertProvider($ticket, auth()->user());
+
         $scheduleStore = \App\Models\ScheduleStore::where('ticket_id', $ticket->id)->with('schedule')->first();
         if (!$scheduleStore || !$scheduleStore->schedule) {
             return redirect()->back()->withErrors(['error' => 'No schedule found for this ticket.']);
@@ -2046,6 +2095,10 @@ class TicketController extends Controller
      */
     public function syncCcs(Request $request, Ticket $ticket)
     {
+        // Deliberately NOT gated on the department axis: the CC list is who follows
+        // the thread, and a requester needs to add their own people to their own
+        // request. It changes no ticket field and no ownership — only the mailing
+        // list — so it stays open to internal customers as well as the owning desk.
         if (!auth()->user()->can('tickets.edit')) {
             abort(403);
         }
@@ -2177,14 +2230,31 @@ class TicketController extends Controller
         $requiresRcaOnResolve = (bool) $ticket->item?->requires_rca_on_resolve;
         $hasAttachments = count($request->file('attachments', []) ?: []) > 0;
 
+        // Replying is a customer's right; MOVING the ticket and writing on the
+        // desk's internal thread are not — those stay with the owning department.
+        // The exception is a requester resolving their own request.
+        $changesStatus = $request->filled('status') && $request->input('status') !== $ticket->status;
+        $isCustomerResolve = $changesStatus
+            && $request->input('status') === 'resolved'
+            && TicketAccess::mayResolveAsCustomer($ticket, $request->user());
+
+        if (($changesStatus && ! $isCustomerResolve) || $request->boolean('is_internal')) {
+            TicketAccess::assertProvider($ticket, $request->user());
+        }
+
+        // Action Taken / RCA are the serving desk's record of the work. A requester
+        // closing the loop on their own request has none to give, so they are not
+        // asked for one.
+        $requiresResolutionRecord = $isTerminalStatusChange && ! $isCustomerResolve;
+
         $this->authorizeTicketStatusChange($request->input('status'), $ticket->status);
 
         $request->validate([
             'comment_text' => [Rule::requiredIf(!$isTerminalStatusChange && !$hasAttachments), 'nullable', 'string'],
             'is_internal' => 'nullable|boolean',
             'status' => 'nullable|string|in:open,for_schedule,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
-            'action_taken' => [Rule::requiredIf($isTerminalStatusChange), 'nullable', 'string'],
-            'root_cause_analysis' => [Rule::requiredIf($isTerminalStatusChange && $requiresRcaOnResolve), 'nullable', 'string'],
+            'action_taken' => [Rule::requiredIf($requiresResolutionRecord), 'nullable', 'string'],
+            'root_cause_analysis' => [Rule::requiredIf($requiresResolutionRecord && $requiresRcaOnResolve), 'nullable', 'string'],
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:1024000',
             'mentions' => 'nullable|array',
@@ -2197,7 +2267,9 @@ class TicketController extends Controller
         $actionTaken = trim((string) $request->input('action_taken'));
         $rootCauseAnalysis = trim((string) $request->input('root_cause_analysis'));
 
-        if ($isTerminalStatusChange) {
+        // Only the desk's resolution carries the Action Taken block; a customer
+        // resolve would otherwise stamp an empty "Action Taken:" on the thread.
+        if ($isTerminalStatusChange && $actionTaken !== '') {
             $commentText .= ($commentText !== '' ? "\n\n" : '') . "Action Taken:\n" . $actionTaken;
 
             if ($rootCauseAnalysis !== '') {
@@ -2416,6 +2488,8 @@ class TicketController extends Controller
             'status'          => 'nullable|string',
         ]);
 
+        TicketAccess::assertProviderOfAll($validated['ticket_ids'], $request->user());
+
         $fields  = ['store_id', 'category_id', 'sub_category_id', 'item_id', 'department', 'assignee_id', 'status'];
         $updates = collect($fields)
             ->filter(fn($k) => $request->has($k))
@@ -2479,6 +2553,8 @@ class TicketController extends Controller
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:1024000',
         ]);
+
+        TicketAccess::assertProviderOfAll($validated['ticket_ids'], $request->user());
 
         $commentText = trim((string) ($validated['comment_text'] ?? ''));
         $attachments = $request->file('attachments', []) ?: [];
@@ -2555,6 +2631,11 @@ class TicketController extends Controller
             'tickets.*.backlogs_end'      => 'nullable|string',
             'tickets.*.remarks'           => 'nullable|string',
         ]);
+
+        TicketAccess::assertProviderOfAll(
+            collect($validated['tickets'])->pluck('parent_id')->unique()->values()->all(),
+            $request->user()
+        );
 
         // Unscoped: a selected parent can live in another entity. Scoped, this guard
         // misses cross-entity children AND findOrFail() below 404s on a cross-entity parent.
@@ -2652,6 +2733,7 @@ class TicketController extends Controller
     public function split(Request $request, Ticket $ticket)
     {
         abort_unless($request->user()->can('tickets.edit'), 403);
+        TicketAccess::assertProvider($ticket, $request->user());
 
         $validated = $request->validate([
             'original_title' => 'required|string|max:255',
@@ -2717,6 +2799,8 @@ class TicketController extends Controller
         if (!in_array($validated['parent_id'], $validated['ticket_ids'])) {
             return redirect()->back()->withErrors(['merge' => 'Parent ticket must be one of the selected tickets.']);
         }
+
+        TicketAccess::assertProviderOfAll($validated['ticket_ids'], $request->user());
 
         // A merge can span entities, so drop ActiveEntityScope — it is a listing
         // filter, not an authorization boundary. Left on, find()/whereIn() return

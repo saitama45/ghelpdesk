@@ -8,6 +8,7 @@ use App\Models\InventoryTransaction;
 use App\Models\StockIn;
 use App\Models\Ticket;
 use App\Models\TicketAsset;
+use App\Support\TicketAccess;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -53,6 +54,7 @@ class TicketAssetController extends Controller
     public function store(Request $request, Ticket $ticket)
     {
         abort_unless($request->user()->can('tickets.edit'), 403);
+        TicketAccess::assertProvider($ticket, $request->user());
 
         $validated = $request->validate([
             'asset_id' => ['required', 'integer', 'exists:assets,id'],
@@ -150,6 +152,7 @@ class TicketAssetController extends Controller
     public function update(Request $request, Ticket $ticket, TicketAsset $ticketAsset)
     {
         abort_unless($request->user()->can('tickets.edit'), 403);
+        TicketAccess::assertProvider($ticket, $request->user());
         abort_unless($ticketAsset->ticket_id === $ticket->id, 404);
 
         $validated = $request->validate([
@@ -194,6 +197,7 @@ class TicketAssetController extends Controller
     public function destroy(Request $request, Ticket $ticket, TicketAsset $ticketAsset)
     {
         abort_unless($request->user()->can('tickets.edit'), 403);
+        TicketAccess::assertProvider($ticket, $request->user());
         abort_unless($ticketAsset->ticket_id === $ticket->id, 404);
 
         $ticketAsset->delete();

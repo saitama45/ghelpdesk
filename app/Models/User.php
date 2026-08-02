@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
@@ -48,6 +49,37 @@ class User extends Authenticatable
     public function subordinates()
     {
         return $this->belongsToMany(User::class, 'manager_user', 'manager_id', 'user_id');
+    }
+
+    /**
+     * Every user under this one in the reporting chain, however deep.
+     *
+     * The chain lives in `manager_user`, which is small enough (one row per
+     * manager/report pair) to walk in memory — SQL Server and SQLite spell
+     * recursive CTEs differently, and this runs on both.
+     *
+     * @return array<int, int> Subordinate user ids, never including self.
+     */
+    public function transitiveSubordinateIds(): array
+    {
+        $byManager = DB::table('manager_user')
+            ->get(['manager_id', 'user_id'])
+            ->groupBy('manager_id')
+            ->map(fn ($rows) => $rows->pluck('user_id')->map(fn ($id) => (int) $id)->all());
+
+        $found = [];
+        $queue = [(int) $this->id];
+
+        while ($queue) {
+            foreach ($byManager[array_shift($queue)] ?? [] as $subId) {
+                if ($subId !== (int) $this->id && ! isset($found[$subId])) {
+                    $found[$subId] = true;
+                    $queue[] = $subId;
+                }
+            }
+        }
+
+        return array_keys($found);
     }
 
     public function creator()
