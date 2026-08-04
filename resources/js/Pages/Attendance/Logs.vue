@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, reactive, computed } from 'vue';
+import { ref, watch, reactive, computed, onMounted } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
@@ -7,7 +7,7 @@ import Modal from '@/Components/Modal.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
-import { MapPinIcon, ClockIcon, ArrowTopRightOnSquareIcon, MagnifyingGlassPlusIcon, MagnifyingGlassMinusIcon, ArrowsPointingOutIcon, XMarkIcon, FunnelIcon, UserCircleIcon } from '@heroicons/vue/24/outline';
+import { MapPinIcon, ClockIcon, ArrowTopRightOnSquareIcon, MagnifyingGlassPlusIcon, MagnifyingGlassMinusIcon, ArrowsPointingOutIcon, XMarkIcon, FunnelIcon, UserCircleIcon, AdjustmentsHorizontalIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
     sessions: Object,
@@ -75,6 +75,76 @@ const selectOffice = (officeId) => {
 const clearOfficeFilter = () => {
     filterStore.value = ''
 }
+
+// --- Office card visibility (persisted per browser) ---
+// null = never customized -> show every office card. An array (even empty) means
+// the user made an explicit choice, so it is honoured as-is.
+const OFFICE_CARDS_STORAGE_KEY = 'attendance.logs.visibleOfficeCards'
+
+const visibleOfficeIds = ref(null)
+const showOfficePicker = ref(false)
+
+const readStoredOfficeIds = () => {
+    try {
+        const raw = window.localStorage.getItem(OFFICE_CARDS_STORAGE_KEY)
+        if (raw === null) return null
+        const parsed = JSON.parse(raw)
+        return Array.isArray(parsed) ? parsed.map(Number).filter(id => Number.isFinite(id)) : null
+    } catch (e) {
+        return null
+    }
+}
+
+const persistOfficeIds = (ids) => {
+    try {
+        window.localStorage.setItem(OFFICE_CARDS_STORAGE_KEY, JSON.stringify(ids))
+    } catch (e) {
+        // Storage unavailable (private mode / quota) - keep the in-memory choice only.
+    }
+}
+
+onMounted(() => {
+    visibleOfficeIds.value = readStoredOfficeIds()
+})
+
+const isOfficeVisible = (officeId) => {
+    return visibleOfficeIds.value === null || visibleOfficeIds.value.includes(officeId)
+}
+
+const toggleOfficeVisibility = (officeId) => {
+    const current = visibleOfficeIds.value === null
+        ? (props.officeAttendanceSummary || []).map(office => office.id)
+        : [...visibleOfficeIds.value]
+
+    const index = current.indexOf(officeId)
+    if (index === -1) {
+        current.push(officeId)
+    } else {
+        current.splice(index, 1)
+    }
+
+    visibleOfficeIds.value = current
+    persistOfficeIds(current)
+}
+
+const showAllOfficeCards = () => {
+    const all = (props.officeAttendanceSummary || []).map(office => office.id)
+    visibleOfficeIds.value = all
+    persistOfficeIds(all)
+}
+
+const hideAllOfficeCards = () => {
+    visibleOfficeIds.value = []
+    persistOfficeIds([])
+}
+
+const displayedOfficeSummary = computed(() => {
+    return (props.officeAttendanceSummary || []).filter(office => isOfficeVisible(office.id))
+})
+
+const hiddenOfficeCount = computed(() => {
+    return (props.officeAttendanceSummary || []).length - displayedOfficeSummary.value.length
+})
 
 const subUnitOptions = computed(() => {
     if (!props.users) return [{ id: '', name: 'All Sub-Units' }];
@@ -387,22 +457,83 @@ const stopDrag = () => {
                             </div>
                         </div>
                     </div>
-                    <button
-                        v-if="selectedOfficeId"
-                        type="button"
-                        @click="clearOfficeFilter"
-                        class="self-start rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300"
-                    >
-                        View all locations
-                    </button>
+                    <div class="flex flex-wrap items-center gap-2 self-start">
+                        <button
+                            v-if="selectedOfficeId"
+                            type="button"
+                            @click="clearOfficeFilter"
+                            class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300"
+                        >
+                            View all locations
+                        </button>
+                        <button
+                            v-if="officeAttendanceSummary.length"
+                            type="button"
+                            @click="showOfficePicker = !showOfficePicker"
+                            :aria-expanded="showOfficePicker"
+                            class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-black transition-colors"
+                            :class="showOfficePicker
+                                ? 'border-blue-500 bg-blue-600 text-white'
+                                : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:bg-gray-900'"
+                        >
+                            <AdjustmentsHorizontalIcon class="h-4 w-4" />
+                            <span>Choose Offices</span>
+                            <span
+                                v-if="hiddenOfficeCount > 0"
+                                class="rounded-full px-1.5 py-0.5 text-[9px] font-black"
+                                :class="showOfficePicker ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'"
+                            >
+                                {{ hiddenOfficeCount }} hidden
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Card visibility picker (saved in this browser) -->
+                <div
+                    v-if="showOfficePicker && officeAttendanceSummary.length"
+                    class="mb-4 rounded-xl border border-gray-200 bg-gray-50/70 p-4 dark:border-gray-700 dark:bg-gray-900/40"
+                >
+                    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                            Cards to show on page load — saved in this browser
+                        </p>
+                        <div class="flex items-center gap-2">
+                            <button type="button" @click="showAllOfficeCards" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-black text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                                Select all
+                            </button>
+                            <button type="button" @click="hideAllOfficeCards" class="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-black text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                                Clear all
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                        <label
+                            v-for="office in officeAttendanceSummary"
+                            :key="`picker-${office.id}`"
+                            class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 transition-colors hover:border-blue-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-700"
+                        >
+                            <input
+                                type="checkbox"
+                                :checked="isOfficeVisible(office.id)"
+                                @change="toggleOfficeVisibility(office.id)"
+                                class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500 dark:border-gray-600"
+                            />
+                            <span class="min-w-0">
+                                <span class="block truncate text-xs font-black text-gray-900 dark:text-gray-100">{{ office.name }}</span>
+                                <span v-if="office.code" class="block truncate text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">{{ office.code }}</span>
+                            </span>
+                        </label>
+                    </div>
                 </div>
 
                 <div
-                    v-if="officeAttendanceSummary.length"
+                    v-if="displayedOfficeSummary.length"
                     class="flex snap-x gap-3 overflow-x-auto pb-2 xl:grid xl:grid-cols-3 xl:overflow-visible xl:pb-0 2xl:grid-cols-4"
                 >
                     <button
-                        v-for="office in officeAttendanceSummary"
+                        v-for="office in displayedOfficeSummary"
                         :key="office.id"
                         type="button"
                         @click="selectOffice(office.id)"
@@ -437,7 +568,15 @@ const stopDrag = () => {
                 </div>
 
                 <div v-else class="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm font-semibold text-gray-400 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-400">
-                    No active corporate office locations found.
+                    <template v-if="officeAttendanceSummary.length">
+                        <p>All office cards are hidden.</p>
+                        <button type="button" @click="showAllOfficeCards" class="mt-2 text-xs font-black text-blue-600 hover:underline dark:text-blue-400">
+                            Show all office cards
+                        </button>
+                    </template>
+                    <template v-else>
+                        No active corporate office locations found.
+                    </template>
                 </div>
             </section>
 

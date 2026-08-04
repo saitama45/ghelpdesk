@@ -111,6 +111,12 @@ const { showSuccess, showError } = useToast();
 const { hasPermission } = usePermission();
 const { formatDate } = useDateFormatter();
 
+// Filter panel starts collapsed on every page load. The FILTER VALUES themselves
+// still persist via `ghelpdesk_ticket_filters` (see onMounted) — only the panel's
+// open/closed state is intentionally not remembered, so the page always opens
+// compact with the active filters summarised as badges in the collapsed bar.
+const showFilters = ref(false);
+
 // Real-time clock for SLA calculations
 const currentTime = ref(new Date());
 let timer;
@@ -1982,6 +1988,76 @@ const requesterTabs = computed(() => {
 
             <div class="space-y-2 sm:space-y-4 mb-6 relative z-20">
                 <div class="rounded-2xl border border-slate-200 bg-white/95 p-2 sm:p-4 shadow-lg shadow-slate-200/60 backdrop-blur supports-[backdrop-filter]:bg-white/85 dark:border-slate-700 dark:bg-slate-900/95 dark:shadow-black/30 dark:supports-[backdrop-filter]:bg-slate-900/85">
+                    <!-- Always-visible toolbar: the Filters toggle, a summary of what is
+                         currently applied, and the primary actions (never hidden). -->
+                    <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                        <button
+                            type="button"
+                            @click="showFilters = !showFilters"
+                            :aria-expanded="showFilters"
+                            class="inline-flex h-[38px] shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-bold transition-colors"
+                            :class="showFilters
+                                ? 'border-blue-500 bg-blue-600 text-white shadow-sm hover:bg-blue-700'
+                                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800'"
+                        >
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                            </svg>
+                            <span>Filters</span>
+                            <span
+                                v-if="activeFilterBadges.length"
+                                class="inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black"
+                                :class="showFilters ? 'bg-white/25 text-white' : 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200'"
+                            >
+                                {{ activeFilterBadges.length }}
+                            </span>
+                            <svg class="h-4 w-4 transition-transform" :class="showFilters ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+
+                        <!-- Collapsed summary: what is applied stays visible without opening the panel. -->
+                        <div v-if="!showFilters" class="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                            <span
+                                v-if="!hasActiveFilters"
+                                class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                            >
+                                No filters
+                            </span>
+                            <span
+                                v-for="badge in activeFilterBadges"
+                                :key="`collapsed-${badge}`"
+                                class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-[11px] font-semibold text-blue-700 dark:border-blue-400/30 dark:bg-blue-500/15 dark:text-blue-200"
+                            >
+                                {{ badge }}
+                            </span>
+                        </div>
+
+                        <div class="ml-auto flex flex-wrap items-center gap-2">
+                            <button
+                                v-if="hasActiveFilters"
+                                @click="clearFilters"
+                                class="inline-flex h-[38px] items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
+                            >
+                                Reset
+                            </button>
+
+                            <button
+                                v-if="hasPermission('tickets.create')"
+                                @click="showCreateModal = true"
+                                class="inline-flex h-[38px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white shadow-md transition-colors hover:bg-blue-700"
+                            >
+                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                                <span>New</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- v-show (not v-if) keeps the autocompletes mounted so their
+                         selections and teleported dropdowns survive collapsing. -->
+                    <div v-show="showFilters" class="mt-2 border-t border-slate-100 pt-2 sm:mt-4 sm:pt-4 dark:border-slate-800">
                     <div class="flex flex-col gap-2 sm:gap-4 xl:flex-row xl:items-end">
                         <div class="grid flex-1 grid-cols-2 gap-2 sm:gap-4 md:grid-cols-4 xl:grid-cols-4">
                             <div class="flex flex-col gap-1.5">
@@ -2139,17 +2215,6 @@ const requesterTabs = computed(() => {
                             >
                                 Reset
                             </button>
-
-                            <button
-                                v-if="hasPermission('tickets.create')"
-                                @click="showCreateModal = true"
-                                class="flex-1 sm:flex-none inline-flex h-[38px] items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white shadow-md transition-colors hover:bg-blue-700"
-                            >
-                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                </svg>
-                                <span>New</span>
-                            </button>
                         </div>
                     </div>
 
@@ -2172,6 +2237,7 @@ const requesterTabs = computed(() => {
                         <div class="hidden sm:block text-xs font-medium text-slate-500 dark:text-slate-300">
                             Filters apply without changing existing ticket logic or workflow behavior.
                         </div>
+                    </div>
                     </div>
                 </div>
 
