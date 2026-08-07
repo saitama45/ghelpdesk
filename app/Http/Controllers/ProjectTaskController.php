@@ -135,6 +135,12 @@ class ProjectTaskController extends Controller
                         'model_specs' => $activity->model_specs,
                         'qty' => $activity->qty,
                         'responsible' => $activity->responsible,
+                        // Sub-tasks used to be created without these, so every
+                        // template sub-task landed with a NULL department and
+                        // dropped out of any department roll-up. Fall back to the
+                        // parent activity when the template row leaves it blank.
+                        'department' => blank($activity->department) ? $parentTask->department : $activity->department,
+                        'sub_unit' => blank($activity->sub_unit) ? $parentTask->sub_unit : $activity->sub_unit,
                         'status' => 'Pending',
                         'progress' => 0,
                         'order' => $activity->order,
@@ -164,6 +170,16 @@ class ProjectTaskController extends Controller
                         $task->update([
                             'milestone_order' => $activity->milestone_order,
                             'order' => $activity->order,
+                        ]);
+                    }
+
+                    // Existing sub-tasks created before the fix above have no
+                    // department at all. Fill only the blanks; never overwrite a
+                    // department a project manager set by hand.
+                    if (blank($task->department)) {
+                        $task->update([
+                            'department' => blank($activity->department) ? $parentTask->department : $activity->department,
+                            'sub_unit' => blank($activity->sub_unit) ? $parentTask->sub_unit : $activity->sub_unit,
                         ]);
                     }
                 }

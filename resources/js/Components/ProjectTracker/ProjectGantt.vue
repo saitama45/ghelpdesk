@@ -801,8 +801,56 @@ const getAssigneeInitial = (task) => {
     return (getAssigneeName(task) || 'U').charAt(0);
 };
 
+/**
+ * The department accountable for a row — mirrors ProjectTask::resolvedDepartment()
+ * on the server. The assignee's department wins because it reflects who is doing
+ * the work; the department copied from the activity template is the fallback that
+ * covers the many rows with no assignee at all.
+ */
+const taskDepartment = (task) => {
+    const assignee = task.assigned_to
+        ? props.users.find(user => user.id == task.assigned_to)
+        : null;
+
+    return (assignee?.department || '').trim() || (task.department || '').trim() || '';
+};
+
 const taskOrganizationLabel = (task) => {
-    return [task.department, task.sub_unit].filter(Boolean).join(' / ');
+    const department = taskDepartment(task);
+
+    if (!department) return '';
+
+    // sub_unit belongs to the row, so it only makes sense alongside the row's own
+    // department — pairing it with an assignee's department would invent an org path.
+    const ownDepartment = (task.department || '').trim();
+    const subUnit = department === ownDepartment ? (task.sub_unit || '').trim() : '';
+
+    return [department, subUnit].filter(Boolean).join(' / ');
+};
+
+/**
+ * A milestone has no department of its own — it is only a category string on its
+ * rows — so it shows the department most of its activities and sub-tasks resolve
+ * to, and says "Mixed" when no single one holds a majority.
+ */
+const milestoneDepartmentLabel = (tasks = []) => {
+    const counts = {};
+
+    tasks.forEach((task) => {
+        [task, ...(task.subTasks || [])].forEach((row) => {
+            const department = taskDepartment(row);
+            if (department) counts[department] = (counts[department] || 0) + 1;
+        });
+    });
+
+    const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+    if (!ranked.length) return '';
+
+    const [name, count] = ranked[0];
+    const total = ranked.reduce((sum, [, value]) => sum + value, 0);
+
+    return count * 2 > total ? name : `Mixed · ${ranked.length} departments`;
 };
 
 const persistTaskOrder = async () => {
@@ -1167,6 +1215,11 @@ const isWeekend = (date) => {
                                           title="Total Lead Time for this milestone">
                                         {{ milestoneLeadTime(tasks) }} {{ milestoneLeadTime(tasks) === 1 ? 'day' : 'days' }}
                                     </span>
+                                    <span v-if="milestoneDepartmentLabel(tasks)"
+                                          class="truncate px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-indigo-500 dark:text-indigo-300"
+                                          title="Department most of this milestone's rows belong to">
+                                        {{ milestoneDepartmentLabel(tasks) }}
+                                    </span>
                                 </div>
                                 <div v-if="canManage" class="flex items-center gap-1.5">
                                     <button type="button"
@@ -1236,7 +1289,7 @@ const isWeekend = (date) => {
                                                 </div>
                                                 <span class="text-[10px] font-black text-slate-400 tabular-nums flex-shrink-0 dark:text-slate-300">{{ row.task.progress }}%</span>
                                             </div>
-                                            <div v-if="!row.isSubTask && taskOrganizationLabel(row.task)" class="mb-1 truncate text-[10px] font-black uppercase tracking-wider text-indigo-500">
+                                            <div v-if="taskOrganizationLabel(row.task)" class="mb-1 truncate text-[10px] font-black uppercase tracking-wider text-indigo-500">
                                                 {{ taskOrganizationLabel(row.task) }}
                                             </div>
                                             <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden dark:bg-slate-800">

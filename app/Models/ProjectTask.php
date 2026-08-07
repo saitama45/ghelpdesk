@@ -109,6 +109,31 @@ class ProjectTask extends Model
     }
 
     /**
+     * The department accountable for this row.
+     *
+     * The assigned user's department wins, because that reflects who is actually
+     * doing the work; the department copied from the activity template is the
+     * fallback. That order matters: only a handful of rows carry an assignee,
+     * while the template fills `department` on most of them, so relying on
+     * either one alone would leave most rows unattributed.
+     *
+     * Callers that resolve this in bulk should eager-load `assignedUser` — see
+     * ProjectOverviewService — or this lazy-loads one query per row.
+     */
+    public function resolvedDepartment(): ?string
+    {
+        $fromAssignee = $this->assigned_to ? trim((string) $this->assignedUser?->department) : '';
+
+        if ($fromAssignee !== '') {
+            return $fromAssignee;
+        }
+
+        $fromRow = trim((string) $this->department);
+
+        return $fromRow !== '' ? $fromRow : null;
+    }
+
+    /**
      * Whether $user may edit THIS row.
      *
      * Project managers (see Project::isManagedBy) may edit every row; everyone

@@ -23,7 +23,8 @@ class ProjectController extends Controller
         private ProjectTaskBoardSyncService $projectTaskBoards,
         private OrganizationReferenceService $organizationReferenceService,
         private ProjectProgressChartService $progressChart,
-        private \App\Services\ProjectScheduler $scheduler
+        private \App\Services\ProjectScheduler $scheduler,
+        private \App\Services\ProjectOverviewService $overview
     ) {
     }
 
@@ -115,6 +116,18 @@ class ProjectController extends Controller
             'dashboard' => Inertia::optional(
                 fn () => $this->progressChart->build($dashProjects, $dashTypes, $dashFrom, $dashTo)
             ),
+            // Same lazy treatment for the per-type Overview sub-tab. It aggregates
+            // every task of the type, so it must not run on the plain list load.
+            //
+            // Gated on projects.view: the /projects route itself is behind auth
+            // only, so without this check any signed-in user would get a
+            // portfolio-wide roll-up of every project, task and department.
+            'overview' => Inertia::optional(
+                fn () => $typeFilter === '' || ! $request->user()?->can('projects.view')
+                    ? null
+                    : $this->overview->build($typeFilter, $request->user())
+            ),
+            'canViewOverview' => (bool) $request->user()?->can('projects.view'),
             'dashboardProjectOptions' => Inertia::optional(
                 fn () => $this->progressChart->options($dashTypes)
             ),

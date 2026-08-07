@@ -19,11 +19,12 @@ import {
     ChartBarIcon,
 } from '@heroicons/vue/24/outline';
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/vue/24/solid';
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { usePermission } from '@/Composables/usePermission';
 import Autocomplete from '@/Components/Autocomplete.vue';
 import ProjectDashboard from './ProjectDashboard.vue';
+import ProjectOverview from './ProjectOverview.vue';
 
 const { confirm } = useConfirm()
 const { hasPermission } = usePermission()
@@ -98,6 +99,14 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    overview: {
+        type: Object,
+        default: null,
+    },
+    canViewOverview: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const searchQuery = ref(props.filters?.search || '');
@@ -106,8 +115,11 @@ const storeFilter = ref(props.filters?.store_id || null);
 const activeType = ref(props.filters?.type || '');
 let searchTimeout = null;
 
-// 'projects' = the existing list; 'dashboard' = the lazy-loaded weekly progress chart.
-const activeTab = ref('projects');
+// 'projects' = the existing list; 'overview' = the per-type portfolio read-out;
+// 'dashboard' = the lazy-loaded weekly progress chart.
+// Landing on /projects?type=Store%20Opening opens that type's Overview, same as
+// clicking the tab. "All" has no Overview and stays on the list.
+const activeTab = ref(props.filters?.type && props.canViewOverview ? 'overview' : 'projects');
 
 const openDashboard = () => {
     activeTab.value = 'dashboard';
@@ -116,6 +128,22 @@ const openDashboard = () => {
         router.reload({ only: ['dashboard', 'dashboardProjectOptions', 'dashboardFilters'] });
     }
 };
+
+const loadOverview = () => {
+    if (!props.overview) {
+        router.reload({ only: ['overview'] });
+    }
+};
+
+const openOverview = () => {
+    activeTab.value = 'overview';
+    loadOverview();
+};
+
+// Direct hit on /projects?type=… — the tab is already Overview, so fetch it.
+onMounted(() => {
+    if (activeTab.value === 'overview') loadOverview();
+});
 
 const visibleProjects = computed(() => props.projects?.data || []);
 const hasPagination = computed(() => Number(props.projects?.last_page || 1) > 1);
@@ -127,11 +155,20 @@ const filterParams = () => ({
     type:     activeType.value || undefined,
 });
 
-const applyFilters = () => {
+const applyFilters = (options = {}) => {
+    // Any visit drops optional props, so an Overview on screen has to re-request
+    // its payload afterwards — otherwise searching would leave it on a skeleton.
+    const wantsOverview = activeTab.value === 'overview';
+
     router.get(route('projects.index'), filterParams(), {
         preserveState: true,
         replace: true,
         preserveScroll: true,
+        ...options,
+        onSuccess: (page) => {
+            options.onSuccess?.(page);
+            if (wantsOverview) loadOverview();
+        },
     });
 };
 
@@ -142,8 +179,13 @@ const updateFilter = (key, value) => {
 };
 
 const setType = (type) => {
-    activeTab.value = 'projects';
+    // Picking a type lands on its Overview — the list is one click away on the
+    // sub-tab. "All" has no Overview, so it falls back to the list. The payload
+    // is an optional prop scoped to the type, so it is absent after the visit and
+    // has to be pulled again for the newly selected type.
     activeType.value = type;
+    activeTab.value = type !== '' && props.canViewOverview ? 'overview' : 'projects';
+
     applyFilters();
 };
 
@@ -329,6 +371,7 @@ const typeTabConfig = computed(() => {
                 <!-- All tab -->
                 <button
                     type="button"
+                    data-testid="type-tab-all"
                     @click="setType('')"
                     :class="[
                         'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-all',
@@ -353,14 +396,14 @@ const typeTabConfig = computed(() => {
                     @click="setType(tab.label)"
                     :class="[
                         'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-all',
-                        activeTab === 'projects' && activeType === tab.label
+                        activeTab !== 'dashboard' && activeType === tab.label
                             ? 'bg-gray-900 text-white shadow dark:bg-gray-100 dark:text-gray-900'
                             : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
                     ]"
                 >
                     <span :class="['inline-block h-2 w-2 rounded-full', tab.dot]" />
                     {{ tab.label }}
-                    <span v-if="tab.count > 0" :class="['rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums', activeTab === 'projects' && activeType === tab.label ? 'bg-white/20 text-white dark:bg-gray-900/20 dark:text-gray-900' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400']">
+                    <span v-if="tab.count > 0" :class="['rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums', activeTab !== 'dashboard' && activeType === tab.label ? 'bg-white/20 text-white dark:bg-gray-900/20 dark:text-gray-900' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400']">
                         {{ tab.count }}
                     </span>
                 </button>
@@ -382,6 +425,48 @@ const typeTabConfig = computed(() => {
                     Dashboard
                 </button>
             </div>
+
+            <!--
+                Second tab row, per project type. "All" has no Overview because the
+                portfolio metrics (schedule compliance, milestone tiles) are only
+                meaningful within a single type's template.
+            -->
+            <div
+                v-if="activeType !== '' && activeTab !== 'dashboard' && canViewOverview"
+                data-testid="project-subtabs"
+                class="flex items-center gap-1 border-b border-gray-200 px-1 dark:border-gray-700"
+            >
+                <button
+                    type="button"
+                    @click="openOverview"
+                    :class="[
+                        'shrink-0 border-b-2 px-3 py-2 text-sm font-semibold transition-all',
+                        activeTab === 'overview'
+                            ? 'border-gray-900 text-gray-900 dark:border-gray-100 dark:text-gray-100'
+                            : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+                    ]"
+                >
+                    Overview
+                </button>
+                <button
+                    type="button"
+                    @click="activeTab = 'projects'"
+                    :class="[
+                        'shrink-0 border-b-2 px-3 py-2 text-sm font-semibold transition-all',
+                        activeTab === 'projects'
+                            ? 'border-gray-900 text-gray-900 dark:border-gray-100 dark:text-gray-100'
+                            : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+                    ]"
+                >
+                    Projects
+                </button>
+            </div>
+
+            <ProjectOverview
+                v-if="activeTab === 'overview'"
+                :overview="overview"
+                :type="activeType"
+            />
 
             <div v-if="activeTab === 'projects'" class="space-y-6">
             <!-- Filters + New Project Button -->
