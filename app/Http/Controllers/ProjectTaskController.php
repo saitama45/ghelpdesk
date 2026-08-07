@@ -20,6 +20,14 @@ class ProjectTaskController extends Controller
     {
     }
 
+    /** Blank manual_status means "no flag" — store NULL, never an empty string. */
+    private function normaliseManualStatus(Request $request): void
+    {
+        if ($request->has('manual_status') && blank($request->input('manual_status'))) {
+            $request->merge(['manual_status' => null]);
+        }
+    }
+
     public function applyTemplates(Request $request, Project $project)
     {
         // Applying a template rewrites the milestone/activity structure — a
@@ -330,6 +338,10 @@ class ProjectTaskController extends Controller
 
     public function store(Request $request)
     {
+        // The Gantt's "None" option posts an empty string; the in: rule only
+        // accepts a real status or null.
+        $this->normaliseManualStatus($request);
+
         $validated = $request->validate([
             'project_id' => 'required|exists:projects,id',
             'parent_task_id' => 'nullable|exists:project_tasks,id',
@@ -341,6 +353,7 @@ class ProjectTaskController extends Controller
             'assigned_to' => 'nullable',
             'support_by' => 'nullable',
             'status' => 'required|string',
+            'manual_status' => 'nullable|string|in:' . implode(',', ProjectTask::manualStatuses()),
             'progress' => 'integer|min:0|max:100',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
@@ -454,6 +467,8 @@ class ProjectTaskController extends Controller
         // sub-task assigned to them.
         abort_unless($projects_task->isEditableBy($request->user()), 403, 'You can only edit rows assigned to you.');
 
+        $this->normaliseManualStatus($request);
+
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'category' => 'sometimes|nullable|string|max:255',
@@ -462,6 +477,7 @@ class ProjectTaskController extends Controller
             'depends_on_task_id' => 'sometimes|nullable|exists:project_tasks,id',
             'can_run_parallel' => 'sometimes|nullable|boolean',
             'status' => 'sometimes|required|string',
+            'manual_status' => 'sometimes|nullable|string|in:' . implode(',', ProjectTask::manualStatuses()),
             'progress' => 'sometimes|integer|min:0|max:100',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
@@ -470,6 +486,12 @@ class ProjectTaskController extends Controller
             'support_by' => 'nullable',
             'order' => 'sometimes|numeric',
         ]);
+
+        // A finished row is not blocked or awaiting approval — clear the manual
+        // state rather than leaving a stale "Blocked" pill on a 100% activity.
+        if (($validated['progress'] ?? null) !== null && (int) $validated['progress'] >= 100) {
+            $validated['manual_status'] = null;
+        }
 
         if (array_key_exists('parent_task_id', $validated)) {
             $validated['parent_task_id'] = $validated['parent_task_id'] ?: null;

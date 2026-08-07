@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import { 
     PlusIcon, 
@@ -23,6 +23,7 @@ import Modal from '@/Components/Modal.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
+import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
 
 const props = defineProps({
     project: Object,
@@ -36,6 +37,12 @@ const props = defineProps({
     // Non-working Philippine holidays ({ date, name, type }) — skipped in the
     // lead-time maths exactly like weekends, and shaded on the timeline.
     holidays: { type: Array, default: () => [] },
+    // Manual states a row can be put into (Blocked, For Approval …). Sourced from
+    // reference_options; empty simply hides the picker.
+    manualStatuses: { type: Array, default: () => [] },
+    // Set by the Reports tab: focus the plan on one department. Watched below —
+    // applies the department filter and scrolls to that department's first row.
+    focusDepartment: { type: String, default: null },
 });
 
 // Y-m-d -> holiday name, for the working-day helpers and the column tooltips.
@@ -102,6 +109,7 @@ const form = useForm({
     category: '',
     assigned_to: '',
     status: 'Pending',
+    manual_status: '',
     task_progress: 0,
     start_date: '',
     end_date: '',
@@ -228,6 +236,7 @@ const resetTaskForm = () => {
     form.category = '';
     form.assigned_to = '';
     form.status = 'Pending';
+    form.manual_status = '';
     form.task_progress = 0;
     form.start_date = '';
     form.end_date = '';
@@ -423,6 +432,7 @@ const editTask = (task) => {
     form.milestone_order = task.milestone_order;
     form.assigned_to = task.assigned_to || task.external_assignment || '';
     form.status = task.status;
+    form.manual_status = task.manual_status || '';
     form.task_progress = task.progress;
     form.start_date = task.start_date ? task.start_date.split('T')[0] : '';
     form.end_date = task.end_date ? task.end_date.split('T')[0] : '';
@@ -679,6 +689,136 @@ const groupedTasks = computed(() => {
 
     return Object.fromEntries(sorted);
 });
+
+/* ------------------------------------------------------------------ filters */
+
+// Sentinels for "has no assignee" / "has no department" — real ids and names can
+// never collide with these.
+const UNASSIGNED = '__unassigned__';
+const NO_DEPARTMENT = '__no_department__';
+
+const filterUsers = ref([]);
+const filterDepartments = ref([]);
+
+// "None" clears the flag; Autocomplete needs it as an explicit option.
+const manualStatusOptions = computed(() => [
+    { label: 'None', value: '' },
+    ...(props.manualStatuses || []).map(status => ({ label: status, value: status })),
+]);
+
+const userFilterOptions = computed(() => [
+    { label: 'Unassigned', value: UNASSIGNED },
+    ...(props.users || []).map(user => ({
+        label: user.department ? `${user.name} — ${user.department}` : user.name,
+        value: user.id,
+    })),
+]);
+
+// Only departments actually present on this plan, so the list stays short.
+const departmentFilterOptions = computed(() => {
+    const names = new Set();
+
+    localTasks.value.forEach((task) => {
+        const department = taskDepartment(task);
+        if (department) names.add(department);
+    });
+
+    return [
+        { label: 'No department', value: NO_DEPARTMENT },
+        ...[...names].sort().map(name => ({ label: name, value: name })),
+    ];
+});
+
+const hasFilters = computed(() => filterUsers.value.length > 0 || filterDepartments.value.length > 0);
+
+const matchesFilters = (task) => {
+    if (filterUsers.value.length) {
+        const assigned = task.assigned_to ? Number(task.assigned_to) : null;
+        const wantsUnassigned = filterUsers.value.includes(UNASSIGNED);
+        const matched = assigned
+            ? filterUsers.value.some(value => Number(value) === assigned)
+            : wantsUnassigned;
+
+        if (!matched) return false;
+    }
+
+    if (filterDepartments.value.length) {
+        const department = taskDepartment(task);
+        const wantsNone = filterDepartments.value.includes(NO_DEPARTMENT);
+        const matched = department
+            ? filterDepartments.value.some(value => String(value).toLowerCase() === department.toLowerCase())
+            : wantsNone;
+
+        if (!matched) return false;
+    }
+
+    return true;
+};
+
+/**
+ * groupedTasks stays whole — scheduling and the lead-time totals must still see
+ * every row. This is the display copy: an activity that matches keeps all of its
+ * sub-tasks, an activity that doesn't is kept only as context for whichever
+ * sub-tasks matched, and an empty milestone drops out entirely.
+ */
+const visibleGroupedTasks = computed(() => {
+    if (!hasFilters.value) return groupedTasks.value;
+
+    const result = {};
+
+    Object.entries(groupedTasks.value).forEach(([category, tasks]) => {
+        const kept = [];
+
+        tasks.forEach((task) => {
+            const subTasks = task.subTasks || [];
+
+            if (matchesFilters(task)) {
+                kept.push(task);
+                return;
+            }
+
+            const matchingSubTasks = subTasks.filter(matchesFilters);
+
+            if (matchingSubTasks.length) {
+                kept.push({ ...task, subTasks: matchingSubTasks });
+            }
+        });
+
+        if (kept.length) result[category] = kept;
+    });
+
+    return result;
+});
+
+const visibleRowCount = computed(() =>
+    Object.values(visibleGroupedTasks.value)
+        .reduce((sum, tasks) => sum + tasks.reduce((n, task) => n + 1 + (task.subTasks?.length || 0), 0), 0)
+);
+
+const clearFilters = () => {
+    filterUsers.value = [];
+    filterDepartments.value = [];
+};
+
+// Reports tab → "show me this department's rows". Applies the filter, then puts
+// that department's first activity at the top of the viewport.
+watch(() => props.focusDepartment, (department) => {
+    if (!department) return;
+
+    filterUsers.value = [];
+    filterDepartments.value = [department];
+    showFilters.value = true;
+
+    nextTick(() => {
+        const firstRow = mainWorkspaceRef.value?.querySelector('[data-task-row]');
+
+        if (firstRow) {
+            firstRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else if (mainWorkspaceRef.value) {
+            mainWorkspaceRef.value.scrollTop = 0;
+        }
+    });
+}, { immediate: true });
 
 const taskRows = (task) => {
     return [
@@ -1000,8 +1140,16 @@ const isWeekend = (date) => {
                     <DocumentDuplicateIcon class="w-4 h-4 mr-2" />
                     {{ isApplyingTemplates ? 'Applying...' : 'Apply Templates' }}
                 </button>
-                <button @click="showFilters = !showFilters" class="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors dark:text-slate-300 dark:hover:bg-indigo-500/15 dark:hover:text-indigo-200">
+                <button @click="showFilters = !showFilters"
+                        :class="[
+                            'relative p-2 rounded-lg transition-colors',
+                            hasFilters
+                                ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-500/20 dark:text-indigo-200'
+                                : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:text-slate-300 dark:hover:bg-indigo-500/15 dark:hover:text-indigo-200'
+                        ]"
+                        title="Filter the plan by assigned user or department">
                     <FunnelIcon class="w-5 h-5" />
+                    <span v-if="hasFilters" class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-indigo-600"></span>
                 </button>
                 <button
                     v-if="canManage"
@@ -1012,6 +1160,45 @@ const isWeekend = (date) => {
                     Add Milestone
                 </button>
             </div>
+        </div>
+
+        <!-- Filter the plan by who owns the work -->
+        <div v-if="showFilters" class="border-b border-slate-200 bg-slate-50/60 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+            <div class="flex flex-col gap-3 md:flex-row md:items-end">
+                <div class="flex-1">
+                    <label class="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-300">
+                        Assigned user
+                    </label>
+                    <MultiAutocomplete
+                        v-model="filterUsers"
+                        :options="userFilterOptions"
+                        placeholder="Any assignee"
+                    />
+                </div>
+                <div class="flex-1">
+                    <label class="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-300">
+                        Department
+                    </label>
+                    <MultiAutocomplete
+                        v-model="filterDepartments"
+                        :options="departmentFilterOptions"
+                        placeholder="Any department"
+                    />
+                </div>
+                <button
+                    v-if="hasFilters"
+                    type="button"
+                    @click="clearFilters"
+                    class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-500 transition-all hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                >
+                    Clear
+                </button>
+            </div>
+
+            <p v-if="hasFilters" class="mt-2 ml-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-300">
+                Showing {{ visibleRowCount }} of {{ stats.total }} rows. An activity is kept when it or one of its
+                sub-tasks matches — totals and scheduling still use the whole plan.
+            </p>
         </div>
 
         <transition
@@ -1110,6 +1297,23 @@ const isWeekend = (date) => {
                         <input v-else v-model="form.task_progress" type="number" min="0" max="100" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                         <div v-if="form.errors.progress" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.progress }}</div>
                     </div>
+                    <!--
+                        A flag beside the percentage, not a replacement for it. The
+                        derived Pending/Ongoing/Done still comes from progress; this
+                        says "and it is stuck", and clears itself at 100%.
+                    -->
+                    <div class="md:col-span-2" v-if="manualStatuses.length">
+                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Flag</label>
+                        <Autocomplete
+                            v-model="form.manual_status"
+                            :options="manualStatusOptions"
+                            placeholder="None"
+                        />
+                        <p class="mt-1 ml-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">
+                            Shown on Overview &amp; Monitoring. Cleared when the row hits 100%.
+                        </p>
+                        <div v-if="form.errors.manual_status" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.manual_status }}</div>
+                    </div>
                     <div class="md:col-span-3">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Timeline</label>
                         <div class="flex items-center space-x-2">
@@ -1203,7 +1407,7 @@ const isWeekend = (date) => {
                     </div>
 
                     <!-- Rows -->
-                    <template v-for="(tasks, category) in groupedTasks" :key="category">
+                    <template v-for="(tasks, category) in visibleGroupedTasks" :key="category">
                         <!-- Category Row -->
                         <div class="flex sticky top-14 z-30">
                             <div class="sticky left-0 z-40 w-[480px] h-10 bg-slate-100 flex items-center justify-between px-4 border-b border-slate-200 border-r shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/20">
@@ -1242,6 +1446,7 @@ const isWeekend = (date) => {
                         <!-- Task Rows -->
                         <template v-for="task in tasks" :key="task.id">
                             <div v-for="row in taskRows(task)" :key="row.task.id" @click="editTask(row.task)"
+                                 :data-task-row="row.task.id"
                                  @dragover.prevent="handleTaskDragOver(row.task)"
                                  @drop.prevent="handleTaskDrop(row.task)"
                                  :class="[

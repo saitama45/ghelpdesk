@@ -24,7 +24,8 @@ class ProjectController extends Controller
         private OrganizationReferenceService $organizationReferenceService,
         private ProjectProgressChartService $progressChart,
         private \App\Services\ProjectScheduler $scheduler,
-        private \App\Services\ProjectOverviewService $overview
+        private \App\Services\ProjectOverviewService $overview,
+        private \App\Services\ProjectWorkspaceService $workspace
     ) {
     }
 
@@ -263,6 +264,11 @@ class ProjectController extends Controller
             'boardYears'     => $this->boardYears(),
             'availableBoards' => $availableBoards,
             'taskListTargets' => $this->projectTaskBoards->monthlyTargetPreview($project),
+            // Department workspace, Monitoring and Reports — all scoped to THIS
+            // project. Built eagerly because the Overview tab (the default) needs
+            // the workspace on first paint.
+            'workspaceData'  => $this->workspace->build($project, auth()->user()),
+            'manualStatuses' => \App\Models\ProjectTask::manualStatuses(),
             // Non-working holidays around the plan, so the Gantt shades them and
             // its lead-time preview matches the server's scheduling.
             'holidays'       => $this->ganttHolidays($project),

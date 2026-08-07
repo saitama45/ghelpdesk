@@ -31,6 +31,7 @@ class ProjectTask extends Model
         'external_assignment',
         'support_by',
         'status',
+        'manual_status',
         'progress',
         'start_date',
         'end_date',
@@ -106,6 +107,40 @@ class ProjectTask extends Model
     public function assets(): HasMany
     {
         return $this->hasMany(ProjectAsset::class, 'project_task_id');
+    }
+
+    /**
+     * The manual states a task may be put into, on top of the progress-derived
+     * Pending / Ongoing / Done. Editable in reference_options; the constant is
+     * only a fallback for a table that has not been seeded.
+     */
+    const MANUAL_STATUSES = ['Blocked', 'For Approval'];
+
+    public static function manualStatuses(): array
+    {
+        $values = ReferenceOption::valuesOfType('project_task_status');
+
+        return ! empty($values) ? $values : self::MANUAL_STATUSES;
+    }
+
+    /**
+     * What the workspace screens show for this row.
+     *
+     * `status` is recomputed from `progress` on every write, so a person's choice
+     * cannot live there — `manual_status` holds it and wins when set. Otherwise
+     * the derived status is mapped to the workspace's vocabulary.
+     */
+    public function displayStatus(): string
+    {
+        if (filled($this->manual_status)) {
+            return $this->manual_status;
+        }
+
+        return match (trim((string) $this->status)) {
+            'Done'    => 'Completed',
+            'Ongoing' => 'In Progress',
+            default   => 'Not Started',
+        };
     }
 
     /**

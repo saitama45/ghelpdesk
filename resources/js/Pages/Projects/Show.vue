@@ -1,9 +1,12 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import ProjectGantt from '@/Components/ProjectTracker/ProjectGantt.vue';
 import AssetsBoard from '@/Components/ProjectTracker/AssetsBoard.vue';
+import ProjectDepartmentWorkspace from '@/Components/ProjectTracker/ProjectDepartmentWorkspace.vue';
+import ProjectMonitoring from '@/Components/ProjectTracker/ProjectMonitoring.vue';
+import ProjectReports from '@/Components/ProjectTracker/ProjectReports.vue';
 import Modal from '@/Components/Modal.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
 import HierarchySelector from '@/Components/HierarchySelector.vue';
@@ -26,7 +29,9 @@ import {
     PlusIcon,
     TrashIcon,
     XMarkIcon,
-    PencilIcon
+    PencilIcon,
+    ExclamationTriangleIcon,
+    DocumentChartBarIcon
 } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
@@ -46,6 +51,17 @@ const props = defineProps({
     // templates, add/delete/reorder). Non-managers may only edit their own rows.
     canManageProject: { type: Boolean, default: false },
     holidays: { type: Array, default: () => [] },
+    // Department workspace / Monitoring / Reports payloads, all scoped to this
+    // project — see ProjectWorkspaceService.
+    workspaceData: {
+        type: Object,
+        default: () => ({
+            workspace: { cards: [], rows: [], department: null, has_department: false },
+            monitoring: { cards: [], dependencies: [], overdue: [], permits: [] },
+            reports: { departments: [], totals: {}, unattributed: 0 },
+        }),
+    },
+    manualStatuses: { type: Array, default: () => [] },
 });
 
 const formatDate = (dateString) => {
@@ -80,6 +96,30 @@ const { hasPermission } = usePermission();
 const urlParams = new URLSearchParams(window.location.search);
 const initialTab = urlParams.get('tab');
 const activeTab = ref(initialTab || 'overview');
+
+/**
+ * Reports / Monitoring → "show me this department's rows on the plan".
+ * Switches to the Gantt and hands it the department; the Gantt applies its own
+ * department filter and scrolls to the first matching row.
+ *
+ * The counter forces the watcher to fire again when the same department is
+ * clicked twice — otherwise the second click would be a no-op.
+ */
+const ganttFocusDepartment = ref(null);
+const openDepartmentOnGantt = (department) => {
+    if (!department) return;
+
+    ganttFocusDepartment.value = null;
+    activeTab.value = 'gantt';
+    nextTick(() => { ganttFocusDepartment.value = department; });
+};
+
+// Badge on the Monitoring tab: how many things actually need a look.
+const monitoringWarnings = computed(() => {
+    const cards = props.workspaceData?.monitoring?.cards || [];
+
+    return cards.reduce((sum, card) => sum + (parseInt(card.value, 10) || 0), 0);
+});
 
 // Keep ?tab= in sync so a save (or a plain refresh) comes back to the tab the
 // user was working in instead of dropping them on Overview.
@@ -892,7 +932,25 @@ const getStatusColor = (status) => {
                         <ChartBarIcon class="w-4 h-4 mr-2" />
                         Gantt Chart
                     </button>
-                    <button 
+                    <button
+                        @click="activeTab = 'monitoring'"
+                        :class="[activeTab === 'monitoring' ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-300' : 'text-gray-500 hover:text-gray-700 dark:text-slate-300 dark:hover:text-slate-100', 'px-6 py-2.5 rounded-xl text-sm font-bold flex items-center transition-all']"
+                    >
+                        <ExclamationTriangleIcon class="w-4 h-4 mr-2" />
+                        Monitoring
+                        <span v-if="monitoringWarnings > 0"
+                              class="ml-2 rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-black tabular-nums text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">
+                            {{ monitoringWarnings }}
+                        </span>
+                    </button>
+                    <button
+                        @click="activeTab = 'reports'"
+                        :class="[activeTab === 'reports' ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-300' : 'text-gray-500 hover:text-gray-700 dark:text-slate-300 dark:hover:text-slate-100', 'px-6 py-2.5 rounded-xl text-sm font-bold flex items-center transition-all']"
+                    >
+                        <DocumentChartBarIcon class="w-4 h-4 mr-2" />
+                        Reports
+                    </button>
+                    <button
                         @click="activeTab = 'assets'"
                         :class="[activeTab === 'assets' ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-300' : 'text-gray-500 hover:text-gray-700 dark:text-slate-300 dark:hover:text-slate-100', 'px-6 py-2.5 rounded-xl text-sm font-bold flex items-center transition-all']"
                     >
@@ -904,6 +962,13 @@ const getStatusColor = (status) => {
 
             <!-- Tab Content -->
             <div class="mt-6">
+                <!-- Department workspace, above the project detail cards -->
+                <ProjectDepartmentWorkspace
+                    v-if="activeTab === 'overview'"
+                    :workspace="workspaceData.workspace"
+                    class="mb-6"
+                />
+
                 <!-- Overview Tab -->
                 <div v-if="activeTab === 'overview'" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <!-- Dates Card -->
@@ -1006,6 +1071,24 @@ const getStatusColor = (status) => {
                         :canManage="canManageProject"
                         :currentUserId="currentUser?.id"
                         :holidays="holidays"
+                        :manualStatuses="manualStatuses"
+                        :focusDepartment="ganttFocusDepartment"
+                    />
+                </div>
+
+                <!-- Monitoring Tab -->
+                <div v-if="activeTab === 'monitoring'">
+                    <ProjectMonitoring
+                        :monitoring="workspaceData.monitoring"
+                        @open-department="openDepartmentOnGantt"
+                    />
+                </div>
+
+                <!-- Reports Tab -->
+                <div v-if="activeTab === 'reports'">
+                    <ProjectReports
+                        :reports="workspaceData.reports"
+                        @open-department="openDepartmentOnGantt"
                     />
                 </div>
 
