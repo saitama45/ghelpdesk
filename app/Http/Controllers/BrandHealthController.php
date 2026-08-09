@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Ticket;
 use App\Models\TicketHistory;
+use App\Services\BrandHealthService;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 
@@ -16,7 +17,29 @@ use Illuminate\Http\Request;
  */
 class BrandHealthController extends Controller
 {
-    public function __construct(private NotificationService $notifications) {}
+    public function __construct(
+        private NotificationService $notifications,
+        private BrandHealthService $brandHealth,
+    ) {}
+
+    /**
+     * Drill-down behind the Top 10 Sub-categories / Top 10 Stores lists: the open
+     * tickets for one brand slice, plus the per-item roll-up shown above them.
+     */
+    public function tickets(Request $request)
+    {
+        abort_unless($request->user()->can('tickets.view'), 403);
+
+        $validated = $request->validate([
+            'brand_id' => ['nullable', 'integer'],
+            // 'none' means tickets with no sub-category — distinct from "no filter".
+            'sub_category_id' => ['nullable', 'string'],
+            'store_id' => ['nullable', 'integer'],
+            'as_of_date' => ['nullable', 'date'],
+        ]);
+
+        return response()->json($this->brandHealth->tickets($validated));
+    }
 
     /** Brand confirmed the fix worked → close the ticket. */
     public function resolve(Request $request, Ticket $ticket)

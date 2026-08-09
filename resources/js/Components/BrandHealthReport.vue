@@ -1,6 +1,10 @@
 <script setup>
 import { ref, computed } from 'vue';
 import { router, Link } from '@inertiajs/vue3';
+import axios from 'axios';
+import Modal from '@/Components/Modal.vue';
+import Autocomplete from '@/Components/Autocomplete.vue';
+import { XMarkIcon } from '@heroicons/vue/24/outline';
 import { useToast } from '@/Composables/useToast';
 import { useConfirm } from '@/Composables/useConfirm';
 
@@ -68,6 +72,81 @@ const workflowCards = (workflow) => WORKFLOW_LANES.map(lane => ({
     count: workflow?.[lane.key] || 0,
 }));
 
+// --- Brand filter + Top 10 lists ---------------------------------------------
+// The filter and the sub-tab pills are the same piece of state, so picking a brand
+// either way scopes the Top 10 panels and the view below them together.
+const brandOptions = computed(() => [
+    { value: 'summary', label: 'All Brands' },
+    ...brands.value.map(b => ({ value: String(b.id), label: b.code ? `${b.name} (${b.code})` : b.name })),
+]);
+
+// Whichever slice the Top 10 panels describe: one brand, or every brand combined.
+const topScope = computed(() => activeBrand.value || totals.value);
+const topSubcategories = computed(() => topScope.value?.top_subcategories || []);
+const topStores = computed(() => topScope.value?.top_stores || []);
+const scopeLabel = computed(() => activeBrand.value ? (activeBrand.value.code || activeBrand.value.name) : 'All Brands');
+
+// Bar width relative to the biggest row, so the #1 row always fills the track.
+const barPct = (rows, count) => {
+    const max = Math.max(...rows.map(r => r.count), 0);
+    return max > 0 ? Math.max(4, Math.round((count / max) * 100)) : 0;
+};
+
+// --- Drill-down modal --------------------------------------------------------
+const showDrill = ref(false);
+const drillLoading = ref(false);
+const drillTitle = ref('');
+const drillSubtitle = ref('');
+const drillItems = ref([]);
+const drillTickets = ref([]);
+
+const openDrill = async ({ title, subtitle, params }) => {
+    drillTitle.value = title;
+    drillSubtitle.value = subtitle;
+    drillItems.value = [];
+    drillTickets.value = [];
+    drillLoading.value = true;
+    showDrill.value = true;
+
+    try {
+        const { data } = await axios.get(route('dashboard.brand-health.tickets', {}, false), {
+            params: {
+                ...(activeBrand.value ? { brand_id: activeBrand.value.id } : {}),
+                ...params,
+            },
+        });
+        drillItems.value = data.items || [];
+        drillTickets.value = data.tickets || [];
+    } catch (e) {
+        showError('Unable to load the ticket breakdown.');
+        showDrill.value = false;
+    } finally {
+        drillLoading.value = false;
+    }
+};
+
+const openSubCategoryDrill = (row) => openDrill({
+    title: row.name,
+    subtitle: `${scopeLabel.value} — ${row.count} open ticket${row.count === 1 ? '' : 's'} in this sub-category`,
+    params: { sub_category_id: String(row.id) },
+});
+
+const openStoreDrill = (row) => openDrill({
+    title: row.code ? `[${row.code}] ${row.name}` : row.name,
+    subtitle: `${row.count} open ticket${row.count === 1 ? '' : 's'} at this store`,
+    params: { store_id: row.id },
+});
+
+const statusLabel = (status) => (status || '').replace(/_/g, ' ');
+
+const statusClass = (status) => ({
+    open: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+    in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+    for_schedule: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
+    waiting_service_provider: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+    waiting_client_feedback: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+}[status] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300');
+
 // --- WCF register actions ----------------------------------------------------
 const runAction = async (row, kind) => {
     const isResolve = kind === 'resolve';
@@ -104,6 +183,22 @@ const runAction = async (row, kind) => {
     </div>
 
     <div v-else>
+        <!-- Brand filter — drives the Top 10 panels and the view below them -->
+        <div class="mb-4 flex flex-col sm:flex-row sm:items-center gap-2">
+            <label class="text-[11px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-400">Brand</label>
+            <div class="w-full sm:w-72">
+                <Autocomplete
+                    :model-value="activeView"
+                    @update:modelValue="activeView = $event || 'summary'"
+                    :options="brandOptions"
+                    label-key="label"
+                    value-key="value"
+                    size="sm"
+                    placeholder="All Brands"
+                />
+            </div>
+        </div>
+
         <!-- Brand sub-tabs: Summary + one per brand -->
         <div class="mb-6 flex flex-wrap items-center gap-2">
             <button
@@ -136,6 +231,75 @@ const runAction = async (row, kind) => {
             <span v-if="!brands.length" class="text-xs text-gray-400 dark:text-gray-500">
                 No brands found. Set a company's Type to “Brand” to track it here.
             </span>
+        </div>
+
+        <!-- ===================== TOP 10 (brand-filtered) ===================== -->
+        <div v-if="brands.length" class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
+            <!-- Top 10 Sub-categories -->
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+                <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between dark:border-gray-700">
+                    <div>
+                        <h4 class="text-sm font-black text-gray-700 uppercase tracking-wider dark:text-gray-200">Top 10 Sub-categories</h4>
+                        <p class="text-[11px] text-gray-400 dark:text-gray-500">{{ scopeLabel }} — click a row for its items and concerns</p>
+                    </div>
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider dark:text-gray-500">Open</span>
+                </div>
+                <div v-if="topSubcategories.length" class="divide-y divide-gray-100 dark:divide-gray-700">
+                    <button
+                        v-for="(row, index) in topSubcategories"
+                        :key="row.id"
+                        @click="openSubCategoryDrill(row)"
+                        class="w-full text-left px-5 py-2.5 hover:bg-blue-50/60 transition-colors dark:hover:bg-gray-700/40"
+                    >
+                        <div class="flex items-center gap-3">
+                            <span class="w-5 text-[11px] font-black text-gray-400 tabular-nums dark:text-gray-500">{{ index + 1 }}</span>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-bold text-gray-800 truncate dark:text-gray-100">{{ row.name }}</p>
+                                <div class="mt-1 h-1.5 w-full rounded-full bg-gray-100 overflow-hidden dark:bg-gray-700">
+                                    <div class="h-full rounded-full bg-blue-500" :style="{ width: barPct(topSubcategories, row.count) + '%' }"></div>
+                                </div>
+                            </div>
+                            <span class="text-sm font-black text-gray-900 tabular-nums dark:text-gray-100">{{ row.count }}</span>
+                        </div>
+                    </button>
+                </div>
+                <p v-else class="px-5 py-10 text-center text-sm text-gray-400 dark:text-gray-500">No open tickets for this brand.</p>
+            </div>
+
+            <!-- Top 10 Stores -->
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+                <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between dark:border-gray-700">
+                    <div>
+                        <h4 class="text-sm font-black text-gray-700 uppercase tracking-wider dark:text-gray-200">Top 10 Stores</h4>
+                        <p class="text-[11px] text-gray-400 dark:text-gray-500">{{ scopeLabel }} — click a store to view its issues</p>
+                    </div>
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider dark:text-gray-500">Open</span>
+                </div>
+                <div v-if="topStores.length" class="divide-y divide-gray-100 dark:divide-gray-700">
+                    <button
+                        v-for="(row, index) in topStores"
+                        :key="row.id"
+                        @click="openStoreDrill(row)"
+                        class="w-full text-left px-5 py-2.5 hover:bg-blue-50/60 transition-colors dark:hover:bg-gray-700/40"
+                    >
+                        <div class="flex items-center gap-3">
+                            <span class="w-5 text-[11px] font-black text-gray-400 tabular-nums dark:text-gray-500">{{ index + 1 }}</span>
+                            <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :class="BAND_META[row.band]?.dot" :title="bandLabel(row.band)"></span>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-bold text-gray-800 truncate dark:text-gray-100">
+                                    <span v-if="row.code" class="text-gray-400 dark:text-gray-500">[{{ row.code }}]</span> {{ row.name }}
+                                </p>
+                                <p class="text-[11px] text-gray-400 dark:text-gray-500">
+                                    <span v-if="activeView === 'summary' && row.brand">{{ row.brand }} · </span>
+                                    OPEN {{ row.workflow.open }} · WCF {{ row.workflow.wcf }} · WSP {{ row.workflow.wsp }}
+                                </p>
+                            </div>
+                            <span class="text-sm font-black text-gray-900 tabular-nums dark:text-gray-100">{{ row.count }}</span>
+                        </div>
+                    </button>
+                </div>
+                <p v-else class="px-5 py-10 text-center text-sm text-gray-400 dark:text-gray-500">No open tickets for this brand.</p>
+            </div>
         </div>
 
         <!-- ============================ SUMMARY ============================ -->
@@ -433,5 +597,86 @@ const runAction = async (row, kind) => {
                 </div>
             </div>
         </template>
+
+        <!-- ===================== Top 10 drill-down modal ===================== -->
+        <Modal :show="showDrill" @close="showDrill = false" maxWidth="5xl">
+            <div class="p-6">
+                <div class="flex items-start justify-between mb-5 border-b border-gray-100 pb-4 dark:border-gray-700">
+                    <div>
+                        <h2 class="text-lg font-black text-gray-900 dark:text-gray-100">{{ drillTitle }}</h2>
+                        <p class="text-xs text-gray-500 mt-0.5 dark:text-gray-400">{{ drillSubtitle }}</p>
+                    </div>
+                    <button @click="showDrill = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:hover:text-gray-200">
+                        <XMarkIcon class="w-6 h-6" />
+                    </button>
+                </div>
+
+                <div v-if="drillLoading" class="flex flex-col items-center justify-center py-12">
+                    <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4"></div>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Loading tickets…</p>
+                </div>
+
+                <div v-else-if="drillTickets.length" class="space-y-5">
+                    <!-- Items & concerns roll-up for the clicked slice -->
+                    <div>
+                        <h3 class="text-[11px] font-black text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-400">Items &amp; Concerns</h3>
+                        <div class="flex flex-wrap gap-2">
+                            <span
+                                v-for="item in drillItems"
+                                :key="item.name"
+                                class="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg border border-gray-200 bg-gray-50 text-xs dark:bg-gray-900/40 dark:border-gray-700"
+                            >
+                                <span class="font-bold text-gray-800 dark:text-gray-100">{{ item.name }}</span>
+                                <span v-if="item.concern_type" class="text-gray-400 dark:text-gray-500">{{ item.concern_type }}</span>
+                                <span class="px-1.5 rounded-full bg-blue-100 text-blue-700 font-black tabular-nums dark:bg-blue-900/40 dark:text-blue-300">{{ item.count }}</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="max-h-[55vh] overflow-y-auto border border-gray-100 rounded-lg dark:border-gray-700">
+                        <table class="min-w-full text-sm">
+                            <thead class="bg-gray-50 sticky top-0 dark:bg-gray-900/60">
+                                <tr class="text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider dark:text-gray-400">
+                                    <th class="px-4 py-2.5">Ticket</th>
+                                    <th class="px-3 py-2.5">Store</th>
+                                    <th class="px-3 py-2.5">Issue</th>
+                                    <th class="px-3 py-2.5">Item</th>
+                                    <th class="px-3 py-2.5">Concern</th>
+                                    <th class="px-3 py-2.5">Assignee</th>
+                                    <th class="px-3 py-2.5">Status</th>
+                                    <th class="px-4 py-2.5 whitespace-nowrap">Created</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                <tr v-for="ticket in drillTickets" :key="ticket.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                                    <td class="px-4 py-2.5 whitespace-nowrap">
+                                        <Link :href="ticket.url" class="font-black text-blue-600 hover:underline dark:text-blue-400">{{ ticket.key }}</Link>
+                                    </td>
+                                    <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap dark:text-gray-300">{{ ticket.store || '—' }}</td>
+                                    <td class="px-3 py-2.5 text-gray-600 max-w-xs truncate dark:text-gray-400" :title="ticket.title">{{ ticket.title }}</td>
+                                    <td class="px-3 py-2.5 text-gray-600 dark:text-gray-400">{{ ticket.item }}</td>
+                                    <td class="px-3 py-2.5 text-gray-500 dark:text-gray-500">{{ ticket.concern_type || '—' }}</td>
+                                    <td class="px-3 py-2.5 text-gray-600 whitespace-nowrap dark:text-gray-400">{{ ticket.assignee }}</td>
+                                    <td class="px-3 py-2.5">
+                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase whitespace-nowrap" :class="statusClass(ticket.status)">
+                                            {{ statusLabel(ticket.status) }}
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-2.5 text-gray-500 whitespace-nowrap dark:text-gray-400">{{ ticket.created_at }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <p v-else class="py-12 text-center text-sm text-gray-400 dark:text-gray-500">No open tickets for this selection.</p>
+
+                <div class="mt-5 flex justify-end">
+                    <button @click="showDrill = false" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </Modal>
     </div>
 </template>

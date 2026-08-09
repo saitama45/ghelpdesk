@@ -68,6 +68,9 @@ Route::middleware('auth')->group(function () {
         ->name('dashboard.chart-tickets');
     Route::get('/dashboard/chart-tickets/export', [\App\Http\Controllers\DashboardController::class, 'exportChartTickets'])
         ->name('dashboard.chart-tickets.export');
+    // Live Brand Health — Top 10 sub-category / store drill-down.
+    Route::get('/dashboard/brand-health/tickets', [\App\Http\Controllers\BrandHealthController::class, 'tickets'])
+        ->name('dashboard.brand-health.tickets');
     // Live Brand Health — WCF confirmation register actions.
     Route::post('/dashboard/brand-health/wcf/{ticket}/resolve', [\App\Http\Controllers\BrandHealthController::class, 'resolve'])
         ->name('dashboard.brand-health.wcf.resolve');
