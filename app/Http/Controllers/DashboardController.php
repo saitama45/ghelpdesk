@@ -8,6 +8,7 @@ use App\Models\Scopes\ActiveEntityScope;
 use App\Services\StoreReportService;
 use App\Services\BrandHealthService;
 use App\Services\OrganizationReferenceService;
+use App\Services\PartnerPerformanceService;
 use App\Support\CompanyContext;
 use App\Models\Project;
 use App\Models\Store;
@@ -27,12 +28,18 @@ class DashboardController extends Controller
     protected $reportService;
     protected $organizationReferenceService;
     protected $brandHealthService;
+    protected $partnerPerformanceService;
 
-    public function __construct(StoreReportService $reportService, OrganizationReferenceService $organizationReferenceService, BrandHealthService $brandHealthService)
-    {
+    public function __construct(
+        StoreReportService $reportService,
+        OrganizationReferenceService $organizationReferenceService,
+        BrandHealthService $brandHealthService,
+        PartnerPerformanceService $partnerPerformanceService
+    ) {
         $this->reportService = $reportService;
         $this->organizationReferenceService = $organizationReferenceService;
         $this->brandHealthService = $brandHealthService;
+        $this->partnerPerformanceService = $partnerPerformanceService;
     }
 
     public function index(Request $request)
@@ -145,6 +152,14 @@ class DashboardController extends Controller
             // so its store population matches Open vs Closed and Live Store Health
             // instead of silently spanning brands outside the selection.
             'brandHealth' => Inertia::optional(fn () => $this->brandHealthService->build($user, null, $effectiveCompanyIds)),
+            // Partner Performance — the escalation children we hand to external partners.
+            // Shares the Entity filter and the year/month filter bar with every other tab.
+            'partnerPerformance' => Inertia::optional(fn () => $this->partnerPerformanceService->build(
+                $user,
+                $effectiveCompanyIds,
+                $year ? (int) $year : null,
+                $month ? (int) $month : null
+            )),
             'ticketCharts' => Inertia::optional(fn () => $this->buildTicketCharts($filteredQuery, $user, $effectiveCompanyIds, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter)),
             'leaderboard' => Inertia::optional(fn () => $this->buildLeaderboard($filteredQuery, $year ? (int) $year : null, $month ? (int) $month : null, $departmentIdFilter, $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null, $userIdFilter, $storeIdFilter, $effectiveCompanyIds)),
             'stats' => Inertia::optional(fn () => $overviewData()['stats']),

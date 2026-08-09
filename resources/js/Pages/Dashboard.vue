@@ -5,6 +5,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import StoreHealthReport from '@/Components/StoreHealthReport.vue';
 import BrandHealthReport from '@/Components/BrandHealthReport.vue';
+import PartnerPerformanceReport from '@/Components/PartnerPerformanceReport.vue';
 import StorePipelineTimeline from '@/Components/StorePipelineTimeline.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
@@ -14,6 +15,7 @@ import { usePermission } from '@/Composables/usePermission.js';
 const props = defineProps({
     storeHealth: Object,
     brandHealth: Object,
+    partnerPerformance: Object,
     kanbanReport: Object,
     kanbanProjects: Object,
     ticketCharts: Object,
@@ -97,6 +99,7 @@ const TAB_PROPS = {
     charts: ['ticketCharts'],
     health: ['storeHealth'],
     brandhealth: ['brandHealth'],
+    partners: ['partnerPerformance'],
     leaders: ['leaderboard'],
     overview: ['stats', 'recentTickets', 'myTickets', 'recentActivity', 'alarmedWaitingTickets', 'urgentTickets', 'totalTicketsList', 'openTicketsList', 'newTicketsList', 'closedTicketsList'],
     pipeline: ['storePipeline'],
@@ -108,6 +111,7 @@ const TABS = computed(() => [
     { key: 'charts', label: 'Open vs Closed' },
     { key: 'health', label: 'Live Store Health' },
     { key: 'brandhealth', label: 'Live Brand Health' },
+    { key: 'partners', label: 'Partner Performance' },
     { key: 'leaders', label: 'Top Techs / Trophies' },
     { key: 'overview', label: 'Overview Performance' },
 ]);
@@ -116,7 +120,7 @@ const activeTab = ref(canViewPipeline ? 'pipeline' : 'flow');
 // Live Store Health sub-tabs: sector view (default) vs corporate-office view.
 const healthSubTab = ref('sectors');
 // Both the default landing tab and Ticket Flow Board data are present on first paint.
-const loaded = reactive({ flow: true, charts: false, health: false, brandhealth: false, leaders: false, overview: false, pipeline: !!props.storePipeline });
+const loaded = reactive({ flow: true, charts: false, health: false, brandhealth: false, partners: false, leaders: false, overview: false, pipeline: !!props.storePipeline });
 const tabLoading = ref(false);
 
 // Store Pipeline (CASA) tab owns its own year / status / type selectors,
@@ -133,7 +137,7 @@ const pipelineData = () => ({
     pipeline_type: pipelineType.value || undefined,
 });
 
-const ALWAYS_REFRESH_TABS = new Set(['charts', 'health', 'brandhealth', 'overview']);
+const ALWAYS_REFRESH_TABS = new Set(['charts', 'health', 'brandhealth', 'partners', 'overview']);
 
 const fetchTab = (tab, force = false) => {
     if (loaded[tab] && !force) return;
@@ -1287,6 +1291,19 @@ const exportChartTickets = () => {
                 @changed="fetchTab('brandhealth', true)"
             />
         </div><!-- /brand health tab -->
+
+        <!-- ============ Partner Performance tab ============ -->
+        <div v-show="activeTab === 'partners'">
+            <div v-if="!loaded.partners" class="flex items-center justify-center py-24 text-sm font-semibold text-gray-400">
+                <span class="w-5 h-5 mr-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span> Loading…
+            </div>
+            <PartnerPerformanceReport
+                v-else
+                :data="partnerPerformance"
+                :entity-ids="drillEntityIds"
+                :filters="filters"
+            />
+        </div><!-- /partner performance tab -->
 
         <!-- ============ Top Techs / Trophies tab ============ -->
         <div v-show="activeTab === 'leaders'">

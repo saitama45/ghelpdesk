@@ -71,6 +71,9 @@ Route::middleware('auth')->group(function () {
     // Live Brand Health — Top 10 sub-category / store drill-down.
     Route::get('/dashboard/brand-health/tickets', [\App\Http\Controllers\BrandHealthController::class, 'tickets'])
         ->name('dashboard.brand-health.tickets');
+    // Partner Performance — partner / brand escalation drill-down.
+    Route::get('/dashboard/partner-performance/tickets', [\App\Http\Controllers\PartnerPerformanceController::class, 'tickets'])
+        ->name('dashboard.partner-performance.tickets');
     // Live Brand Health — WCF confirmation register actions.
     Route::post('/dashboard/brand-health/wcf/{ticket}/resolve', [\App\Http\Controllers\BrandHealthController::class, 'resolve'])
         ->name('dashboard.brand-health.wcf.resolve');
