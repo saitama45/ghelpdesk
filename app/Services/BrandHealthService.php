@@ -45,18 +45,30 @@ class BrandHealthService
         'wcf'  => ['waiting_client_feedback'],
     ];
 
-    public function build($user, ?string $asOfDate = null): array
+    /**
+     * @param  array|null  $companyIds  Effective Entity/Company selection from the
+     *                                  dashboard filter. The tab counts only brands
+     *                                  inside it, so Live Brand Health and every other
+     *                                  entity-scoped widget describe the same stores.
+     */
+    public function build($user, ?string $asOfDate = null, ?array $companyIds = null): array
     {
         $asOfDate = $asOfDate ?: Carbon::now()->format('Y-m-d');
         $agingDays = (int) Setting::get('waiting_aging_alarm_days', 3);
         $bands = $this->thresholdBands();
 
-        // Every active brand (Company type = 'Brand'). Ordered by name for stable tabs.
-        $brands = Company::query()
-            ->where('is_active', true)
-            ->where('type', 'Brand')
+        // Active brands (Company type = 'Brand') inside the entity selection. Ordered
+        // by name for stable tabs.
+        $brands = $this->brandQuery($companyIds)
             ->orderBy('name')
             ->get(['id', 'name', 'code', 'logo']);
+
+        // Whether anything was filtered out tells the empty state which story to tell:
+        // "no brands configured" vs "no brands in the current entity selection".
+        $entityScoped = $companyIds !== null;
+        $brandsOutsideScope = $entityScoped
+            ? Company::query()->where('is_active', true)->where('type', 'Brand')->count() - $brands->count()
+            : 0;
 
         if ($brands->isEmpty()) {
             return [
@@ -65,6 +77,8 @@ class BrandHealthService
                 'thresholds' => $this->thresholdLabels($bands),
                 'can_close' => (bool) $user?->can('tickets.close'),
                 'can_reopen' => (bool) $user?->can('tickets.edit'),
+                'entity_scoped' => $entityScoped,
+                'brands_outside_scope' => $brandsOutsideScope,
                 'totals' => $this->emptyTotals(),
                 'brands' => [],
             ];
@@ -179,6 +193,8 @@ class BrandHealthService
             'thresholds' => $this->thresholdLabels($bands),
             'can_close' => (bool) $user?->can('tickets.close'),
             'can_reopen' => (bool) $user?->can('tickets.edit'),
+            'entity_scoped' => $entityScoped,
+            'brands_outside_scope' => $brandsOutsideScope,
             'totals' => array_merge($this->aggregateTotals($brandRows), [
                 'top_subcategories' => $this->topSubCategories($allStores, $subCategoryRowsByStore, $subCategoryNames),
                 'top_stores' => $this->topStores($allStores, $statusCountsByStore, $bands, $brandLabels),
@@ -255,17 +271,17 @@ class BrandHealthService
      * per-item roll-up so a sub-category click answers "which items and concerns".
      *
      * @param array{brand_id?:int|null, sub_category_id?:int|string|null, store_id?:int|null, as_of_date?:string|null} $filters
+     * @param  array|null  $companyIds  Same entity selection the tab was built with, so
+     *                                  a drill-down can never reach outside it.
      */
-    public function tickets(array $filters): array
+    public function tickets(array $filters, ?array $companyIds = null): array
     {
         $asOfDate = $filters['as_of_date'] ?? Carbon::now()->format('Y-m-d');
         $brandId = $filters['brand_id'] ?? null;
         $storeId = $filters['store_id'] ?? null;
         $subCategory = $filters['sub_category_id'] ?? null;
 
-        $brands = Company::query()
-            ->where('is_active', true)
-            ->where('type', 'Brand')
+        $brands = $this->brandQuery($companyIds)
             ->when($brandId, fn ($q) => $q->where('id', $brandId))
             ->get(['id', 'name', 'code']);
 
@@ -385,6 +401,19 @@ class BrandHealthService
                 ];
             })
             ->groupBy('brand_id');
+    }
+
+    /**
+     * The tab's brand universe: active Company rows of type 'Brand', narrowed to the
+     * dashboard's Entity/Company selection when one is supplied. An empty selection
+     * means "no accessible entity" and must yield nothing, not everything.
+     */
+    private function brandQuery(?array $companyIds)
+    {
+        return Company::query()
+            ->where('is_active', true)
+            ->where('type', 'Brand')
+            ->when($companyIds !== null, fn ($q) => $q->whereIn('id', $companyIds ?: [0]));
     }
 
     private function aggregateTotals(Collection $brandRows): array

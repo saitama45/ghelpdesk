@@ -1283,6 +1283,7 @@ const exportChartTickets = () => {
             <BrandHealthReport
                 v-else
                 :data="brandHealth"
+                :entity-ids="drillEntityIds"
                 @changed="fetchTab('brandhealth', true)"
             />
         </div><!-- /brand health tab -->

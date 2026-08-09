@@ -49,11 +49,32 @@ class BrandHealthTopListsTest extends TestCase
         $this->assertNotNull($beta->id);
     }
 
+    public function test_build_follows_the_entity_selection(): void
+    {
+        [$alpha] = $this->fixture();
+
+        $data = app(BrandHealthService::class)->build(User::factory()->create(), null, [$alpha->id]);
+
+        // Beta is a brand, but it sits outside the selection — its stores and tickets
+        // must not leak into the tab that the other entity-scoped tabs describe.
+        $this->assertSame(['ALPHA'], collect($data['brands'])->pluck('code')->all());
+        $this->assertSame(5, $data['totals']['active_tickets']);
+        $this->assertSame(['ALP-1', 'ALP-2'], collect($data['totals']['top_stores'])->pluck('code')->all());
+        $this->assertTrue($data['entity_scoped']);
+        $this->assertSame(1, $data['brands_outside_scope']);
+
+        // An empty selection means "no accessible entity" — that yields nothing.
+        $empty = app(BrandHealthService::class)->build(User::factory()->create(), null, []);
+        $this->assertSame([], $empty['brands']);
+        $this->assertSame(2, $empty['brands_outside_scope']);
+        $this->assertSame(0, $empty['totals']['active_tickets']);
+    }
+
     public function test_drill_down_endpoint_filters_by_sub_category_and_store(): void
     {
         [$alpha] = $this->fixture();
 
-        $viewer = User::factory()->create();
+        $viewer = User::factory()->create(['company_id' => $alpha->id]);
         $viewer->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate('tickets.view', 'web'));
 
         $posId = SubCategory::where('name', 'POS')->value('id');
@@ -83,6 +104,30 @@ class BrandHealthTopListsTest extends TestCase
 
         $this->assertSame(1, $unspecified['count']);
         $this->assertSame(['Unspecified'], collect($unspecified['items'])->pluck('name')->all());
+    }
+
+    public function test_drill_down_cannot_reach_brands_outside_the_entity_selection(): void
+    {
+        [$alpha, $beta] = $this->fixture();
+
+        // Viewer is scoped to Alpha; asking for Beta's brand must come back empty
+        // rather than handing over another entity's tickets.
+        $viewer = User::factory()->create(['company_id' => $alpha->id]);
+        $viewer->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate('tickets.view', 'web'));
+
+        $out = $this->actingAs($viewer)
+            ->getJson(route('dashboard.brand-health.tickets', ['brand_id' => $beta->id]))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(0, $out['count']);
+
+        // Same for a store id belonging to Beta.
+        $betaStore = Store::where('code', 'BET-1')->value('id');
+        $this->assertSame(0, $this->actingAs($viewer)
+            ->getJson(route('dashboard.brand-health.tickets', ['store_id' => $betaStore]))
+            ->assertOk()
+            ->json('count'));
     }
 
     public function test_drill_down_requires_ticket_view_permission(): void

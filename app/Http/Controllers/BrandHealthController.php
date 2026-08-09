@@ -6,6 +6,7 @@ use App\Models\Ticket;
 use App\Models\TicketHistory;
 use App\Services\BrandHealthService;
 use App\Services\NotificationService;
+use App\Support\CompanyContext;
 use Illuminate\Http\Request;
 
 /**
@@ -36,9 +37,19 @@ class BrandHealthController extends Controller
             'sub_category_id' => ['nullable', 'string'],
             'store_id' => ['nullable', 'integer'],
             'as_of_date' => ['nullable', 'date'],
+            'entity_ids' => ['nullable', 'array'],
+            'entity_ids.*' => ['integer'],
         ]);
 
-        return response()->json($this->brandHealth->tickets($validated));
+        // Resolved through CompanyContext exactly like the dashboard build, so the
+        // requested ids can only ever narrow the caller's own accessible entities.
+        $effectiveCompanyIds = CompanyContext::effectiveEntityIds(
+            $request->user(),
+            (array) $request->input('entity_ids', []),
+            $request->user()->can('dashboard.filter_entity')
+        );
+
+        return response()->json($this->brandHealth->tickets($validated, $effectiveCompanyIds));
     }
 
     /** Brand confirmed the fix worked → close the ticket. */

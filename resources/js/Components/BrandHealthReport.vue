@@ -10,6 +10,10 @@ import { useConfirm } from '@/Composables/useConfirm';
 
 const props = defineProps({
     data: { type: Object, default: null },
+    // Effective Entity/Company ids from the dashboard filter. The tab is built from
+    // this selection, so the drill-down has to carry it too or a click could reach
+    // brands the filter excluded.
+    entityIds: { type: Array, default: () => [] },
 });
 const emit = defineEmits(['changed']);
 
@@ -86,6 +90,10 @@ const topSubcategories = computed(() => topScope.value?.top_subcategories || [])
 const topStores = computed(() => topScope.value?.top_stores || []);
 const scopeLabel = computed(() => activeBrand.value ? (activeBrand.value.code || activeBrand.value.name) : 'All Brands');
 
+// The tab follows the dashboard Entity filter, so an empty tab usually means the
+// filter excluded every brand rather than that none are configured.
+const excludedByFilter = computed(() => !!props.data?.entity_scoped && (props.data?.brands_outside_scope || 0) > 0);
+
 // Bar width relative to the biggest row, so the #1 row always fills the track.
 const barPct = (rows, count) => {
     const max = Math.max(...rows.map(r => r.count), 0);
@@ -112,6 +120,7 @@ const openDrill = async ({ title, subtitle, params }) => {
         const { data } = await axios.get(route('dashboard.brand-health.tickets', {}, false), {
             params: {
                 ...(activeBrand.value ? { brand_id: activeBrand.value.id } : {}),
+                ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
                 ...params,
             },
         });
@@ -197,6 +206,9 @@ const runAction = async (row, kind) => {
                     placeholder="All Brands"
                 />
             </div>
+            <p v-if="data.entity_scoped" class="text-[11px] text-gray-400 dark:text-gray-500">
+                Scoped to the dashboard Entity filter — {{ brands.length }} brand{{ brands.length === 1 ? '' : 's' }} in view<span v-if="data.brands_outside_scope"> ({{ data.brands_outside_scope }} outside the selection)</span>.
+            </p>
         </div>
 
         <!-- Brand sub-tabs: Summary + one per brand -->
@@ -228,9 +240,20 @@ const runAction = async (row, kind) => {
                     {{ brand.priority_stores }}
                 </span>
             </button>
-            <span v-if="!brands.length" class="text-xs text-gray-400 dark:text-gray-500">
-                No brands found. Set a company's Type to “Brand” to track it here.
-            </span>
+        </div>
+
+        <!-- Nothing to show: say whether the filter excluded the brands or none exist -->
+        <div v-if="!brands.length" class="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-12 text-center dark:bg-gray-800 dark:border-gray-700">
+            <p class="text-sm font-bold text-gray-600 dark:text-gray-300">
+                {{ excludedByFilter
+                    ? 'No brands in the current entity selection.'
+                    : 'No brands found.' }}
+            </p>
+            <p class="text-xs text-gray-400 mt-1.5 dark:text-gray-500">
+                {{ excludedByFilter
+                    ? `This tab counts the same stores as the other dashboard tabs, so it only covers Brand companies inside the Entity filter. ${data.brands_outside_scope} brand${data.brands_outside_scope === 1 ? '' : 's'} sit outside it — add them to the Entity filter above to monitor them here.`
+                    : 'Set a company’s Type to “Brand” on /companies to track it here.' }}
+            </p>
         </div>
 
         <!-- ===================== TOP 10 (brand-filtered) ===================== -->
@@ -304,7 +327,7 @@ const runAction = async (row, kind) => {
 
         <!-- ============================ SUMMARY ============================ -->
         <template v-if="activeView === 'summary'">
-            <div v-if="totals" class="space-y-6">
+            <div v-if="totals && brands.length" class="space-y-6">
                 <!-- KPI tiles -->
                 <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
                     <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4 dark:bg-gray-800 dark:border-gray-700">

@@ -141,9 +141,10 @@ class DashboardController extends Controller
 
             // Lazy tabs — excluded from the initial load, fetched on first tab click.
             'storeHealth' => Inertia::optional(fn () => $this->buildStoreHealth($selectedSubUnitLabel, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter, $effectiveCompanyIds)),
-            // Live Brand Health — brand-wide (every active Brand company), independent
-            // of the entity/sector/user filters so the tab is a full brand monitor.
-            'brandHealth' => Inertia::optional(fn () => $this->brandHealthService->build($user)),
+            // Live Brand Health — the Brand companies inside the Entity/Company filter,
+            // so its store population matches Open vs Closed and Live Store Health
+            // instead of silently spanning brands outside the selection.
+            'brandHealth' => Inertia::optional(fn () => $this->brandHealthService->build($user, null, $effectiveCompanyIds)),
             'ticketCharts' => Inertia::optional(fn () => $this->buildTicketCharts($filteredQuery, $user, $effectiveCompanyIds, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter)),
             'leaderboard' => Inertia::optional(fn () => $this->buildLeaderboard($filteredQuery, $year ? (int) $year : null, $month ? (int) $month : null, $departmentIdFilter, $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null, $userIdFilter, $storeIdFilter, $effectiveCompanyIds)),
             'stats' => Inertia::optional(fn () => $overviewData()['stats']),
