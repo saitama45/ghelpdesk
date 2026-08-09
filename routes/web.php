@@ -74,6 +74,9 @@ Route::middleware('auth')->group(function () {
     // Partner Performance — partner / brand escalation drill-down.
     Route::get('/dashboard/partner-performance/tickets', [\App\Http\Controllers\PartnerPerformanceController::class, 'tickets'])
         ->name('dashboard.partner-performance.tickets');
+
+    Route::get('/dashboard/asset-health/units', [\App\Http\Controllers\AssetOperationalHealthController::class, 'units'])
+        ->name('dashboard.asset-health.units');
     // Live Brand Health — WCF confirmation register actions.
     Route::post('/dashboard/brand-health/wcf/{ticket}/resolve', [\App\Http\Controllers\BrandHealthController::class, 'resolve'])
         ->name('dashboard.brand-health.wcf.resolve');

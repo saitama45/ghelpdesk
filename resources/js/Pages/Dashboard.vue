@@ -6,6 +6,7 @@ import Modal from '@/Components/Modal.vue';
 import StoreHealthReport from '@/Components/StoreHealthReport.vue';
 import BrandHealthReport from '@/Components/BrandHealthReport.vue';
 import PartnerPerformanceReport from '@/Components/PartnerPerformanceReport.vue';
+import AssetOperationalHealthReport from '@/Components/AssetOperationalHealthReport.vue';
 import StorePipelineTimeline from '@/Components/StorePipelineTimeline.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
@@ -16,6 +17,7 @@ const props = defineProps({
     storeHealth: Object,
     brandHealth: Object,
     partnerPerformance: Object,
+    assetHealth: Object,
     kanbanReport: Object,
     kanbanProjects: Object,
     ticketCharts: Object,
@@ -99,18 +101,22 @@ const TAB_PROPS = {
     charts: ['ticketCharts'],
     health: ['storeHealth'],
     brandhealth: ['brandHealth'],
+    assethealth: ['assetHealth'],
     partners: ['partnerPerformance'],
     leaders: ['leaderboard'],
     overview: ['stats', 'recentTickets', 'myTickets', 'recentActivity', 'alarmedWaitingTickets', 'urgentTickets', 'totalTicketsList', 'openTicketsList', 'newTicketsList', 'closedTicketsList'],
     pipeline: ['storePipeline'],
 };
 const canViewPipeline = hasPermission('projects.view');
+// Asset Operational Health reads the inventory fleet, so it follows stock-in visibility.
+const canViewAssetHealth = hasPermission('stock_ins.view');
 const TABS = computed(() => [
     ...(canViewPipeline ? [{ key: 'pipeline', label: 'CASA Pipeline' }] : []),
     { key: 'flow', label: 'Ticket Flow Board' },
     { key: 'charts', label: 'Open vs Closed' },
     { key: 'health', label: 'Live Store Health' },
     { key: 'brandhealth', label: 'Live Brand Health' },
+    ...(canViewAssetHealth ? [{ key: 'assethealth', label: 'Asset Operational Health' }] : []),
     { key: 'partners', label: 'Partner Performance' },
     { key: 'leaders', label: 'Top Techs / Trophies' },
     { key: 'overview', label: 'Overview Performance' },
@@ -120,7 +126,7 @@ const activeTab = ref(canViewPipeline ? 'pipeline' : 'flow');
 // Live Store Health sub-tabs: sector view (default) vs corporate-office view.
 const healthSubTab = ref('sectors');
 // Both the default landing tab and Ticket Flow Board data are present on first paint.
-const loaded = reactive({ flow: true, charts: false, health: false, brandhealth: false, partners: false, leaders: false, overview: false, pipeline: !!props.storePipeline });
+const loaded = reactive({ flow: true, charts: false, health: false, brandhealth: false, assethealth: false, partners: false, leaders: false, overview: false, pipeline: !!props.storePipeline });
 const tabLoading = ref(false);
 
 // Store Pipeline (CASA) tab owns its own year / status / type selectors,
@@ -137,14 +143,24 @@ const pipelineData = () => ({
     pipeline_type: pipelineType.value || undefined,
 });
 
-const ALWAYS_REFRESH_TABS = new Set(['charts', 'health', 'brandhealth', 'partners', 'overview']);
+const ALWAYS_REFRESH_TABS = new Set(['charts', 'health', 'brandhealth', 'assethealth', 'partners', 'overview']);
+
+// Asset Operational Health owns a group selector, kept out of the shared filter bar
+// because it narrows units rather than tickets.
+const assetHealthGroup = ref(props.filters?.asset_health_group || '');
+const assetHealthData = () => ({ asset_health_group: assetHealthGroup.value || undefined });
+
+const changeAssetHealthGroup = (nextGroup) => {
+    assetHealthGroup.value = nextGroup || '';
+    fetchTab('assethealth', true);
+};
 
 const fetchTab = (tab, force = false) => {
     if (loaded[tab] && !force) return;
     tabLoading.value = true;
     router.reload({
         only: TAB_PROPS[tab],
-        data: tab === 'pipeline' ? pipelineData() : {},
+        data: tab === 'pipeline' ? pipelineData() : (tab === 'assethealth' ? assetHealthData() : {}),
         onSuccess: () => { loaded[tab] = true; },
         onFinish: () => { tabLoading.value = false; },
     });
@@ -189,6 +205,7 @@ const applyFilters = () => {
         pipeline_year: pipelineYear.value,
         pipeline_status: pipelineStatus.value || undefined,
         pipeline_type: pipelineType.value || undefined,
+        asset_health_group: assetHealthGroup.value || undefined,
         ...(entityFilterEnabled.value ? { entity_ids: resolvedEntityIds() } : {}),
         // Department filtering is disabled — always span every department.
         skip_default_department: 1,
@@ -1291,6 +1308,19 @@ const exportChartTickets = () => {
                 @changed="fetchTab('brandhealth', true)"
             />
         </div><!-- /brand health tab -->
+
+        <!-- ============ Asset Operational Health tab ============ -->
+        <div v-show="activeTab === 'assethealth'">
+            <div v-if="!loaded.assethealth" class="flex items-center justify-center py-24 text-sm font-semibold text-gray-400">
+                <span class="w-5 h-5 mr-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></span> Loading…
+            </div>
+            <AssetOperationalHealthReport
+                v-else
+                :data="assetHealth"
+                :entity-ids="drillEntityIds"
+                @change-group="changeAssetHealthGroup"
+            />
+        </div><!-- /asset operational health tab -->
 
         <!-- ============ Partner Performance tab ============ -->
         <div v-show="activeTab === 'partners'">

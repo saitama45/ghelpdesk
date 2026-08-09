@@ -1,0 +1,56 @@
+{
+  "source": "C:\\Users\\TAS\\AppData\\Local\\hermes\\tmp\\ghelpdesk-slides.pdf",
+  "page_count": 10,
+  "pages": [
+    {
+      "page": 1,
+      "chars": 103,
+      "text": "Service Operations\nAsset Brand Health Dashboard \nIntegration Workﬂow:\nAsset Stock-In & Ticketing System"
+    },
+    {
+      "page": 2,
+      "chars": 1052,
+      "text": "Stock-In & Encode\nInventory team receives new IT \nequipment, encodes master \ndata (serial numbers), and tags \nasset to speciﬁc store (e.g. \nST001-PC01).\nMonitoring Board\nNew stock-in automatically sets \ninitial operational status. Asset \nMonitoring Board displays \nSTATUS: OPERATIONAL \n(GREEN).\nReport & Tag Ticket\nStore reports issue. Tech opens \nsupport ticket, searches Store \nID, and selects speciﬁc Asset \nTag ﬁeld (e.g. ST001-PC01).\nState Change (RED)\nTagging asset triggers \nautomated monitoring \nupdate—Asset Board status \nautomatically turns STATUS: \nIMPACTED (RED).\nResolve & Recovery\nTicket resolved or escalated. \nUpon resolution conﬁrmation, \nasset monitoring status \nautomatically reverts to \nOPERATIONAL (GREEN).\nOperational Baseline Store asset tagged & auto-registered with \nGREEN status on Master DB\nDynamic Impact Trigger Support ticket asset tagging instantly turns \nMonitoring Board RED\nClosed-Loop Auto Sync Ticket resolution automatically restores \nasset monitoring to GREEN\nIntegration Workﬂow: Asset Stock-In & Ticketing System"
+    },
+    {
+      "page": 3,
+      "chars": 583,
+      "text": "1. STOCK-IN PROCESS (EXISTING & NEW STORE LAUNCH)\nAUTOMATED MONITORING STATE\nDASHBOARD: ASSET MONITORING BOARD\nManageable View: Dynamically counts total stocked-in equipment by store, type, and live \noperating state.\nSTAR\nT\nReceive IT \nEquipment\nInventory Team\nIdentifies equipment & captures \nSerial Numbers\nINPUT Data\nAsset Master Data (unique codes)\nACTION Encode & Tag\nTag assets to specific Store ID\nDATA \nSTORE\nIT Asset Master DB\nInitial Status\nNEW \nSTOCKIN\nDefault State: GREEN\nAsset Tag: ST001PC01\nDesktop PC Serial: \nSN98765\nArea 1: Asset Stock-In (On-going ℅ SO Team)"
+    },
+    {
+      "page": 4,
+      "chars": 481,
+      "text": "2. SERVICE OPERATION TICKETING WORKFLOW\nStore reports IT \nIssue\nACTION\nOpen New Support Ticket\nINPUT Asset Tag Search\nTech searches Asset Tag \nfield\nACTION Tag Specific Asset\nLink Asset (e.g. \nST001PC01\nSTATE \nCHANGE \nTRIGGER\nMONITORING UPDATE Ticket Created & \nTagged\nTicket \nLifecycle:\nMONITORING UPDATE Ticket Resolved 0 \nOpen Left)\nArea 2: Service Operation Ticketing & Asset Tagging Integration\nSEARCH FILTERED by Item Name showing, \nAssets for this specific store only"
+    },
+    {
+      "page": 5,
+      "chars": 26,
+      "text": "Asset Operational Baseline"
+    },
+    {
+      "page": 6,
+      "chars": 783,
+      "text": "The monitoring system tracks operational health dynamically based on ticket lifecycle state transitions.\nMulti-Ticket Edge Case: If multiple active tickets are attached to one asset, status remains RED until all linked tickets reach Resolved or Closed status.\nTrigger Event: Support Ticket Created & Asset Tagged.\nTrigger Event: Ticket Resolution / Closure.\nImpacted State (RED)\n• Technician links Asset_Tag (e.g., ST001PC01) to active ticket.\n• System executes DB hook: Set Asset.Health = 'RED'.\n• Store Monitoring Dashboard re-renders item badge to RED.\nOperational Recovery (GREEN)\n• Technician marks ticket as Resolved or Closed.\n• System validates 0 remaining open tickets for this asset tag.\n• System updates DB Set Asset.Health = 'GREEN'.\nVisual Health State Change Triggers"
+    },
+    {
+      "page": 7,
+      "chars": 290,
+      "text": "Groups & Category Triggers\nGROUPS\nITEMS / CATEGORY\nPOS SYSTEMS\nPOS & TABLET HARDWARE | POS SOFTWARE\nPERIPHERALS\nPRINTERS | CASH DRAWERS | KITCHEN DISPLAY\nSECURITY\nCCTV\nNETWORK & CONNECTIVITY\nMODEM | ROUTER | AP\nDIGITAL EXPERIENCE\nAMPLIFIER | DIGITAL EASEL\nBACK OFFICE\nUPS | LAPTOP | DESKTOP"
+    },
+    {
+      "page": 8,
+      "chars": 34,
+      "text": "Current Dashboard via Google Sheet"
+    },
+    {
+      "page": 9,
+      "chars": 23,
+      "text": "Sample Health Dashboard"
+    },
+    {
+      "page": 10,
+      "chars": 12,
+      "text": "End of Slide"
+    }
+  ]
+}

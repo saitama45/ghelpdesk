@@ -44,6 +44,7 @@
                     <template #header>
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Category</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Asset Group</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Status</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Actions</th>
                         </tr>
@@ -65,7 +66,14 @@
                                 </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <span :class="category.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" 
+                                <span v-if="category.asset_group"
+                                      class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-200">
+                                    {{ category.asset_group.label }}
+                                </span>
+                                <span v-else class="text-sm text-gray-400 dark:text-gray-500">Not an asset group</span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span :class="category.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
                                       class="inline-flex px-2 py-1 text-xs font-semibold rounded-full">
                                     {{ category.is_active ? 'Active' : 'Inactive' }}
                                 </span>
@@ -233,6 +241,20 @@
                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"></textarea>
                         </div>
 
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Asset Group</label>
+                            <Autocomplete
+                                v-model="form.asset_group_id"
+                                :options="assetGroupOptions"
+                                label-key="name"
+                                value-key="id"
+                                placeholder="Not an asset group"
+                            />
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                Groups this category on the Asset Operational Health dashboard. Leave blank for ticket-only categories.
+                            </p>
+                        </div>
+
                         <div v-if="isEditing" class="flex items-center">
                             <input v-model="form.is_active" type="checkbox" id="is_active_cat" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
                             <label for="is_active_cat" class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">Active Category</label>
@@ -255,10 +277,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
+import Autocomplete from '@/Components/Autocomplete.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
@@ -266,8 +289,12 @@ import { usePagination } from '@/Composables/usePagination'
 import { usePermission } from '@/Composables/usePermission'
 
 const props = defineProps({
-    categories: Object
+    categories: Object,
+    assetGroups: { type: Array, default: () => [] }
 })
+
+// "" is the real "not an asset group" value — the field is nullable.
+const assetGroupOptions = computed(() => [{ id: '', name: 'Not an asset group' }, ...props.assetGroups])
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
@@ -283,6 +310,7 @@ const currentCategory = ref(null)
 const form = reactive({
     name: '',
     description: '',
+    asset_group_id: '',
     is_active: true
 })
 
@@ -357,6 +385,7 @@ const openCreateModal = () => {
     currentCategory.value = null
     form.name = ''
     form.description = ''
+    form.asset_group_id = ''
     form.is_active = true
     showModal.value = true
 }
@@ -366,6 +395,7 @@ const editCategory = (category) => {
     currentCategory.value = category
     form.name = category.name
     form.description = category.description || ''
+    form.asset_group_id = category.asset_group_id || ''
     form.is_active = category.is_active
     showModal.value = true
 }

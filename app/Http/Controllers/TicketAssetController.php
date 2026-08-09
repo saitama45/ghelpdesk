@@ -91,6 +91,13 @@ class TicketAssetController extends Controller
                 ]);
             }
 
+            // The unit must still be AT the ticket's store. assetsSearch() already
+            // filters by store, but a stale client (or a direct POST) can submit a
+            // unit that has since been transferred away, which would tag a ticket to
+            // hardware that is no longer there — and mis-attribute its operational
+            // health. Revalidated here rather than trusted from the search results.
+            $this->assertUnitIsAtTicketStore($unit, $ticket);
+
             // Snapshot identity server-side (do not trust client values).
             $stockInId = $unit->id;
             $serialNo = $unit->serial_no;
@@ -205,6 +212,34 @@ class TicketAssetController extends Controller
         return response()->json([
             'message' => 'Asset removed successfully.',
         ]);
+    }
+
+    /**
+     * Reject a fixed unit that is not currently located at the ticket's store.
+     *
+     * Current location follows received transfers (LocatesInventoryUnits), so a unit
+     * that was stocked into store A and later received at store B is valid only for a
+     * store-B ticket. A ticket with no store cannot be checked, so it is left alone
+     * rather than blocked.
+     */
+    private function assertUnitIsAtTicketStore(StockIn $unit, Ticket $ticket): void
+    {
+        $storeCode = $ticket->store?->code;
+
+        if (! $storeCode) {
+            return;
+        }
+
+        $atStore = $this->fixedUnitsCurrentlyAt(
+            $this->locationVariants($storeCode),
+            fn ($query) => $query->where('stock_ins.id', $unit->id)
+        );
+
+        if ($atStore->isEmpty()) {
+            throw ValidationException::withMessages([
+                'stock_in_id' => 'This unit is no longer located at the ticket\'s store. Refresh the search and pick a unit currently at '.$storeCode.'.',
+            ]);
+        }
     }
 
     /**

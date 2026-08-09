@@ -6,6 +6,7 @@ use App\Models\DepartmentNode;
 use App\Models\Item;
 use App\Models\Scopes\ActiveEntityScope;
 use App\Services\StoreReportService;
+use App\Services\AssetOperationalHealthService;
 use App\Services\BrandHealthService;
 use App\Services\OrganizationReferenceService;
 use App\Services\PartnerPerformanceService;
@@ -29,17 +30,20 @@ class DashboardController extends Controller
     protected $organizationReferenceService;
     protected $brandHealthService;
     protected $partnerPerformanceService;
+    protected $assetHealthService;
 
     public function __construct(
         StoreReportService $reportService,
         OrganizationReferenceService $organizationReferenceService,
         BrandHealthService $brandHealthService,
-        PartnerPerformanceService $partnerPerformanceService
+        PartnerPerformanceService $partnerPerformanceService,
+        AssetOperationalHealthService $assetHealthService
     ) {
         $this->reportService = $reportService;
         $this->organizationReferenceService = $organizationReferenceService;
         $this->brandHealthService = $brandHealthService;
         $this->partnerPerformanceService = $partnerPerformanceService;
+        $this->assetHealthService = $assetHealthService;
     }
 
     public function index(Request $request)
@@ -57,6 +61,9 @@ class DashboardController extends Controller
         $pipelineYear = (int) $request->input('pipeline_year', (int) date('Y'));
         $pipelineStatus = trim((string) $request->input('pipeline_status', ''));
         $pipelineType = trim((string) $request->input('pipeline_type', ''));
+        // Asset Operational Health owns its own group selector, independent of the
+        // ticket filters (the tab counts units, not tickets).
+        $assetHealthGroup = trim((string) $request->input('asset_health_group', ''));
         $selectedSubUnitLabel = 'all';
 
         // Entity/Company filter. Defaults to the active sidebar entity; permitted
@@ -133,6 +140,7 @@ class DashboardController extends Controller
                 'pipeline_year' => $pipelineYear,
                 'pipeline_status' => $pipelineStatus ?: null,
                 'pipeline_type' => $pipelineType ?: null,
+                'asset_health_group' => $assetHealthGroup ?: null,
             ],
             'entityFilter' => fn () => [
                 'enabled' => $canEntityFilter,
@@ -160,6 +168,12 @@ class DashboardController extends Controller
                 $year ? (int) $year : null,
                 $month ? (int) $month : null
             )),
+            // Asset Operational Health — per physical unit, derived live from linked
+            // tickets. A different metric from Live Store/Brand Health (which count
+            // open tickets per store), so it gets its own tab rather than changing theirs.
+            'assetHealth' => Inertia::optional(fn () => $user->can('stock_ins.view')
+                ? $this->assetHealthService->build($effectiveCompanyIds, $storeIdFilter, $assetHealthGroup ?: null)
+                : null),
             'ticketCharts' => Inertia::optional(fn () => $this->buildTicketCharts($filteredQuery, $user, $effectiveCompanyIds, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter)),
             'leaderboard' => Inertia::optional(fn () => $this->buildLeaderboard($filteredQuery, $year ? (int) $year : null, $month ? (int) $month : null, $departmentIdFilter, $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null, $userIdFilter, $storeIdFilter, $effectiveCompanyIds)),
             'stats' => Inertia::optional(fn () => $overviewData()['stats']),

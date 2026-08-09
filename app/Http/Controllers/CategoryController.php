@@ -3,10 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Models\ReferenceOption;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use Inertia\Inertia;
 
 class CategoryController extends Controller implements HasMiddleware
 {
@@ -22,17 +23,25 @@ class CategoryController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Category::query();
-        
+        $query = Category::query()->with('assetGroup:id,value,label');
+
         if ($request->filled('search')) {
             $query->where('name', 'like', "%{$request->search}%")
-                  ->orWhere('description', 'like', "%{$request->search}%");
+                ->orWhere('description', 'like', "%{$request->search}%");
         }
-        
+
         $categories = $query->paginate($request->get('per_page', 10))->withQueryString();
-        
+
         return Inertia::render('Categories/Index', [
             'categories' => $categories,
+            // Asset Operational Health groups (slide 07). Categories left unmapped
+            // simply never appear on the Asset Health tab.
+            'assetGroups' => ReferenceOption::ofType('asset_group')
+                ->map(fn (ReferenceOption $option) => [
+                    'id' => (int) $option->id,
+                    'name' => $option->label,
+                ])
+                ->values(),
         ]);
     }
 
@@ -41,11 +50,13 @@ class CategoryController extends Controller implements HasMiddleware
         $request->validate([
             'name' => 'required|string|max:255|unique:categories,name',
             'description' => 'nullable|string',
+            'asset_group_id' => 'nullable|exists:reference_options,id',
         ]);
 
         Category::create([
             'name' => $request->name,
             'description' => $request->description,
+            'asset_group_id' => $request->asset_group_id ?: null,
             'is_active' => true,
         ]);
 
@@ -55,14 +66,16 @@ class CategoryController extends Controller implements HasMiddleware
     public function update(Request $request, Category $category)
     {
         $request->validate([
-            'name' => 'required|string|max:255|unique:categories,name,' . $category->id,
+            'name' => 'required|string|max:255|unique:categories,name,'.$category->id,
             'description' => 'nullable|string',
+            'asset_group_id' => 'nullable|exists:reference_options,id',
             'is_active' => 'boolean',
         ]);
 
         $category->update([
             'name' => $request->name,
             'description' => $request->description,
+            'asset_group_id' => $request->asset_group_id ?: null,
             'is_active' => $request->boolean('is_active'),
         ]);
 
@@ -72,6 +85,7 @@ class CategoryController extends Controller implements HasMiddleware
     public function destroy(Category $category)
     {
         $category->delete();
+
         return redirect()->back()->with('success', 'Category deleted successfully');
     }
 
@@ -91,6 +105,7 @@ class CategoryController extends Controller implements HasMiddleware
             $row++;
             if (count($line) !== count($header)) {
                 $errors[] = "Row {$row}: column count mismatch, skipped.";
+
                 continue;
             }
             $data = array_combine($header, array_map('trim', $line));
@@ -102,7 +117,8 @@ class CategoryController extends Controller implements HasMiddleware
             ]);
 
             if ($validator->fails()) {
-                $errors[] = "Row {$row}: " . implode(', ', $validator->errors()->all());
+                $errors[] = "Row {$row}: ".implode(', ', $validator->errors()->all());
+
                 continue;
             }
 
@@ -122,11 +138,11 @@ class CategoryController extends Controller implements HasMiddleware
     public function template()
     {
         $headers = [
-            'Content-Type'        => 'text/csv',
+            'Content-Type' => 'text/csv',
             'Content-Disposition' => 'attachment; filename="categories-import-template.csv"',
-            'Pragma'              => 'no-cache',
-            'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
-            'Expires'             => '0',
+            'Pragma' => 'no-cache',
+            'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires' => '0',
         ];
 
         $columns = ['name', 'description', 'is_active'];
