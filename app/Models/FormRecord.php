@@ -3,9 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class FormRecord extends Model
 {
+    // Archiving = soft delete. The delete button still destroys the row outright
+    // (forceDelete), so the two actions stay distinct.
+    use SoftDeletes;
+
     protected $fillable = [
         'form_definition_id',
         'request_type_id',
@@ -16,6 +21,8 @@ class FormRecord extends Model
         'current_approval_level',
         'created_by',
         'updated_by',
+        'archived_at',
+        'archived_by',
     ];
 
     protected $casts = [
@@ -23,6 +30,8 @@ class FormRecord extends Model
         'request_type_id' => 'integer',
         'created_by' => 'integer',
         'updated_by' => 'integer',
+        'archived_by' => 'integer',
+        'archived_at' => 'datetime',
         'data' => 'array',
     ];
 
@@ -49,6 +58,11 @@ class FormRecord extends Model
     public function updator()
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function archiver()
+    {
+        return $this->belongsTo(User::class, 'archived_by');
     }
 
     public function approvals()

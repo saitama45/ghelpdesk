@@ -20,7 +20,7 @@ const props = defineProps({
 const { hasPermission } = usePermission()
 const { confirm } = useConfirm()
 const { showSuccess, showError } = useToast()
-const { destroy: deleteRequest } = useErrorHandler()
+const { post, destroy: deleteRequest } = useErrorHandler()
 
 const search = ref(props.filters?.search ?? '')
 const status = ref(props.filters?.status ?? '')
@@ -74,6 +74,22 @@ const deleteRecord = async (record) => {
                 const errorMessage = Object.values(errors).flat().join(', ') || 'Cannot delete record'
                 showError(errorMessage)
             }
+        })
+    }
+}
+
+// Archive is the reversible counterpart of delete; restoring happens on the form's
+// own page, where the Archived filter lives.
+const archiveRecord = async (record) => {
+    const confirmed = await confirm({
+        title: 'Archive Record',
+        message: `Archive this approved record from "${record.definition.name}"? It can be restored from the form's Archived filter.`
+    })
+
+    if (confirmed) {
+        post(route('dynamic-form.archive', { slug: record.definition.slug, id: record.id }), {}, {
+            preserveScroll: true,
+            onError: (errors) => showError(Object.values(errors).flat().join(', ') || 'Cannot archive record')
         })
     }
 }
@@ -347,6 +363,17 @@ const toggleAllColumns = () => {
                                         </svg>
                                     </button>
                                     
+                                    <button
+                                        v-if="hasPermission(record.definition.slug + '.archive') && record.status === 'Approved'"
+                                        @click="archiveRecord(record)"
+                                        class="p-2 text-amber-600 hover:text-white hover:bg-amber-600 rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center"
+                                        title="Archive Record"
+                                    >
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                                        </svg>
+                                    </button>
+
                                     <button
                                         v-if="hasPermission(record.definition.slug + '.delete')"
                                         @click="deleteRecord(record)"

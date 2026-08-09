@@ -208,6 +208,8 @@ Route::middleware('auth')->group(function () {
     Route::post('forms/{slug}/{id}/approve', [\App\Http\Controllers\DynamicFormController::class, 'approve'])->name('dynamic-form.approve');
     Route::post('forms/{slug}/{id}/reject', [\App\Http\Controllers\DynamicFormController::class, 'reject'])->name('dynamic-form.reject');
     Route::post('forms/{slug}/{id}/remind', [\App\Http\Controllers\DynamicFormController::class, 'remind'])->name('dynamic-form.remind');
+    Route::post('forms/{slug}/{id}/archive', [\App\Http\Controllers\DynamicFormController::class, 'archive'])->name('dynamic-form.archive');
+    Route::post('forms/{slug}/{id}/restore', [\App\Http\Controllers\DynamicFormController::class, 'restore'])->name('dynamic-form.restore');
     Route::resource('pos-requests', \App\Http\Controllers\PosRequestController::class);
     Route::post('pos-requests/{pos_request}/approve', [\App\Http\Controllers\PosRequestController::class, 'approve'])->name('pos-requests.approve');
     Route::post('pos-requests/{pos_request}/reject', [\App\Http\Controllers\PosRequestController::class, 'reject'])->name('pos-requests.reject');
@@ -369,7 +371,9 @@ Route::middleware('auth')->group(function () {
     Route::get('reports/store-health', [\App\Http\Controllers\StoreReportController::class, 'index'])->name('reports.store-health');
     Route::get('reports/store-health/pdf', [\App\Http\Controllers\StoreReportController::class, 'pdf'])->name('reports.store-health.pdf');
     Route::get('reports/store-health/{store}/tickets', [\App\Http\Controllers\StoreReportController::class, 'getTickets'])->name('reports.store-health.tickets');
+    Route::get('reports/store-health/{store}/tickets/export', [\App\Http\Controllers\StoreReportController::class, 'exportTickets'])->name('reports.store-health.tickets.export');
     Route::get('reports/store-health/sector/{sector}/tickets', [\App\Http\Controllers\StoreReportController::class, 'getSectorTickets'])->name('reports.store-health.sector-tickets');
+    Route::get('reports/store-health/sector/{sector}/tickets/export', [\App\Http\Controllers\StoreReportController::class, 'exportSectorTickets'])->name('reports.store-health.sector-tickets.export');
     Route::get('reports/sla-performance', [\App\Http\Controllers\SlaReportController::class, 'index'])->name('reports.sla-performance');
     Route::get('reports/sla-performance/pdf', [\App\Http\Controllers\SlaReportController::class, 'pdf'])->name('reports.sla-performance.pdf');
     Route::get('reports/sla-performance/tickets', [\App\Http\Controllers\SlaReportController::class, 'getTickets'])->name('reports.sla-performance.tickets');

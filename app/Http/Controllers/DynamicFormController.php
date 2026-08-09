@@ -14,6 +14,9 @@ class DynamicFormController extends Controller
 {
     use ResolvesLinkedTicket;
 
+    /** Status-filter sentinel for the archive view (not a stored record status). */
+    private const ARCHIVED_FILTER = 'Archived';
+
     protected FormServiceFactory $serviceFactory;
 
     public function __construct(FormServiceFactory $serviceFactory)
@@ -91,12 +94,21 @@ class DynamicFormController extends Controller
             $query->where('created_by', $request->user()->id);
         }
 
+        // "Archived" is a view over the soft-deleted rows, not a stored status —
+        // only the archivers/restorers get to look at it.
+        $viewingArchived = $request->input('status') === self::ARCHIVED_FILTER
+            && $this->canSeeArchive($request, $form);
+
+        if ($viewingArchived) {
+            $query->onlyTrashed()->with('archiver:id,name');
+        }
+
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where('data', 'like', "%{$search}%");
         }
 
-        if ($request->filled('status')) {
+        if ($request->filled('status') && $request->status !== self::ARCHIVED_FILTER) {
             $query->where('status', $request->status);
         }
 
@@ -124,13 +136,70 @@ class DynamicFormController extends Controller
             // Drives the provider-vs-customer framing on the page: managers work
             // the whole queue, customers see and track only their own requests.
             'accessView' => $manages ? 'provider' : 'customer',
+            'viewingArchived' => $viewingArchived,
+            'canSeeArchive' => $this->canSeeArchive($request, $form),
+        ]);
+    }
+
+    /**
+     * Archiving is a soft delete: the approved record leaves the working queue but
+     * stays restorable, unlike destroy() which removes it for good.
+     */
+    public function archive(Request $request, $slug, $id)
+    {
+        $form = FormDefinition::where('slug', $slug)->firstOrFail();
+        abort_unless($request->user()->can($form->slug . '.archive'), 403);
+
+        $record = FormRecord::where('form_definition_id', $form->id)->findOrFail($id);
+
+        // Only settled work gets filed away — an open request still belongs in the queue.
+        abort_unless($record->status === 'Approved', 422, 'Only approved records can be archived.');
+
+        $record->forceFill([
+            'archived_at' => now(),
+            'archived_by' => $request->user()->id,
+        ])->save();
+
+        $record->delete();
+
+        return redirect()->back()->with('success', 'Record archived successfully');
+    }
+
+    public function restore(Request $request, $slug, $id)
+    {
+        $form = FormDefinition::where('slug', $slug)->firstOrFail();
+        abort_unless($request->user()->can($form->slug . '.restore'), 403);
+
+        $record = FormRecord::onlyTrashed()
+            ->where('form_definition_id', $form->id)
+            ->findOrFail($id);
+
+        $record->restore();
+        $record->forceFill(['archived_at' => null, 'archived_by' => null])->save();
+
+        return redirect()->back()->with('success', 'Record restored successfully');
+    }
+
+    /**
+     * Who may look at the archive: whoever can put records there or take them back.
+     */
+    private function canSeeArchive(Request $request, FormDefinition $form): bool
+    {
+        return (bool) $request->user()?->canAny([
+            $form->slug . '.archive',
+            $form->slug . '.restore',
         ]);
     }
 
     public function show(Request $request, $slug, $id)
     {
         $form = FormDefinition::where('slug', $slug)->firstOrFail();
-        $record = FormRecord::with(['creator', 'updator', 'approvals.user', 'definition', 'requestType', 'ticket.slaMetric'])
+        // Archived rows stay readable for whoever works the archive, so a record can
+        // be inspected before it is restored.
+        $seesArchive = $this->canSeeArchive($request, $form);
+
+        $record = FormRecord::with(['creator', 'updator', 'approvals.user', 'definition', 'requestType', 'ticket.slaMetric', 'archiver:id,name'])
+            ->when($seesArchive, fn ($q) => $q->withTrashed())
             ->where('form_definition_id', $form->id)
             ->findOrFail($id);
 
@@ -224,8 +293,9 @@ class DynamicFormController extends Controller
     {
         $form = FormDefinition::where('slug', $slug)->firstOrFail();
         $record = FormRecord::where('form_definition_id', $form->id)->findOrFail($id);
-        
-        $record->delete();
+
+        // Deleting stays permanent — archiving is the reversible one.
+        $record->forceDelete();
 
         return redirect()->back()->with('success', 'Record deleted successfully');
     }

@@ -115,20 +115,41 @@ const modalLoading = ref(false);
 const selectedStoreTickets = ref([]);
 const selectedStoreName = ref('');
 
+// Export endpoint for whichever drill-down is open, carrying the same filters as the
+// fetch so the .xlsx is exactly the list on screen. Empty while loading / on error.
+const ticketsExportUrl = ref('');
+
+const exportQueryString = (params) => {
+    const query = new URLSearchParams();
+
+    Object.entries(params).forEach(([key, value]) => {
+        if (value === undefined || value === null || value === '') return;
+
+        if (Array.isArray(value)) {
+            value.forEach(item => query.append(`${key}[]`, item));
+        } else {
+            query.append(key, value);
+        }
+    });
+
+    return query.toString();
+};
+
 const fetchTickets = async (storeId) => {
     modalLoading.value = true;
     showTicketsModal.value = true;
+    ticketsExportUrl.value = '';
     try {
-        const response = await axios.get(route('reports.store-health.tickets', storeId, false), {
-            params: {
-                as_of_date: filterForm.value.as_of_date,
-                user_id: filterForm.value.user_id,
-                ...deptFilterParams.value,
-                ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
-            }
-        });
+        const params = {
+            as_of_date: filterForm.value.as_of_date,
+            user_id: filterForm.value.user_id,
+            ...deptFilterParams.value,
+            ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
+        };
+        const response = await axios.get(route('reports.store-health.tickets', storeId, false), { params });
         selectedStoreTickets.value = response.data.tickets;
         selectedStoreName.value = response.data.store_name;
+        ticketsExportUrl.value = `${route('reports.store-health.tickets.export', storeId, false)}?${exportQueryString(params)}`;
     } catch (error) {
         console.error('Error fetching tickets:', error);
     } finally {
@@ -139,23 +160,32 @@ const fetchTickets = async (storeId) => {
 const fetchSectorTickets = async (sector) => {
     modalLoading.value = true;
     showTicketsModal.value = true;
+    ticketsExportUrl.value = '';
     try {
-        const response = await axios.get(route('reports.store-health.sector-tickets', sector, false), {
-            params: {
-                as_of_date: filterForm.value.as_of_date,
-                store_id: filterForm.value.store_id,
-                user_id: filterForm.value.user_id,
-                ...deptFilterParams.value,
-                ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
-            }
-        });
+        const params = {
+            as_of_date: filterForm.value.as_of_date,
+            store_id: filterForm.value.store_id,
+            user_id: filterForm.value.user_id,
+            ...deptFilterParams.value,
+            ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
+        };
+        const response = await axios.get(route('reports.store-health.sector-tickets', sector, false), { params });
         selectedStoreTickets.value = response.data.tickets;
         selectedStoreName.value = response.data.store_name;
+        ticketsExportUrl.value = `${route('reports.store-health.sector-tickets.export', sector, false)}?${exportQueryString(params)}`;
     } catch (error) {
         console.error('Error fetching sector tickets:', error);
     } finally {
         modalLoading.value = false;
     }
+};
+
+// Attachment download, so navigating doesn't leave the page (matches the Tickets
+// xlsx export); window.open would leave a blank tab behind and can be popup-blocked.
+const exportTickets = () => {
+    if (!ticketsExportUrl.value) return;
+
+    window.location.href = ticketsExportUrl.value;
 };
 
 const applyFilters = () => {
@@ -911,7 +941,16 @@ const getAreaItemClass = (count, maxCols) => {
                     </div>
                 </div>
 
-                <div class="mt-6 flex justify-end">
+                <div class="mt-6 flex justify-end gap-2">
+                    <button
+                        v-if="!modalLoading && selectedStoreTickets.length > 0"
+                        @click="exportTickets"
+                        :disabled="!ticketsExportUrl"
+                        class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium flex items-center shadow-sm"
+                    >
+                        <DocumentArrowDownIcon class="w-4 h-4 mr-2" />
+                        Export to Excel
+                    </button>
                     <button @click="showTicketsModal = false" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">
                         Close
                     </button>

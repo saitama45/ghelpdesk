@@ -31,7 +31,7 @@ class StoreReportController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('can:reports.store_health', only: ['index', 'pdf', 'getTickets']),
+            new Middleware('can:reports.store_health', only: ['index', 'pdf', 'getTickets', 'exportTickets']),
         ];
     }
 
@@ -142,6 +142,38 @@ class StoreReportController extends Controller implements HasMiddleware
 
     public function getTickets(Request $request, Store $store)
     {
+        return response()->json([
+            'store_name' => $store->name,
+            'tickets' => $this->storeTickets($request, $store),
+        ]);
+    }
+
+    /**
+     * Same rows the store drill-down modal shows, as an .xlsx download.
+     */
+    public function exportTickets(Request $request, Store $store)
+    {
+        return $this->ticketsSpreadsheet($this->storeTickets($request, $store), $store->name);
+    }
+
+    public function getSectorTickets(Request $request, $sector)
+    {
+        return response()->json([
+            'store_name' => 'Sector ' . $sector,
+            'tickets' => $this->sectorTickets($request, $sector),
+        ]);
+    }
+
+    /**
+     * Same rows the sector drill-down modal shows, as an .xlsx download.
+     */
+    public function exportSectorTickets(Request $request, $sector)
+    {
+        return $this->ticketsSpreadsheet($this->sectorTickets($request, $sector), 'Sector ' . $sector);
+    }
+
+    private function storeTickets(Request $request, Store $store)
+    {
         $asOfDate = $request->input('as_of_date');
         $userId = $request->input('user_id');
         $departmentId = $request->input('department_id');
@@ -181,13 +213,10 @@ class StoreReportController extends Controller implements HasMiddleware
             ->filter(fn ($ticket) => $this->ticketMatchesDisplayUser($ticket, $userId, $sectorAssignments))
             ->values();
 
-        return response()->json([
-            'store_name' => $store->name,
-            'tickets' => $tickets
-        ]);
+        return $tickets;
     }
 
-    public function getSectorTickets(Request $request, $sector)
+    private function sectorTickets(Request $request, $sector)
     {
         $asOfDate = $request->input('as_of_date');
         $storeId = $request->input('store_id');
@@ -240,10 +269,71 @@ class StoreReportController extends Controller implements HasMiddleware
             ->filter(fn ($ticket) => $this->ticketMatchesDisplayUser($ticket, $userId, $sectorAssignments))
             ->values();
 
-        return response()->json([
-            'store_name' => 'Sector ' . $sector,
-            'tickets' => $tickets
+        return $tickets;
+    }
+
+    /**
+     * Streams the drill-down list as an .xlsx, mirroring the modal's columns so the
+     * download matches what the user is looking at.
+     */
+    private function ticketsSpreadsheet($tickets, string $label)
+    {
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Tickets');
+
+        $headers = ['Ticket #', 'Store Code', 'Store Name', 'Sector', 'Subject/Title', 'Assignee', 'Status', 'Created At'];
+
+        foreach ($headers as $i => $header) {
+            $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+            $sheet->setCellValue($col . '1', $header);
+        }
+
+        $lastCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle("A1:{$lastCol}1")->getFont()->setBold(true);
+        $sheet->getStyle("A1:{$lastCol}1")->getFill()
+            ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFD9E1F2');
+
+        $tz = new \DateTimeZone('Asia/Manila');
+        $row = 2;
+
+        foreach ($tickets as $ticket) {
+            $sheet->setCellValue('A' . $row, $ticket->ticket_key);
+            $sheet->setCellValue('B' . $row, $ticket->store?->code);
+            $sheet->setCellValue('C' . $row, $ticket->store?->name);
+            $sheet->setCellValue('D' . $row, $ticket->store?->sector);
+            $sheet->setCellValue('E' . $row, $ticket->title);
+            $sheet->setCellValue('F' . $row, $ticket->assignee?->name ?? 'Unassigned');
+            $sheet->setCellValue('G' . $row, $this->statusLabel($ticket->status));
+            $sheet->setCellValue('H' . $row, $ticket->created_at?->setTimezone($tz)->format('Y-m-d H:i:s'));
+            $row++;
+        }
+
+        foreach (range(1, count($headers)) as $i) {
+            $sheet->getColumnDimensionByColumn($i)->setAutoSize(true);
+        }
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $filename = \Illuminate\Support\Str::slug('store-health-' . $label) . '-' . now()->format('Y-m-d-His') . '.xlsx';
+
+        return response()->stream(fn () => $writer->save('php://output'), 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control' => 'max-age=0',
         ]);
+    }
+
+    /**
+     * Mirrors the modal's status wording so the export reads the same.
+     */
+    private function statusLabel(?string $status): string
+    {
+        return match ($status) {
+            'waiting_service_provider' => 'Waiting for service provider',
+            'waiting_client_feedback' => 'Waiting for clients feedback?',
+            default => $status ? str_replace('_', ' ', $status) : '',
+        };
     }
 
     /**

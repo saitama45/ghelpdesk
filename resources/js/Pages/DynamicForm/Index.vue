@@ -16,6 +16,9 @@ const props = defineProps({
     records: Object,
     copyTransferPayload: { type: Object, default: null },
     filters: Object,
+    // True while the table is showing archived (soft-deleted) records.
+    viewingArchived: { type: Boolean, default: false },
+    canSeeArchive: { type: Boolean, default: false },
 })
 
 const { showSuccess, showError } = useToast()
@@ -289,6 +292,40 @@ const submitForm = () => {
     }
 }
 
+// Archive = reversible soft delete, offered only once a record is Approved.
+// Delete stays permanent and Open-only, so the two never overlap.
+const canArchive = computed(() => hasPermission(props.form.slug + '.archive'))
+const canRestore = computed(() => hasPermission(props.form.slug + '.restore'))
+
+const archiveRecord = async (record) => {
+    const confirmed = await confirm({
+        title: 'Archive Record',
+        message: 'Archive this approved record? It leaves the list but can be restored later.'
+    })
+
+    if (confirmed) {
+        // No success toast here — AppLayout already surfaces the flash message.
+        post(route('dynamic-form.archive', { slug: props.form.slug, id: record.id }), {}, {
+            preserveScroll: true,
+            onError: (errors) => showError(Object.values(errors).flat().join(', ') || 'Cannot archive record')
+        })
+    }
+}
+
+const restoreRecord = async (record) => {
+    const confirmed = await confirm({
+        title: 'Restore Record',
+        message: 'Restore this record back into the active list?'
+    })
+
+    if (confirmed) {
+        post(route('dynamic-form.restore', { slug: props.form.slug, id: record.id }), {}, {
+            preserveScroll: true,
+            onError: (errors) => showError(Object.values(errors).flat().join(', ') || 'Cannot restore record')
+        })
+    }
+}
+
 const deleteRecord = async (record) => {
     const confirmed = await confirm({
         title: 'Delete Record',
@@ -517,6 +554,8 @@ const getStageDisplay = (record) => {
                             <option value="Approved">Approved</option>
                             <option value="Rejected">Rejected</option>
                             <option value="Cancelled">Cancelled</option>
+                            <!-- Archive view: soft-deleted records, restorable from here. -->
+                            <option v-if="canSeeArchive" value="Archived">Archived</option>
                         </select>
                         <Dropdown align="right" width="48" contentClasses="py-1 bg-white border border-gray-100 shadow-xl">
                             <template #trigger>
@@ -634,6 +673,13 @@ const getStageDisplay = (record) => {
                                 <span :class="statusClass(record.status)" class="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide whitespace-nowrap">
                                     {{ record.status }}
                                 </span>
+                                <!-- Archived rows keep their approved status; the tag says where they live now. -->
+                                <span v-if="record.deleted_at" class="mt-1 block text-[9px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-300">
+                                    Archived
+                                    <span v-if="record.archiver" class="block font-bold normal-case tracking-normal text-gray-400 dark:text-slate-400">
+                                        by {{ record.archiver.name }}
+                                    </span>
+                                </span>
                             </td>
                             <td v-if="isColumnVisible('created_by')" class="px-6 py-5 whitespace-nowrap text-left">
                                 <div class="text-sm font-semibold text-gray-600 dark:text-slate-200">{{ record.creator?.name || 'System' }}</div>
@@ -653,7 +699,27 @@ const getStageDisplay = (record) => {
                                         </svg>
                                     </Link>
                                     <button
-                                        v-if="hasPermission(form.slug + '.edit') && record.status === 'Open'"
+                                        v-if="viewingArchived && canRestore"
+                                        @click="restoreRecord(record)"
+                                        class="p-2 text-sky-600 hover:text-white hover:bg-sky-600 rounded-xl transition-all duration-300 shadow-sm"
+                                        title="Restore"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a5 5 0 015 5v2M3 10l4-4M3 10l4 4" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        v-if="!viewingArchived && canArchive && record.status === 'Approved'"
+                                        @click="archiveRecord(record)"
+                                        class="p-2 text-amber-600 hover:text-white hover:bg-amber-600 rounded-xl transition-all duration-300 shadow-sm"
+                                        title="Archive"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        v-if="!viewingArchived && hasPermission(form.slug + '.edit') && record.status === 'Open'"
                                         @click="editRecord(record)"
                                         class="p-2 text-indigo-600 hover:text-white hover:bg-indigo-600 rounded-xl transition-all duration-300 shadow-sm"
                                         title="Edit"
@@ -663,7 +729,7 @@ const getStageDisplay = (record) => {
                                         </svg>
                                     </button>
                                     <button
-                                        v-if="hasPermission(form.slug + '.delete') && record.status === 'Open'"
+                                        v-if="!viewingArchived && hasPermission(form.slug + '.delete') && record.status === 'Open'"
                                         @click="deleteRecord(record)"
                                         class="p-2 text-rose-600 hover:text-white hover:bg-rose-600 rounded-xl transition-all duration-300 shadow-sm"
                                         title="Delete"

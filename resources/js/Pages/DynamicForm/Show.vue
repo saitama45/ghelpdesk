@@ -314,9 +314,13 @@ function getApprovalForLevel(lvl) {
 function statusClass(s) {
     if (!s) return 'bg-gray-500 text-white'
     if (s.startsWith('Approved Level')) return 'bg-indigo-500 text-white shadow-indigo-200'
-    const map = { 'Approved': 'bg-emerald-500 text-white shadow-emerald-200', 'Open': 'bg-blue-500 text-white shadow-blue-200', 'Cancelled': 'bg-rose-500 text-white shadow-rose-200', 'Rejected': 'bg-red-500 text-white shadow-red-200' }
+    const map = { 'Approved': 'bg-emerald-500 text-white shadow-emerald-200', 'Open': 'bg-blue-500 text-white shadow-blue-200', 'Cancelled': 'bg-rose-500 text-white shadow-rose-200', 'Rejected': 'bg-red-500 text-white shadow-red-200', 'Archived': 'bg-amber-500 text-white shadow-amber-200' }
     return map[s] ?? 'bg-amber-500 text-white shadow-amber-200'
 }
+
+// An archived record keeps its approved status underneath, but the badge has to say
+// where the record actually is now.
+const displayStatus = computed(() => props.record.deleted_at ? 'Archived' : props.record.status)
 
 function fmt(d) {
     if (!d) return ''
@@ -398,9 +402,16 @@ const lineItems = computed(() => props.record.data?.items ?? [])
 
                         <!-- Header Card -->
                         <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200/50 p-10 border border-gray-100 relative overflow-hidden dark:bg-gray-800 dark:border-gray-700">
-                            <div class="absolute top-0 right-0 p-8">
-                                <span :class="statusClass(record.status)" class="px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg">
-                                    {{ record.status }}
+                            <div class="absolute top-0 right-0 p-8 text-right">
+                                <span :class="statusClass(displayStatus)" class="px-6 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg">
+                                    {{ displayStatus }}
+                                </span>
+                                <!-- Keep the underlying status visible so the record still reads as approved. -->
+                                <span v-if="record.deleted_at" class="mt-2 block text-[9px] font-bold uppercase tracking-widest text-gray-400 dark:text-slate-400">
+                                    Was {{ record.status }}
+                                    <span v-if="record.archiver" class="block normal-case tracking-normal">
+                                        Archived by {{ record.archiver.name }}<span v-if="record.archived_at"> · {{ fmt(record.archived_at) }}</span>
+                                    </span>
                                 </span>
                             </div>
                             <h1 class="text-3xl font-black text-gray-900 tracking-tight mb-4 flex items-center gap-3 dark:text-gray-100">
