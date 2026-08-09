@@ -465,6 +465,45 @@ class AssetOperationalHealthTest extends TestCase
         $this->assertSame(1, $store['active_tickets'], 'but it is a single issue');
     }
 
+    /**
+     * The board's "Active Issues" number and the drill-down's unit list are different
+     * counts, and the drill-down must report BOTH — otherwise clicking a cell showing
+     * "2" opens a list of 3 units and reads as a bug rather than as one shared ticket.
+     *
+     * Mirrors the real CFE I case: one CCTV inspection ticket tagged to two cameras,
+     * plus a separate ticket on a laptop → 2 issues across 3 impacted units.
+     */
+    public function test_drill_down_reports_issue_count_and_unit_count_separately(): void
+    {
+        $camA = $this->unit('SN-CAM-A', $this->store->code);
+        $camB = $this->unit('SN-CAM-B', $this->store->code);
+        $laptop = $this->unit('SN-LAPTOP', $this->store->code);
+        $this->unit('SN-HEALTHY', $this->store->code); // untouched, stays operational
+
+        $inspection = $this->ticket('open');
+        $this->tag($inspection, $camA);
+        $this->tag($inspection, $camB);
+        $this->tag($this->ticket('open'), $laptop);
+
+        $store = collect($this->build()['stores'])->firstWhere('code', 'ST001');
+        $this->assertSame(2, $store['active_tickets'], 'board shows 2 issues');
+        $this->assertSame(3, $store['impacted'], 'across 3 impacted units');
+
+        $drill = app(AssetOperationalHealthService::class)
+            ->units([$this->company->id], $this->store->id, null, 'impacted');
+
+        // Both numbers travel with the drill-down so the modal can reconcile them.
+        $this->assertSame(2, $drill['ticket_count']);
+        $this->assertSame(3, $drill['impacted_count']);
+        $this->assertSame(3, $drill['count']);
+
+        // And the shared ticket really does appear on both cameras.
+        $keys = collect($drill['units'])
+            ->mapWithKeys(fn ($unit) => [$unit['serial_no'] => collect($unit['tickets'])->pluck('id')->all()]);
+        $this->assertSame($keys['SN-CAM-A'], $keys['SN-CAM-B']);
+        $this->assertNotSame($keys['SN-CAM-A'], $keys['SN-LAPTOP']);
+    }
+
     /** Consumables and unposted stock never enter the deployed fleet. */
     public function test_only_posted_fixed_units_are_counted(): void
     {

@@ -233,6 +233,11 @@ class AssetOperationalHealthService
 
         $store = $stores->count() === 1 ? $stores->first() : null;
 
+        // Units and issues are different counts and must both be reported: one ticket
+        // tagged to three cameras is ONE issue affecting THREE units. Returning only
+        // the unit count made the board's "Active Issues" number look wrong.
+        $impacted = $rows->where('status', 'impacted');
+
         return [
             'store' => $store ? [
                 'id' => (int) $store->id,
@@ -240,6 +245,11 @@ class AssetOperationalHealthService
                 'name' => $store->name,
             ] : null,
             'count' => $rows->count(),
+            'impacted_count' => $impacted->count(),
+            'ticket_count' => $impacted
+                ->flatMap(fn (array $unit) => $unit['tickets'] ?? [])
+                ->unique('id')
+                ->count(),
             'units' => $rows->all(),
         ];
     }

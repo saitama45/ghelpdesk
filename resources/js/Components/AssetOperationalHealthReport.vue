@@ -92,11 +92,29 @@ const drillLoading = ref(false);
 const drillTitle = ref('');
 const drillSubtitle = ref('');
 const drillUnits = ref([]);
+const drillTicketCount = ref(0);
+const drillImpactedCount = ref(0);
+
+const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+
+// The board counts ISSUES (distinct tickets) while the drill-down lists UNITS, and one
+// ticket can be tagged to several units. Spell both out so "Active Issues: 2" opening a
+// list of 3 units reads as arithmetic rather than a bug.
+const drillCountLine = computed(() => {
+    if (!drillImpactedCount.value) return '';
+    const issues = plural(drillTicketCount.value, 'active ticket');
+    const units = plural(drillImpactedCount.value, 'impacted unit');
+    return drillTicketCount.value === drillImpactedCount.value
+        ? `${issues} · ${units}`
+        : `${issues} affecting ${units}`;
+});
 
 const openDrill = async ({ title, subtitle, params }) => {
     drillTitle.value = title;
     drillSubtitle.value = subtitle;
     drillUnits.value = [];
+    drillTicketCount.value = 0;
+    drillImpactedCount.value = 0;
     showDrill.value = true;
     drillLoading.value = true;
 
@@ -109,6 +127,8 @@ const openDrill = async ({ title, subtitle, params }) => {
             },
         });
         drillUnits.value = data.units || [];
+        drillTicketCount.value = data.ticket_count || 0;
+        drillImpactedCount.value = data.impacted_count || 0;
     } catch (e) {
         showError('Unable to load the unit breakdown.');
         showDrill.value = false;
@@ -120,8 +140,8 @@ const openDrill = async ({ title, subtitle, params }) => {
 const openStoreDrill = (store, status = null) => openDrill({
     title: store.code ? `${store.code} — ${store.name}` : store.name,
     subtitle: status === 'impacted'
-        ? `${store.impacted} impacted unit${store.impacted === 1 ? '' : 's'}`
-        : `${store.total} deployed unit${store.total === 1 ? '' : 's'} · ${store.impacted} impacted`,
+        ? 'Impacted units only'
+        : `${plural(store.total, 'deployed unit')} · ${store.impacted} impacted`,
     params: { store_id: store.id, ...(status ? { status } : {}) },
 });
 
@@ -130,8 +150,8 @@ const openCellDrill = (store, groupName, cell) => {
     openDrill({
         title: `${store.code || store.name} · ${groupName}`,
         subtitle: cell.impacted > 0
-            ? `${cell.impacted} of ${cell.total} unit${cell.total === 1 ? '' : 's'} impacted`
-            : `All ${cell.total} unit${cell.total === 1 ? '' : 's'} operational`,
+            ? `${cell.impacted} of ${plural(cell.total, 'unit')} impacted`
+            : `All ${plural(cell.total, 'unit')} operational`,
         params: { store_id: store.id, group: groupName },
     });
 };
@@ -264,7 +284,11 @@ const openCellDrill = (store, groupName, cell) => {
                                 >
                                     {{ column.name }}
                                 </th>
-                                <th rowspan="2" class="px-3 py-2 text-center text-[11px] font-black uppercase tracking-wider border border-white/30 bg-[#31859c] whitespace-nowrap">
+                                <th
+                                    rowspan="2"
+                                    class="px-3 py-2 text-center text-[11px] font-black uppercase tracking-wider border border-white/30 bg-[#31859c] whitespace-nowrap"
+                                    title="Distinct active tickets at this store. One ticket can affect several units, so this can be lower than the impacted-unit count."
+                                >
                                     Active Issues
                                 </th>
                                 <th rowspan="2" class="px-3 py-2 text-center text-[11px] font-black uppercase tracking-wider border border-white/30 bg-[#31859c] whitespace-nowrap">
@@ -369,6 +393,10 @@ const openCellDrill = (store, groupName, cell) => {
                     <div>
                         <h3 class="text-lg font-black text-gray-900 dark:text-gray-100">{{ drillTitle }}</h3>
                         <p class="text-xs text-gray-500 dark:text-gray-400">{{ drillSubtitle }}</p>
+                        <!-- Reconciles the board's issue count with this unit list. -->
+                        <p v-if="drillCountLine" class="text-xs font-bold text-gray-700 mt-0.5 dark:text-gray-300">
+                            {{ drillCountLine }}
+                        </p>
                     </div>
                     <button @click="showDrill = false" class="inline-flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700">
                         <XMarkIcon class="w-5 h-5" />
