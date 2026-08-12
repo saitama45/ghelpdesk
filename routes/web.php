@@ -71,6 +71,9 @@ Route::middleware('auth')->group(function () {
     // Live Brand Health — Top 10 sub-category / store drill-down.
     Route::get('/dashboard/brand-health/tickets', [\App\Http\Controllers\BrandHealthController::class, 'tickets'])
         ->name('dashboard.brand-health.tickets');
+    // Live Brand Health — Top 10 lists re-ranked for a concern-type / status slice.
+    Route::get('/dashboard/brand-health/top-lists', [\App\Http\Controllers\BrandHealthController::class, 'topLists'])
+        ->name('dashboard.brand-health.top-lists');
     // Partner Performance — partner / brand escalation drill-down.
     Route::get('/dashboard/partner-performance/tickets', [\App\Http\Controllers\PartnerPerformanceController::class, 'tickets'])
         ->name('dashboard.partner-performance.tickets');

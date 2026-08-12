@@ -45,6 +45,12 @@ class BrandHealthService
         'wcf'  => ['waiting_client_feedback'],
     ];
 
+    /** Resolved counts as closed, matching the dashboard-wide open/closed tally. */
+    private const TERMINAL_STATUSES = ['resolved', 'closed'];
+
+    /** Status buckets offered by the Top 10 filter. */
+    public const STATUS_BUCKETS = ['open', 'closed', 'all'];
+
     /**
      * @param  array|null  $companyIds  Effective Entity/Company selection from the
      *                                  dashboard filter. The tab counts only brands
@@ -103,7 +109,7 @@ class BrandHealthService
             $statusCountsByStore = Ticket::query()
                 ->withoutGlobalScope(ActiveEntityScope::class)
                 ->whereNull('tickets.parent_id')
-                ->whereNotIn('tickets.status', ['resolved', 'closed'])
+                ->whereNotIn('tickets.status', self::TERMINAL_STATUSES)
                 ->whereIn('tickets.store_id', $allStoreIds)
                 ->whereDate('tickets.created_at', '<=', $asOfDate)
                 ->selectRaw('store_id, status, COUNT(*) as c')
@@ -116,23 +122,22 @@ class BrandHealthService
         // Same open backlog, sliced by sub-category (the /items taxonomy) so each brand
         // can be ranked by what is actually breaking. Grouped per store so the rows can
         // be folded up per brand without a second round trip.
-        $subCategoryRowsByStore = collect();
+        $subCategoryCountsByStore = collect();
         if ($allStoreIds->isNotEmpty()) {
-            $subCategoryRowsByStore = Ticket::query()
+            $subCategoryCountsByStore = Ticket::query()
                 ->withoutGlobalScope(ActiveEntityScope::class)
                 ->whereNull('tickets.parent_id')
-                ->whereNotIn('tickets.status', ['resolved', 'closed'])
+                ->whereNotIn('tickets.status', self::TERMINAL_STATUSES)
                 ->whereIn('tickets.store_id', $allStoreIds)
                 ->whereDate('tickets.created_at', '<=', $asOfDate)
                 ->selectRaw('store_id, sub_category_id, COUNT(*) as c')
                 ->groupBy('store_id', 'sub_category_id')
                 ->get()
-                ->groupBy('store_id');
+                ->groupBy('store_id')
+                ->map(fn ($rows) => $this->foldSubCategoryCounts($rows));
         }
 
-        $subCategoryNames = SubCategory::query()
-            ->whereIn('id', $subCategoryRowsByStore->flatten(1)->pluck('sub_category_id')->filter()->unique()->values())
-            ->pluck('name', 'id');
+        $subCategoryNames = $this->subCategoryNames($subCategoryCountsByStore);
 
         // The WCF confirmation register: the actual tickets awaiting brand confirmation.
         $wcfByBrand = $this->wcfRegister($allStoreIds, $storesByBrand, $asOfDate, $agingDays);
@@ -141,7 +146,7 @@ class BrandHealthService
             (int) $brand->id => $brand->code ?: $brand->name,
         ])->all();
 
-        $brandRows = $brands->map(function (Company $brand) use ($storesByBrand, $statusCountsByStore, $bands, $wcfByBrand, $subCategoryRowsByStore, $subCategoryNames, $brandLabels) {
+        $brandRows = $brands->map(function (Company $brand) use ($storesByBrand, $statusCountsByStore, $bands, $wcfByBrand, $subCategoryCountsByStore, $subCategoryNames, $brandLabels) {
             $stores = $storesByBrand->get($brand->id, collect());
 
             $health = ['green' => 0, 'yellow' => 0, 'orange' => 0, 'red' => 0];
@@ -179,7 +184,7 @@ class BrandHealthService
                 'active_tickets' => $activeTickets,
                 'health' => $health,
                 'workflow' => $workflow,
-                'top_subcategories' => $this->topSubCategories($stores, $subCategoryRowsByStore, $subCategoryNames),
+                'top_subcategories' => $this->topSubCategories($stores, $subCategoryCountsByStore, $subCategoryNames),
                 'top_stores' => $this->topStores($stores, $statusCountsByStore, $bands, $brandLabels),
                 'wcf_register' => $wcfByBrand->get($brand->id, collect())->values()->all(),
             ];
@@ -196,7 +201,7 @@ class BrandHealthService
             'entity_scoped' => $entityScoped,
             'brands_outside_scope' => $brandsOutsideScope,
             'totals' => array_merge($this->aggregateTotals($brandRows), [
-                'top_subcategories' => $this->topSubCategories($allStores, $subCategoryRowsByStore, $subCategoryNames),
+                'top_subcategories' => $this->topSubCategories($allStores, $subCategoryCountsByStore, $subCategoryNames),
                 'top_stores' => $this->topStores($allStores, $statusCountsByStore, $bands, $brandLabels),
             ]),
             'brands' => $brandRows->all(),
@@ -204,18 +209,99 @@ class BrandHealthService
     }
 
     /**
-     * Top sub-categories (the /items taxonomy) by open-ticket volume for a set of
-     * stores. Tickets with no sub-category fold into a single "Unspecified" row so
-     * the list always adds up to the brand's open backlog.
+     * The Top 10 lists on their own, rebuilt for a concern-type / status slice.
+     *
+     * The tab paints from build(), which only ever counts the open backlog. The
+     * moment the user narrows the Top 10 filter to a concern type or asks for
+     * closed / all tickets, the two lists come from here instead — everything else
+     * on the tab (health bands, WCF register) stays an open-backlog read.
+     *
+     * @param  array{brand_id?:int|null, concern_type?:string|null, status?:string|null, as_of_date?:string|null}  $filters
+     * @param  array|null  $companyIds  Same entity selection the tab was built with.
      */
-    private function topSubCategories(Collection $stores, Collection $subCategoryRowsByStore, Collection $names, int $limit = 10): array
+    public function topLists(array $filters, ?array $companyIds = null): array
+    {
+        $asOfDate = $filters['as_of_date'] ?? Carbon::now()->format('Y-m-d');
+        $bucket = $this->statusBucket($filters['status'] ?? null);
+        $concernType = $filters['concern_type'] ?? null;
+        $brandId = $filters['brand_id'] ?? null;
+
+        // Labels come from the whole selection so a store row can still name its
+        // owning brand while the list itself is narrowed to one brand.
+        $allBrands = $this->brandQuery($companyIds)->get(['id', 'name', 'code']);
+        $brandLabels = $allBrands->mapWithKeys(fn (Company $brand) => [
+            (int) $brand->id => $brand->code ?: $brand->name,
+        ])->all();
+
+        $brandIds = $brandId
+            ? $allBrands->where('id', (int) $brandId)->pluck('id')
+            : $allBrands->pluck('id');
+
+        $stores = $brandIds->isEmpty()
+            ? collect()
+            : Store::query()
+                ->where('is_active', true)
+                ->whereIn('company_id', $brandIds)
+                ->get(['id', 'code', 'name', 'company_id']);
+
+        if ($stores->isEmpty()) {
+            return ['top_subcategories' => [], 'top_stores' => [], 'total' => 0];
+        }
+
+        // One grouped query feeds both lists. Status rides along so a store's health
+        // dot can keep describing the live open backlog even when the list beside it
+        // is ranking closed tickets.
+        $rows = Ticket::query()
+            ->withoutGlobalScope(ActiveEntityScope::class)
+            ->whereNull('tickets.parent_id')
+            ->whereIn('tickets.store_id', $stores->pluck('id'))
+            ->whereDate('tickets.created_at', '<=', $asOfDate)
+            // The open bucket never needs terminal rows; the others need both halves.
+            ->when($bucket === 'open', fn ($q) => $q->whereNotIn('tickets.status', self::TERMINAL_STATUSES))
+            ->when($concernType, fn ($q) => $q->whereHas('item', fn ($i) => $i->where('concern_type', $concernType)))
+            ->selectRaw('store_id, sub_category_id, status, COUNT(*) as c')
+            ->groupBy('store_id', 'sub_category_id', 'status')
+            ->get();
+
+        $statusCountsByStore = $rows->groupBy('store_id')->map(function ($storeRows) {
+            $counts = [];
+            foreach ($storeRows as $row) {
+                $counts[$row->status] = ($counts[$row->status] ?? 0) + (int) $row->c;
+            }
+
+            return $counts;
+        });
+
+        $bucketRows = $rows->filter(fn ($row) => $this->inBucket($row->status, $bucket));
+
+        $subCategoryCountsByStore = $bucketRows->groupBy('store_id')
+            ->map(fn ($storeRows) => $this->foldSubCategoryCounts($storeRows));
+
+        return [
+            'top_subcategories' => $this->topSubCategories(
+                $stores,
+                $subCategoryCountsByStore,
+                $this->subCategoryNames($subCategoryCountsByStore)
+            ),
+            'top_stores' => $this->topStores($stores, $statusCountsByStore, $this->thresholdBands(), $brandLabels, $bucket),
+            'total' => (int) $bucketRows->sum('c'),
+        ];
+    }
+
+    /**
+     * Top sub-categories (the /items taxonomy) by ticket volume for a set of stores.
+     * Tickets with no sub-category fold into a single "Unspecified" row so the list
+     * always adds up to the slice it describes.
+     *
+     * @param  Collection  $countsByStore  store id → [sub-category id (0 = none) → count]
+     */
+    private function topSubCategories(Collection $stores, Collection $countsByStore, Collection $names, int $limit = 10): array
     {
         $counts = [];
 
         foreach ($stores as $store) {
-            foreach ($subCategoryRowsByStore->get($store->id, collect()) as $row) {
-                $key = (int) ($row->sub_category_id ?? 0);
-                $counts[$key] = ($counts[$key] ?? 0) + (int) $row->c;
+            foreach ($countsByStore->get($store->id, []) as $key => $count) {
+                $counts[$key] = ($counts[$key] ?? 0) + $count;
             }
         }
 
@@ -234,13 +320,27 @@ class BrandHealthService
             ->all();
     }
 
-    /** Top stores by open-ticket volume, carrying their health band for colouring. */
-    private function topStores(Collection $stores, Collection $statusCountsByStore, array $bands, array $brandLabels, int $limit = 10): array
+    /**
+     * Top stores by ticket volume for the chosen bucket, carrying their health band
+     * for colouring. The band always reads the live open backlog — health is an
+     * open-ticket idea — while `count` and `lanes` follow the bucket being listed.
+     */
+    private function topStores(Collection $stores, Collection $statusCountsByStore, array $bands, array $brandLabels, string $bucket = 'open', int $limit = 10): array
     {
         return $stores
-            ->map(function (Store $store) use ($statusCountsByStore, $bands, $brandLabels) {
+            ->map(function (Store $store) use ($statusCountsByStore, $bands, $brandLabels, $bucket) {
                 $counts = $statusCountsByStore->get($store->id, []);
-                $total = array_sum($counts);
+
+                $total = 0;
+                $openTotal = 0;
+                foreach ($counts as $status => $count) {
+                    if ($this->inBucket($status, $bucket)) {
+                        $total += (int) $count;
+                    }
+                    if (! in_array($status, self::TERMINAL_STATUSES, true)) {
+                        $openTotal += (int) $count;
+                    }
+                }
 
                 $workflow = ['open' => 0, 'wsp' => 0, 'wcf' => 0];
                 foreach (self::WORKFLOW as $lane => $statuses) {
@@ -255,8 +355,9 @@ class BrandHealthService
                     'name' => $store->name,
                     'brand' => $brandLabels[(int) $store->company_id] ?? null,
                     'count' => $total,
-                    'band' => $this->healthBucket($total, $bands),
+                    'band' => $this->healthBucket($openTotal, $bands),
                     'workflow' => $workflow,
+                    'lanes' => $this->storeLanes($counts, $bucket),
                 ];
             })
             ->filter(fn ($row) => $row['count'] > 0)
@@ -266,11 +367,81 @@ class BrandHealthService
             ->all();
     }
 
+    /** The per-store caption under a Top 10 store row, worded for the chosen bucket. */
+    private function storeLanes(array $counts, string $bucket): array
+    {
+        $sum = fn (array $statuses) => array_sum(array_map(fn ($s) => (int) ($counts[$s] ?? 0), $statuses));
+
+        if ($bucket === 'closed') {
+            return [
+                ['label' => 'RESOLVED', 'count' => $sum(['resolved'])],
+                ['label' => 'CLOSED', 'count' => $sum(['closed'])],
+            ];
+        }
+
+        $lanes = [
+            ['label' => 'OPEN', 'count' => $sum(self::WORKFLOW['open'])],
+            ['label' => 'WCF', 'count' => $sum(self::WORKFLOW['wcf'])],
+            ['label' => 'WSP', 'count' => $sum(self::WORKFLOW['wsp'])],
+        ];
+
+        if ($bucket === 'all') {
+            $lanes[] = ['label' => 'CLOSED', 'count' => $sum(self::TERMINAL_STATUSES)];
+        }
+
+        return $lanes;
+    }
+
+    /** Fold grouped rows into [sub-category id (0 = none) → count]. */
+    private function foldSubCategoryCounts(Collection $rows): array
+    {
+        $counts = [];
+
+        foreach ($rows as $row) {
+            $key = (int) ($row->sub_category_id ?? 0);
+            $counts[$key] = ($counts[$key] ?? 0) + (int) $row->c;
+        }
+
+        return $counts;
+    }
+
+    /** Resolve display names for every sub-category id present in the folded counts. */
+    private function subCategoryNames(Collection $countsByStore): Collection
+    {
+        $ids = collect($countsByStore)
+            ->flatMap(fn ($counts) => array_keys($counts))
+            ->filter()
+            ->unique()
+            ->values();
+
+        return $ids->isEmpty() ? collect() : SubCategory::query()->whereIn('id', $ids)->pluck('name', 'id');
+    }
+
+    /** Normalise a requested status bucket, defaulting to the open backlog. */
+    private function statusBucket(?string $bucket): string
+    {
+        return in_array($bucket, self::STATUS_BUCKETS, true) ? $bucket : 'open';
+    }
+
+    /** Does a ticket status belong to the requested bucket? */
+    private function inBucket(?string $status, string $bucket): bool
+    {
+        $terminal = in_array($status, self::TERMINAL_STATUSES, true);
+
+        return match ($bucket) {
+            'closed' => $terminal,
+            'all' => true,
+            default => ! $terminal,
+        };
+    }
+
     /**
-     * Drill-down behind the Top 10 lists: the open tickets for a brand slice, plus a
+     * Drill-down behind the Top 10 lists: the tickets for a brand slice, plus a
      * per-item roll-up so a sub-category click answers "which items and concerns".
+     * It takes the same concern-type / status filters as the lists, so a click can
+     * never show a different set of tickets than the row that was clicked counted.
      *
-     * @param array{brand_id?:int|null, sub_category_id?:int|string|null, store_id?:int|null, as_of_date?:string|null} $filters
+     * @param array{brand_id?:int|null, sub_category_id?:int|string|null, store_id?:int|null, concern_type?:string|null, status?:string|null, as_of_date?:string|null} $filters
      * @param  array|null  $companyIds  Same entity selection the tab was built with, so
      *                                  a drill-down can never reach outside it.
      */
@@ -280,6 +451,8 @@ class BrandHealthService
         $brandId = $filters['brand_id'] ?? null;
         $storeId = $filters['store_id'] ?? null;
         $subCategory = $filters['sub_category_id'] ?? null;
+        $bucket = $this->statusBucket($filters['status'] ?? null);
+        $concernType = $filters['concern_type'] ?? null;
 
         $brands = $this->brandQuery($companyIds)
             ->when($brandId, fn ($q) => $q->where('id', $brandId))
@@ -300,7 +473,9 @@ class BrandHealthService
         $tickets = Ticket::query()
             ->withoutGlobalScope(ActiveEntityScope::class)
             ->whereNull('tickets.parent_id')
-            ->whereNotIn('tickets.status', ['resolved', 'closed'])
+            ->when($bucket === 'open', fn ($q) => $q->whereNotIn('tickets.status', self::TERMINAL_STATUSES))
+            ->when($bucket === 'closed', fn ($q) => $q->whereIn('tickets.status', self::TERMINAL_STATUSES))
+            ->when($concernType, fn ($q) => $q->whereHas('item', fn ($i) => $i->where('concern_type', $concernType)))
             ->whereIn('tickets.store_id', $stores->pluck('id'))
             ->whereDate('tickets.created_at', '<=', $asOfDate)
             ->when($subCategory === 'none', fn ($q) => $q->whereNull('tickets.sub_category_id'))

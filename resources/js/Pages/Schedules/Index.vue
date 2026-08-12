@@ -1456,6 +1456,12 @@
                             <div v-else></div>
 
                             <div class="flex flex-col items-end gap-1.5">
+                                <!-- One schedule per person per day — warn before the save is attempted. -->
+                                <p v-if="scheduleDateConflict && !isViewingOnly"
+                                   class="flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400">
+                                    <svg class="h-3.5 w-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" /></svg>
+                                    Already has a {{ scheduleDateConflict.schedule.status }} schedule on {{ formatConflictDate(scheduleDateConflict.dateKey) }}
+                                </p>
                                 <p v-if="isRequestingScheduleChange && !isViewingOnly"
                                    class="flex items-center gap-1 text-xs font-semibold text-amber-600">
                                     <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" /></svg>
@@ -1555,6 +1561,15 @@ const getScheduleDateKeysBetween = (startValue, endValue) => {
     }
 
     return keys
+}
+
+/** "2026-08-10" → "Aug 10, 2026" for the duplicate-schedule warning. */
+const formatConflictDate = (dateKey) => {
+    const parsed = parseScheduleDateKey(dateKey)
+
+    return parsed
+        ? parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : dateKey
 }
 
 const getTopPriorityTicket = (segments, fallbackTicket = null) => {
@@ -3006,12 +3021,60 @@ const validateScheduleStores = () => {
     return true
 }
 
+/**
+ * One schedule per person per calendar day. The server enforces this too; catching
+ * it here names the day before the round trip and stops a double-click from queuing
+ * a second save.
+ */
+const findScheduleDateConflict = (excludeScheduleId = null) => {
+    const submittedDates = new Set(
+        form.stores.flatMap(entry => getScheduleDateKeysBetween(entry.start_time, entry.end_time))
+    )
+
+    if (!submittedDates.size) return null
+
+    for (const schedule of props.schedules ?? []) {
+        if (Number(schedule.user_id) !== Number(form.user_id)) continue
+        if (excludeScheduleId && Number(schedule.id) === Number(excludeScheduleId)) continue
+
+        const segments = Array.isArray(schedule.schedule_stores) && schedule.schedule_stores.length
+            ? schedule.schedule_stores
+            : [schedule]
+
+        for (const segment of segments) {
+            for (const dateKey of getScheduleDateKeysBetween(segment.start_time, segment.end_time)) {
+                if (submittedDates.has(dateKey)) {
+                    return { dateKey, schedule }
+                }
+            }
+        }
+    }
+
+    return null
+}
+
+// Live warning inside the modal, so the clash shows while the dates are being picked.
+const scheduleDateConflict = computed(() => {
+    if (!showModal.value || isViewingOnly.value) return null
+
+    return findScheduleDateConflict(isEditing.value ? currentScheduleId.value : null)
+})
+
 const submitForm = () => {
     if (!validateScheduleStores()) return
 
     const editingScheduleId = isEditing.value ? currentScheduleId.value : null
     const isUpdatingSchedule = Boolean(editingScheduleId)
     const isChangeRequest = isRequestingScheduleChange.value
+
+    const conflict = findScheduleDateConflict(editingScheduleId)
+    if (conflict) {
+        showError(
+            `This user already has a ${conflict.schedule.status} schedule on ${formatConflictDate(conflict.dateKey)}. `
+            + 'Open that schedule and add the location there instead of creating a second one.'
+        )
+        return
+    }
 
     if (isChangeRequest && !form.requester_remarks?.trim()) {
         showError('Please enter your request remarks before submitting.')

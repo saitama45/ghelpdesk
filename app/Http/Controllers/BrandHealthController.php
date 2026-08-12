@@ -8,6 +8,7 @@ use App\Services\BrandHealthService;
 use App\Services\NotificationService;
 use App\Support\CompanyContext;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 /**
  * Write actions behind the Live Brand Health tab's WCF confirmation register.
@@ -24,8 +25,8 @@ class BrandHealthController extends Controller
     ) {}
 
     /**
-     * Drill-down behind the Top 10 Sub-categories / Top 10 Stores lists: the open
-     * tickets for one brand slice, plus the per-item roll-up shown above them.
+     * Drill-down behind the Top 10 Sub-categories / Top 10 Stores lists: the tickets
+     * for one brand slice, plus the per-item roll-up shown above them.
      */
     public function tickets(Request $request)
     {
@@ -36,20 +37,48 @@ class BrandHealthController extends Controller
             // 'none' means tickets with no sub-category — distinct from "no filter".
             'sub_category_id' => ['nullable', 'string'],
             'store_id' => ['nullable', 'integer'],
+            'concern_type' => ['nullable', 'in:Incident,Service Request,Problem'],
+            'status' => ['nullable', Rule::in(BrandHealthService::STATUS_BUCKETS)],
             'as_of_date' => ['nullable', 'date'],
             'entity_ids' => ['nullable', 'array'],
             'entity_ids.*' => ['integer'],
         ]);
 
-        // Resolved through CompanyContext exactly like the dashboard build, so the
-        // requested ids can only ever narrow the caller's own accessible entities.
-        $effectiveCompanyIds = CompanyContext::effectiveEntityIds(
+        return response()->json($this->brandHealth->tickets($validated, $this->effectiveCompanyIds($request)));
+    }
+
+    /**
+     * The Top 10 Sub-categories / Top 10 Stores lists rebuilt for a concern-type and
+     * status slice. The tab itself always paints the open backlog; this endpoint is
+     * what the two filters above the lists call.
+     */
+    public function topLists(Request $request)
+    {
+        abort_unless($request->user()->can('tickets.view'), 403);
+
+        $validated = $request->validate([
+            'brand_id' => ['nullable', 'integer'],
+            'concern_type' => ['nullable', 'in:Incident,Service Request,Problem'],
+            'status' => ['nullable', Rule::in(BrandHealthService::STATUS_BUCKETS)],
+            'as_of_date' => ['nullable', 'date'],
+            'entity_ids' => ['nullable', 'array'],
+            'entity_ids.*' => ['integer'],
+        ]);
+
+        return response()->json($this->brandHealth->topLists($validated, $this->effectiveCompanyIds($request)));
+    }
+
+    /**
+     * Resolved through CompanyContext exactly like the dashboard build, so requested
+     * ids can only ever narrow the caller's own accessible entities.
+     */
+    private function effectiveCompanyIds(Request $request): ?array
+    {
+        return CompanyContext::effectiveEntityIds(
             $request->user(),
             (array) $request->input('entity_ids', []),
             $request->user()->can('dashboard.filter_entity')
         );
-
-        return response()->json($this->brandHealth->tickets($validated, $effectiveCompanyIds));
     }
 
     /** Brand confirmed the fix worked → close the ticket. */

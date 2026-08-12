@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { router, Link } from '@inertiajs/vue3';
 import axios from 'axios';
 import Modal from '@/Components/Modal.vue';
@@ -86,9 +86,75 @@ const brandOptions = computed(() => [
 
 // Whichever slice the Top 10 panels describe: one brand, or every brand combined.
 const topScope = computed(() => activeBrand.value || totals.value);
-const topSubcategories = computed(() => topScope.value?.top_subcategories || []);
-const topStores = computed(() => topScope.value?.top_stores || []);
 const scopeLabel = computed(() => activeBrand.value ? (activeBrand.value.code || activeBrand.value.name) : 'All Brands');
+
+// --- Top 10 concern / status filters -----------------------------------------
+// The tab is built as an open-backlog read, so the props already answer the
+// default slice (all concerns, open tickets) with no round trip. Any other slice
+// is re-ranked server-side — closed tickets simply are not in the payload.
+const CONCERN_OPTIONS = [
+    { value: 'all', label: 'All Concerns' },
+    { value: 'Incident', label: 'Incident' },
+    { value: 'Service Request', label: 'Service Request' },
+    { value: 'Problem', label: 'Problem' },
+];
+const STATUS_OPTIONS = [
+    { value: 'open', label: 'Open Tickets' },
+    { value: 'closed', label: 'Closed Tickets' },
+    { value: 'all', label: 'All Tickets' },
+];
+
+const topConcern = ref('all');
+const topStatus = ref('open');
+const topFiltered = ref(null);   // server-ranked lists, or null while on the default slice
+const topLoading = ref(false);
+
+const topIsDefault = computed(() => topConcern.value === 'all' && topStatus.value === 'open');
+const bucketLabel = computed(() => ({ open: 'Open', closed: 'Closed', all: 'All' }[topStatus.value]));
+// Wording for the row subtitles and empty states, e.g. "3 closed tickets".
+const bucketNoun = computed(() => ({ open: 'open', closed: 'closed', all: '' }[topStatus.value]));
+
+const topSubcategories = computed(() => (topFiltered.value ? topFiltered.value.top_subcategories : topScope.value?.top_subcategories) || []);
+const topStores = computed(() => (topFiltered.value ? topFiltered.value.top_stores : topScope.value?.top_stores) || []);
+
+// Filter params shared by the lists and the drill-down, so a click always shows
+// exactly the tickets the clicked row counted.
+const topFilterParams = () => ({
+    ...(topConcern.value !== 'all' ? { concern_type: topConcern.value } : {}),
+    ...(topStatus.value !== 'open' ? { status: topStatus.value } : {}),
+});
+
+const loadTopLists = async () => {
+    if (topIsDefault.value) {
+        topFiltered.value = null;
+        return;
+    }
+
+    topLoading.value = true;
+    // Remember which slice this request is for: a fast click could otherwise let a
+    // stale response overwrite a newer one.
+    const requestedFor = `${activeView.value}|${topConcern.value}|${topStatus.value}`;
+
+    try {
+        const { data } = await axios.get(route('dashboard.brand-health.top-lists', {}, false), {
+            params: {
+                ...(activeBrand.value ? { brand_id: activeBrand.value.id } : {}),
+                ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
+                ...topFilterParams(),
+            },
+        });
+        if (requestedFor === `${activeView.value}|${topConcern.value}|${topStatus.value}`) {
+            topFiltered.value = data;
+        }
+    } catch (e) {
+        showError('Unable to load the filtered Top 10 lists.');
+    } finally {
+        topLoading.value = false;
+    }
+};
+
+// Brand switch, filter change or a fresh payload all re-rank the same two lists.
+watch([topConcern, topStatus, activeView, () => props.data], loadTopLists);
 
 // The tab follows the dashboard Entity filter, so an empty tab usually means the
 // filter excluded every brand rather than that none are configured.
@@ -121,6 +187,7 @@ const openDrill = async ({ title, subtitle, params }) => {
             params: {
                 ...(activeBrand.value ? { brand_id: activeBrand.value.id } : {}),
                 ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
+                ...topFilterParams(),
                 ...params,
             },
         });
@@ -134,15 +201,22 @@ const openDrill = async ({ title, subtitle, params }) => {
     }
 };
 
+// "3 closed tickets" / "3 tickets" — matches whatever the Top 10 filter is showing.
+const ticketPhrase = (count) => {
+    const noun = bucketNoun.value ? `${bucketNoun.value} ticket` : 'ticket';
+    const concern = topConcern.value !== 'all' ? ` (${topConcern.value})` : '';
+    return `${count} ${noun}${count === 1 ? '' : 's'}${concern}`;
+};
+
 const openSubCategoryDrill = (row) => openDrill({
     title: row.name,
-    subtitle: `${scopeLabel.value} — ${row.count} open ticket${row.count === 1 ? '' : 's'} in this sub-category`,
+    subtitle: `${scopeLabel.value} — ${ticketPhrase(row.count)} in this sub-category`,
     params: { sub_category_id: String(row.id) },
 });
 
 const openStoreDrill = (row) => openDrill({
     title: row.code ? `[${row.code}] ${row.name}` : row.name,
-    subtitle: `${row.count} open ticket${row.count === 1 ? '' : 's'} at this store`,
+    subtitle: `${ticketPhrase(row.count)} at this store`,
     params: { store_id: row.id },
 });
 
@@ -257,6 +331,42 @@ const runAction = async (row, kind) => {
         </div>
 
         <!-- ===================== TOP 10 (brand-filtered) ===================== -->
+        <!-- Concern type + ticket status apply to both Top 10 panels and to the
+             drill-down behind them. -->
+        <div v-if="brands.length" class="mb-3 flex flex-col sm:flex-row sm:items-center gap-2">
+            <label class="text-[11px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-400">Top 10 Filter</label>
+            <div class="w-full sm:w-56">
+                <Autocomplete
+                    :model-value="topConcern"
+                    @update:modelValue="topConcern = $event || 'all'"
+                    :options="CONCERN_OPTIONS"
+                    label-key="label"
+                    value-key="value"
+                    size="sm"
+                    placeholder="All Concerns"
+                />
+            </div>
+            <div class="w-full sm:w-48">
+                <Autocomplete
+                    :model-value="topStatus"
+                    @update:modelValue="topStatus = $event || 'open'"
+                    :options="STATUS_OPTIONS"
+                    label-key="label"
+                    value-key="value"
+                    size="sm"
+                    placeholder="Open Tickets"
+                />
+            </div>
+            <span v-if="topLoading" class="text-[11px] font-bold text-gray-400 dark:text-gray-500">Re-ranking…</span>
+            <button
+                v-else-if="!topIsDefault"
+                @click="topConcern = 'all'; topStatus = 'open'"
+                class="text-[11px] font-bold text-blue-600 hover:underline dark:text-blue-400"
+            >
+                Reset
+            </button>
+        </div>
+
         <div v-if="brands.length" class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
             <!-- Top 10 Sub-categories -->
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden dark:bg-gray-800 dark:border-gray-700">
@@ -265,7 +375,9 @@ const runAction = async (row, kind) => {
                         <h4 class="text-sm font-black text-gray-700 uppercase tracking-wider dark:text-gray-200">Top 10 Sub-categories</h4>
                         <p class="text-[11px] text-gray-400 dark:text-gray-500">{{ scopeLabel }} — click a row for its items and concerns</p>
                     </div>
-                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider dark:text-gray-500">Open</span>
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider dark:text-gray-500">
+                        <span v-if="topConcern !== 'all'" class="text-blue-500 dark:text-blue-400">{{ topConcern }} · </span>{{ bucketLabel }}
+                    </span>
                 </div>
                 <div v-if="topSubcategories.length" class="divide-y divide-gray-100 dark:divide-gray-700">
                     <button
@@ -286,7 +398,9 @@ const runAction = async (row, kind) => {
                         </div>
                     </button>
                 </div>
-                <p v-else class="px-5 py-10 text-center text-sm text-gray-400 dark:text-gray-500">No open tickets for this brand.</p>
+                <p v-else class="px-5 py-10 text-center text-sm text-gray-400 dark:text-gray-500">
+                    No {{ bucketNoun ? bucketNoun + ' ' : '' }}tickets<span v-if="topConcern !== 'all'"> of type {{ topConcern }}</span> for this brand.
+                </p>
             </div>
 
             <!-- Top 10 Stores -->
@@ -296,7 +410,9 @@ const runAction = async (row, kind) => {
                         <h4 class="text-sm font-black text-gray-700 uppercase tracking-wider dark:text-gray-200">Top 10 Stores</h4>
                         <p class="text-[11px] text-gray-400 dark:text-gray-500">{{ scopeLabel }} — click a store to view its issues</p>
                     </div>
-                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider dark:text-gray-500">Open</span>
+                    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider dark:text-gray-500">
+                        <span v-if="topConcern !== 'all'" class="text-blue-500 dark:text-blue-400">{{ topConcern }} · </span>{{ bucketLabel }}
+                    </span>
                 </div>
                 <div v-if="topStores.length" class="divide-y divide-gray-100 dark:divide-gray-700">
                     <button
@@ -307,21 +423,26 @@ const runAction = async (row, kind) => {
                     >
                         <div class="flex items-center gap-3">
                             <span class="w-5 text-[11px] font-black text-gray-400 tabular-nums dark:text-gray-500">{{ index + 1 }}</span>
-                            <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :class="BAND_META[row.band]?.dot" :title="bandLabel(row.band)"></span>
+                            <!-- The dot always reads the store's live open backlog, even when the list ranks closed tickets. -->
+                            <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :class="BAND_META[row.band]?.dot" :title="`${bandLabel(row.band)} (open backlog)`"></span>
                             <div class="flex-1 min-w-0">
                                 <p class="text-sm font-bold text-gray-800 truncate dark:text-gray-100">
                                     <span v-if="row.code" class="text-gray-400 dark:text-gray-500">[{{ row.code }}]</span> {{ row.name }}
                                 </p>
                                 <p class="text-[11px] text-gray-400 dark:text-gray-500">
                                     <span v-if="activeView === 'summary' && row.brand">{{ row.brand }} · </span>
-                                    OPEN {{ row.workflow.open }} · WCF {{ row.workflow.wcf }} · WSP {{ row.workflow.wsp }}
+                                    <span v-for="(lane, i) in row.lanes" :key="lane.label">
+                                        <span v-if="i"> · </span>{{ lane.label }} {{ lane.count }}
+                                    </span>
                                 </p>
                             </div>
                             <span class="text-sm font-black text-gray-900 tabular-nums dark:text-gray-100">{{ row.count }}</span>
                         </div>
                     </button>
                 </div>
-                <p v-else class="px-5 py-10 text-center text-sm text-gray-400 dark:text-gray-500">No open tickets for this brand.</p>
+                <p v-else class="px-5 py-10 text-center text-sm text-gray-400 dark:text-gray-500">
+                    No {{ bucketNoun ? bucketNoun + ' ' : '' }}tickets<span v-if="topConcern !== 'all'"> of type {{ topConcern }}</span> for this brand.
+                </p>
             </div>
         </div>
 
@@ -692,7 +813,9 @@ const runAction = async (row, kind) => {
                     </div>
                 </div>
 
-                <p v-else class="py-12 text-center text-sm text-gray-400 dark:text-gray-500">No open tickets for this selection.</p>
+                <p v-else class="py-12 text-center text-sm text-gray-400 dark:text-gray-500">
+                    No {{ bucketNoun ? bucketNoun + ' ' : '' }}tickets for this selection.
+                </p>
 
                 <div class="mt-5 flex justify-end">
                     <button @click="showDrill = false" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors text-sm font-medium dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">

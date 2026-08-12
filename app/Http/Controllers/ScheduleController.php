@@ -326,32 +326,49 @@ class ScheduleController extends Controller implements HasMiddleware
         $startTime = Carbon::parse(collect($storeEntries)->min('start_time'));
         $endTime   = Carbon::parse(collect($storeEntries)->max('end_time'));
 
-        if ($this->hasScheduleOverlap((int) $request->user_id, $expandedStoreEntries, null, $request->status)) {
-            return redirect()->back()->withErrors(['stores' => 'This user already has a schedule that overlaps with the selected time range.']);
-        }
+        // The duplicate check and the insert share one transaction so a double-click
+        // (or two approvers saving at once) cannot land two schedules on the same day.
+        $conflictDate = DB::transaction(function () use ($request, $expandedStoreEntries, $startTime, $endTime) {
+            $conflictDate = $this->conflictingScheduleDate(
+                (int) $request->user_id,
+                $expandedStoreEntries,
+                null,
+                true
+            );
 
-        $schedule = Schedule::create([
-            'user_id'        => $request->user_id,
-            'created_by'     => auth()->id(),
-            'updated_by'     => auth()->id(),
-            'status'         => $request->status,
-            'start_time'     => $startTime,
-            'end_time'       => $endTime,
-            'pickup_start'   => $request->pickup_start,
-            'pickup_end'     => $request->pickup_end,
-            'backlogs_start' => $request->backlogs_start,
-            'backlogs_end'   => $request->backlogs_end,
-        ]);
+            if ($conflictDate) {
+                return $conflictDate;
+            }
 
-        foreach ($expandedStoreEntries as $entry) {
-            $schedule->scheduleStores()->create([
-                'store_id'             => $entry['store_id'] ?? null,
-                'ticket_id'            => $entry['ticket_id'] ?? null,
-                'start_time'           => $entry['start_time'],
-                'end_time'             => $entry['end_time'],
-                'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
-                'remarks'              => $entry['remarks'] ?? null,
+            $schedule = Schedule::create([
+                'user_id'        => $request->user_id,
+                'created_by'     => auth()->id(),
+                'updated_by'     => auth()->id(),
+                'status'         => $request->status,
+                'start_time'     => $startTime,
+                'end_time'       => $endTime,
+                'pickup_start'   => $request->pickup_start,
+                'pickup_end'     => $request->pickup_end,
+                'backlogs_start' => $request->backlogs_start,
+                'backlogs_end'   => $request->backlogs_end,
             ]);
+
+            foreach ($expandedStoreEntries as $entry) {
+                $schedule->scheduleStores()->create([
+                    'store_id'             => $entry['store_id'] ?? null,
+                    'ticket_id'            => $entry['ticket_id'] ?? null,
+                    'start_time'           => $entry['start_time'],
+                    'end_time'             => $entry['end_time'],
+                    'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
+                    'remarks'              => $entry['remarks'] ?? null,
+                ]);
+            }
+
+            return null;
+        });
+
+        if ($conflictDate) {
+            return redirect()->back()->withErrors(['stores' => $this->scheduleDateTakenMessage($conflictDate)]);
         }
 
         return redirect()->back()->with('success', 'Schedule created successfully');
@@ -880,9 +897,9 @@ class ScheduleController extends Controller implements HasMiddleware
             ]);
         }
 
-        if ($this->hasScheduleOverlap((int) $payload['user_id'], $expandedStoreEntries, $schedule->id, $payload['status'])) {
+        if ($conflictDate = $this->conflictingScheduleDate((int) $payload['user_id'], $expandedStoreEntries, $schedule->id)) {
             throw ValidationException::withMessages([
-                'stores' => 'This user already has a schedule that overlaps with the selected time range.',
+                'stores' => $this->scheduleDateTakenMessage($conflictDate),
             ]);
         }
 
@@ -1276,85 +1293,102 @@ class ScheduleController extends Controller implements HasMiddleware
         return Carbon::parse($value, 'Asia/Manila')->timezone('Asia/Manila')->format('Y-m-d H:i:s');
     }
 
-    private function hasScheduleOverlap(int $userId, array $newEntries, $excludeScheduleId = null, $newStatus = null): bool
+    /**
+     * A person can only be in one place on a given day, so /schedules allows exactly
+     * ONE schedule per user per calendar date — several locations in a day belong on
+     * that single schedule as multiple entries, not as a second schedule. Anything
+     * else shows the same person twice on the board (an On-site row and a WFH row
+     * for the same date), which is the duplicate this guard exists to stop.
+     *
+     * Returns the first date already taken, so the caller can name it in the error;
+     * null when the submitted entries are free to save.
+     *
+     * @param  array  $newEntries  Expanded schedule_store entries (start_time/end_time).
+     * @param  bool  $lock  Hold the conflicting rows for the rest of the transaction,
+     *                      so a double-submit cannot slip a second schedule through
+     *                      between the check and the insert.
+     */
+    private function conflictingScheduleDate(int $userId, array $newEntries, $excludeScheduleId = null, bool $lock = false): ?Carbon
     {
         if (empty($newEntries)) {
-            return false;
+            return null;
         }
 
-        $wholeDayStatuses = ['SL', 'VL', 'Restday', 'Holiday', 'N/A'];
-        $isNewWholeDay = in_array($newStatus, $wholeDayStatuses);
+        $candidateDates = collect($newEntries)
+            ->flatMap(function ($entry) {
+                $day = Carbon::parse($entry['start_time'])->startOfDay();
+                $lastDay = Carbon::parse($entry['end_time'])->startOfDay();
+                $dates = [];
 
-        $candidateEntries = collect($newEntries)->map(fn ($entry) => [
-            'start_time' => Carbon::parse($entry['start_time']),
-            'end_time'   => Carbon::parse($entry['end_time']),
-            'start_date' => Carbon::parse($entry['start_time'])->startOfDay(),
-            'end_date'   => Carbon::parse($entry['end_time'])->startOfDay(),
-        ]);
+                // A shift that runs past midnight occupies both calendar days.
+                while ($day->lte($lastDay)) {
+                    $dates[] = $day->toDateString();
+                    $day = $day->copy()->addDay();
+                }
 
-        $rangeStart = $candidateEntries->sortBy(fn ($entry) => $entry['start_time']->getTimestamp())->first()['start_time'];
-        $rangeEnd = $candidateEntries->sortByDesc(fn ($entry) => $entry['end_time']->getTimestamp())->first()['end_time'];
+                return $dates;
+            })
+            ->unique()
+            ->sort()
+            ->values();
 
-        $existingSegments = ScheduleStore::query()
-            ->with('schedule')
-            ->where('start_time', '<=', $rangeEnd->copy()->endOfDay())
-            ->where('end_time', '>=', $rangeStart->copy()->startOfDay())
+        $rangeStart = Carbon::parse($candidateDates->first())->startOfDay();
+        $rangeEnd = Carbon::parse($candidateDates->last())->endOfDay();
+        $taken = $candidateDates->flip();
+
+        $segmentQuery = ScheduleStore::query()
+            ->where('start_time', '<=', $rangeEnd)
+            ->where('end_time', '>=', $rangeStart)
             ->whereHas('schedule', function ($query) use ($userId, $excludeScheduleId) {
                 $query->where('user_id', $userId);
 
                 if ($excludeScheduleId) {
                     $query->where('id', '!=', $excludeScheduleId);
                 }
-            })
-            ->get();
+            });
 
-        foreach ($existingSegments as $segment) {
-            $isExistingWholeDay = in_array($segment->schedule->status, $wholeDayStatuses);
-            foreach ($candidateEntries as $entry) {
-                $segmentStart = Carbon::parse($segment->start_time);
-                $segmentEnd = Carbon::parse($segment->end_time);
-
-                $sharesDay = $entry['start_date']->lte($segmentEnd->copy()->startOfDay()) 
-                          && $entry['end_date']->gte($segmentStart->copy()->startOfDay());
-
-                if ($sharesDay && ($isNewWholeDay || $isExistingWholeDay)) {
-                    return true;
-                }
-
-                if ($entry['start_time']->lte($segmentEnd) && $entry['end_time']->gte($segmentStart)) {
-                    return true;
-                }
-            }
+        if ($lock) {
+            $segmentQuery->lockForUpdate();
         }
 
-        $legacySchedules = Schedule::query()
+        // Legacy schedules carry their window on the schedule row itself (no
+        // schedule_stores), so both shapes have to be checked.
+        $scheduleQuery = Schedule::query()
             ->where('user_id', $userId)
             ->when($excludeScheduleId, fn ($query) => $query->where('id', '!=', $excludeScheduleId))
             ->whereDoesntHave('scheduleStores')
-            ->where('start_time', '<=', $rangeEnd->copy()->endOfDay())
-            ->where('end_time', '>=', $rangeStart->copy()->startOfDay())
-            ->get(['id', 'start_time', 'end_time', 'status']);
+            ->where('start_time', '<=', $rangeEnd)
+            ->where('end_time', '>=', $rangeStart);
 
-        foreach ($legacySchedules as $legacySchedule) {
-            $isExistingWholeDay = in_array($legacySchedule->status, $wholeDayStatuses);
-            foreach ($candidateEntries as $entry) {
-                $legacyStart = Carbon::parse($legacySchedule->start_time);
-                $legacyEnd = Carbon::parse($legacySchedule->end_time);
+        if ($lock) {
+            $scheduleQuery->lockForUpdate();
+        }
 
-                $sharesDay = $entry['start_date']->lte($legacyEnd->copy()->startOfDay()) 
-                          && $entry['end_date']->gte($legacyStart->copy()->startOfDay());
+        $existingWindows = $segmentQuery->get(['start_time', 'end_time'])
+            ->concat($scheduleQuery->get(['id', 'start_time', 'end_time']));
 
-                if ($sharesDay && ($isNewWholeDay || $isExistingWholeDay)) {
-                    return true;
+        foreach ($existingWindows as $window) {
+            $day = Carbon::parse($window->start_time)->startOfDay();
+            $lastDay = Carbon::parse($window->end_time)->startOfDay();
+
+            while ($day->lte($lastDay)) {
+                if ($taken->has($day->toDateString())) {
+                    return $day->copy();
                 }
 
-                if ($entry['start_time']->lte($legacyEnd) && $entry['end_time']->gte($legacyStart)) {
-                    return true;
-                }
+                $day = $day->addDay();
             }
         }
 
-        return false;
+        return null;
+    }
+
+    /** The message shown when a second schedule is attempted on an occupied day. */
+    private function scheduleDateTakenMessage(Carbon $date): string
+    {
+        return 'This user already has a schedule on '
+            . $date->format('M j, Y')
+            . '. Open that schedule and add the location there instead of creating a second one.';
     }
 
     private function scheduleHasAttendanceLogs(Schedule $schedule): bool

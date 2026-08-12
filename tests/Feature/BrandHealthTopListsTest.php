@@ -139,6 +139,127 @@ class BrandHealthTopListsTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_top_lists_endpoint_filters_by_status_bucket(): void
+    {
+        [$alpha] = $this->fixture();
+        $viewer = $this->viewer($alpha);
+
+        // Open (the default) is what the tab itself paints.
+        $open = $this->actingAs($viewer)
+            ->getJson(route('dashboard.brand-health.top-lists', ['brand_id' => $alpha->id]))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(['ALP-1' => 4, 'ALP-2' => 1], collect($open['top_stores'])->pluck('count', 'code')->all());
+        $this->assertSame(5, $open['total']);
+        $this->assertSame(['OPEN', 'WCF', 'WSP'], collect($open['top_stores'][0]['lanes'])->pluck('label')->all());
+
+        // Closed: only the terminal ticket at ALP-2 survives, and the caption switches
+        // to the terminal lanes.
+        $closed = $this->actingAs($viewer)
+            ->getJson(route('dashboard.brand-health.top-lists', ['brand_id' => $alpha->id, 'status' => 'closed']))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(['ALP-2' => 1], collect($closed['top_stores'])->pluck('count', 'code')->all());
+        $this->assertSame(['POS' => 1], collect($closed['top_subcategories'])->pluck('count', 'name')->all());
+        $this->assertSame(['RESOLVED', 'CLOSED'], collect($closed['top_stores'][0]['lanes'])->pluck('label')->all());
+        // The health dot keeps reading the live open backlog (ALP-2 has 1 open ticket).
+        $this->assertSame('green', $closed['top_stores'][0]['band']);
+
+        // All: open + closed together.
+        $all = $this->actingAs($viewer)
+            ->getJson(route('dashboard.brand-health.top-lists', ['brand_id' => $alpha->id, 'status' => 'all']))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(['ALP-1' => 4, 'ALP-2' => 2], collect($all['top_stores'])->pluck('count', 'code')->all());
+        $this->assertSame('POS', $all['top_subcategories'][0]['name']); // still ranked by volume
+        $this->assertSame(['Network' => 1, 'POS' => 4, 'Unspecified' => 1], collect($all['top_subcategories'])->pluck('count', 'name')->sortKeys()->all());
+        $this->assertSame(6, $all['total']);
+    }
+
+    public function test_top_lists_endpoint_filters_by_concern_type(): void
+    {
+        [$alpha] = $this->fixture();
+        $viewer = $this->viewer($alpha);
+
+        // Service Request lives only on the Network item at ALP-2. The unspecified
+        // ticket carries no item, so it can never match a concern type.
+        $service = $this->actingAs($viewer)
+            ->getJson(route('dashboard.brand-health.top-lists', ['brand_id' => $alpha->id, 'concern_type' => 'Service Request']))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(['ALP-2' => 1], collect($service['top_stores'])->pluck('count', 'code')->all());
+        $this->assertSame(['Network' => 1], collect($service['top_subcategories'])->pluck('count', 'name')->all());
+
+        // Incident + all statuses picks up the closed POS ticket too.
+        $incidents = $this->actingAs($viewer)
+            ->getJson(route('dashboard.brand-health.top-lists', [
+                'brand_id' => $alpha->id,
+                'concern_type' => 'Incident',
+                'status' => 'all',
+            ]))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(['POS' => 4], collect($incidents['top_subcategories'])->pluck('count', 'name')->all());
+        $this->assertSame(4, $incidents['total']);
+    }
+
+    public function test_top_lists_endpoint_respects_entity_scope_and_permission(): void
+    {
+        [$alpha, $beta] = $this->fixture();
+
+        // A viewer scoped to Alpha cannot pull Beta's lists through the endpoint.
+        $out = $this->actingAs($this->viewer($alpha))
+            ->getJson(route('dashboard.brand-health.top-lists', ['brand_id' => $beta->id, 'status' => 'all']))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame([], $out['top_stores']);
+        $this->assertSame([], $out['top_subcategories']);
+
+        $this->actingAs(User::factory()->create())
+            ->getJson(route('dashboard.brand-health.top-lists'))
+            ->assertForbidden();
+    }
+
+    public function test_drill_down_follows_the_top_list_filters(): void
+    {
+        [$alpha] = $this->fixture();
+        $viewer = $this->viewer($alpha);
+
+        $closed = $this->actingAs($viewer)
+            ->getJson(route('dashboard.brand-health.tickets', ['brand_id' => $alpha->id, 'status' => 'closed']))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(1, $closed['count']);
+        $this->assertSame(['closed'], collect($closed['tickets'])->pluck('status')->all());
+
+        $serviceRequests = $this->actingAs($viewer)
+            ->getJson(route('dashboard.brand-health.tickets', [
+                'brand_id' => $alpha->id,
+                'concern_type' => 'Service Request',
+                'status' => 'all',
+            ]))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(1, $serviceRequests['count']);
+        $this->assertSame(['Slow Link'], collect($serviceRequests['items'])->pluck('name')->all());
+    }
+
+    private function viewer(Company $company): User
+    {
+        $viewer = User::factory()->create(['company_id' => $company->id]);
+        $viewer->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate('tickets.view', 'web'));
+
+        return $viewer;
+    }
+
     /** @return array{0: Company, 1: Company} */
     private function fixture(): array
     {

@@ -95,6 +95,11 @@ class RecurringSchedulePlannerService
             ]);
         }
 
+        // Something else may have claimed the day while the request sat pending (a
+        // manual entry, or a second replacement request approved first). Approving
+        // anyway would leave the person on the board twice for that date.
+        $this->guardDateIsFree((int) $payload['user_id'], $date, $scheduleIds->all());
+
         $entry = [
             'user_id' => (int) $payload['user_id'],
             'status' => $payload['status'],
@@ -348,6 +353,33 @@ class RecurringSchedulePlannerService
         }
 
         return ['approval', null];
+    }
+
+    /**
+     * One schedule per user per calendar day: fail loudly if the date is already
+     * occupied by a schedule other than the ones this action is replacing.
+     *
+     * @param  array<int>  $ignoreScheduleIds  Schedules the caller is about to retire.
+     */
+    private function guardDateIsFree(int $userId, string $date, array $ignoreScheduleIds): void
+    {
+        $dayStart = Carbon::parse($date, self::TIMEZONE)->startOfDay();
+        $dayEnd = $dayStart->copy()->endOfDay();
+
+        $occupied = Schedule::query()
+            ->where('user_id', $userId)
+            ->whereNotIn('id', $ignoreScheduleIds ?: [0])
+            ->where('start_time', '<=', $dayEnd)
+            ->where('end_time', '>=', $dayStart)
+            ->exists();
+
+        if ($occupied) {
+            throw ValidationException::withMessages([
+                'request' => 'This user already has another schedule on '
+                    . $dayStart->format('M j, Y')
+                    . '. Remove it first, then approve this replacement.',
+            ]);
+        }
     }
 
     private function replaceSchedules(array $entry, int $actorId): void
