@@ -84,7 +84,10 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             ['3. Row Key must be unique within a template. Use Parent Row Key for a sub-task.'],
             ['4. Only one sub-task level is supported; a sub-task cannot be another row\'s parent.'],
             ['5. Existing templates with the same name, project type, and store class are skipped.'],
-            ['6. Remove the example rows before importing your own data.'],
+            ['6. Duration Days must be greater than 0. On a parent row it is ignored and recomputed as the sum of its sub-tasks.'],
+            ['7. Can Run Parallel = No starts the row the day after its dependency finishes; Yes starts it on the same day its dependency starts.'],
+            ['8. Start and Finish are calculated, never imported: Finish = Start + Duration Days - 1.'],
+            ['9. Remove the example rows before importing your own data.'],
         ], null, 'A1');
         $instructions->getColumnDimension('A')->setWidth(110);
         $instructions->getStyle('A1')->getFont()->setBold(true)->setSize(14);
@@ -96,8 +99,8 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         $sheet->fromArray([
             ['New Store Opening', $projectTypes->first(), $storeClasses->first(), 'ACT-1', null, 'Prepare site', 'Preparation', 1, null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 2, 1, null, 'No'],
             ['New Store Opening', $projectTypes->first(), $storeClasses->first(), 'SUB-1', 'ACT-1', 'Confirm site readiness', 'Preparation', 1, null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 1, 1, null, 'No'],
-            // A requisite + Yes: this row starts once ACT-1 finishes and is free
-            // to overlap whatever else is still running.
+            // A requisite + Yes: this row starts the same day ACT-1 starts, so
+            // the two run side by side.
             ['New Store Opening', $projectTypes->first(), $storeClasses->first(), 'ACT-2', null, 'Order signage', 'Preparation', 1, null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 3, 2, 'ACT-1', 'Yes'],
         ], null, 'A2');
 
@@ -444,6 +447,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 return $activity;
             });
         $activities = $this->assignMissingMilestoneOrders($activities);
+        $activities = $this->rollUpParentLeadTimes($activities);
 
         $this->validateActivityHierarchy($projectTemplate, $activities);
 
@@ -555,6 +559,30 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 ]);
             }
         }
+    }
+
+    /**
+     * A milestone's Lead Time is never typed in — it is the sum of its
+     * sub-tasks' lead times (Business Requirement, "Developer Logic" rule 5).
+     * The grid disables the input, but an Excel import can still carry a stale
+     * figure, so the sum is re-derived here for every parent row.
+     */
+    private function rollUpParentLeadTimes($activities)
+    {
+        $sumByParent = $activities
+            ->filter(fn (array $activity) => filled($activity['parent_client_key'] ?? null))
+            ->groupBy('parent_client_key')
+            ->map(fn ($children) => $children->sum(fn (array $child) => max(1, (int) $child['default_duration_days'])));
+
+        return $activities->map(function (array $activity) use ($sumByParent) {
+            $total = $sumByParent[$activity['client_key']] ?? null;
+
+            if ($total !== null) {
+                $activity['default_duration_days'] = $total;
+            }
+
+            return $activity;
+        });
     }
 
     private function assignMissingMilestoneOrders($activities)

@@ -151,8 +151,9 @@ const addWorkingDays = (date, days) => {
     return cursor;
 };
 
-// End of a span that begins on `date` and runs `days` working days after it.
-const endOfSpan = (date, days) => addWorkingDays(date, Math.max(1, days));
+// End of a span beginning on `date`, with `date` itself counted as day 1:
+// Finish = Start + Lead Time - 1. Mirrors ScheduleCalculator::endOfSpan().
+const endOfSpan = (date, days) => addWorkingDays(date, Math.max(1, days) - 1);
 
 const toDateInput = (date) => {
     const pad = (n) => String(n).padStart(2, '0');

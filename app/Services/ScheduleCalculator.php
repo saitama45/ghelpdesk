@@ -8,13 +8,18 @@ use Carbon\Carbon;
  * Date arithmetic for a project plan, in one of two counting modes:
  *
  *  - 'working'  — weekends and non-working PH holidays are skipped, so a 4-day
- *                 lead time starting Wed 29 Jul ends Tue 4 Aug.
- *  - 'calendar' — every day counts, so the same 4 days end Sun 2 Aug.
+ *                 lead time starting Wed 29 Jul ends Mon 3 Aug.
+ *  - 'calendar' — every day counts, so the same 4 days end Sat 1 Aug.
  *
- * Only the mode changes; the counting rule itself is identical in both. Lead
- * time days are counted *after* the start date and the next row begins the
- * following day, so consecutive bars never share a day. That rule is confirmed
- * behaviour — do not "fix" the off-by-one to close the visual gap.
+ * Only the mode changes; the counting rule itself is identical in both.
+ *
+ * **The lead time INCLUDES the start date** — Finish = Start + Lead Time - 1, so
+ * a 1-day row starts and ends on the same day and a 10-day row starting Day 1
+ * ends Day 10. The next row still begins the following day, so consecutive bars
+ * never share a day. Set by
+ * References/Business_Requirement_Milestone_Schedule_Computation.xlsx and applied
+ * on 2026-08-13; it replaces the earlier exclusive count (which ended that same
+ * 4-day row on Tue 4 Aug).
  */
 class ScheduleCalculator
 {
@@ -89,12 +94,12 @@ class ScheduleCalculator
     }
 
     /**
-     * The end of a span beginning on $start and running $days days — counted
-     * after the start date, so the next row starts the day after this ends.
+     * The end of a span beginning on $start and running $days days, with the
+     * start date counted as day 1: Finish = Start + Lead Time - 1.
      */
     public function endOfSpan(Carbon $start, int $days): Carbon
     {
-        return $this->addDays($start, max(1, $days));
+        return $this->addDays($start, max(1, $days) - 1);
     }
 
     /** Where the next row in the chain begins — bars never share a day. */
@@ -112,7 +117,8 @@ class ScheduleCalculator
     {
         $cursor = $this->toWorkingDay($start->copy())->startOfDay();
         $target = $end->copy()->startOfDay();
-        $days = 0;
+        // The start date is day 1, so a same-day span is one day long.
+        $days = 1;
 
         while ($cursor->lt($target)) {
             $cursor->addDay();

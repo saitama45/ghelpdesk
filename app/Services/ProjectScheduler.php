@@ -58,9 +58,10 @@ class ProjectScheduler
 
     /**
      * An activity with sub-tasks owns no figures of its own: its progress is
-     * their lead-time-weighted average. Its lead time is provisionally their sum
-     * so a project with no Day 1 Date still shows something sensible; once the
-     * chain runs, reschedule() replaces it with the span they actually cover.
+     * their lead-time-weighted average and its lead time is the SUM of theirs
+     * (Business Requirement, "Developer Logic" rule 5). Parallel sub-tasks
+     * shorten the bar the milestone covers but not the effort it totals, so the
+     * sum stands — reschedule() only re-derives its dates.
      */
     public function syncParentRollups(Project $project): void
     {
@@ -118,9 +119,6 @@ class ProjectScheduler
         ])->values()->all();
 
         $schedule = $this->chainFor($project)->resolve($rows, $project->day1_date);
-        $parentIds = $tasks->filter(fn ($task) => !empty($task->parent_task_id))
-            ->pluck('parent_task_id')
-            ->flip();
 
         foreach ($tasks as $task) {
             $span = $schedule[(string) $task->id] ?? null;
@@ -136,11 +134,8 @@ class ProjectScheduler
                 $updates['end_date'] = $span['end'];
             }
 
-            // A parent's lead time is the stretch its sub-tasks actually cover.
-            // With parallel sub-tasks that is no longer their sum.
-            if ($parentIds->has($task->id) && (int) $task->lead_time_days !== (int) $span['days']) {
-                $updates['lead_time_days'] = (int) $span['days'];
-            }
+            // A parent's lead time stays the sum syncParentRollups() wrote — the
+            // span its sub-tasks cover is not its lead time.
 
             if ($updates !== []) {
                 $task->update($updates);

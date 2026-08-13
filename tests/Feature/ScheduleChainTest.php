@@ -53,20 +53,41 @@ class ScheduleChainTest extends TestCase
             $this->row(['id' => 3, 'days' => 10, 'order' => 3, 'depends_on' => 2]),
         ], self::DAY1);
 
-        // Lead time is counted AFTER the start date (the confirmed rule), so a
-        // 10-day row starting on day 1 ends on day 11 and the next starts day 12.
+        // The Comparison Example on the Business Requirement sheet: Finish =
+        // Start + Lead Time - 1, so a 10-day row starting day 1 ends day 10.
         $this->assertSame(1, $this->dayNumber($schedule['1']['start']));
-        $this->assertSame(11, $this->dayNumber($schedule['1']['end']));
-        $this->assertSame(12, $this->dayNumber($schedule['2']['start']));
-        $this->assertSame(17, $this->dayNumber($schedule['2']['end']));
-        $this->assertSame(18, $this->dayNumber($schedule['3']['start']));
+        $this->assertSame(10, $this->dayNumber($schedule['1']['end']));
+        $this->assertSame(11, $this->dayNumber($schedule['2']['start']));
+        $this->assertSame(15, $this->dayNumber($schedule['2']['end']));
+        $this->assertSame(16, $this->dayNumber($schedule['3']['start']));
+        $this->assertSame(25, $this->dayNumber($schedule['3']['end']));
+    }
+
+    /** The Worked Scheduling Example: sub-tasks of 2, 2, 4 and 2 days. */
+    public function test_sub_tasks_reproduce_the_worked_scheduling_example(): void
+    {
+        $schedule = $this->chain()->resolve([
+            $this->row(['id' => 1, 'days' => 10, 'order' => 1]),
+            $this->row(['id' => 11, 'parent_id' => 1, 'days' => 2, 'order' => 1]),
+            $this->row(['id' => 12, 'parent_id' => 1, 'days' => 2, 'order' => 2]),
+            $this->row(['id' => 13, 'parent_id' => 1, 'days' => 4, 'order' => 3]),
+            $this->row(['id' => 14, 'parent_id' => 1, 'days' => 2, 'order' => 4]),
+        ], self::DAY1);
+
+        foreach ([['11', 1, 2], ['12', 3, 4], ['13', 5, 8], ['14', 9, 10]] as [$id, $start, $end]) {
+            $this->assertSame($start, $this->dayNumber($schedule[$id]['start']), "Sub-task {$id} start");
+            $this->assertSame($end, $this->dayNumber($schedule[$id]['end']), "Sub-task {$id} end");
+        }
+
+        $this->assertSame(1, $this->dayNumber($schedule['1']['start']));
+        $this->assertSame(10, $this->dayNumber($schedule['1']['end']));
     }
 
     /**
-     * Sheet rows 1.6 and 1.7: both flagged Yes, both pointing at 1.5, so both
-     * start together the day after 1.5 finishes instead of queueing.
+     * TC-003: both flagged Yes and both pointing at row 5, so both start on the
+     * same day row 5 starts and run alongside it.
      */
-    public function test_two_parallel_rows_sharing_a_requisite_start_together(): void
+    public function test_two_parallel_rows_sharing_a_requisite_start_with_it(): void
     {
         $schedule = $this->chain()->resolve([
             $this->row(['id' => 5, 'days' => 5, 'order' => 5]),
@@ -76,10 +97,7 @@ class ScheduleChainTest extends TestCase
 
         $this->assertSame($schedule['6']['start'], $schedule['7']['start']);
         $this->assertSame($schedule['6']['end'], $schedule['7']['end']);
-        $this->assertSame(
-            Carbon::parse($schedule['5']['end'])->addDay()->toDateString(),
-            $schedule['6']['start']
-        );
+        $this->assertSame($schedule['5']['start'], $schedule['6']['start']);
     }
 
     /**
@@ -101,9 +119,9 @@ class ScheduleChainTest extends TestCase
         ], self::DAY1);
 
         $this->assertSame(
-            Carbon::parse($schedule['27']['end'])->addDay()->toDateString(),
+            $schedule['27']['start'],
             $schedule['31']['start'],
-            'A parallel row must start off its requisite, ignoring the queue.'
+            'A parallel row must start alongside its requisite, ignoring the queue.'
         );
 
         $this->assertTrue(
@@ -118,21 +136,39 @@ class ScheduleChainTest extends TestCase
         );
     }
 
-    /** A No row waits for BOTH its requisite and the row ahead of it. */
-    public function test_a_sequential_row_waits_for_the_later_of_requisite_and_predecessor(): void
+    /**
+     * A No row starts the day after its requisite finishes — the requisite alone
+     * governs, so an explicit one overrides the row printed above it.
+     */
+    public function test_an_explicit_requisite_overrides_the_row_above(): void
     {
         $schedule = $this->chain()->resolve([
             $this->row(['id' => 1, 'days' => 5, 'order' => 1]),
-            // Long row in the queue ahead of 3.
+            // Long row sitting in the list between 1 and 3.
             $this->row(['id' => 2, 'days' => 40, 'order' => 2, 'depends_on' => 1]),
-            // Requisite finishes early, but the queue is what holds it back.
+            // Points back at 1, so it starts off 1 rather than waiting for 2.
             $this->row(['id' => 3, 'days' => 5, 'order' => 3, 'depends_on' => 1]),
         ], self::DAY1);
 
         $this->assertSame(
-            Carbon::parse($schedule['2']['end'])->addDay()->toDateString(),
+            Carbon::parse($schedule['1']['end'])->addDay()->toDateString(),
             $schedule['3']['start']
         );
+        $this->assertSame($schedule['2']['start'], $schedule['3']['start']);
+    }
+
+    /** With no requisite set, the row above is the dependency. */
+    public function test_a_row_without_a_requisite_follows_the_row_above_it(): void
+    {
+        $schedule = $this->chain()->resolve([
+            $this->row(['id' => 1, 'days' => 5, 'order' => 1]),
+            $this->row(['id' => 2, 'days' => 3, 'order' => 2]),
+        ], self::DAY1);
+
+        $this->assertSame(1, $this->dayNumber($schedule['1']['start']));
+        $this->assertSame(5, $this->dayNumber($schedule['1']['end']));
+        $this->assertSame(6, $this->dayNumber($schedule['2']['start']));
+        $this->assertSame(8, $this->dayNumber($schedule['2']['end']));
     }
 
     /** With no requisite to anchor to, Yes means "run alongside the row above". */
@@ -174,13 +210,13 @@ class ScheduleChainTest extends TestCase
     {
         $rows = [$this->row(['id' => 1, 'days' => 4])];
 
-        // Wed 29 Jul + 4 working days = Tue 4 Aug (the confirmed reference case).
+        // Wed 29 Jul counts as day 1, so 4 working days are 29, 30, 31 and Mon 3 Aug.
         $working = $this->chain(ScheduleCalculator::MODE_WORKING)->resolve($rows, '2026-07-29');
-        $this->assertSame('2026-08-04', $working['1']['end']);
+        $this->assertSame('2026-08-03', $working['1']['end']);
 
-        // The same 4 days counted straight through land on Sun 2 Aug.
+        // The same 4 days counted straight through end on Sat 1 Aug.
         $calendar = $this->chain(ScheduleCalculator::MODE_CALENDAR)->resolve($rows, '2026-07-29');
-        $this->assertSame('2026-08-02', $calendar['1']['end']);
+        $this->assertSame('2026-08-01', $calendar['1']['end']);
     }
 
     /** A pinned Start Date beats both the requisite and the queue. */

@@ -265,8 +265,8 @@
                                                 <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[150px] dark:text-slate-300">Department</th>
                                                 <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[150px] dark:text-slate-300">Sub-Unit</th>
                                                 <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider w-28 dark:text-slate-300">Lead Time Days</th>
-                                                <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-20 dark:text-slate-300" title="Day number counted from Day 1, worked out from the lead times and requisites below">Start<span class="block font-bold normal-case tracking-normal text-gray-400">(days)</span></th>
-                                                <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-20 dark:text-slate-300" title="Day number counted from Day 1, worked out from the lead times and requisites below">Finish<span class="block font-bold normal-case tracking-normal text-gray-400">(days)</span></th>
+                                                <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-20 dark:text-slate-300" title="Calculated. Day 1 when nothing comes before it; otherwise Dependency Finish + 1, or the Dependency's own Start when Can Run Parallel is Yes.">Start<span class="block font-bold normal-case tracking-normal text-gray-400">(days)</span></th>
+                                                <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-20 dark:text-slate-300" title="Calculated: Finish = Start + Lead Time - 1. A 10-day row starting on Day 1 finishes on Day 10.">Finish<span class="block font-bold normal-case tracking-normal text-gray-400">(days)</span></th>
                                                 <th class="px-3 py-2 text-left text-[10px] font-black text-gray-500 uppercase tracking-wider min-w-[190px] dark:text-slate-300">Dependency<span class="block font-bold normal-case tracking-normal text-gray-400">(requisite)</span></th>
                                                 <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-28 dark:text-slate-300">Can Run<br>Parallel?</th>
                                                 <th class="px-3 py-2 text-center text-[10px] font-black text-gray-500 uppercase tracking-wider w-24 dark:text-slate-300"></th>
@@ -315,7 +315,7 @@
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <input v-model="act.default_duration_days" type="number" min="1" :disabled="subTasksFor(act).length > 0" @keydown.backspace="preventLastDigitBackspace" @input="ensureNumericValue(act, 'default_duration_days', $event)" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:disabled:bg-gray-800">
-                                                        <span v-if="subTasksFor(act).length" class="block mt-0.5 text-[9px] font-black text-blue-400 uppercase tracking-wider">Sub-task span</span>
+                                                        <span v-if="subTasksFor(act).length" class="block mt-0.5 text-[9px] font-black text-blue-400 uppercase tracking-wider" :title="`Calculated: sum of the ${subTasksFor(act).length} sub-task lead times`">Sum of sub-tasks</span>
                                                     </td>
                                                     <td class="px-2 py-2 text-center">
                                                         <span class="text-xs font-mono font-bold" :class="offsetFor(act).start === 1 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'">
@@ -336,7 +336,7 @@
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <button type="button" @click="act.can_run_parallel = !act.can_run_parallel"
-                                                                :title="act.can_run_parallel ? 'Starts off its requisite only — may overlap other rows' : 'Waits for its requisite AND the row above it'"
+                                                                :title="act.can_run_parallel ? 'Yes — starts on the SAME day its dependency starts, running alongside it' : 'No — starts the day after its dependency finishes'"
                                                                 class="w-full text-[10px] font-black uppercase tracking-wider rounded px-2 py-1 border transition-colors"
                                                                 :class="act.can_run_parallel
                                                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
@@ -433,7 +433,7 @@
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <button type="button" @click="subTask.can_run_parallel = !subTask.can_run_parallel"
-                                                                :title="subTask.can_run_parallel ? 'Starts off its requisite only — may overlap other sub-tasks' : 'Waits for its requisite AND the sub-task above it'"
+                                                                :title="subTask.can_run_parallel ? 'Yes — starts on the SAME day its dependency starts, running alongside it' : 'No — starts the day after its dependency finishes'"
                                                                 class="w-full text-[10px] font-black uppercase tracking-wider rounded px-2 py-1 border transition-colors"
                                                                 :class="subTask.can_run_parallel
                                                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
@@ -1075,17 +1075,21 @@ const removeActivity = (activity) => {
 }
 
 // ── Start / Finish day numbers ────────────────────────────────────────────────
-// A live preview of what the backend chain (App\Services\ScheduleChain) will do
-// once the template is applied to a project, expressed as plain day numbers off
-// Day 1 rather than dates — a template has no Day 1 of its own. The rules are
-// deliberately identical to the PHP:
+// Plain day numbers counted off Day 1 — a template has no calendar of its own.
+// The arithmetic follows References/Business_Requirement_Milestone_Schedule_
+// Computation.xlsx ("Developer Logic" sheet) to the letter:
 //
-//   No  → start after BOTH the requisite and the row above have finished
-//   Yes → start after the requisite alone, so the row may overlap others
-//         (with no requisite, it runs alongside the row above instead)
+//   1. Dependency blank        → Start = Day 1 (a sub-task falls back to its
+//                                milestone's own start day)
+//   2. Dependency, Parallel No → Start = Dependency Finish + 1
+//   3. Dependency, Parallel Yes→ Start = Dependency Start (runs alongside it)
+//   4. Finish = Start + Lead Time - 1   ← lead time is INCLUSIVE of the start
+//   5. Milestone Lead Time = sum of its sub-task lead times
+//   6. Milestone Finish = latest sub-task finish
 //
-// Lead time is counted AFTER the start day, matching endOfSpan() — a 10-day row
-// starting on day 1 finishes on day 11.
+// The Dependency column's "Previous row" / "Previous sub-task" placeholder is
+// the implicit dependency: an unset requisite means the row above, which is what
+// makes "Milestone Start = Previous Finish + 1" fall out of rule 2.
 const scheduleOffsets = computed(() => {
     const rows = form.activities
     const byKey = new Map(rows.map(row => [row.client_key, row]))
@@ -1114,40 +1118,35 @@ const scheduleOffsets = computed(() => {
         list.forEach((row, index) => predecessor.set(row.client_key, index ? list[index - 1].client_key : null))
     })
 
-    const requisiteOf = (row) => {
+    // The one row this one hangs off: the chosen requisite, or — when the
+    // Dependency cell is left on "Previous row" — the row above it.
+    const dependencyOf = (row) => {
         const key = row.depends_on_client_key
-        return key && key !== row.client_key && byKey.has(key) ? key : null
+
+        if (key && key !== row.client_key && byKey.has(key)) return key
+
+        return predecessor.get(row.client_key) || null
     }
 
     const resolved = {}
-    const spanOf = (key) => resolved[key] || null
+    const leadTimeOf = (row) => Math.max(1, Number(row.default_duration_days) || 1)
 
     const startFor = (row, fallback) => {
-        const requisite = spanOf(requisiteOf(row))
-        const previous = spanOf(predecessor.get(row.client_key))
+        const dependency = resolved[dependencyOf(row)]
 
-        if (row.can_run_parallel) {
-            if (requisite) return requisite.finish + 1
-            // Nothing to anchor to — run alongside the row above.
-            return previous ? previous.start : fallback
-        }
+        if (!dependency) return fallback
 
-        const blockers = [requisite, previous].filter(Boolean).map(span => span.finish)
-        return blockers.length ? Math.max(...blockers) + 1 : fallback
+        return row.can_run_parallel ? dependency.start : dependency.finish + 1
     }
 
     const isReady = (row) => {
-        const requisite = requisiteOf(row)
-        if (requisite && !resolved[requisite]) return false
-
-        const previous = predecessor.get(row.client_key)
-        const needsPrevious = !(row.can_run_parallel && requisite)
-        return !(needsPrevious && previous && !resolved[previous])
+        const dependency = dependencyOf(row)
+        return !dependency || Boolean(resolved[dependency])
     }
 
     const place = (row, fallback) => {
         const start = startFor(row, fallback)
-        resolved[row.client_key] = { start, finish: start + Math.max(1, Number(row.default_duration_days) || 1) }
+        resolved[row.client_key] = { start, finish: start + leadTimeOf(row) - 1 }
     }
 
     const resolveGroup = (root) => {
@@ -1168,29 +1167,29 @@ const scheduleOffsets = computed(() => {
         }
         pending.forEach(child => place(child, parentStart))
 
-        // A parent owns no span of its own — it covers whatever its sub-tasks span.
+        // Rule 6 — a parent owns no span of its own: it covers whatever its
+        // sub-tasks span, so its finish is the latest sub-task finish.
         resolved[root.client_key] = {
             start: Math.min(...children.map(child => resolved[child.client_key].start)),
             finish: Math.max(...children.map(child => resolved[child.client_key].finish)),
         }
     }
 
-    // Requisite-first, not top-to-bottom: a row may depend on one further down.
+    // Dependency-first, not top-to-bottom: a row may depend on one further down.
     let pending = [...roots]
     let guard = roots.length + 1
 
     while (pending.length && guard--) {
-        const ready = pending.filter(root => [root, ...(childrenByParent.get(root.client_key) || [])]
-            .every(row => {
-                const requisite = requisiteOf(row)
-                const previous = predecessor.get(row.client_key)
-                const inGroup = (key) => key === root.client_key
-                    || (childrenByParent.get(root.client_key) || []).some(child => child.client_key === key)
+        const ready = pending.filter(root => {
+            const children = childrenByParent.get(root.client_key) || []
+            const inGroup = (key) => key === root.client_key
+                || children.some(child => child.client_key === key)
 
-                if (requisite && !resolved[requisite] && !inGroup(requisite)) return false
-                if (!(row.can_run_parallel && requisite) && previous && !resolved[previous] && !inGroup(previous)) return false
-                return true
-            }))
+            return [root, ...children].every(row => {
+                const dependency = dependencyOf(row)
+                return !dependency || resolved[dependency] || inGroup(dependency)
+            })
+        })
 
         if (!ready.length) break
         ready.forEach(resolveGroup)
@@ -1227,18 +1226,26 @@ const milestoneSpan = (activities) => {
     }
 }
 
-// Only root activities are counted: a parent's lead time is already its
-// sub-tasks' span (kept in sync by the watcher below), so adding sub-task days
-// on top would double-count them.
+/** Rule 5 — a milestone's lead time is the sum of its sub-task lead times. */
+const subTaskLeadTimeSum = (activity) => {
+    return subTasksFor(activity).reduce((sum, subTask) => sum + Math.max(1, Number(subTask.default_duration_days) || 1), 0)
+}
+
+// Only root activities are counted: a parent's lead time is already the sum of
+// its sub-tasks (kept in sync by the watcher below), so adding sub-task days on
+// top would double-count them.
 const milestoneLeadTimeSum = (activities) => {
     return activities.reduce((sum, activity) => sum + (Number(activity.default_duration_days) || 0), 0)
 }
 
-/** How long the whole plan runs — the last finish, not the sum of the rows. */
+/**
+ * How long the whole plan runs. Day numbers are inclusive, so a plan finishing
+ * on day 10 is 10 days long — no -1 correction.
+ */
 const grandTotalLeadTimeDays = computed(() => {
     const spans = Object.values(scheduleOffsets.value)
 
-    return spans.length ? Math.max(...spans.map(span => span.finish)) - 1 : 0
+    return spans.length ? Math.max(...spans.map(span => span.finish)) : 0
 })
 
 watch(
@@ -1250,18 +1257,15 @@ watch(
         order: a.order,
     })),
     () => {
-        // A parent's lead time is the stretch its sub-tasks cover. With parallel
-        // sub-tasks that is no longer their sum, so read it off the schedule.
+        // Rule 5 — a parent's lead time is the SUM of its sub-task lead times,
+        // never the stretch they happen to cover. Parallel sub-tasks shorten the
+        // milestone's span but not the effort it totals.
         form.activities.forEach(activity => {
             if (activity.parent_client_key) return
 
-            const subs = form.activities.filter(a => a.parent_client_key === activity.client_key)
-            if (!subs.length) return
+            if (!subTasksFor(activity).length) return
 
-            const span = scheduleOffsets.value[activity.client_key]
-            if (!span) return
-
-            const days = Math.max(1, span.finish - span.start)
+            const days = subTaskLeadTimeSum(activity)
             if (Number(activity.default_duration_days) !== days) {
                 activity.default_duration_days = days
             }
@@ -1284,9 +1288,11 @@ const preventLastDigitBackspace = (event) => {
 
 const ensureNumericValue = (activity, field, event) => {
     const value = event.currentTarget.value
-    const isInvalidOrder = field === 'order' && (!Number.isFinite(Number(value)) || Number(value) < 1)
+    // Data Dictionary: Lead Time must be > 0, and Ord is 1-based.
+    const isBelowMinimum = !Number.isFinite(Number(value)) || Number(value) < 1
+    const isInvalid = (field === 'order' || field === 'default_duration_days') && isBelowMinimum
 
-    if (value === '' || isInvalidOrder) {
+    if (value === '' || isInvalid) {
         event.currentTarget.value = '1'
         activity[field] = 1
     }

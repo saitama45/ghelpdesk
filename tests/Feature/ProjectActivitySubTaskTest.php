@@ -346,19 +346,20 @@ class ProjectActivitySubTaskTest extends TestCase
             ])
             ->assertRedirect();
 
-        // Chain: Install POS (2026-08-03 to 08-04, 2 days) -> its sub-task
-        // Configure menu (08-05, 1 day) -> next root Network Setup (08-06 to 08-08, 3 days).
+        // Finish = Start + Lead Time - 1. Install POS owns a sub-task, so its bar
+        // is exactly that sub-task's: Configure menu runs 1 day on 08-03. Network
+        // Setup then starts the next day and its 3 days cover 08-04 to 08-06.
         $installPos = ProjectTask::where('project_id', $project->id)->where('name', 'Install POS')->firstOrFail();
         $this->assertSame('2026-08-03', $installPos->start_date->toDateString());
-        $this->assertSame('2026-08-04', $installPos->end_date->toDateString());
+        $this->assertSame('2026-08-03', $installPos->end_date->toDateString());
 
         $configureMenu = ProjectTask::where('project_id', $project->id)->where('name', 'Configure menu')->firstOrFail();
-        $this->assertSame('2026-08-05', $configureMenu->start_date->toDateString());
-        $this->assertSame('2026-08-05', $configureMenu->end_date->toDateString());
+        $this->assertSame('2026-08-03', $configureMenu->start_date->toDateString());
+        $this->assertSame('2026-08-03', $configureMenu->end_date->toDateString());
 
         $networkSetup = ProjectTask::where('project_id', $project->id)->where('name', 'Network Setup')->firstOrFail();
-        $this->assertSame('2026-08-06', $networkSetup->start_date->toDateString());
-        $this->assertSame('2026-08-08', $networkSetup->end_date->toDateString());
+        $this->assertSame('2026-08-04', $networkSetup->start_date->toDateString());
+        $this->assertSame('2026-08-06', $networkSetup->end_date->toDateString());
     }
 
     public function test_applying_template_without_day1_date_leaves_dates_null(): void
@@ -430,13 +431,14 @@ class ProjectActivitySubTaskTest extends TestCase
             ])
             ->assertRedirect();
 
+        // 5 working days from Tue 09-01 are 01, 02, 03, 04 and Mon 09-07.
         $this->assertSame('5', (string) $first->refresh()->lead_time_days);
         $this->assertSame('2026-09-01', $first->start_date->toDateString());
-        $this->assertSame('2026-09-05', $first->end_date->toDateString());
+        $this->assertSame('2026-09-07', $first->end_date->toDateString());
 
         // Second task now starts right after the first's new (longer) span.
-        $this->assertSame('2026-09-06', $second->refresh()->start_date->toDateString());
-        $this->assertSame('2026-09-08', $second->end_date->toDateString());
+        $this->assertSame('2026-09-08', $second->refresh()->start_date->toDateString());
+        $this->assertSame('2026-09-10', $second->end_date->toDateString());
     }
 
     public function test_adding_a_task_reschedules_the_whole_project(): void
@@ -470,9 +472,10 @@ class ProjectActivitySubTaskTest extends TestCase
         $this->assertSame('2026-09-01', $first->refresh()->start_date->toDateString());
         $this->assertSame('2026-09-02', $first->end_date->toDateString());
 
+        // 3 working days from Thu 09-03 are 03, 04 and Mon 09-07.
         $newTask = ProjectTask::where('project_id', $project->id)->where('name', 'Network Setup')->firstOrFail();
         $this->assertSame('2026-09-03', $newTask->start_date->toDateString());
-        $this->assertSame('2026-09-05', $newTask->end_date->toDateString());
+        $this->assertSame('2026-09-07', $newTask->end_date->toDateString());
     }
 
     public function test_deleting_a_task_reschedules_the_remaining_tasks(): void

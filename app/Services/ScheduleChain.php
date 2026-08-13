@@ -8,23 +8,24 @@ use Carbon\Carbon;
  * Turns an ordered set of plan rows into concrete Start/Finish dates, driven by
  * each row's requisite rather than by its position in the list.
  *
- * The rule, for a row R:
+ * The rules come from References/Business_Requirement_Milestone_Schedule_
+ * Computation.xlsx ("Developer Logic"), for a row R with dependency D:
  *
- *   - "Can Run Parallel? = No"  — R starts the day after BOTH its requisite and
- *     the row ahead of it have finished. R stays in the queue.
- *   - "Can Run Parallel? = Yes" — R starts the day after its requisite alone
- *     finishes and ignores the queue entirely, so it may overlap work that is
- *     still running (and may even begin earlier than the row printed above it).
- *     A Yes row with no requisite has nothing to anchor to, so it runs alongside
- *     the row above it instead — sharing that row's start date.
+ *   - No dependency at all      — R starts on the fallback (Day 1 for the first
+ *                                 root, the parent's start for a first sub-task).
+ *   - "Can Run Parallel? = No"  — R starts the day after D finishes.
+ *   - "Can Run Parallel? = Yes" — R starts on the SAME day D starts, so the two
+ *                                 run side by side.
  *
  * A NULL requisite means "follow the previous row", which is what every row did
  * before dependencies existed — so an untouched plan schedules exactly as it
- * always has.
+ * always has. That implicit predecessor IS the dependency for the rules above,
+ * which is what makes "Start = previous Finish + 1" fall out of the No branch.
  *
  * Sub-tasks run *inside* their parent: the first one starts on the parent's own
  * start date and the parent's bar is stretched to cover whatever its sub-tasks
- * actually span. A parent therefore owns no lead time of its own.
+ * actually span. A parent owns no dates of its own; its lead time is the SUM of
+ * its sub-tasks' lead times (ProjectScheduler::syncParentRollups).
  *
  * Rows are resolved requisite-first, not top-to-bottom, so a row may depend on
  * one further down the list. A dependency cycle can't be satisfied, so the rows
@@ -57,6 +58,15 @@ class ScheduleChain
         $byKey = [];
         foreach ($rows as $row) {
             $byKey[$this->key($row['id'])] = $this->normalize($row);
+        }
+
+        // A requisite pointing at a row that is not in this plan (deleted, or
+        // filtered out) is dropped, so the row falls back to following the one
+        // above it rather than jumping to Day 1.
+        foreach ($byKey as $key => $row) {
+            if ($row['depends_on'] !== null && !isset($byKey[$row['depends_on']])) {
+                $byKey[$key]['depends_on'] = null;
+            }
         }
 
         [$rootKeys, $childKeysByParent] = $this->buildHierarchy($byKey);
@@ -227,22 +237,21 @@ class ScheduleChain
         return true;
     }
 
+    /**
+     * The one row this one hangs off: its chosen requisite, or — when none is
+     * set — the row above it.
+     */
+    private function dependencyOf(array $row): ?string
+    {
+        return $row['depends_on'] ?? $row['predecessor'];
+    }
+
     /** Row ids that must be placed before this one can be. */
     private function requirements(array $row): array
     {
-        $needed = [];
+        $dependency = $this->dependencyOf($row);
 
-        if ($row['depends_on'] !== null) {
-            $needed[] = $row['depends_on'];
-        }
-
-        // A parallel row with a requisite is free of the queue; anything else
-        // still has to know where the row ahead of it landed.
-        if (!($row['parallel'] && $row['depends_on'] !== null) && $row['predecessor'] !== null) {
-            $needed[] = $row['predecessor'];
-        }
-
-        return $needed;
+        return $dependency !== null ? [$dependency] : [];
     }
 
     private function resolveGroup(array $group, array $byKey, array &$resolved, Carbon $day1, bool $force): void
@@ -320,7 +329,8 @@ class ScheduleChain
 
     /**
      * Where a row begins. A hand-pinned Start Date always wins; otherwise the
-     * requisite / queue rule decides, falling back to $fallback (Day 1 for a
+     * dependency decides — the day after it finishes, or its very own start date
+     * when the row may run in parallel — falling back to $fallback (Day 1 for a
      * root, the parent's start for a first sub-task).
      */
     private function startFor(array $row, array $resolved, Carbon $fallback): Carbon
@@ -329,33 +339,15 @@ class ScheduleChain
             return $this->calculator->toWorkingDay(Carbon::parse($row['anchor'])->startOfDay());
         }
 
-        $dependency = $row['depends_on'] !== null ? ($resolved[$row['depends_on']] ?? null) : null;
-        $predecessor = $row['predecessor'] !== null ? ($resolved[$row['predecessor']] ?? null) : null;
+        $dependencyKey = $this->dependencyOf($row);
+        $dependency = $dependencyKey !== null ? ($resolved[$dependencyKey] ?? null) : null;
 
-        if ($row['parallel']) {
-            if ($dependency) {
-                return $this->calculator->nextDay($dependency['end']);
-            }
-
-            // Nothing to anchor to — run alongside the row above instead of
-            // queueing behind it, so "Yes" always means something.
-            if ($predecessor) {
-                return $this->calculator->toWorkingDay($predecessor['start']->copy());
-            }
-
+        if (!$dependency) {
             return $this->calculator->toWorkingDay($fallback->copy());
         }
 
-        $latest = null;
-
-        foreach ([$dependency, $predecessor] as $span) {
-            if ($span && ($latest === null || $span['end']->gt($latest))) {
-                $latest = $span['end'];
-            }
-        }
-
-        return $latest !== null
-            ? $this->calculator->nextDay($latest)
-            : $this->calculator->toWorkingDay($fallback->copy());
+        return $row['parallel']
+            ? $this->calculator->toWorkingDay($dependency['start']->copy())
+            : $this->calculator->nextDay($dependency['end']);
     }
 }
