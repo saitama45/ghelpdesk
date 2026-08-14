@@ -155,6 +155,20 @@ const addWorkingDays = (date, days) => {
 // Finish = Start + Lead Time - 1. Mirrors ScheduleCalculator::endOfSpan().
 const endOfSpan = (date, days) => addWorkingDays(date, Math.max(1, days) - 1);
 
+// Days covered by `start`..`end` inclusive, counted in the project's own day
+// mode. Mirrors ScheduleCalculator::daysBetween().
+const daysBetween = (start, end) => {
+    const cursor = toWorkingDay(start);
+    let days = 1;
+
+    while (cursor < end) {
+        cursor.setDate(cursor.getDate() + 1);
+        if (!isNonWorkingDay(cursor)) days++;
+    }
+
+    return Math.max(1, days);
+};
+
 const toDateInput = (date) => {
     const pad = (n) => String(n).padStart(2, '0');
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -846,8 +860,43 @@ const milestoneLeadTime = (tasks = []) => {
     return tasks.reduce((sum, task) => sum + effectiveLeadTime(task), 0);
 };
 
+/**
+ * How long a milestone runs on the chart — its first start to its last finish,
+ * inclusive. Like the grand total, this is a span rather than the sum of its
+ * rows, so parallel activities inside the milestone are not counted twice.
+ */
+const milestoneSpanDays = (tasks = []) => {
+    const dated = tasks.flatMap(task => [task, ...(task.subTasks || [])])
+        .filter(task => task.start_date && task.end_date);
+
+    if (!dated.length) return milestoneLeadTime(tasks);
+
+    const starts = dated.map(task => parseLocalDate(task.start_date).getTime());
+    const ends = dated.map(task => parseLocalDate(task.end_date).getTime());
+
+    return daysBetween(new Date(Math.min(...starts)), new Date(Math.max(...ends)));
+};
+
+/**
+ * How long the whole plan actually runs: the first start to the last finish,
+ * inclusive, counted in the project's day mode.
+ *
+ * NOT the sum of the rows' lead times. Parallel rows overlap, so summing them
+ * double-counts the shared days — a plan of 10 + 5 + 5 + 5 days where three rows
+ * start together runs 15 days, not 25. Without a Day 1 Date no row has dates
+ * yet, so the sum is the only figure available and stands in.
+ */
 const grandTotalLeadTime = computed(() => {
-    return Object.values(groupedTasks.value).reduce((sum, tasks) => sum + milestoneLeadTime(tasks), 0);
+    const dated = localTasks.value.filter(task => task.start_date && task.end_date);
+
+    if (!dated.length) {
+        return Object.values(groupedTasks.value).reduce((sum, tasks) => sum + milestoneLeadTime(tasks), 0);
+    }
+
+    const starts = dated.map(task => parseLocalDate(task.start_date).getTime());
+    const ends = dated.map(task => parseLocalDate(task.end_date).getTime());
+
+    return daysBetween(new Date(Math.min(...starts)), new Date(Math.max(...ends)));
 });
 
 const subTasksOfEditingTask = computed(() => {
@@ -1121,8 +1170,8 @@ const isWeekend = (date) => {
                     <p class="text-sm font-bold text-slate-900 dark:text-slate-100">{{ stats.completed }}</p>
                 </div>
                 <div class="h-8 w-px bg-slate-100 dark:bg-slate-700"></div>
-                <div class="text-center">
-                    <p class="text-[10px] uppercase tracking-wider font-bold text-indigo-500 dark:text-indigo-300">Grand Total Lead Time</p>
+                <div class="text-center" :title="`How long the plan runs end to end — the first start to the last finish, counted in ${countsEveryDay ? 'calendar' : 'working'} days. Rows that run in parallel share those days, so this is not the sum of every row's lead time.`">
+                    <p class="text-[10px] uppercase tracking-wider font-bold text-indigo-500 dark:text-indigo-300">Grand Total Days</p>
                     <p class="text-sm font-bold text-slate-900 dark:text-slate-100">{{ grandTotalLeadTime }} {{ grandTotalLeadTime === 1 ? 'day' : 'days' }}</p>
                 </div>
             </div>
@@ -1417,8 +1466,8 @@ const isWeekend = (date) => {
                                     <span class="text-[11px] font-black text-slate-600 uppercase tracking-wider dark:text-slate-100">{{ category }}</span>
                                     <span class="ml-2 px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[9px] font-bold dark:bg-slate-700 dark:text-slate-200">{{ visibleTaskCount(tasks) }}</span>
                                     <span class="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[9px] font-black uppercase whitespace-nowrap dark:bg-indigo-500/20 dark:text-indigo-200"
-                                          title="Total Lead Time for this milestone">
-                                        {{ milestoneLeadTime(tasks) }} {{ milestoneLeadTime(tasks) === 1 ? 'day' : 'days' }}
+                                          :title="`How long this milestone runs — its first start to its last finish. Its rows total ${milestoneLeadTime(tasks)} lead-time days, but rows running in parallel share the same days.`">
+                                        {{ milestoneSpanDays(tasks) }} {{ milestoneSpanDays(tasks) === 1 ? 'day' : 'days' }}
                                     </span>
                                     <span v-if="milestoneDepartmentLabel(tasks)"
                                           class="truncate px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-indigo-500 dark:text-indigo-300"

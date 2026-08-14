@@ -9,7 +9,6 @@ import ProjectMonitoring from '@/Components/ProjectTracker/ProjectMonitoring.vue
 import ProjectReports from '@/Components/ProjectTracker/ProjectReports.vue';
 import Modal from '@/Components/Modal.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
-import HierarchySelector from '@/Components/HierarchySelector.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputError from '@/Components/InputError.vue';
@@ -266,83 +265,40 @@ const confirmAutoCreateMonthlyBoards = async (extraTarget = null) => {
     });
 };
 
-const findNodeIdByStrings = (departmentName, orgPath) => {
-    if (!departmentName) return '';
-    const dept = (props.hierarchicalDepartments || []).find(d => d.name === departmentName);
-    if (!dept) return '';
-    if (!orgPath) return `dept-${dept.id}`;
-    
-    const targetPath = orgPath.split(' > ').map(p => p.trim());
-    let currentNodes = dept.nodes || [];
-    let lastFoundNodeId = `dept-${dept.id}`;
-    
-    for (const pathPart of targetPath) {
-        const node = currentNodes.find(n => n.name === pathPart);
-        if (!node) break;
-        lastFoundNodeId = node.id;
-        currentNodes = node.children || [];
-    }
-    return lastFoundNodeId;
-};
+// The member's target is picked by department only — the sub-unit is optional
+// and is inherited from the chosen system user's org_path when we have one.
+const departmentNameOptions = computed(() => {
+    const names = [
+        ...(props.hierarchicalDepartments || []).map(d => d.name),
+        ...(props.departments || []).map(d => d.name),
+        ...(props.departmentOptions || []).map(d => d.name),
+        defaultDepartment,
+    ]
+        .map(name => (name || '').trim())
+        .filter(Boolean);
 
-const getNodeDetails = (nodeId) => {
-    if (!nodeId) return null;
-    if (typeof nodeId === 'string' && nodeId.startsWith('dept-')) {
-        const deptId = Number(nodeId.replace('dept-', ''));
-        const dept = (props.hierarchicalDepartments || []).find(d => Number(d.id) === deptId);
-        if (dept) return { department: dept.name, sub_unit: '' };
-    }
-    
-    const findNodeAndPath = (nodes, targetId, currentPath = []) => {
-        for (const node of (nodes || [])) {
-            if (Number(node.id) === Number(targetId)) {
-                return { department_id: node.department_id, path: [...currentPath, node.name] };
-            }
-            if (node.children) {
-                const found = findNodeAndPath(node.children, targetId, [...currentPath, node.name]);
-                if (found) return found;
-            }
-        }
-        return null;
-    };
-    
-    for (const dept of (props.hierarchicalDepartments || [])) {
-        const found = findNodeAndPath(dept.nodes, nodeId);
-        if (found) return { department: dept.name, sub_unit: found.path.join(' > ') };
-    }
-    return null;
-};
-
-const selectedDepartmentNode = ref(findNodeIdByStrings(defaultDepartment, defaultSubUnit));
-
-watch(selectedDepartmentNode, (newVal) => {
-    if (!newVal) {
-        teamForm.department = '';
-        teamForm.sub_unit = '';
-        return;
-    }
-    const details = getNodeDetails(newVal);
-    if (details) {
-        teamForm.department = details.department;
-        teamForm.sub_unit = details.sub_unit;
-    }
-});
-
-const hierarchicalDepartmentOptions = computed(() => {
-    return (props.hierarchicalDepartments || []).map(dept => ({
-        ...dept,
-        id: `dept-${dept.id}`,
-        children: dept.nodes || [],
-    }));
+    return [...new Set(names)]
+        .sort((a, b) => a.localeCompare(b))
+        .map(name => ({ label: name, value: name }));
 });
 
 const selectedTeamUser = computed(() => {
     return props.users.find((user) => Number(user.id) === Number(teamForm.user_id)) || null;
 });
 
-const selectedDepartment = computed(() => {
-    return (props.departmentOptions || []).find((department) => department.name === teamForm.department) || null;
-});
+// Picking a department by hand invalidates any sub-unit we inherited from the
+// user, unless the user actually sits in that department.
+const onDepartmentSelected = (value) => {
+    teamForm.department = value || '';
+    teamForm.clearErrors('department', 'sub_unit');
+
+    const user = selectedTeamUser.value;
+    const userDepartment = (user?.department || '').trim();
+
+    teamForm.sub_unit = userDepartment && userDepartment === teamForm.department
+        ? (user.org_path || user.sub_unit || '')
+        : '';
+};
 
 const openEditModal = () => {
     editForm.project_type = props.project.project_type || 'Store Opening';
@@ -389,7 +345,7 @@ const syncTeamTargetFromUser = () => {
     teamForm.sub_unit = selectedTeamUser.value.org_path || selectedTeamUser.value.sub_unit || teamForm.sub_unit;
     teamForm.external_name = '';
 
-    selectedDepartmentNode.value = findNodeIdByStrings(teamForm.department, teamForm.sub_unit);
+    teamForm.clearErrors('department', 'sub_unit');
 };
 
 const addTeamMember = async () => {
@@ -417,10 +373,9 @@ const addTeamMember = async () => {
         return;
     }
 
-    if (!teamForm.department || !teamForm.sub_unit) {
+    if (!teamForm.department) {
         teamForm.setError({
             department: 'Select a department.',
-            sub_unit: 'Select a sub-unit.',
         });
         return;
     }
@@ -439,7 +394,6 @@ const addTeamMember = async () => {
         .post(route('projects-team-members.store'), {
         onSuccess: () => {
             teamForm.reset('user_id', 'external_name', 'department', 'sub_unit', 'role_type');
-            selectedDepartmentNode.value = findNodeIdByStrings(defaultDepartment, defaultSubUnit);
         },
         preserveScroll: true
     });
@@ -786,14 +740,14 @@ const getStatusColor = (status) => {
                             </div>
 
                             <div>
-                                <InputLabel value="Department / Sub-Unit" />
-                                <HierarchySelector
-                                    v-model="selectedDepartmentNode"
-                                    :nodes="hierarchicalDepartmentOptions"
-                                    placeholder="Select department or sub-unit..."
+                                <InputLabel value="Department" />
+                                <Autocomplete
+                                    :model-value="teamForm.department || null"
+                                    :options="departmentNameOptions"
+                                    placeholder="Select a department..."
+                                    @update:modelValue="onDepartmentSelected"
                                 />
                                 <InputError :message="teamForm.errors.department" />
-                                <InputError :message="teamForm.errors.sub_unit" />
                             </div>
 
                             <div>
