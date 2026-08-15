@@ -300,6 +300,48 @@ Route::middleware('auth')->group(function () {
     Route::resource('vendors', \App\Http\Controllers\VendorController::class)->except(['show', 'create', 'edit']);
     Route::post('holidays/generate', [\App\Http\Controllers\HolidayController::class, 'generate'])->name('holidays.generate');
     Route::resource('holidays', \App\Http\Controllers\HolidayController::class)->except(['show', 'create', 'edit']);
+
+    // UAT Tracker — cycles, the verdict matrix, findings and sign-off.
+    // The literal /uat/template must be declared before /uat/{cycle}, otherwise
+    // route-model binding tries to resolve "template" as a cycle.
+    Route::get('uat/template', [\App\Http\Controllers\UatController::class, 'template'])->name('uat.template');
+    Route::get('uat', [\App\Http\Controllers\UatController::class, 'index'])->name('uat.index');
+    Route::post('uat', [\App\Http\Controllers\UatController::class, 'store'])->name('uat.store');
+    Route::get('uat/{cycle}', [\App\Http\Controllers\UatController::class, 'show'])->name('uat.show');
+    Route::put('uat/{cycle}', [\App\Http\Controllers\UatController::class, 'update'])->name('uat.update');
+    Route::delete('uat/{cycle}', [\App\Http\Controllers\UatController::class, 'destroy'])->name('uat.destroy');
+    Route::post('uat/{cycle}/duplicate', [\App\Http\Controllers\UatController::class, 'duplicate'])->name('uat.duplicate');
+    Route::get('uat/{cycle}/export', [\App\Http\Controllers\UatController::class, 'export'])->name('uat.export');
+    Route::post('uat/{cycle}/import', [\App\Http\Controllers\UatController::class, 'import'])->name('uat.import');
+
+    Route::post('uat/{cycle}/sections', [\App\Http\Controllers\UatController::class, 'storeSection'])->name('uat.sections.store');
+    Route::put('uat/{cycle}/sections/{section}', [\App\Http\Controllers\UatController::class, 'updateSection'])->name('uat.sections.update');
+    Route::delete('uat/{cycle}/sections/{section}', [\App\Http\Controllers\UatController::class, 'destroySection'])->name('uat.sections.destroy');
+
+    Route::post('uat/{cycle}/cases/reorder', [\App\Http\Controllers\UatController::class, 'reorderCases'])->name('uat.cases.reorder');
+    Route::post('uat/{cycle}/cases', [\App\Http\Controllers\UatController::class, 'storeCase'])->name('uat.cases.store');
+    Route::get('uat/{cycle}/cases/{case}', [\App\Http\Controllers\UatController::class, 'caseDetail'])->name('uat.cases.show');
+    Route::put('uat/{cycle}/cases/{case}', [\App\Http\Controllers\UatController::class, 'updateCase'])->name('uat.cases.update');
+    Route::delete('uat/{cycle}/cases/{case}', [\App\Http\Controllers\UatController::class, 'destroyCase'])->name('uat.cases.destroy');
+
+    Route::post('uat/{cycle}/participants', [\App\Http\Controllers\UatController::class, 'storeParticipant'])->name('uat.participants.store');
+    Route::put('uat/{cycle}/participants/{participant}', [\App\Http\Controllers\UatController::class, 'updateParticipant'])->name('uat.participants.update');
+    Route::delete('uat/{cycle}/participants/{participant}', [\App\Http\Controllers\UatController::class, 'destroyParticipant'])->name('uat.participants.destroy');
+    Route::post('uat/{cycle}/participants/{participant}/token', [\App\Http\Controllers\UatController::class, 'issueToken'])->name('uat.participants.token');
+    Route::delete('uat/{cycle}/participants/{participant}/token', [\App\Http\Controllers\UatController::class, 'revokeToken'])->name('uat.participants.token.revoke');
+
+    Route::post('uat/{cycle}/results', [\App\Http\Controllers\UatController::class, 'storeResult'])->name('uat.results.store');
+    Route::post('uat/{cycle}/results/bulk', [\App\Http\Controllers\UatController::class, 'bulkResults'])->name('uat.results.bulk');
+    Route::post('uat/{cycle}/evidence', [\App\Http\Controllers\UatController::class, 'storeEvidence'])->name('uat.evidence.store');
+    Route::delete('uat/{cycle}/evidence/{evidence}', [\App\Http\Controllers\UatController::class, 'destroyEvidence'])->name('uat.evidence.destroy');
+
+    Route::post('uat/{cycle}/signoff', [\App\Http\Controllers\UatController::class, 'storeSignoff'])->name('uat.signoff.store');
+    Route::post('uat/{cycle}/final-signoff', [\App\Http\Controllers\UatController::class, 'finalSignoff'])->name('uat.signoff.final');
+
+    Route::post('uat/{cycle}/findings', [\App\Http\Controllers\UatFindingController::class, 'store'])->name('uat.findings.store');
+    Route::put('uat/{cycle}/findings/{finding}', [\App\Http\Controllers\UatFindingController::class, 'update'])->name('uat.findings.update');
+    Route::delete('uat/{cycle}/findings/{finding}', [\App\Http\Controllers\UatFindingController::class, 'destroy'])->name('uat.findings.destroy');
+    Route::post('uat/{cycle}/findings/{finding}/ticket', [\App\Http\Controllers\UatFindingController::class, 'convertToTicket'])->name('uat.findings.ticket');
     Route::get('activity-templates/template', [\App\Http\Controllers\ActivityTemplateController::class, 'template'])->name('activity-templates.template');
     Route::post('activity-templates/import', [\App\Http\Controllers\ActivityTemplateController::class, 'import'])->name('activity-templates.import');
     Route::get('activity-templates/{activity_template}/export', [\App\Http\Controllers\ActivityTemplateController::class, 'export'])->name('activity-templates.export');
@@ -556,6 +598,14 @@ Route::get('/public/queue/track/{token}', [App\Http\Controllers\PublicQueueContr
 Route::get('/public/queue/track/{token}/data', [App\Http\Controllers\PublicQueueController::class, 'trackData'])->name('public.queue.track.data');
 Route::get('/public/queue/kiosk/{token}', [App\Http\Controllers\PublicQueueController::class, 'kiosk'])->name('public.queue.kiosk');
 Route::post('/public/queue/kiosk/{token}', [App\Http\Controllers\PublicQueueController::class, 'kioskStore'])->middleware('throttle:10,1')->name('public.queue.kiosk.store');
+// UAT Tracker — no-login stakeholder portal. The token in the URL is the whole
+// credential, so every write is throttled and scoped to its own participant.
+Route::get('/public/uat/{token}', [App\Http\Controllers\PublicUatController::class, 'portal'])->name('public.uat.portal');
+Route::get('/public/uat/{token}/cases/{case}', [App\Http\Controllers\PublicUatController::class, 'caseDetail'])->name('public.uat.case');
+Route::post('/public/uat/{token}/verdict', [App\Http\Controllers\PublicUatController::class, 'storeVerdict'])->middleware('throttle:60,1')->name('public.uat.verdict');
+Route::post('/public/uat/{token}/finding', [App\Http\Controllers\PublicUatController::class, 'storeFinding'])->middleware('throttle:20,1')->name('public.uat.finding');
+Route::post('/public/uat/{token}/signoff', [App\Http\Controllers\PublicUatController::class, 'storeSignoff'])->middleware('throttle:10,1')->name('public.uat.signoff');
+
 Route::get('/public/survey-thank-you', function () {
     return Inertia::render('Public/SurveyThankYou');
 })->name('public.survey.thankyou');

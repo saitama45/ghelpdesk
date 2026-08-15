@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Cache;
 
 class RoleService
 {
-    protected const ACTION_ORDER = ['view', 'operate', 'show', 'create', 'edit', 'assign', 'resolve', 'close', 'post', 'delete', 'archive', 'restore', 'approve', 'export', 'import', 'canned_messages', 'internal_notes'];
+    protected const ACTION_ORDER = ['view', 'operate', 'show', 'create', 'edit', 'execute', 'assign', 'resolve', 'close', 'post', 'delete', 'archive', 'restore', 'signoff', 'approve', 'export', 'import', 'canned_messages', 'internal_notes'];
 
     /**
      * Get all roles with their permissions
@@ -82,6 +82,7 @@ class RoleService
             'presence',
             'kb articles',
             'holidays',
+            'uat tracker',
             'users',
             'roles',
             'companies',
@@ -146,6 +147,8 @@ class RoleService
                 $categoryDisplay = 'Project Type & Store Class';
             } elseif ($category === 'queue') {
                 $categoryDisplay = 'Queue Monitor';
+            } elseif ($category === 'uat') {
+                $categoryDisplay = 'UAT Tracker';
             } else {
                 $categoryDisplay = $form ? $form->name : (
                     in_array(strtolower($category), ['pos_requests', 'sap_requests', 'request_types', 'activity_templates', 'canned_messages', 'form_builder']) 

@@ -373,6 +373,15 @@ export const MODULE_REGISTRY = [
                 activeMatch: ['holidays.*'],
                 permission: 'holidays.view',
             },
+            {
+                id: 'uat',
+                label: 'UAT Tracker',
+                description: 'Acceptance test cycles, verdict matrix, findings and sign-off',
+                icon: ClipboardDocumentCheckIcon,
+                routeName: 'uat.index',
+                activeMatch: ['uat.*'],
+                permission: 'uat.view',
+            },
         ],
     },
     {

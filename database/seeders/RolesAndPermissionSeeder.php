@@ -232,6 +232,17 @@ class RolesAndPermissionSeeder extends Seeder
             'holidays.edit' => 'Edit holidays',
             'holidays.delete' => 'Delete holidays',
 
+            // UAT Tracker
+            'uat.view' => 'View UAT cycles',
+            'uat.create' => 'Create UAT cycles',
+            'uat.edit' => 'Edit UAT cycles, test cases and participants',
+            'uat.execute' => 'Record test verdicts and log findings',
+            'uat.signoff' => 'Record department/stakeholder acceptance',
+            'uat.approve' => 'Give the final UAT sign-off',
+            'uat.import' => 'Import UAT workbooks',
+            'uat.export' => 'Export UAT workbooks',
+            'uat.delete' => 'Delete UAT cycles and test cases',
+
             // Activity Templates
             'activity_templates.view' => 'View activity templates',
             'activity_templates.create' => 'Create activity templates',
@@ -375,6 +386,11 @@ class RolesAndPermissionSeeder extends Seeder
             'alaga.view',
             'alaga.create',
             'alaga.edit',
+            // Tech Support runs the tests and logs what breaks; owning the cycle
+            // and signing it off stay with the project/QA lead.
+            'uat.view',
+            'uat.execute',
+            'uat.export',
         ]);
         
         $user->givePermissionTo([
