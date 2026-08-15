@@ -326,6 +326,7 @@ const submitAcceptance = () => {
         remarks: acceptForm.remarks || null,
     }, {
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => { acceptModal.open = false },
         onError: (e) => { acceptModal.error = e.remarks || e.result || 'Could not record that.' },
         onFinish: () => { acceptModal.saving = false },
@@ -338,6 +339,7 @@ const submitFinal = () => {
 
     router.post(`/uat/${props.cycle.id}/final-signoff`, { ...finalForm }, {
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => { finalModal.open = false },
         onError: (e) => { finalModal.error = e.result || e.remarks || 'Could not record the sign-off.' },
         onFinish: () => { finalModal.saving = false },

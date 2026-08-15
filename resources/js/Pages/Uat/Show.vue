@@ -191,7 +191,7 @@
 </template>
 
 <script setup>
-import { ref, computed, provide } from 'vue'
+import { ref, computed, watch, onMounted, provide } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import Modal from '@/Components/Modal.vue'
@@ -225,7 +225,38 @@ const route = window.route
 const { hasPermission } = usePermission()
 const can = (permission) => hasPermission(permission)
 
-const activeTab = ref('overview')
+const TAB_IDS = ['overview', 'matrix', 'execute', 'findings', 'signoff', 'setup']
+
+/**
+ * The active tab lives in the URL, not in component state.
+ *
+ * Inertia tears the page component down on any non-GET visit (preserveState
+ * defaults to false), so a plain ref reset to the first tab every time a record
+ * was saved. Keeping it in the query string survives that, survives a refresh,
+ * and makes a tab linkable. `redirect()->back()` returns to the referring URL,
+ * so the parameter comes back with it.
+ */
+const tabFromUrl = () => {
+    const requested = new URLSearchParams(window.location.search).get('tab')
+    return TAB_IDS.includes(requested) ? requested : 'overview'
+}
+
+const activeTab = ref(tabFromUrl())
+
+// replaceState rather than an Inertia visit: switching tabs is a client-side
+// concern and must not cost a server round trip.
+watch(activeTab, (tab) => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', tab)
+    window.history.replaceState(window.history.state, '', url.toString())
+})
+
+// A remount (save, back/forward) re-reads the URL.
+onMounted(() => {
+    const fromUrl = tabFromUrl()
+    if (fromUrl !== activeTab.value) activeTab.value = fromUrl
+})
+
 const editModal = ref(false)
 const importModal = ref(false)
 const importing = ref(false)
@@ -325,6 +356,7 @@ const submitImport = () => {
     router.post(`/uat/${props.cycle.id}/import`, { file }, {
         forceFormData: true,
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => { importModal.value = false },
         onError: (errors) => { importError.value = errors.file || 'Import failed.' },
         onFinish: () => { importing.value = false },

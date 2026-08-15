@@ -76,7 +76,9 @@
             <div v-if="resultId" class="mt-4">
                 <div class="mb-1 flex items-center justify-between">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-200">Evidence</label>
-                    <span class="text-xs text-gray-400">Screenshots replace the workbook's SS1…SSn sheet</span>
+                    <span class="text-xs text-gray-400">
+                        {{ uploading ? 'Resizing and uploading…' : `Over ${MAX_UPLOAD_MB} MB is resized automatically` }}
+                    </span>
                 </div>
 
                 <div v-if="evidence.length" class="mb-2 flex flex-wrap gap-2">
@@ -137,6 +139,7 @@ import { router } from '@inertiajs/vue3'
 import Modal from '@/Components/Modal.vue'
 import InputError from '@/Components/InputError.vue'
 import { verdict, VERDICT_ORDER, asLines } from '../uatVerdict.js'
+import { compressImages, MAX_UPLOAD_MB } from '@/Composables/useImageCompressor.js'
 
 const props = defineProps({
     show: Boolean,
@@ -151,6 +154,7 @@ const emit = defineEmits(['close', 'log-finding'])
 const can = inject('uatCan', () => false)
 
 const saving = ref(false)
+const uploading = ref(false)
 const loadingDetail = ref(false)
 const detail = ref(null)
 const evidence = ref([])
@@ -214,15 +218,19 @@ const save = () => {
         remarks: form.remarks || null,
     }, {
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => emit('close'),
         onError: (e) => { errors.remarks = e.remarks || '' },
         onFinish: () => { saving.value = false },
     })
 }
 
-const uploadEvidence = (event) => {
-    const files = Array.from(event.target.files || [])
-    if (!files.length || !resultId.value) return
+const uploadEvidence = async (event) => {
+    if (!event.target.files?.length || !resultId.value) return
+
+    // Oversized screenshots are resized to fit rather than refused.
+    uploading.value = true
+    const { files } = await compressImages(event.target.files)
 
     router.post(`/uat/${props.cycle.id}/evidence`, {
         uat_case_result_id: resultId.value,
@@ -230,13 +238,18 @@ const uploadEvidence = (event) => {
     }, {
         forceFormData: true,
         preserveScroll: true,
-        onFinish: () => { if (evidenceInput.value) evidenceInput.value.value = '' },
+        preserveState: true,
+        onFinish: () => {
+            uploading.value = false
+            if (evidenceInput.value) evidenceInput.value.value = ''
+        },
     })
 }
 
 const removeEvidence = (file) => {
     router.delete(`/uat/${props.cycle.id}/evidence/${file.id}`, {
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => { evidence.value = evidence.value.filter(e => e.id !== file.id) },
     })
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\UatCase;
 use App\Models\UatCaseResult;
 use App\Models\UatCycle;
+use App\Models\UatEvidence;
 use App\Models\UatFinding;
 use App\Models\UatParticipant;
 use App\Models\UatSignoff;
@@ -132,17 +133,28 @@ class PublicUatController extends Controller
             'uat_case_id' => ['required', Rule::exists('uat_cases', 'id')->where('uat_cycle_id', $cycle->id)],
             'result' => ['required', Rule::in(array_keys(UatCaseResult::results()))],
             'remarks' => 'nullable|string|max:8000',
+            'screenshots' => 'nullable|array|max:10',
+            'screenshots.*' => 'file|image|mimes:png,jpg,jpeg,gif,webp|max:10240',
         ]);
 
+        $isProblem = in_array($validated['result'], [UatCaseResult::FAILED, UatCaseResult::BLOCKED], true);
+
         // Reporting a problem without describing it wastes everyone's next hour.
-        if (in_array($validated['result'], [UatCaseResult::FAILED, UatCaseResult::BLOCKED], true)
-            && blank($validated['remarks'] ?? null)) {
+        if ($isProblem && blank($validated['remarks'] ?? null)) {
             throw ValidationException::withMessages([
                 'remarks' => 'Please describe what went wrong so the team can act on it.',
             ]);
         }
 
-        UatCaseResult::updateOrCreate(
+        // "Has a problem" must come with a picture of the problem. "Couldn't
+        // test it" often has nothing to capture, so evidence stays optional there.
+        if ($validated['result'] === UatCaseResult::FAILED && !$request->hasFile('screenshots')) {
+            throw ValidationException::withMessages([
+                'screenshots' => 'Please attach a screenshot showing the problem.',
+            ]);
+        }
+
+        $result = UatCaseResult::updateOrCreate(
             [
                 'uat_case_id' => $validated['uat_case_id'],
                 'uat_participant_id' => $participant->id,
@@ -157,7 +169,46 @@ class PublicUatController extends Controller
             ]
         );
 
+        $this->storeScreenshots($request, $cycle, $participant, $result);
+
         return redirect()->back()->with('success', 'Saved. Thank you.');
+    }
+
+    /**
+     * Saves screenshots from the portal against a verdict or a finding.
+     *
+     * Uploads arrive from an unauthenticated visitor, so they are constrained to
+     * images by validation and recorded under the participant's name rather than
+     * a user id.
+     */
+    private function storeScreenshots(
+        Request $request,
+        UatCycle $cycle,
+        UatParticipant $participant,
+        ?UatCaseResult $result = null,
+        ?UatFinding $finding = null
+    ): int {
+        if (!$request->hasFile('screenshots')) {
+            return 0;
+        }
+
+        $stored = 0;
+
+        foreach ($request->file('screenshots') as $file) {
+            UatEvidence::create([
+                'uat_cycle_id' => $cycle->id,
+                'uat_case_result_id' => $result?->id,
+                'uat_finding_id' => $finding?->id,
+                'file_name' => $file->getClientOriginalName(),
+                'file_path' => $file->store("uat/{$cycle->id}", 'public'),
+                'mime_type' => $file->getClientMimeType(),
+                'file_size' => $file->getSize(),
+                'uploaded_by_name' => $participant->display_name,
+            ]);
+            $stored++;
+        }
+
+        return $stored;
     }
 
     /** Stakeholders can raise a finding directly rather than burying it in remarks. */
@@ -174,15 +225,23 @@ class PublicUatController extends Controller
             'title' => 'required|string|max:255',
             'details' => 'nullable|string|max:8000',
             'severity' => ['required', Rule::in(array_keys(UatFinding::severities()))],
+            // Same standard as an internally-logged finding.
+            'screenshots' => 'required|array|min:1|max:10',
+            'screenshots.*' => 'file|image|mimes:png,jpg,jpeg,gif,webp|max:10240',
         ]);
 
-        $finding = UatFinding::create(array_merge($validated, [
-            'uat_cycle_id' => $cycle->id,
-            'uat_participant_id' => $participant->id,
-            'reference' => UatFinding::nextReference($cycle->id),
-            'status' => UatFinding::STATUS_OPEN,
-            'reported_by_name' => $participant->display_name,
-        ]));
+        $finding = UatFinding::create(array_merge(
+            collect($validated)->except('screenshots')->all(),
+            [
+                'uat_cycle_id' => $cycle->id,
+                'uat_participant_id' => $participant->id,
+                'reference' => UatFinding::nextReference($cycle->id),
+                'status' => UatFinding::STATUS_OPEN,
+                'reported_by_name' => $participant->display_name,
+            ]
+        ));
+
+        $this->storeScreenshots($request, $cycle, $participant, null, $finding);
 
         return redirect()->back()->with('success', "Reported as {$finding->reference}. The team has been notified.");
     }

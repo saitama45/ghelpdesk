@@ -121,6 +121,33 @@
                 </p>
 
                 <form @submit.prevent="submitConvert" class="mt-5 space-y-4">
+                    <!-- Every ticket leaves with a screenshot. Findings logged
+                         before that rule, or raised from the client portal, get
+                         one attached here. -->
+                    <div v-if="convertNeedsScreenshot" class="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+                        <label class="mb-1 block text-sm font-medium text-amber-900 dark:text-amber-100">
+                            Screenshot required <span class="text-rose-600">*</span>
+                        </label>
+                        <p class="mb-2 text-xs text-amber-800 dark:text-amber-200">
+                            This finding has no evidence attached. Add at least one screenshot so whoever picks up the ticket can see the defect.
+                        </p>
+                        <input ref="convertFileInput" type="file" multiple accept="image/png,image/jpeg,image/gif,image/webp"
+                               @change="onConvertFilesPicked"
+                               class="block w-full text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-amber-700 dark:text-gray-200">
+                        <p v-if="convertCompressing" class="mt-1 text-xs font-medium text-blue-700 dark:text-blue-300">Resizing image(s)…</p>
+                        <p v-for="(note, i) in convertNotes" :key="i" class="mt-0.5 text-xs text-amber-800 dark:text-amber-200">
+                            Resized — {{ note }}
+                        </p>
+                        <p class="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                            Anything over {{ MAX_UPLOAD_MB }}&nbsp;MB is resized automatically.
+                        </p>
+                        <InputError :message="convert.error" class="mt-1" />
+                    </div>
+
+                    <p v-else class="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200">
+                        {{ (convert.finding?.evidence || []).length }} screenshot(s) will be copied onto the ticket.
+                    </p>
+
                     <div>
                         <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Assign the ticket to</label>
                         <Autocomplete v-model="convertForm.assignee_id" :options="userOptions" placeholder="Search user..." />
@@ -135,9 +162,9 @@
                                 class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
                             Cancel
                         </button>
-                        <button type="submit" :disabled="convert.saving"
+                        <button type="submit" :disabled="convert.saving || convertCompressing"
                                 class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:opacity-50">
-                            {{ convert.saving ? 'Raising...' : 'Raise Ticket' }}
+                            {{ convertCompressing ? 'Resizing...' : (convert.saving ? 'Raising...' : 'Raise Ticket') }}
                         </button>
                     </div>
                 </form>
@@ -151,9 +178,11 @@ import { ref, reactive, computed, inject } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import Modal from '@/Components/Modal.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
+import InputError from '@/Components/InputError.vue'
 import UatIconBtn from './UatIconBtn.vue'
 import FindingModal from './FindingModal.vue'
 import { useConfirm } from '@/Composables/useConfirm'
+import { compressImages, MAX_UPLOAD_MB } from '@/Composables/useImageCompressor.js'
 import { SEVERITY_CHIPS, FINDING_STATUS_CHIPS } from '../uatVerdict.js'
 
 const props = defineProps({
@@ -182,8 +211,27 @@ const statusFilter = ref(null)
 const severityFilter = ref(null)
 
 const modal = reactive({ open: false, finding: null })
-const convert = reactive({ open: false, finding: null, saving: false })
+const convert = reactive({ open: false, finding: null, saving: false, error: '' })
 const convertForm = reactive({ assignee_id: null, serving_department_id: null })
+const convertFiles = ref([])
+const convertFileInput = ref(null)
+const convertCompressing = ref(false)
+const convertNotes = ref([])
+
+const onConvertFilesPicked = async (event) => {
+    convertCompressing.value = true
+    convertNotes.value = []
+
+    try {
+        const { files, notes } = await compressImages(event.target.files)
+        convertFiles.value = files
+        convertNotes.value = notes
+    } finally {
+        convertCompressing.value = false
+    }
+}
+
+const convertNeedsScreenshot = computed(() => (convert.finding?.evidence || []).length === 0)
 
 const statusFilterOptions = computed(() => [
     { label: 'All statuses', value: null },
@@ -240,16 +288,32 @@ const openEdit = (finding) => { modal.finding = finding; modal.open = true }
 
 const openConvert = (finding) => {
     convert.finding = finding
+    convert.error = ''
+    convertFiles.value = []
+    if (convertFileInput.value) convertFileInput.value.value = ''
     convertForm.assignee_id = finding.assigned_to_user_id ?? null
     convertForm.serving_department_id = finding.department_id ?? null
     convert.open = true
 }
 
 const submitConvert = () => {
+    convert.error = ''
+
+    if (convertNeedsScreenshot.value && convertFiles.value.length === 0) {
+        convert.error = 'Attach at least one screenshot before raising the ticket.'
+        return
+    }
+
     convert.saving = true
-    router.post(`/uat/${props.cycle.id}/findings/${convert.finding.id}/ticket`, { ...convertForm }, {
+    router.post(`/uat/${props.cycle.id}/findings/${convert.finding.id}/ticket`, {
+        ...convertForm,
+        screenshots: convertFiles.value,
+    }, {
+        forceFormData: true,
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => { convert.open = false },
+        onError: (e) => { convert.error = e.screenshots || 'Could not raise the ticket.' },
         onFinish: () => { convert.saving = false },
     })
 }
@@ -264,6 +328,6 @@ const remove = async (finding) => {
 
     if (!ok) return
 
-    router.delete(`/uat/${props.cycle.id}/findings/${finding.id}`, { preserveScroll: true })
+    router.delete(`/uat/${props.cycle.id}/findings/${finding.id}`, { preserveScroll: true, preserveState: true })
 }
 </script>

@@ -261,7 +261,12 @@ class UatController extends Controller implements HasMiddleware
             'executed_at', 'executed_by_user_id', 'executed_by_name',
         ]);
         $findings = $cycle->findings()
-            ->with(['assignee:id,name', 'testCase:id,case_key,title', 'ticket:id,ticket_key,status', 'participant:id,label'])
+            ->with([
+                'assignee:id,name', 'testCase:id,case_key,title',
+                'ticket:id,ticket_key,status', 'participant:id,label',
+                // Screenshots are mandatory on a finding, so the register shows them.
+                'evidence',
+            ])
             ->orderByRaw("CASE severity WHEN 'blocker' THEN 1 WHEN 'major' THEN 2 WHEN 'minor' THEN 3 ELSE 4 END")
             ->orderByDesc('id')
             ->get();

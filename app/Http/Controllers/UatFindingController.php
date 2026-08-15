@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Ticket;
+use App\Models\TicketAttachment;
 use App\Models\UatCycle;
 use App\Models\UatEvidence;
 use App\Models\UatFinding;
@@ -33,30 +34,56 @@ class UatFindingController extends Controller implements HasMiddleware
 
     public function store(Request $request, UatCycle $cycle)
     {
-        $validated = $request->validate($this->rules($cycle));
+        $validated = $request->validate(
+            array_merge(
+                $this->rules($cycle),
+                // A defect report with no picture of the defect is rarely
+                // actionable, so evidence is mandatory at the point of logging.
+                $this->screenshotRules(required: true)
+            ),
+            [
+                'screenshots.required' => 'Attach at least one screenshot of the defect.',
+                'screenshots.*.image' => 'Evidence must be an image (PNG, JPG, GIF or WEBP).',
+                'screenshots.*.max' => 'Each screenshot must be 10 MB or smaller.',
+            ]
+        );
 
         $finding = DB::transaction(function () use ($request, $cycle, $validated) {
-            return UatFinding::create(array_merge($validated, [
-                'uat_cycle_id' => $cycle->id,
-                'reference' => UatFinding::nextReference($cycle->id),
-                'status' => $validated['status'] ?? UatFinding::STATUS_OPEN,
-                'reported_by_user_id' => $request->user()->id,
-                'reported_by_name' => $request->user()->name,
-                'created_by' => $request->user()->id,
-                'updated_by' => $request->user()->id,
-            ]));
+            $finding = UatFinding::create(array_merge(
+                collect($validated)->except('screenshots')->all(),
+                [
+                    'uat_cycle_id' => $cycle->id,
+                    'reference' => UatFinding::nextReference($cycle->id),
+                    'status' => $validated['status'] ?? UatFinding::STATUS_OPEN,
+                    'reported_by_user_id' => $request->user()->id,
+                    'reported_by_name' => $request->user()->name,
+                    'created_by' => $request->user()->id,
+                    'updated_by' => $request->user()->id,
+                ]
+            ));
+
+            $this->storeScreenshots($request, $cycle, $finding);
+
+            return $finding;
         });
 
-        return redirect()->back()->with('success', "Finding {$finding->reference} logged.");
+        return redirect()->back()->with('success', "Finding {$finding->reference} logged with evidence.");
     }
 
     public function update(Request $request, UatCycle $cycle, UatFinding $finding)
     {
         abort_unless($finding->uat_cycle_id === $cycle->id, 404);
 
-        $validated = $request->validate(array_merge($this->rules($cycle), [
-            'resolution_notes' => 'nullable|string|max:4000',
-        ]));
+        $validated = $request->validate(array_merge(
+            $this->rules($cycle),
+            ['resolution_notes' => 'nullable|string|max:4000'],
+            // Editing can add more screenshots; it never demands them, since the
+            // finding already had to carry one to exist.
+            $this->screenshotRules(required: false)
+        ));
+
+        $this->storeScreenshots($request, $cycle, $finding);
+        $validated = collect($validated)->except('screenshots')->all();
 
         $status = $validated['status'] ?? $finding->status;
 
@@ -110,14 +137,25 @@ class UatFindingController extends Controller implements HasMiddleware
             return redirect()->back()->with('info', "Finding {$finding->reference} is already linked to a ticket.");
         }
 
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'assignee_id' => 'nullable|exists:users,id',
             'serving_department_id' => 'nullable|exists:departments,id',
             'store_id' => 'nullable|exists:stores,id',
-        ]);
+        ], $this->screenshotRules(required: false)));
+
+        // Findings logged before evidence was mandatory — and anything raised
+        // from the client portal, which has no uploader — can still be attached
+        // to here, but a ticket never leaves without a screenshot.
+        $this->storeScreenshots($request, $cycle, $finding);
+
+        if (!$finding->evidence()->exists()) {
+            throw ValidationException::withMessages([
+                'screenshots' => 'Attach at least one screenshot before raising a ticket — the fixer needs to see the defect.',
+            ]);
+        }
 
         $ticket = DB::transaction(function () use ($request, $cycle, $finding, $validated) {
-            $finding->loadMissing('testCase:id,case_key,title');
+            $finding->loadMissing(['testCase:id,case_key,title', 'evidence']);
 
             $context = array_filter([
                 'UAT cycle' => "{$cycle->code} — {$cycle->title}",
@@ -151,6 +189,8 @@ class UatFindingController extends Controller implements HasMiddleware
                 'department_id' => $cycle->department_id,
             ]);
 
+            $this->copyEvidenceToTicket($finding, $ticket);
+
             $finding->update([
                 'ticket_id' => $ticket->id,
                 'status' => $finding->status === UatFinding::STATUS_OPEN
@@ -163,10 +203,77 @@ class UatFindingController extends Controller implements HasMiddleware
             return $ticket;
         });
 
+        $shots = $finding->evidence()->count();
+
         return redirect()->back()->with(
             'success',
-            "Ticket {$ticket->ticket_key} raised for finding {$finding->reference}."
+            "Ticket {$ticket->ticket_key} raised for finding {$finding->reference} with {$shots} screenshot(s) attached."
         );
+    }
+
+    /**
+     * Screenshot evidence. Multiple files are allowed — one picture rarely tells
+     * the whole story of a defect.
+     */
+    private function screenshotRules(bool $required): array
+    {
+        return [
+            'screenshots' => ($required ? 'required' : 'nullable').'|array|max:10',
+            'screenshots.*' => 'file|image|mimes:png,jpg,jpeg,gif,webp|max:10240',
+        ];
+    }
+
+    /** Persists uploaded screenshots as evidence against the finding. */
+    private function storeScreenshots(Request $request, UatCycle $cycle, UatFinding $finding): int
+    {
+        if (!$request->hasFile('screenshots')) {
+            return 0;
+        }
+
+        $stored = 0;
+
+        foreach ($request->file('screenshots') as $file) {
+            UatEvidence::create([
+                'uat_cycle_id' => $cycle->id,
+                'uat_finding_id' => $finding->id,
+                'file_name' => $file->getClientOriginalName(),
+                'file_path' => $file->store("uat/{$cycle->id}", 'public'),
+                'mime_type' => $file->getClientMimeType(),
+                'file_size' => $file->getSize(),
+                'uploaded_by_user_id' => $request->user()?->id,
+                'uploaded_by_name' => $request->user()?->name,
+            ]);
+            $stored++;
+        }
+
+        return $stored;
+    }
+
+    /**
+     * Copies the finding's evidence onto the ticket so whoever picks the ticket
+     * up sees the screenshot without having to open the UAT module. Copied, not
+     * moved — the evidence stays attached to the finding as the audit record.
+     */
+    private function copyEvidenceToTicket(UatFinding $finding, Ticket $ticket): void
+    {
+        foreach ($finding->evidence as $evidence) {
+            if (!Storage::disk('public')->exists($evidence->file_path)) {
+                continue;
+            }
+
+            $target = 'ticket-attachments/'.time().'_'.basename($evidence->file_path);
+
+            if (!Storage::disk('public')->copy($evidence->file_path, $target)) {
+                continue;
+            }
+
+            TicketAttachment::create([
+                'ticket_id' => $ticket->id,
+                'file_name' => $evidence->file_name,
+                'file_storage_path' => str_replace('\\', '/', $target),
+                'file_size_bytes' => $evidence->file_size,
+            ]);
+        }
     }
 
     private function rules(UatCycle $cycle): array

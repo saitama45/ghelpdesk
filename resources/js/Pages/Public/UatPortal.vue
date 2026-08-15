@@ -155,15 +155,42 @@
                                 <textarea v-model="drafts[item.id]" rows="3"
                                           placeholder="Describe what you saw and what you expected instead."
                                           class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
-                                <p v-if="errors[item.id]" class="mt-1 text-xs font-medium text-rose-600">{{ errors[item.id] }}</p>
+
+                                <!-- A picture of the problem. Required when something
+                                     is broken; optional when it could not be tested. -->
+                                <div class="mt-3">
+                                    <label class="mb-1 block text-sm font-medium text-gray-700">
+                                        Screenshot
+                                        <span v-if="pendingVerdict[item.id] === 'failed'" class="text-rose-600">*</span>
+                                        <span v-else class="text-xs font-normal text-gray-400">(optional)</span>
+                                    </label>
+                                    <input type="file" multiple accept="image/png,image/jpeg,image/gif,image/webp"
+                                           @change="onShotsPicked(item, $event)"
+                                           class="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-blue-700">
+                                    <p v-if="compressing === item.id" class="mt-1 text-xs font-medium text-blue-600">
+                                        Resizing your image…
+                                    </p>
+                                    <p v-else-if="(shots[item.id] || []).length" class="mt-1 text-xs text-emerald-600">
+                                        {{ shots[item.id].length }} file(s) ready
+                                    </p>
+                                    <p v-for="(note, i) in (shotNotes[item.id] || [])" :key="i" class="mt-0.5 text-xs text-gray-500">
+                                        Resized for upload — {{ note }}
+                                    </p>
+                                    <p class="mt-1 text-xs text-gray-400">
+                                        A screenshot is by far the fastest way for the team to understand the problem.
+                                        Large images are resized automatically — you don't need to shrink them yourself.
+                                    </p>
+                                </div>
+
+                                <p v-if="errors[item.id]" class="mt-2 text-xs font-medium text-rose-600">{{ errors[item.id] }}</p>
                                 <div class="mt-2 flex justify-end gap-2">
                                     <button @click="cancelRemark(item)"
                                             class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50">
                                         Cancel
                                     </button>
-                                    <button @click="submitVerdict(item)" :disabled="saving === item.id"
+                                    <button @click="submitVerdict(item)" :disabled="saving === item.id || compressing === item.id"
                                             class="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50">
-                                        {{ saving === item.id ? 'Saving...' : 'Submit' }}
+                                        {{ compressing === item.id ? 'Resizing...' : (saving === item.id ? 'Saving...' : 'Submit') }}
                                     </button>
                                 </div>
                             </div>
@@ -257,6 +284,7 @@
 import { ref, reactive, computed } from 'vue'
 import { Head, router, usePage } from '@inertiajs/vue3'
 import { verdict, SIGNOFF_CHIPS, formatDateTime } from '../Uat/uatVerdict.js'
+import { compressImages } from '@/Composables/useImageCompressor.js'
 
 const props = defineProps({
     token: String,
@@ -282,6 +310,27 @@ const saving = ref(null)
 const drafts = reactive({})
 const errors = reactive({})
 const pendingVerdict = reactive({})
+const shots = reactive({})
+const shotNotes = reactive({})
+const compressing = ref(null)
+
+/**
+ * Clients photograph or screenshot on whatever device they have, and those files
+ * are routinely far over the limit. Shrink them here rather than making a
+ * non-technical stakeholder work out how to resize an image.
+ */
+const onShotsPicked = async (item, event) => {
+    compressing.value = item.id
+    shotNotes[item.id] = []
+
+    try {
+        const { files, notes } = await compressImages(event.target.files)
+        shots[item.id] = files
+        shotNotes[item.id] = notes
+    } finally {
+        compressing.value = null
+    }
+}
 
 const signoffForm = reactive({
     result: props.signoff?.result || 'passed',
@@ -401,15 +450,25 @@ const setVerdict = (item, key) => {
 
 const submitVerdict = (item) => {
     const key = pendingVerdict[item.id]
+
     if (!(drafts[item.id] || '').trim()) {
         errors[item.id] = 'Please describe the problem so the team can act on it.'
         return
     }
+
+    // Mirrors the server rule, so the client is told before the upload round trip.
+    if (key === 'failed' && (shots[item.id] || []).length === 0) {
+        errors[item.id] = 'Please attach a screenshot showing the problem.'
+        return
+    }
+
     post(item, key, drafts[item.id])
 }
 
 const cancelRemark = (item) => {
     delete pendingVerdict[item.id]
+    delete shots[item.id]
+    delete shotNotes[item.id]
     errors[item.id] = ''
 }
 
@@ -420,10 +479,17 @@ const post = (item, result, remarks) => {
         uat_case_id: item.id,
         result,
         remarks,
+        screenshots: shots[item.id] || [],
     }, {
+        forceFormData: true,
         preserveScroll: true,
-        onSuccess: () => { delete pendingVerdict[item.id] },
-        onError: (e) => { errors[item.id] = e.remarks || 'Could not save that.' },
+        preserveState: true,
+        onSuccess: () => {
+            delete pendingVerdict[item.id]
+            delete shots[item.id]
+            delete shotNotes[item.id]
+        },
+        onError: (e) => { errors[item.id] = e.remarks || e.screenshots || 'Could not save that.' },
         onFinish: () => { saving.value = null },
     })
 }
@@ -442,6 +508,7 @@ const submitSignoff = () => {
     signoffSaving.value = true
     router.post(`/public/uat/${props.token}/signoff`, { ...signoffForm }, {
         preserveScroll: true,
+        preserveState: true,
         onError: (e) => { signoffError.value = e.remarks || e.confirmed_name || 'Could not submit that.' },
         onFinish: () => { signoffSaving.value = false },
     })

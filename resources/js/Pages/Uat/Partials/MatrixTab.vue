@@ -414,6 +414,7 @@ const submitBulk = () => {
         only_pending: bulk.only_pending,
     }, {
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => { bulk.open = false },
         onFinish: () => { bulk.saving = false },
     })

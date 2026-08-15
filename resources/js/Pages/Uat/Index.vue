@@ -354,6 +354,7 @@ const submitDuplicate = () => {
     processing.value = true
     post(`/uat/${duplicateModal.cycle.id}/duplicate`, { ...duplicateForm }, {
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => { duplicateModal.open = false },
         onFinish: () => { processing.value = false },
     })
@@ -369,6 +370,6 @@ const deleteCycle = async (cycle) => {
 
     if (!ok) return
 
-    destroy(`/uat/${cycle.id}`, { preserveScroll: true })
+    destroy(`/uat/${cycle.id}`, { preserveScroll: true, preserveState: true })
 }
 </script>

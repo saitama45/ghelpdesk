@@ -267,6 +267,7 @@ const submit = () => {
 
     const done = {
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => emit('close'),
         onError: (e) => { errors.value = e },
         onFinish: () => { processing.value = false },

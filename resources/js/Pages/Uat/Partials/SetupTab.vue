@@ -594,6 +594,7 @@ const submitParticipant = () => {
 
     const done = {
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => { participantModal.open = false },
         onError: (e) => { participantModal.errors = e },
         onFinish: () => { participantModal.saving = false },
@@ -615,11 +616,11 @@ const removeParticipant = async (participant) => {
     })
     if (!ok) return
 
-    router.delete(`/uat/${props.cycle.id}/participants/${participant.id}`, { preserveScroll: true })
+    router.delete(`/uat/${props.cycle.id}/participants/${participant.id}`, { preserveScroll: true, preserveState: true })
 }
 
 const issueToken = (participant) => {
-    router.post(`/uat/${props.cycle.id}/participants/${participant.id}/token`, { valid_days: 60 }, { preserveScroll: true })
+    router.post(`/uat/${props.cycle.id}/participants/${participant.id}/token`, { valid_days: 60 }, { preserveScroll: true, preserveState: true })
 }
 
 const revokeToken = async (participant) => {
@@ -631,7 +632,7 @@ const revokeToken = async (participant) => {
     })
     if (!ok) return
 
-    router.delete(`/uat/${props.cycle.id}/participants/${participant.id}/token`, { preserveScroll: true })
+    router.delete(`/uat/${props.cycle.id}/participants/${participant.id}/token`, { preserveScroll: true, preserveState: true })
 }
 
 const copyLink = async (participant) => {
@@ -662,6 +663,7 @@ const submitSection = () => {
 
     const done = {
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => { sectionModal.open = false },
         onError: (e) => { sectionModal.errors = e },
         onFinish: () => { sectionModal.saving = false },
@@ -683,7 +685,7 @@ const removeSection = async (section) => {
     })
     if (!ok) return
 
-    router.delete(`/uat/${props.cycle.id}/sections/${section.id}`, { preserveScroll: true })
+    router.delete(`/uat/${props.cycle.id}/sections/${section.id}`, { preserveScroll: true, preserveState: true })
 }
 
 // ---- cases ----
@@ -736,6 +738,7 @@ const submitCase = () => {
 
     const done = {
         preserveScroll: true,
+        preserveState: true,
         onSuccess: () => { caseModal.open = false },
         onError: (e) => { caseModal.errors = e },
         onFinish: () => { caseModal.saving = false },
@@ -757,6 +760,6 @@ const removeCase = async (testCase) => {
     })
     if (!ok) return
 
-    router.delete(`/uat/${props.cycle.id}/cases/${testCase.id}`, { preserveScroll: true })
+    router.delete(`/uat/${props.cycle.id}/cases/${testCase.id}`, { preserveScroll: true, preserveState: true })
 }
 </script>
