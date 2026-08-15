@@ -11,8 +11,8 @@
                 <Autocomplete v-model="scopeFilter" :options="scopeOptions" placeholder="All cases" />
             </div>
             <div class="w-52">
-                <label class="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Section</label>
-                <Autocomplete v-model="sectionFilter" :options="sectionOptions" placeholder="All sections" />
+                <label class="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Section/Module</label>
+                <Autocomplete v-model="sectionFilter" :options="sectionOptions" placeholder="All sections/modules" />
             </div>
 
             <div v-if="activeParticipant" class="ml-auto text-right">
@@ -214,6 +214,7 @@ const props = defineProps({
     sections: Array,
     cases: Array,
     participants: Array,
+    columns: Array,
     results: Array,
     findings: Array,
     signoffs: Array,
@@ -264,7 +265,7 @@ const scopeOptions = [
 ]
 
 const sectionOptions = computed(() => [
-    { label: 'All sections', value: null },
+    { label: 'All sections/modules', value: null },
     ...(props.sections || []).map(s => ({ label: s.name, value: s.id })),
 ])
 

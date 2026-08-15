@@ -96,9 +96,12 @@
         <div v-if="activePane === 'sections'" class="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-5 py-4 dark:border-gray-700">
                 <div>
-                    <h3 class="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Sections</h3>
-                    <p class="mt-0.5 text-xs text-gray-400">
-                        Functional areas that group the test cases. Non-critical sections are reported but never block go-live.
+                    <h3 class="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Sections/Modules</h3>
+                    <p class="mt-0.5 max-w-2xl text-xs text-gray-400">
+                        The functional areas of the system under test — in practice, its
+                        <span class="font-semibold text-gray-500 dark:text-gray-300">modules</span>
+                        (Billing, Scheduler, Issuances, Inventory…). Test cases are grouped under the module they exercise,
+                        so progress can be read per module. Non-critical modules are still reported but never block go-live.
                     </p>
                 </div>
                 <button @click="openSection()"
@@ -106,11 +109,11 @@
                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
-                    Add Section
+                    Add Section/Module
                 </button>
             </div>
 
-            <p v-if="!sections.length" class="px-5 py-10 text-center text-sm text-gray-400">No sections yet.</p>
+            <p v-if="!sections.length" class="px-5 py-10 text-center text-sm text-gray-400">No sections/modules yet.</p>
 
             <table v-else class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
@@ -129,8 +132,8 @@
                         </td>
                         <td class="whitespace-nowrap px-4 py-3 text-right">
                             <div class="flex justify-end space-x-1">
-                                <UatIconBtn kind="edit" title="Edit section" @click="openSection(section)" />
-                                <UatIconBtn kind="delete" title="Remove section" @click="removeSection(section)" />
+                                <UatIconBtn kind="edit" title="Edit section/module" @click="openSection(section)" />
+                                <UatIconBtn kind="delete" title="Remove section/module" @click="removeSection(section)" />
                             </div>
                         </td>
                     </tr>
@@ -147,8 +150,8 @@
                            class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
                 </div>
                 <div class="w-52">
-                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Section</label>
-                    <Autocomplete v-model="caseSectionFilter" :options="sectionFilterOptions" placeholder="All sections" />
+                    <label class="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Section/Module</label>
+                    <Autocomplete v-model="caseSectionFilter" :options="sectionFilterOptions" placeholder="All sections/modules" />
                 </div>
                 <button @click="openCase()"
                         class="ml-auto inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700">
@@ -169,7 +172,7 @@
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">ID</th>
                             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Test Case</th>
-                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Section</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Section/Module</th>
                             <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Priority</th>
                             <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Actions</th>
                         </tr>
@@ -230,6 +233,12 @@
                             <p class="mt-1 text-xs text-gray-400">
                                 Column heading will be
                                 <span class="font-semibold text-gray-600 dark:text-gray-300">{{ participantForm.label || '—' }}</span>
+                            </p>
+                            <!-- A department's tester and approver are separate
+                                 columns that share a heading; say so up front. -->
+                            <p v-if="labelCollision" class="mt-1 rounded bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+                                {{ labelCollision }} already has a column here. That is fine — a department can have both a
+                                tester and an approver — and the columns are told apart by person and role.
                             </p>
                             <InputError :message="participantModal.errors.label" class="mt-1" />
                         </div>
@@ -300,13 +309,13 @@
         <Modal :show="sectionModal.open" @close="sectionModal.open = false" maxWidth="lg">
             <div class="p-6">
                 <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">
-                    {{ sectionModal.record ? 'Edit Section' : 'Add Section' }}
+                    {{ sectionModal.record ? 'Edit Section/Module' : 'Add Section/Module' }}
                 </h3>
 
                 <form @submit.prevent="submitSection" class="mt-5 space-y-4">
                     <div>
                         <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Name</label>
-                        <input v-model="sectionForm.name" type="text" required placeholder="e.g. Billing, Scheduler, Issuances"
+                        <input v-model="sectionForm.name" type="text" required placeholder="e.g. Billing, Scheduler, Issuances, Inventory"
                                class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
                         <InputError :message="sectionModal.errors.name" class="mt-1" />
                     </div>
@@ -362,8 +371,8 @@
 
                     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                         <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Section</label>
-                            <Autocomplete v-model="caseForm.uat_section_id" :options="sectionSelectOptions" placeholder="Select section..." />
+                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Section/Module</label>
+                            <Autocomplete v-model="caseForm.uat_section_id" :options="sectionSelectOptions" placeholder="Select section/module..." />
                         </div>
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Screen</label>
@@ -435,6 +444,7 @@ const props = defineProps({
     sections: Array,
     cases: Array,
     participants: Array,
+    columns: Array,
     results: Array,
     findings: Array,
     signoffs: Array,
@@ -452,7 +462,7 @@ const { showSuccess, showError } = useToast()
 
 const panes = [
     { id: 'participants', label: 'Participants' },
-    { id: 'sections', label: 'Sections' },
+    { id: 'sections', label: 'Sections/Modules' },
     { id: 'cases', label: 'Test Cases' },
 ]
 const activePane = ref('participants')
@@ -478,6 +488,18 @@ const caseForm = reactive({
 const departmentOptions = computed(() => [{ label: '—', value: null }, ...(props.options?.departments || [])])
 
 const isDepartmentKind = computed(() => participantForm.kind === 'department')
+
+/** The label of an existing participant that this one would duplicate, if any. */
+const labelCollision = computed(() => {
+    const label = (participantForm.label || '').trim().toLowerCase()
+    if (!label) return null
+
+    const clash = (props.participants || []).some(p =>
+        p.id !== participantModal.record?.id && (p.label || '').trim().toLowerCase() === label
+    )
+
+    return clash ? participantForm.label : null
+})
 
 /**
  * Department picker for the participant form. An imported column whose heading
@@ -527,7 +549,7 @@ const sectionSelectOptions = computed(() => [
     ...(props.sections || []).map(s => ({ label: s.name, value: s.id })),
 ])
 const sectionFilterOptions = computed(() => [
-    { label: 'All sections', value: null },
+    { label: 'All sections/modules', value: null },
     ...(props.sections || []).map(s => ({ label: s.name, value: s.id })),
 ])
 
@@ -678,7 +700,7 @@ const submitSection = () => {
 
 const removeSection = async (section) => {
     const ok = await confirm({
-        title: 'Remove Section',
+        title: 'Remove Section/Module',
         message: `Remove "${section.name}"? Its ${caseCountFor(section.id)} test case(s) are kept and become ungrouped.`,
         confirmLabel: 'Remove',
         variant: 'danger',

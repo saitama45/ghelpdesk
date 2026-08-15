@@ -238,6 +238,7 @@ const props = defineProps({
     sections: Array,
     cases: Array,
     participants: Array,
+    columns: Array,
     results: Array,
     findings: Array,
     signoffs: Array,

@@ -307,6 +307,11 @@ Route::middleware('auth')->group(function () {
     Route::get('uat/template', [\App\Http\Controllers\UatController::class, 'template'])->name('uat.template');
     Route::get('uat', [\App\Http\Controllers\UatController::class, 'index'])->name('uat.index');
     Route::post('uat', [\App\Http\Controllers\UatController::class, 'store'])->name('uat.store');
+    // Everything below acts on ONE cycle, so it all sits behind the department
+    // boundary. Hiding rows from the index alone left the URLs reachable — a
+    // listing filter is not an authorisation boundary. Grouping rather than
+    // per-route middleware means a route added here later cannot forget it.
+    Route::middleware(\App\Http\Middleware\EnsureUatCycleInDepartment::class)->group(function () {
     Route::get('uat/{cycle}/edit-data', [\App\Http\Controllers\UatController::class, 'editData'])->name('uat.edit-data');
     Route::get('uat/{cycle}', [\App\Http\Controllers\UatController::class, 'show'])->name('uat.show');
     Route::put('uat/{cycle}', [\App\Http\Controllers\UatController::class, 'update'])->name('uat.update');
@@ -343,6 +348,8 @@ Route::middleware('auth')->group(function () {
     Route::put('uat/{cycle}/findings/{finding}', [\App\Http\Controllers\UatFindingController::class, 'update'])->name('uat.findings.update');
     Route::delete('uat/{cycle}/findings/{finding}', [\App\Http\Controllers\UatFindingController::class, 'destroy'])->name('uat.findings.destroy');
     Route::post('uat/{cycle}/findings/{finding}/ticket', [\App\Http\Controllers\UatFindingController::class, 'convertToTicket'])->name('uat.findings.ticket');
+    });
+
     Route::get('activity-templates/template', [\App\Http\Controllers\ActivityTemplateController::class, 'template'])->name('activity-templates.template');
     Route::post('activity-templates/import', [\App\Http\Controllers\ActivityTemplateController::class, 'import'])->name('activity-templates.import');
     Route::get('activity-templates/{activity_template}/export', [\App\Http\Controllers\ActivityTemplateController::class, 'export'])->name('activity-templates.export');

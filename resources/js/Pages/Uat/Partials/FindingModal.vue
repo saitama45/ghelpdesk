@@ -62,20 +62,24 @@
                 <div>
                     <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">
                         Screenshots
-                        <span v-if="!finding" class="text-rose-600">*</span>
+                        <span v-if="!finding && !inheritedEvidence.length" class="text-rose-600">*</span>
                         <span v-else class="text-xs font-normal text-gray-400">(add more)</span>
                     </label>
 
-                    <div v-if="existingEvidence.length" class="mb-2 flex flex-wrap gap-2">
-                        <a v-for="file in existingEvidence" :key="file.id" :href="file.url" target="_blank" rel="noopener"
-                           :title="file.file_name"
-                           class="block overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-                            <img v-if="file.is_image" :src="file.url" :alt="file.file_name" class="h-20 w-28 object-cover" />
-                            <span v-else class="flex h-20 w-28 items-center justify-center bg-gray-50 px-2 text-center text-[10px] text-gray-500 dark:bg-gray-900 dark:text-gray-300">
-                                {{ file.file_name }}
-                            </span>
-                        </a>
+                    <EvidenceGallery :items="existingEvidence" class="mb-2" />
+
+                    <!-- Screenshots already attached to the case's verdicts are
+                         carried over automatically when the finding is created. -->
+                    <div v-if="!finding && inheritedEvidence.length" class="mb-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                        <p class="mb-2 text-xs font-semibold text-emerald-800 dark:text-emerald-200">
+                            {{ inheritedEvidence.length }} screenshot(s) from this test case will be attached automatically —
+                            you only need to add more if something else is worth showing.
+                        </p>
+                        <EvidenceGallery :items="inheritedEvidence" size="sm" />
                     </div>
+                    <p v-else-if="!finding && loadingInherited" class="mb-2 text-xs text-gray-400">
+                        Checking the test case for existing screenshots…
+                    </p>
 
                     <input ref="fileInput" type="file" multiple accept="image/png,image/jpeg,image/gif,image/webp"
                            @change="onFilesPicked"
@@ -129,6 +133,7 @@ import Modal from '@/Components/Modal.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
 import InputError from '@/Components/InputError.vue'
 import { compressImages, MAX_UPLOAD_MB } from '@/Composables/useImageCompressor.js'
+import EvidenceGallery from './EvidenceGallery.vue'
 
 const props = defineProps({
     show: Boolean,
@@ -150,6 +155,34 @@ const compressionNotes = ref([])
 
 const pickedNames = computed(() => pickedFiles.value.map(f => f.name))
 const existingEvidence = computed(() => props.finding?.evidence || [])
+
+// Evidence already attached to the selected case's verdicts, which the server
+// copies onto the finding on create.
+const inheritedEvidence = ref([])
+const loadingInherited = ref(false)
+
+const loadInheritedEvidence = async (caseId) => {
+    inheritedEvidence.value = []
+    if (!caseId || props.finding) return
+
+    loadingInherited.value = true
+    try {
+        const response = await fetch(`/uat/${props.cycle.id}/cases/${caseId}`, {
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+        })
+        if (!response.ok) return
+
+        const payload = await response.json()
+        // Every participant's evidence for the case — an approver raising a
+        // finding should still inherit the tester's screenshot.
+        inheritedEvidence.value = (payload.results || []).flatMap(r => r.evidence || [])
+    } catch {
+        inheritedEvidence.value = []
+    } finally {
+        loadingInherited.value = false
+    }
+}
 
 // Oversized screenshots are shrunk to fit rather than rejected.
 const onFilesPicked = async (event) => {
@@ -177,6 +210,14 @@ const form = reactive({
     resolution_notes: '',
 })
 
+// Must sit AFTER `form` is declared: watch() evaluates its getter immediately to
+// register dependencies, so referencing `form` above this line throws a temporal
+// dead zone error — which kills Vue's renderer and blanks every tab until a hard
+// reload.
+watch(() => form.uat_case_id, (caseId) => {
+    if (props.show) loadInheritedEvidence(caseId)
+})
+
 const caseOptions = computed(() => [
     { label: '— Not tied to a specific case —', value: null },
     ...(props.cases || []).map(c => ({ label: `${c.case_key} — ${c.title}`, value: c.id })),
@@ -191,6 +232,7 @@ watch(() => props.show, (open) => {
     errors.value = {}
     pickedFiles.value = []
     compressionNotes.value = []
+    inheritedEvidence.value = []
     if (fileInput.value) fileInput.value.value = ''
 
     if (props.finding) {
@@ -219,14 +261,19 @@ watch(() => props.show, (open) => {
         department_id: null,
         resolution_notes: '',
     })
+
+    // Called directly, not left to the uat_case_id watcher: reopening the modal
+    // for the same case leaves that value unchanged, so the watcher never fires.
+    loadInheritedEvidence(form.uat_case_id)
 }, { immediate: true })
 
 const submit = () => {
     errors.value = {}
 
     // Caught here as well as server-side so the user is not made to wait for a
-    // round trip to learn they forgot the screenshot.
-    if (!props.finding && pickedFiles.value.length === 0) {
+    // round trip to learn they forgot the screenshot. Inherited case evidence
+    // satisfies the requirement on its own.
+    if (!props.finding && pickedFiles.value.length === 0 && inheritedEvidence.value.length === 0) {
         errors.value = { screenshots: 'Attach at least one screenshot of the defect.' }
         return
     }

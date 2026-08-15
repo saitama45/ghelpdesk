@@ -55,8 +55,10 @@ class PublicUatController extends Controller
             'id', 'uat_cycle_id', 'uat_section_id', 'case_key', 'screen', 'title', 'is_critical', 'priority', 'order',
         ]);
 
-        // Only this participant's column — never the whole matrix.
+        // Only this participant's column — never the whole matrix. Evidence rides
+        // along so a client can see the screenshots they already sent.
         $results = UatCaseResult::where('uat_participant_id', $participant->id)
+            ->with('evidence')
             ->get(['id', 'uat_case_id', 'result', 'remarks', 'executed_at']);
 
         $signoff = $participant->currentSignoff()->first();
@@ -92,6 +94,19 @@ class PublicUatController extends Controller
                 'remarks' => $signoff->remarks,
                 'confirmed_at' => $signoff->confirmed_at?->toIso8601String(),
             ] : null,
+            // An approver signs off for the whole cycle, so they need to see what
+            // the testers actually reported. Without this they were asked to
+            // accept a round while looking at an empty checklist of their own.
+            'reportedProblems' => $participant->isApprover()
+                ? $this->reportedProblems($cycle, $participant)
+                : [],
+            // Approvers review rather than test independently, so their checklist
+            // mirrors each tester's full answer — verdict, note and screenshots —
+            // above their own. Testers deliberately do NOT get this: seeing a
+            // colleague's answer first would bias their own.
+            'otherAnswers' => $participant->isApprover()
+                ? $this->otherAnswers($cycle, $participant)
+                : [],
             'options' => [
                 'results' => collect(UatCaseResult::results())
                     ->map(fn ($label, $value) => ['label' => $label, 'value' => $value])->values()->all(),
@@ -101,6 +116,72 @@ class PublicUatController extends Controller
                     ->map(fn ($label, $value) => ['label' => $label, 'value' => $value])->values()->all(),
             ],
         ]);
+    }
+
+    /**
+     * Everyone else's answers, keyed by case id — the same shape the tester sees
+     * for their own, so an approver's checklist mirrors it rather than
+     * summarising it.
+     *
+     * @return array<int,array<int,array<string,mixed>>>
+     */
+    private function otherAnswers(UatCycle $cycle, UatParticipant $approver): array
+    {
+        return UatCaseResult::where('uat_cycle_id', $cycle->id)
+            ->where('uat_participant_id', '!=', $approver->id)
+            ->where('result', '!=', UatCaseResult::PENDING)
+            ->with(['participant:id,label,role', 'evidence'])
+            ->get(['id', 'uat_case_id', 'uat_participant_id', 'result', 'remarks', 'executed_at', 'executed_by_name'])
+            ->groupBy('uat_case_id')
+            ->map(fn ($group) => $group->map(fn (UatCaseResult $r) => [
+                'id' => $r->id,
+                'label' => $r->participant?->label,
+                'role' => $r->participant?->role,
+                'name' => $r->executed_by_name,
+                'result' => $r->result,
+                'remarks' => $r->remarks,
+                'answered_at' => $r->executed_at?->toIso8601String(),
+                'evidence' => $r->evidence->map(fn ($e) => [
+                    'id' => $e->id,
+                    'file_name' => $e->file_name,
+                    'url' => $e->url,
+                    'is_image' => $e->is_image,
+                ])->all(),
+            ])->values()->all())
+            ->all();
+    }
+
+    /**
+     * Every problem other participants have reported on this cycle, so an
+     * approver can judge what they are being asked to accept.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    private function reportedProblems(UatCycle $cycle, UatParticipant $approver): array
+    {
+        return UatCaseResult::where('uat_cycle_id', $cycle->id)
+            ->whereIn('result', [UatCaseResult::FAILED, UatCaseResult::BLOCKED])
+            ->with(['testCase:id,case_key,title', 'participant:id,label', 'evidence'])
+            ->orderBy('uat_case_id')
+            ->get()
+            ->map(fn (UatCaseResult $row) => [
+                'id' => $row->id,
+                'case_key' => $row->testCase?->case_key,
+                'case_title' => $row->testCase?->title,
+                'result' => $row->result,
+                'remarks' => $row->remarks,
+                'reported_by' => $row->executed_by_name ?: $row->participant?->label,
+                'participant_label' => $row->participant?->label,
+                // Their own column is shown on the checklist tab already.
+                'is_mine' => $row->uat_participant_id === $approver->id,
+                'evidence' => $row->evidence->map(fn ($e) => [
+                    'id' => $e->id,
+                    'file_name' => $e->file_name,
+                    'url' => $e->url,
+                    'is_image' => $e->is_image,
+                ])->all(),
+            ])
+            ->all();
     }
 
     /** Full text of one case — steps and expected results, fetched on demand. */

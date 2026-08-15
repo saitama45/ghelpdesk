@@ -210,6 +210,8 @@ const props = defineProps({
     sections: { type: Array, default: () => [] },
     cases: { type: Array, default: () => [] },
     participants: { type: Array, default: () => [] },
+    // One entry per department column (approver + tester collapsed together).
+    columns: { type: Array, default: () => [] },
     results: { type: Array, default: () => [] },
     findings: { type: Array, default: () => [] },
     signoffs: { type: Array, default: () => [] },
@@ -269,6 +271,7 @@ const tabProps = computed(() => ({
     sections: props.sections,
     cases: props.cases,
     participants: props.participants,
+    columns: props.columns,
     results: props.results,
     findings: props.findings,
     signoffs: props.signoffs,

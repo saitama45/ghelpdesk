@@ -22,11 +22,102 @@ use Illuminate\Support\Collection;
 class UatService
 {
     /**
-     * Headline verdict for a case, given every participant verdict on it.
+     * The matrix columns: ONE per department, not one per person.
      *
-     * Worst-wins: one department reporting a failure fails the case regardless
-     * of how many others passed it. A case is only Passed when at least one
-     * participant executed it and nobody is still outstanding.
+     * A department frequently has both a tester and an approver. They each
+     * record their own answer (the audit trail keeps both), but the matrix shows
+     * the department once — otherwise two columns headed "MKTG" sit side by side
+     * and nobody can tell which is which.
+     *
+     * @param  Collection<int,UatParticipant>  $participants
+     * @return array<int,array<string,mixed>>
+     */
+    public function columns(Collection $participants): array
+    {
+        return $participants
+            ->filter(fn (UatParticipant $p) => $p->is_active && $p->canRecordVerdicts())
+            ->groupBy(fn (UatParticipant $p) => mb_strtolower(trim((string) $p->label)))
+            ->map(function (Collection $group) {
+                $approver = $group->firstWhere('role', UatParticipant::ROLE_APPROVER);
+                $tester = $group->firstWhere('role', UatParticipant::ROLE_TESTER);
+                $first = $group->first();
+
+                return [
+                    'key' => mb_strtolower(trim((string) $first->label)),
+                    'label' => $first->label,
+                    'kind' => $first->kind,
+                    'member_ids' => $group->pluck('id')->all(),
+                    'approver_id' => $approver?->id,
+                    'tester_id' => $tester?->id,
+                    // Whoever a new verdict is recorded against by default: the
+                    // approver has the final say, so they own the column.
+                    'default_participant_id' => $approver?->id ?? $tester?->id ?? $first->id,
+                    'members' => $group->map(fn (UatParticipant $p) => [
+                        'id' => $p->id,
+                        'name' => $p->display_name,
+                        'role' => $p->role,
+                    ])->values()->all(),
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * One department's verdict on one case.
+     *
+     * The approver's answer IS the department's decision. Until they give one,
+     * the tester's answer stands in — so a department is never blank while its
+     * tester has reported something.
+     *
+     * @param  Collection<int,UatCaseResult>  $caseResults  results for a single case
+     * @param  array<string,mixed>  $column
+     */
+    public function columnVerdict(Collection $caseResults, array $column): string
+    {
+        if ($column['approver_id'] ?? null) {
+            $approved = $caseResults->firstWhere('uat_participant_id', $column['approver_id']);
+
+            if ($approved && $approved->result !== UatCaseResult::PENDING) {
+                return $approved->result;
+            }
+        }
+
+        // Fall back to everyone else in the department (usually one tester).
+        $others = $caseResults->filter(
+            fn (UatCaseResult $r) => in_array($r->uat_participant_id, $column['member_ids'], true)
+                && $r->uat_participant_id !== ($column['approver_id'] ?? null)
+        );
+
+        return $this->rollUp($others);
+    }
+
+    /**
+     * Headline verdict for a case across every department column.
+     *
+     * Departments are collapsed first (approver wins), then worst-wins across
+     * them: one department reporting a failure fails the case regardless of how
+     * many others passed it.
+     *
+     * @param  array<int,array<string,mixed>>  $columns
+     */
+    public function caseVerdict(Collection $caseResults, array $columns): string
+    {
+        if ($columns === []) {
+            return $this->rollUp($caseResults);
+        }
+
+        $perColumn = collect($columns)
+            ->map(fn (array $column) => (object) ['result' => $this->columnVerdict($caseResults, $column)]);
+
+        return $this->rollUp($perColumn);
+    }
+
+    /**
+     * Worst-wins over a set of verdicts.
+     *
+     * Used both for the members inside one department column and for the
+     * collapsed department verdicts across a case.
      */
     public function rollUp(Collection $results): string
     {
@@ -70,6 +161,7 @@ class UatService
     public function statistics(Collection $cases, Collection $results, Collection $participants): array
     {
         $byCase = $results->groupBy('uat_case_id');
+        $columns = $this->columns($participants);
 
         $counts = array_fill_keys(array_keys(UatCaseResult::results()), 0);
         $criticalTotal = 0;
@@ -77,7 +169,7 @@ class UatService
         $criticalOutstanding = 0;
 
         foreach ($cases as $case) {
-            $verdict = $this->rollUp($byCase->get($case->id, collect()));
+            $verdict = $this->caseVerdict($byCase->get($case->id, collect()), $columns);
             $counts[$verdict] = ($counts[$verdict] ?? 0) + 1;
 
             if ($case->is_critical) {
@@ -99,13 +191,20 @@ class UatService
 
         $graded = $counts[UatCaseResult::PASSED] + $counts[UatCaseResult::FAILED];
 
-        // Every tester-facing cell of the matrix, and how many carry an answer.
-        $activeParticipants = $participants->filter(fn ($p) => $p->is_active && $p->canRecordVerdicts());
-        $cellsTotal = $total * $activeParticipants->count();
-        $cellsFilled = $results
-            ->whereIn('uat_participant_id', $activeParticipants->pluck('id')->all())
-            ->reject(fn ($r) => $r->result === UatCaseResult::PENDING)
-            ->count();
+        // The matrix grid is cases x DEPARTMENT columns, so the cell count follows
+        // the columns rather than the head-count behind them.
+        $cellsTotal = $total * count($columns);
+        $cellsFilled = 0;
+
+        foreach ($cases as $case) {
+            $caseResults = $byCase->get($case->id, collect());
+
+            foreach ($columns as $column) {
+                if ($this->columnVerdict($caseResults, $column) !== UatCaseResult::PENDING) {
+                    $cellsFilled++;
+                }
+            }
+        }
 
         return [
             'total_cases' => $total,
@@ -128,46 +227,70 @@ class UatService
     }
 
     /**
-     * Per-participant progress — how far down the checklist each column is.
+     * Progress per DEPARTMENT column, using the same approver-wins rule as the
+     * matrix, plus a per-member breakdown for the drill-down.
      *
      * @param  Collection<int,UatParticipant>  $participants
      */
     public function participantProgress(Collection $participants, Collection $cases, Collection $results): array
     {
+        $byCase = $results->groupBy('uat_case_id');
         $byParticipant = $results->groupBy('uat_participant_id');
         $total = $cases->count();
 
-        return $participants->map(function (UatParticipant $participant) use ($byParticipant, $total) {
-            $rows = $byParticipant->get($participant->id, collect());
-            $answered = $rows->reject(fn ($r) => $r->result === UatCaseResult::PENDING)->count();
+        return collect($this->columns($participants))->map(function (array $column) use ($cases, $byCase, $byParticipant, $total) {
+            $counts = array_fill_keys(array_keys(UatCaseResult::results()), 0);
+
+            foreach ($cases as $case) {
+                $verdict = $this->columnVerdict($byCase->get($case->id, collect()), $column);
+                $counts[$verdict] = ($counts[$verdict] ?? 0) + 1;
+            }
+
+            $answered = $total - $counts[UatCaseResult::PENDING];
 
             return [
-                'id' => $participant->id,
-                'label' => $participant->label,
+                'key' => $column['key'],
+                'label' => $column['label'],
+                'kind' => $column['kind'],
+                'approver_id' => $column['approver_id'],
+                'tester_id' => $column['tester_id'],
+                // Who sits behind the department column, and how far each is —
+                // shown when the column is expanded.
+                'members' => collect($column['members'])->map(function (array $member) use ($byParticipant, $total) {
+                    $rows = $byParticipant->get($member['id'], collect());
+                    $done = $rows->reject(fn ($r) => $r->result === UatCaseResult::PENDING)->count();
+
+                    return $member + [
+                        'answered' => $done,
+                        'total' => $total,
+                        'rate' => $total > 0 ? round($done / $total, 4) : 0.0,
+                    ];
+                })->all(),
                 'total' => $total,
                 'answered' => $answered,
-                'passed' => $rows->where('result', UatCaseResult::PASSED)->count(),
-                'failed' => $rows->where('result', UatCaseResult::FAILED)->count(),
-                'blocked' => $rows->where('result', UatCaseResult::BLOCKED)->count(),
-                'ongoing' => $rows->where('result', UatCaseResult::ONGOING)->count(),
-                'not_applicable' => $rows->where('result', UatCaseResult::NOT_APPLICABLE)->count(),
-                'pending' => max(0, $total - $answered),
+                'passed' => $counts[UatCaseResult::PASSED],
+                'failed' => $counts[UatCaseResult::FAILED],
+                'blocked' => $counts[UatCaseResult::BLOCKED],
+                'ongoing' => $counts[UatCaseResult::ONGOING],
+                'not_applicable' => $counts[UatCaseResult::NOT_APPLICABLE],
+                'pending' => $counts[UatCaseResult::PENDING],
                 'rate' => $total > 0 ? round($answered / $total, 4) : 0.0,
             ];
         })->values()->all();
     }
 
     /** Per-section progress, for the matrix group headers. */
-    public function sectionProgress(Collection $cases, Collection $results): array
+    public function sectionProgress(Collection $cases, Collection $results, Collection $participants): array
     {
         $byCase = $results->groupBy('uat_case_id');
+        $columns = $this->columns($participants);
 
-        return $cases->groupBy('uat_section_id')->map(function (Collection $sectionCases) use ($byCase) {
+        return $cases->groupBy('uat_section_id')->map(function (Collection $sectionCases) use ($byCase, $columns) {
             $passed = 0;
             $outstanding = 0;
 
             foreach ($sectionCases as $case) {
-                $verdict = $this->rollUp($byCase->get($case->id, collect()));
+                $verdict = $this->caseVerdict($byCase->get($case->id, collect()), $columns);
                 if ($verdict === UatCaseResult::PASSED || $verdict === UatCaseResult::NOT_APPLICABLE) {
                     $passed++;
                 } else {
@@ -194,13 +317,14 @@ class UatService
     public function readiness(UatCycle $cycle, Collection $cases, Collection $results, Collection $findings, Collection $participants): array
     {
         $byCase = $results->groupBy('uat_case_id');
+        $columns = $this->columns($participants);
         $gated = $cycle->gate_on_critical_only
             ? $cases->where('is_critical', true)
             : $cases;
 
         $outstandingCases = [];
         foreach ($gated as $case) {
-            $verdict = $this->rollUp($byCase->get($case->id, collect()));
+            $verdict = $this->caseVerdict($byCase->get($case->id, collect()), $columns);
             if (!in_array($verdict, [UatCaseResult::PASSED, UatCaseResult::NOT_APPLICABLE], true)) {
                 $outstandingCases[] = [
                     'case_key' => $case->case_key,

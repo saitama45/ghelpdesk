@@ -116,6 +116,41 @@
                             </button>
                         </div>
 
+                        <!-- Each tester's answer, mirrored in full. Approvers only,
+                             so a tester is never primed by a colleague's answer. -->
+                        <div v-for="answer in answersFor(item)" :key="answer.id"
+                             class="mt-3 rounded-lg border-l-4 bg-gray-50 px-3 py-2"
+                             :class="answer.result === 'failed' ? 'border-rose-400'
+                                 : answer.result === 'blocked' ? 'border-amber-400'
+                                 : answer.result === 'passed' ? 'border-emerald-400' : 'border-slate-300'">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="text-sm font-semibold text-gray-800">{{ answer.name || answer.label }}</span>
+                                <span v-if="answer.label && answer.name" class="text-xs text-gray-400">({{ answer.label }})</span>
+                                <span class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                                      :class="verdict(answer.result).chip">
+                                    {{ answerLabel(answer.result) }}
+                                </span>
+                                <span v-if="answer.answered_at" class="ml-auto text-xs text-gray-400">
+                                    {{ formatDateTime(answer.answered_at) }}
+                                </span>
+                            </div>
+
+                            <p v-if="answer.remarks" class="mt-1 text-sm text-gray-700">
+                                <span class="font-semibold">Note:</span> {{ answer.remarks }}
+                            </p>
+
+                            <div v-if="answer.evidence.length" class="mt-2">
+                                <p class="mb-1 text-xs font-semibold text-gray-500">Screenshots</p>
+                                <EvidenceGallery :items="answer.evidence" size="sm" />
+                            </div>
+                        </div>
+
+                        <!-- The approver's own answer stays a separate record. -->
+                        <p v-if="answersFor(item).length && participant.can_record"
+                           class="mt-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Your answer
+                        </p>
+
                         <!-- Procedure -->
                         <div v-if="expanded === item.id" class="mt-3 rounded-lg bg-gray-50 p-3">
                             <p v-if="detailLoading" class="text-sm text-gray-400">Loading…</p>
@@ -195,9 +230,15 @@
                                 </div>
                             </div>
 
-                            <p v-else-if="remarkOf(item)" class="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600">
-                                <span class="font-semibold">Your note:</span> {{ remarkOf(item) }}
-                            </p>
+                            <div v-else-if="remarkOf(item) || evidenceOf(item).length" class="mt-2 rounded-lg bg-gray-50 px-3 py-2">
+                                <p v-if="remarkOf(item)" class="text-sm text-gray-600">
+                                    <span class="font-semibold">Your note:</span> {{ remarkOf(item) }}
+                                </p>
+                                <div v-if="evidenceOf(item).length" class="mt-2">
+                                    <p class="mb-1 text-xs font-semibold text-gray-500">Screenshots you sent</p>
+                                    <EvidenceGallery :items="evidenceOf(item)" size="sm" />
+                                </div>
+                            </div>
                         </div>
 
                         <div v-else-if="verdictOf(item) !== 'pending'" class="mt-3 border-t border-gray-100 pt-3">
@@ -211,6 +252,49 @@
 
             <!-- ============ SIGN-OFF ============ -->
             <div v-else-if="tab === 'signoff'" class="space-y-4">
+                <!-- What the testers found. An approver was previously shown only
+                     their own (often empty) checklist, so a round with reported
+                     problems looked clean from here. -->
+                <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <h2 class="text-lg font-bold text-gray-900">What testers reported</h2>
+
+                    <p v-if="!reportedProblems.length" class="mt-2 text-sm text-gray-500">
+                        No problems have been reported on this round so far.
+                    </p>
+
+                    <template v-else>
+                        <p class="mt-1 text-sm text-gray-600">
+                            {{ reportedProblems.length }} item(s) were marked as a problem or untestable.
+                            Please review before accepting.
+                        </p>
+
+                        <div class="mt-4 space-y-3">
+                            <div v-for="problem in reportedProblems" :key="problem.id"
+                                 class="rounded-lg border p-3"
+                                 :class="problem.result === 'failed' ? 'border-rose-200 bg-rose-50/60' : 'border-amber-200 bg-amber-50/60'">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="font-mono text-[11px] font-bold text-gray-500">{{ problem.case_key }}</span>
+                                    <span class="text-sm font-semibold text-gray-900">{{ problem.case_title }}</span>
+                                    <span class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                                          :class="problem.result === 'failed' ? 'bg-rose-600 text-white' : 'bg-amber-500 text-white'">
+                                        {{ problem.result === 'failed' ? 'Has a problem' : "Couldn't test it" }}
+                                    </span>
+                                    <span class="ml-auto text-xs text-gray-500">
+                                        reported by {{ problem.reported_by || problem.participant_label }}
+                                        <span v-if="problem.is_mine" class="font-semibold">(you)</span>
+                                    </span>
+                                </div>
+
+                                <p v-if="problem.remarks" class="mt-1.5 text-sm text-gray-700">{{ problem.remarks }}</p>
+
+                                <div v-if="problem.evidence.length" class="mt-2">
+                                    <EvidenceGallery :items="problem.evidence" size="sm" />
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
                 <div v-if="signoff" class="rounded-xl border border-emerald-200 bg-emerald-50 p-5">
                     <h2 class="text-base font-bold text-emerald-900">You have already responded</h2>
                     <div class="mt-2 flex flex-wrap items-center gap-3 text-sm">
@@ -285,6 +369,7 @@ import { ref, reactive, computed } from 'vue'
 import { Head, router, usePage } from '@inertiajs/vue3'
 import { verdict, SIGNOFF_CHIPS, formatDateTime } from '../Uat/uatVerdict.js'
 import { compressImages } from '@/Composables/useImageCompressor.js'
+import EvidenceGallery from '../Uat/Partials/EvidenceGallery.vue'
 
 const props = defineProps({
     token: String,
@@ -294,6 +379,8 @@ const props = defineProps({
     cases: { type: Array, default: () => [] },
     results: { type: Array, default: () => [] },
     signoff: { type: Object, default: null },
+    reportedProblems: { type: Array, default: () => [] },
+    otherAnswers: { type: Object, default: () => ({}) },
     options: { type: Object, default: () => ({}) },
 })
 
@@ -365,6 +452,10 @@ const resultIndex = computed(() => {
 
 const verdictOf = (item) => pendingVerdict[item.id] || resultIndex.value.get(item.id)?.result || 'pending'
 const remarkOf = (item) => resultIndex.value.get(item.id)?.remarks || ''
+const evidenceOf = (item) => resultIndex.value.get(item.id)?.evidence || []
+
+/** Other participants' answers for an item. Only populated for approvers. */
+const answersFor = (item) => props.otherAnswers?.[item.id] || []
 
 const answered = computed(() =>
     (props.cases || []).filter(c => (resultIndex.value.get(c.id)?.result || 'pending') !== 'pending').length

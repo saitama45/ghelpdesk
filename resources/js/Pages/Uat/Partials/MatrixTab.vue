@@ -8,8 +8,8 @@
                        class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
             </div>
             <div class="w-52">
-                <label class="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Section</label>
-                <Autocomplete v-model="sectionFilter" :options="sectionOptions" placeholder="All sections" />
+                <label class="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Section/Module</label>
+                <Autocomplete v-model="sectionFilter" :options="sectionOptions" placeholder="All sections/modules" />
             </div>
             <div class="w-52">
                 <label class="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Verdict</label>
@@ -93,12 +93,13 @@
                         <th class="sticky left-0 top-0 z-30 min-w-[320px] border-b border-r border-gray-200 bg-gray-50 px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
                             Test Case
                         </th>
-                        <th v-for="column in columns" :key="column.id"
+                        <th v-for="column in columns" :key="column.key"
                             class="sticky top-0 z-20 min-w-[104px] border-b border-gray-200 bg-gray-50 px-2 py-3 text-center dark:border-gray-700 dark:bg-gray-900">
                             <div class="text-xs font-bold text-gray-700 dark:text-gray-200">{{ column.label }}</div>
-                            <div class="mt-0.5 text-[10px] font-medium uppercase tracking-wide"
-                                 :class="column.role === 'approver' ? 'text-indigo-600 dark:text-indigo-300' : 'text-gray-400'">
-                                {{ column.role === 'approver' ? 'Approver' : 'Tester' }}
+                            <!-- One column per department. Who sits behind it is
+                                 shown on the cell drill-down, not here. -->
+                            <div class="mt-0.5 text-[10px] font-medium text-gray-400" :title="memberSummary(column)">
+                                {{ column.members.length }} {{ column.members.length === 1 ? 'person' : 'people' }}
                             </div>
                             <button v-if="canExecute && cycleOpen" @click="openBulk('participant', column)"
                                     class="mt-1 text-[10px] font-semibold text-blue-600 hover:underline dark:text-blue-300">
@@ -121,7 +122,7 @@
                                     <span class="text-[11px] text-gray-500 dark:text-gray-400">{{ group.cases.length }} item(s)</span>
                                     <button v-if="canExecute && cycleOpen && group.id" @click="openBulk('section', null, group)"
                                             class="text-[11px] font-semibold text-blue-600 hover:underline dark:text-blue-300">
-                                        fill section
+                                        fill module
                                     </button>
                                 </div>
                             </td>
@@ -148,7 +149,7 @@
                                 </div>
                             </td>
 
-                            <td v-for="column in columns" :key="column.id"
+                            <td v-for="column in columns" :key="column.key"
                                 class="border-b border-gray-200 px-1.5 py-2 text-center dark:border-gray-700">
                                 <button
                                     type="button"
@@ -182,8 +183,8 @@
             :show="cellModal.open"
             :cycle="cycle"
             :test-case="cellModal.testCase"
-            :participant="cellModal.participant"
-            :result="cellModal.result"
+            :column="cellModal.column"
+            :results="results"
             @close="cellModal.open = false"
             @log-finding="startFinding"
         />
@@ -260,6 +261,7 @@ const props = defineProps({
     sections: Array,
     cases: Array,
     participants: Array,
+    columns: Array,
     results: Array,
     findings: Array,
     signoffs: Array,
@@ -282,14 +284,18 @@ const sectionFilter = ref(null)
 const verdictFilter = ref(null)
 const criticalOnly = ref(false)
 
-const cellModal = reactive({ open: false, testCase: null, participant: null, result: null })
+const cellModal = reactive({ open: false, testCase: null, column: null })
 const findingModal = reactive({ open: false, prefill: null })
 const bulk = reactive({ open: false, scope: 'participant', participant: null, section: null, result: 'passed', only_pending: true, saving: false })
 
-// Only testers and approvers own a column; observers read the report instead.
-const columns = computed(() =>
-    (props.participants || []).filter(p => p.is_active && ['tester', 'approver'].includes(p.role))
-)
+// One column per DEPARTMENT, built server-side so the grid, the tallies and the
+// exported workbook all use the same definition.
+const columns = computed(() => props.columns || [])
+
+const memberSummary = (column) =>
+    (column.members || [])
+        .map(m => `${m.name || column.label} (${m.role === 'approver' ? 'Approver' : 'Tester'})`)
+        .join(', ')
 
 // Verdict lookup keyed "caseId:participantId" — the matrix reads it once per cell.
 const resultIndex = computed(() => {
@@ -300,22 +306,65 @@ const resultIndex = computed(() => {
     return index
 })
 
-const cellFor = (testCase, column) => resultIndex.value.get(`${testCase.id}:${column.id}`) || null
-const cellResult = (testCase, column) => cellFor(testCase, column)?.result || 'pending'
+const resultFor = (testCase, participantId) =>
+    participantId ? resultIndex.value.get(`${testCase.id}:${participantId}`) || null : null
+
+/**
+ * The department's verdict on a case: the approver's answer is the decision,
+ * and until they give one the tester's stands. Mirrors
+ * UatService::columnVerdict so the grid agrees with the header tallies.
+ */
+const cellResult = (testCase, column) => {
+    const approved = resultFor(testCase, column.approver_id)
+    if (approved && approved.result !== 'pending') return approved.result
+
+    const others = (column.member_ids || [])
+        .filter(id => id !== column.approver_id)
+        .map(id => resultFor(testCase, id)?.result)
+        .filter(Boolean)
+        .filter(v => v !== 'not_applicable')
+
+    if (!others.length) {
+        const anyNa = (column.member_ids || []).some(id => resultFor(testCase, id)?.result === 'not_applicable')
+        return anyNa ? 'not_applicable' : 'pending'
+    }
+    if (others.includes('failed')) return 'failed'
+    if (others.includes('blocked')) return 'blocked'
+    if (others.includes('pending')) return 'pending'
+    if (others.includes('ongoing')) return 'ongoing'
+    return 'passed'
+}
+
+/** The row actually shown in the cell, so remarks/evidence markers match it. */
+const cellFor = (testCase, column) => {
+    const approved = resultFor(testCase, column.approver_id)
+    if (approved && approved.result !== 'pending') return approved
+
+    for (const id of column.member_ids || []) {
+        if (id === column.approver_id) continue
+        const row = resultFor(testCase, id)
+        if (row && row.result !== 'pending') return row
+    }
+
+    return resultFor(testCase, column.default_participant_id)
+}
+
 const cellClass = (testCase, column) => verdict(cellResult(testCase, column)).cell
 const cellGlyph = (testCase, column) => verdict(cellResult(testCase, column)).glyph || '·'
 const cellLabel = (testCase, column) => verdict(cellResult(testCase, column)).label
 const cellHasRemark = (testCase, column) => Boolean(cellFor(testCase, column)?.remarks)
 
 const cellTitle = (testCase, column) => {
+    const decided = resultFor(testCase, column.approver_id)
+    const source = decided && decided.result !== 'pending' ? 'approver' : 'tester'
+    const base = `${column.label}: ${verdict(cellResult(testCase, column)).label} (${source}) — click for the breakdown`
     const row = cellFor(testCase, column)
-    const base = `${column.label}: ${verdict(row?.result || 'pending').label}`
-    return row?.remarks ? `${base} — ${row.remarks.slice(0, 120)}` : base
+    return row?.remarks ? `${base}\n${row.remarks.slice(0, 120)}` : base
 }
 
 /**
- * Mirrors UatService::rollUp on the server so the Roll-up column and the header
- * tallies agree without another round trip. Worst verdict wins.
+ * Mirrors UatService::caseVerdict: collapse each department first, then
+ * worst-wins across them.
  */
 const rollUp = (testCase) => {
     const verdicts = columns.value
@@ -331,7 +380,7 @@ const rollUp = (testCase) => {
 }
 
 const sectionOptions = computed(() => [
-    { label: 'All sections', value: null },
+    { label: 'All sections/modules', value: null },
     ...(props.sections || []).map(s => ({ label: s.name, value: s.id })),
 ])
 
@@ -369,11 +418,15 @@ const groupedCases = computed(() => {
     return Array.from(byId.values())
 })
 
+/**
+ * Clicking a department cell opens the breakdown: the tester's answer and the
+ * approver's, side by side, each editable. The grid shows one number; this is
+ * where you see who said what.
+ */
 const openCell = (testCase, column) => {
     if (!canExecute.value) return
     cellModal.testCase = testCase
-    cellModal.participant = column
-    cellModal.result = cellFor(testCase, column)
+    cellModal.column = column
     cellModal.open = true
 }
 
@@ -381,7 +434,7 @@ const startFinding = (testCase) => {
     cellModal.open = false
     findingModal.prefill = {
         uat_case_id: testCase.id,
-        uat_participant_id: cellModal.participant?.id ?? null,
+        uat_participant_id: cellModal.column?.default_participant_id ?? null,
         title: `${testCase.case_key} — `,
     }
     findingModal.open = true
@@ -398,9 +451,11 @@ const openBulk = (scope, participant = null, section = null) => {
 
 const bulkDescription = computed(() => {
     if (bulk.scope === 'participant') {
-        return `Applies to every test case in the ${bulk.participant?.label} column.`
+        const owner = (bulk.participant?.members || []).find(m => m.id === bulk.participant?.default_participant_id)
+        const who = owner ? `${owner.name} (${owner.role === 'approver' ? 'Approver' : 'Tester'})` : 'the column owner'
+        return `Applies to every test case in the ${bulk.participant?.label} column, recorded against ${who}.`
     }
-    return `Applies to every test case in the ${bulk.section?.name} section, across all columns.`
+    return `Applies to every test case in the ${bulk.section?.name} section/module, across all columns.`
 })
 
 const submitBulk = () => {
@@ -408,7 +463,9 @@ const submitBulk = () => {
 
     router.post(`/uat/${props.cycle.id}/results/bulk`, {
         scope: bulk.scope,
-        uat_participant_id: bulk.participant?.id ?? null,
+        // A department column is filled through whoever owns its decision —
+        // the approver when there is one, otherwise the tester.
+        uat_participant_id: bulk.participant?.default_participant_id ?? null,
         uat_section_id: bulk.section?.id ?? null,
         result: bulk.result,
         only_pending: bulk.only_pending,

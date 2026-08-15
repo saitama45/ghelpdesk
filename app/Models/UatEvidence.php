@@ -61,9 +61,24 @@ class UatEvidence extends Model
         return $this->belongsTo(User::class, 'uploaded_by_user_id');
     }
 
+    /**
+     * Root-relative URL, deliberately not the absolute one.
+     *
+     * Storage::url() builds its result from APP_URL, which is routinely wrong:
+     * in dev it carries whatever port was last configured (a cycle's evidence
+     * pointed at :8001 while the app was served on :8000, so every thumbnail
+     * broke), and behind a proxy it can disagree with the host that actually
+     * served the page. A path always resolves against the current origin.
+     */
     public function getUrlAttribute(): ?string
     {
-        return $this->file_path ? Storage::disk('public')->url($this->file_path) : null;
+        if (!$this->file_path) {
+            return null;
+        }
+
+        $url = Storage::disk('public')->url($this->file_path);
+
+        return parse_url($url, PHP_URL_PATH) ?: $url;
     }
 
     /** Screenshots render inline; anything else falls back to a download link. */

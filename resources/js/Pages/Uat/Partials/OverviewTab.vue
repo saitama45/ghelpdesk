@@ -27,18 +27,51 @@
                     No participants yet. Add the departments and stakeholders who will test in the Setup tab.
                 </p>
 
+                <!-- One row per DEPARTMENT. The people behind it appear when the
+                     row is expanded, which is where tester vs approver matters. -->
                 <div v-else class="mt-4 space-y-3">
-                    <div v-for="row in participantProgress" :key="row.id">
-                        <div class="mb-1 flex items-center justify-between text-sm">
-                            <span class="font-medium text-gray-800 dark:text-gray-100">{{ row.label }}</span>
-                            <span class="text-xs text-gray-500 dark:text-gray-400">{{ row.answered }} / {{ row.total }}</span>
-                        </div>
+                    <div v-for="row in participantProgress" :key="row.key">
+                        <button type="button" @click="toggle(row.key)"
+                                class="mb-1 flex w-full items-center justify-between gap-3 text-left text-sm">
+                            <span class="flex min-w-0 items-center gap-1.5">
+                                <svg class="h-3 w-3 shrink-0 text-gray-400 transition-transform"
+                                     :class="expanded[row.key] ? 'rotate-90' : ''"
+                                     fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+                                </svg>
+                                <span class="truncate font-medium text-gray-800 dark:text-gray-100">{{ row.label }}</span>
+                                <span class="shrink-0 text-xs text-gray-400">
+                                    ({{ row.members.length }} {{ row.members.length === 1 ? 'person' : 'people' }})
+                                </span>
+                            </span>
+                            <span class="shrink-0 text-xs text-gray-500 dark:text-gray-400">{{ row.answered }} / {{ row.total }}</span>
+                        </button>
+
                         <div class="flex h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
                             <div class="bg-emerald-500" :style="{ width: share(row, 'passed') }" :title="`${row.passed} passed`"></div>
                             <div class="bg-rose-500" :style="{ width: share(row, 'failed') }" :title="`${row.failed} failed`"></div>
                             <div class="bg-amber-500" :style="{ width: share(row, 'blocked') }" :title="`${row.blocked} blocked`"></div>
                             <div class="bg-blue-500" :style="{ width: share(row, 'ongoing') }" :title="`${row.ongoing} ongoing`"></div>
                             <div class="bg-slate-400" :style="{ width: share(row, 'not_applicable') }" :title="`${row.not_applicable} not applicable`"></div>
+                        </div>
+
+                        <div v-if="expanded[row.key]" class="mt-2 space-y-1.5 border-l-2 border-gray-200 pl-4 dark:border-gray-700">
+                            <div v-for="member in row.members" :key="member.id"
+                                 class="flex items-center justify-between gap-3 text-xs">
+                                <span class="flex min-w-0 items-center gap-2">
+                                    <span class="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                                          :class="member.role === 'approver'
+                                              ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200'
+                                              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'">
+                                        {{ member.role === 'approver' ? 'Approver' : 'Tester' }}
+                                    </span>
+                                    <span class="truncate text-gray-700 dark:text-gray-200">{{ member.name }}</span>
+                                </span>
+                                <span class="shrink-0 text-gray-500 dark:text-gray-400">{{ member.answered }} / {{ member.total }}</span>
+                            </div>
+                            <p class="pt-1 text-[11px] text-gray-400">
+                                The department's verdict is the approver's answer; the tester's stands until they give one.
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -88,9 +121,12 @@
             </div>
         </div>
 
-        <!-- Section breakdown -->
+        <!-- Section/Module breakdown -->
         <div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <h3 class="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Progress by Section</h3>
+            <h3 class="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Progress by Section/Module</h3>
+            <p class="mt-0.5 text-xs text-gray-400">
+                How each module of the system under test is tracking.
+            </p>
 
             <p v-if="!sectionRows.length" class="mt-4 text-sm text-gray-400">
                 No test cases yet. Import a workbook or add cases in the Setup tab.
@@ -130,7 +166,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, reactive } from 'vue'
 import { pct } from '../uatVerdict.js'
 
 const props = defineProps({
@@ -138,6 +174,7 @@ const props = defineProps({
     sections: Array,
     cases: Array,
     participants: Array,
+    columns: Array,
     results: Array,
     findings: Array,
     signoffs: Array,
@@ -168,6 +205,10 @@ const share = (row, key) => {
     return `${Math.round(((row[key] || 0) / row.total) * 100)}%`
 }
 
+// A department row expands to show the tester and approver behind it.
+const expanded = reactive({})
+const toggle = (key) => { expanded[key] = !expanded[key] }
+
 const sectionRows = computed(() => {
     const progress = props.sectionProgress || {}
     const rows = (props.sections || []).map(section => ({
@@ -183,7 +224,7 @@ const sectionRows = computed(() => {
         || Object.entries(progress).find(([key]) => key === 'null')?.[1]
 
     if (ungrouped && ungrouped.total > 0) {
-        rows.push({ id: null, name: 'Ungrouped', is_critical: true, ...ungrouped })
+        rows.push({ id: null, name: 'No module', is_critical: true, ...ungrouped })
     }
 
     return rows

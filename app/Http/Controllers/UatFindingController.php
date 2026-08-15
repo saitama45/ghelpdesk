@@ -12,6 +12,7 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -34,21 +35,21 @@ class UatFindingController extends Controller implements HasMiddleware
 
     public function store(Request $request, UatCycle $cycle)
     {
+        // Not `required` here: a finding raised against a test case inherits the
+        // screenshots already attached to that case's verdicts, so the tester is
+        // not asked for the same picture twice. The real check is below, once
+        // both sources are known.
         $validated = $request->validate(
-            array_merge(
-                $this->rules($cycle),
-                // A defect report with no picture of the defect is rarely
-                // actionable, so evidence is mandatory at the point of logging.
-                $this->screenshotRules(required: true)
-            ),
+            array_merge($this->rules($cycle), $this->screenshotRules(required: false)),
             [
-                'screenshots.required' => 'Attach at least one screenshot of the defect.',
                 'screenshots.*.image' => 'Evidence must be an image (PNG, JPG, GIF or WEBP).',
                 'screenshots.*.max' => 'Each screenshot must be 10 MB or smaller.',
             ]
         );
 
-        $finding = DB::transaction(function () use ($request, $cycle, $validated) {
+        $inherited = 0;
+
+        $finding = DB::transaction(function () use ($request, $cycle, $validated, &$inherited) {
             $finding = UatFinding::create(array_merge(
                 collect($validated)->except('screenshots')->all(),
                 [
@@ -62,12 +63,28 @@ class UatFindingController extends Controller implements HasMiddleware
                 ]
             ));
 
-            $this->storeScreenshots($request, $cycle, $finding);
+            $uploaded = $this->storeScreenshots($request, $cycle, $finding);
+            $inherited = $this->inheritCaseEvidence($cycle, $finding);
+
+            // Rolls the whole thing back — no half-created finding.
+            if ($uploaded + $inherited === 0) {
+                throw ValidationException::withMessages([
+                    'screenshots' => 'Attach at least one screenshot of the defect.',
+                ]);
+            }
 
             return $finding;
         });
 
-        return redirect()->back()->with('success', "Finding {$finding->reference} logged with evidence.");
+        $total = $finding->evidence()->count();
+        $note = $inherited > 0
+            ? " ({$inherited} carried over from the test evidence)"
+            : '';
+
+        return redirect()->back()->with(
+            'success',
+            "Finding {$finding->reference} logged with {$total} screenshot(s){$note}."
+        );
     }
 
     public function update(Request $request, UatCycle $cycle, UatFinding $finding)
@@ -247,6 +264,63 @@ class UatFindingController extends Controller implements HasMiddleware
         }
 
         return $stored;
+    }
+
+    /**
+     * Carries the screenshots already attached to a case's verdicts across to a
+     * finding raised against that case.
+     *
+     * The tester (or approver) has usually just uploaded the picture while
+     * recording "Has a problem"; making them attach it again to the finding is
+     * pure friction. Every participant's evidence for the case is taken, so an
+     * approver raising a finding still gets the tester's screenshot.
+     *
+     * The file is physically copied rather than the row re-pointed: evidence
+     * rows own their file and delete it on removal, so sharing one path would
+     * mean deleting a finding could blank a verdict's evidence.
+     */
+    private function inheritCaseEvidence(UatCycle $cycle, UatFinding $finding): int
+    {
+        if (!$finding->uat_case_id) {
+            return 0;
+        }
+
+        $sources = UatEvidence::where('uat_cycle_id', $cycle->id)
+            ->whereNotNull('uat_case_result_id')
+            ->whereIn('uat_case_result_id', function ($q) use ($finding) {
+                $q->select('id')->from('uat_case_results')->where('uat_case_id', $finding->uat_case_id);
+            })
+            ->get();
+
+        $copied = 0;
+
+        foreach ($sources as $source) {
+            if (!Storage::disk('public')->exists($source->file_path)) {
+                continue;
+            }
+
+            $target = "uat/{$cycle->id}/".Str::random(40).'.'.pathinfo($source->file_path, PATHINFO_EXTENSION);
+
+            if (!Storage::disk('public')->copy($source->file_path, $target)) {
+                continue;
+            }
+
+            UatEvidence::create([
+                'uat_cycle_id' => $cycle->id,
+                'uat_finding_id' => $finding->id,
+                'label' => $source->label,
+                'file_name' => $source->file_name,
+                'file_path' => $target,
+                'mime_type' => $source->mime_type,
+                'file_size' => $source->file_size,
+                'uploaded_by_user_id' => $source->uploaded_by_user_id,
+                'uploaded_by_name' => $source->uploaded_by_name,
+            ]);
+
+            $copied++;
+        }
+
+        return $copied;
     }
 
     /**

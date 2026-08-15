@@ -36,8 +36,13 @@ class UatWorkbook
     private const SCRIPT_HEADERS = [
         'test case id' => 'case_key',
         'case id' => 'case_key',
+        // The functional area a case belongs to — the application's module.
+        // Older workbooks have no such column; the importer then derives it
+        // from the text before " - " in Screen.
+        'section/module' => 'section',
+        'section / module' => 'section',
+        'section' => 'section',
         'screen' => 'screen',
-        'module' => 'screen',
         'description' => 'description',
         'test steps' => 'steps',
         'steps' => 'steps',
@@ -131,9 +136,19 @@ class UatWorkbook
             if ($titleCol !== false) {
                 $participants = [];
                 $remarkCol = null;
+                // Present on exports; absent on a hand-written checklist, which
+                // still carries its modules as banner rows.
+                $sectionCol = null;
+                foreach (['section/module', 'section / module', 'section', 'module'] as $needle) {
+                    $found = array_search($needle, $cells, true);
+                    if ($found !== false) {
+                        $sectionCol = $found;
+                        break;
+                    }
+                }
 
                 foreach ($cells as $col => $label) {
-                    if ($col <= $titleCol || $label === '') {
+                    if ($col <= $titleCol || $label === '' || $col === $sectionCol) {
                         continue;
                     }
                     if (in_array($label, ['remark', 'remarks', 'comment', 'comments'], true)) {
@@ -145,7 +160,12 @@ class UatWorkbook
                 }
 
                 if ($participants !== []) {
-                    return [$index, ['title' => $titleCol, 'participants' => $participants, 'remarks' => $remarkCol], self::FORMAT_MATRIX];
+                    return [$index, [
+                        'title' => $titleCol,
+                        'participants' => $participants,
+                        'remarks' => $remarkCol,
+                        'section' => $sectionCol,
+                    ], self::FORMAT_MATRIX];
                 }
             }
         }
@@ -194,9 +214,13 @@ class UatWorkbook
                 continue;
             }
 
-            // The Screen column reads "Issuances - Department Orders": the part
-            // before the dash is the functional area, which becomes the section.
-            $sectionName = $screen !== '' ? trim(explode(' - ', $screen)[0]) : 'General';
+            // Prefer an explicit Section/Module column. Falling back to Screen,
+            // which reads "Issuances - Department Orders": the part before the
+            // dash is the functional area.
+            $explicit = trim((string) ($row[$map['section'] ?? -1] ?? ''));
+            $sectionName = $explicit !== ''
+                ? $explicit
+                : ($screen !== '' ? trim(explode(' - ', $screen)[0]) : 'General');
             $section = $this->resolveSection($cycle, $sectionCache, $sectionName);
 
             $case = UatCase::create([
@@ -270,6 +294,7 @@ class UatWorkbook
     {
         $titleCol = $map['title'];
         $remarkCol = $map['remarks'];
+        $sectionCol = $map['section'] ?? null;
 
         $participants = [];
         foreach ($map['participants'] as $col => $label) {
@@ -311,9 +336,14 @@ class UatWorkbook
                 }
             }
 
-            // A row with a label but no verdicts anywhere is a section banner
-            // ("ITEM", "BILLING") rather than a checklist item.
-            if (!$hasVerdicts && !preg_match('/^\s*\d+[.)]/', $title)) {
+            // An explicit Section/Module cell wins; otherwise a row with a label
+            // but no verdicts anywhere is a module banner ("ITEM", "BILLING")
+            // rather than a checklist item.
+            $explicitSection = $sectionCol !== null ? trim((string) ($row[$sectionCol] ?? '')) : '';
+
+            if ($explicitSection !== '') {
+                $currentSection = $this->resolveSection($cycle, $sectionCache, $explicitSection);
+            } elseif (!$hasVerdicts && !preg_match('/^\s*\d+[.)]/', $title)) {
                 $currentSection = $this->resolveSection($cycle, $sectionCache, $title);
                 continue;
             }
@@ -519,7 +549,9 @@ class UatWorkbook
         $cases = $cycle->cases()->with('section')->get();
         $participants = $cycle->participants()->with(['user:id,name,email', 'department:id,name', 'currentSignoff'])->get();
         $results = $cycle->results()->get();
-        $findings = $cycle->findings()->with(['assignee:id,name', 'testCase:id,case_key', 'ticket:id,ticket_key'])->get();
+        $findings = $cycle->findings()
+            ->with(['assignee:id,name', 'testCase:id,case_key', 'ticket:id,ticket_key,created_at'])
+            ->get();
 
         $spreadsheet = new Spreadsheet;
         $spreadsheet->getProperties()
@@ -582,14 +614,15 @@ class UatWorkbook
         $sheet->getStyle('A1:A8')->getFont()->setBold(true);
         $sheet->getStyle('D3:E8')->getFont()->setBold(true);
 
-        $headers = ['Test Case ID', 'Screen', 'Description', 'Test Steps', 'Expected Results', 'Actual Results', 'Remarks'];
+        $headers = ['Test Case ID', 'Section/Module', 'Screen', 'Description', 'Test Steps', 'Expected Results', 'Actual Results', 'Remarks'];
         $sheet->fromArray($headers, null, 'A11');
         $this->styleHeaderRow($sheet, 11, count($headers));
 
         $row = 12;
         foreach ($cases as $case) {
             $caseResults = $byCase->get($case->id, collect());
-            $verdict = $this->uat->rollUp($caseResults);
+            // Department columns collapse first (approver wins), then worst-wins.
+            $verdict = $this->uat->caseVerdict($caseResults, $this->uat->columns($participants));
 
             // Every participant's remark, attributed — the source sheet had one
             // anonymous Remarks cell, which lost who reported what.
@@ -603,6 +636,7 @@ class UatWorkbook
 
             $sheet->fromArray([
                 $case->case_key,
+                $case->section?->name,
                 $case->screen,
                 $case->description,
                 $case->steps,
@@ -611,8 +645,9 @@ class UatWorkbook
                 $remarks,
             ], null, 'A'.$row);
 
-            $sheet->getStyle('F'.$row)->getFont()->getColor()->setARGB($this->verdictColor($verdict));
-            $sheet->getStyle('F'.$row)->getFont()->setBold(true);
+            // Actual Results moved to column G when Section/Module was inserted.
+            $sheet->getStyle('G'.$row)->getFont()->getColor()->setARGB($this->verdictColor($verdict));
+            $sheet->getStyle('G'.$row)->getFont()->setBold(true);
             $row++;
         }
 
@@ -631,10 +666,12 @@ class UatWorkbook
     {
         $sheet->setTitle('Walkthrough Matrix');
 
-        $columns = $participants->filter(fn ($p) => $p->is_active && $p->canRecordVerdicts())->values();
+        // One column per DEPARTMENT, matching the on-screen matrix: the approver's
+        // answer is the department's, with the tester's standing in until then.
+        $columns = collect($this->uat->columns($participants));
         $lookup = $results->groupBy('uat_case_id');
 
-        $headers = array_merge(['Ref', 'Title'], $columns->pluck('label')->all(), ['Remark']);
+        $headers = array_merge(['Ref', 'Section/Module', 'Title'], $columns->pluck('label')->all(), ['Remark']);
         $sheet->fromArray($headers, null, 'A1');
         $this->styleHeaderRow($sheet, 1, count($headers));
 
@@ -653,12 +690,11 @@ class UatWorkbook
                 $row++;
             }
 
-            $caseResults = $lookup->get($case->id, collect())->keyBy('uat_participant_id');
+            $caseResults = $lookup->get($case->id, collect());
 
-            $line = [$case->case_key, $case->title];
-            foreach ($columns as $participant) {
-                $result = $caseResults->get($participant->id);
-                $line[] = $result ? $this->verdictShorthand($result->result) : '';
+            $line = [$case->case_key, $sectionName, $case->title];
+            foreach ($columns as $column) {
+                $line[] = $this->verdictShorthand($this->uat->columnVerdict($caseResults, $column));
             }
             $line[] = $caseResults->filter(fn ($r) => filled($r->remarks))->pluck('remarks')->implode("\n");
 
@@ -673,12 +709,14 @@ class UatWorkbook
         $sheet->getStyle("A1:{$lastColumn}{$lastRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 
         $sheet->getColumnDimension('A')->setWidth(12);
-        $sheet->getColumnDimension('B')->setWidth(60);
-        for ($i = 3; $i < count($headers); $i++) {
+        $sheet->getColumnDimension('B')->setWidth(22);
+        $sheet->getColumnDimension('C')->setWidth(60);
+        for ($i = 4; $i < count($headers); $i++) {
             $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($i))->setWidth(14);
         }
         $sheet->getColumnDimension($lastColumn)->setWidth(50);
-        $sheet->freezePane('C2');
+        // Ref + Section/Module + Title stay visible while scrolling the columns.
+        $sheet->freezePane('D2');
     }
 
     /** Sheet 3 — the acceptance roster and final sign-off. */
@@ -742,9 +780,17 @@ class UatWorkbook
     {
         $sheet->setTitle('Findings');
 
-        $headers = ['Ref', 'Test Case', 'Title', 'Details', 'Severity', 'Status', 'Assigned To', 'Ticket', 'Reported By', 'Resolved At', 'Resolution'];
+        // Timestamps mirror the Findings tab, so the exported register answers
+        // "when was this raised, when did it become a ticket, when was it closed".
+        $headers = [
+            'Ref', 'Test Case', 'Title', 'Details', 'Severity', 'Status',
+            'Logged At', 'Assigned To', 'Ticket', 'Ticket Raised At',
+            'Reported By', 'Resolved At', 'Resolution',
+        ];
         $sheet->fromArray($headers, null, 'A1');
         $this->styleHeaderRow($sheet, 1, count($headers));
+
+        $stamp = fn (?\DateTimeInterface $at) => $at?->format('Y-m-d H:i');
 
         $row = 2;
         foreach ($findings as $finding) {
@@ -755,20 +801,25 @@ class UatWorkbook
                 $finding->details,
                 UatFinding::severities()[$finding->severity] ?? $finding->severity,
                 UatFinding::statuses()[$finding->status] ?? $finding->status,
+                $stamp($finding->created_at),
                 $finding->assignee?->name,
                 $finding->ticket?->ticket_key,
+                $stamp($finding->ticket?->created_at),
                 $finding->reported_by_name,
-                $finding->resolved_at?->format('Y-m-d'),
+                $stamp($finding->resolved_at),
                 $finding->resolution_notes,
             ], null, 'A'.$row);
             $row++;
         }
 
         $lastRow = max(1, $row - 1);
-        $sheet->getStyle("A1:K{$lastRow}")->getAlignment()->setVertical(Alignment::VERTICAL_TOP)->setWrapText(true);
-        $sheet->getStyle("A1:K{$lastRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+        $sheet->getStyle("A1:M{$lastRow}")->getAlignment()->setVertical(Alignment::VERTICAL_TOP)->setWrapText(true);
+        $sheet->getStyle("A1:M{$lastRow}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 
-        foreach (['A' => 10, 'B' => 14, 'C' => 40, 'D' => 55, 'E' => 12, 'F' => 14, 'G' => 22, 'H' => 16, 'I' => 22, 'J' => 14, 'K' => 40] as $column => $width) {
+        foreach ([
+            'A' => 10, 'B' => 14, 'C' => 40, 'D' => 55, 'E' => 12, 'F' => 14,
+            'G' => 18, 'H' => 22, 'I' => 16, 'J' => 18, 'K' => 22, 'L' => 18, 'M' => 40,
+        ] as $column => $width) {
             $sheet->getColumnDimension($column)->setWidth($width);
         }
         $sheet->freezePane('A2');
@@ -781,11 +832,12 @@ class UatWorkbook
 
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Test Script');
-        $headers = ['Test Case ID', 'Screen', 'Description', 'Test Steps', 'Expected Results', 'Actual Results', 'Remarks'];
+        $headers = ['Test Case ID', 'Section/Module', 'Screen', 'Description', 'Test Steps', 'Expected Results', 'Actual Results', 'Remarks'];
         $sheet->fromArray($headers, null, 'A1');
         $this->styleHeaderRow($sheet, 1, count($headers));
         $sheet->fromArray([
             'UI-UX-01',
+            'Issuances',
             'Issuances - Department Orders',
             'Verify the tester can filter and open a department order.',
             "1. Open Issuances → Department Orders\n2. Choose a Series\n3. Click Apply Filters",
@@ -793,10 +845,10 @@ class UatWorkbook
             'Passed',
             '',
         ], null, 'A2');
-        foreach (['A' => 14, 'B' => 32, 'C' => 50, 'D' => 60, 'E' => 45, 'F' => 14, 'G' => 45] as $column => $width) {
+        foreach (['A' => 14, 'B' => 22, 'C' => 32, 'D' => 50, 'E' => 60, 'F' => 45, 'G' => 14, 'H' => 45] as $column => $width) {
             $sheet->getColumnDimension($column)->setWidth($width);
         }
-        $sheet->getStyle('A2:G2')->getAlignment()->setVertical(Alignment::VERTICAL_TOP)->setWrapText(true);
+        $sheet->getStyle('A2:H2')->getAlignment()->setVertical(Alignment::VERTICAL_TOP)->setWrapText(true);
 
         $matrix = $spreadsheet->createSheet(1);
         $matrix->setTitle('Walkthrough Matrix');
@@ -805,7 +857,9 @@ class UatWorkbook
         // a tester receives already matches the organisation rather than the
         // department names of whoever the original checklist belonged to.
         $codes = $this->departmentCodes();
-        $headers = array_merge(['Title'], $codes, ['Remark']);
+        // Section/Module sits BEFORE Title: the importer treats every column
+        // after Title as a participant, so it has to come first.
+        $headers = array_merge(['Section/Module', 'Title'], $codes, ['Remark']);
         $matrix->fromArray($headers, null, 'A1');
         $this->styleHeaderRow($matrix, 1, count($headers));
 
@@ -824,17 +878,20 @@ class UatWorkbook
         };
 
         $matrix->fromArray([
-            array_merge(['ITEM'], $pad, ['']),
-            array_merge(['1. Understand types of Items available'], $mark(['Yes']), ['']),
-            array_merge(['2. Able to add Item'], $mark(['Yes', 'No']), ['Example remark for the row']),
+            // A banner row still works (module name in Title, no verdicts), and
+            // so does naming the module per row in the Section/Module column.
+            array_merge(['', 'ITEM'], $pad, ['']),
+            array_merge(['Item', '1. Understand types of Items available'], $mark(['Yes']), ['']),
+            array_merge(['Item', '2. Able to add Item'], $mark(['Yes', 'No']), ['Example remark for the row']),
         ], null, 'A2');
 
-        $matrix->getColumnDimension('A')->setWidth(60);
-        for ($i = 2; $i < count($headers); $i++) {
+        $matrix->getColumnDimension('A')->setWidth(22);
+        $matrix->getColumnDimension('B')->setWidth(60);
+        for ($i = 3; $i < count($headers); $i++) {
             $matrix->getColumnDimension(Coordinate::stringFromColumnIndex($i))->setWidth(12);
         }
         $matrix->getColumnDimension(Coordinate::stringFromColumnIndex(count($headers)))->setWidth(40);
-        $matrix->freezePane('B2');
+        $matrix->freezePane('C2');
 
         $instructions = $spreadsheet->createSheet(2);
         $instructions->setTitle('Instructions');
@@ -844,9 +901,10 @@ class UatWorkbook
             ['The importer accepts either sheet layout. Upload one at a time; the active sheet is the one that is read.'],
             [''],
             ['A. Test Script layout'],
-            ['1. Keep the header row exactly as shown: Test Case ID, Screen, Description, Test Steps, Expected Results, Actual Results, Remarks.'],
+            ['1. Keep the header row exactly as shown: Test Case ID, Section/Module, Screen, Description, Test Steps, Expected Results, Actual Results, Remarks.'],
             ['2. Test Case ID is required and must be unique within the cycle. Rows repeating an existing ID are skipped, never overwritten.'],
-            ['3. The text before " - " in Screen becomes the section, so "Issuances - Department Orders" files under Issuances.'],
+            ['3. Section/Module is the functional area of the system — its module (Billing, Scheduler, Issuances). Cases are grouped by it, and progress is reported per module.'],
+            ['   If the column is left blank (or missing, as in older workbooks), the text before " - " in Screen is used instead, so "Issuances - Department Orders" files under Issuances.'],
             ['4. Actual Results accepts Passed, Failed, Blocked, Ongoing, Pending or N/A. It is recorded against a "QA" column.'],
             [''],
             ['B. Walkthrough Matrix layout'],
@@ -854,7 +912,7 @@ class UatWorkbook
             ['2. The department columns are generated from the active departments on the /departments page, using their CODE.'],
             ['   Delete any column your test does not involve, and add your own heading for an external client or a team that is not a department.'],
             ['3. A column whose heading matches a department code (or name) is linked to that department automatically.'],
-            ['4. A row with a title but no verdicts is read as a section banner (e.g. ITEM, BILLING).'],
+            ['4. A row with a title but no verdicts is read as a Section/Module banner — the application module the rows beneath it belong to (e.g. ITEM, BILLING).'],
             ['5. Verdict cells accept Yes / No / Ongoing / N/A as well as Passed / Failed / Blocked / Pending.'],
             ['6. Participants are matched to existing columns by label, and created when they do not exist yet.'],
             [''],

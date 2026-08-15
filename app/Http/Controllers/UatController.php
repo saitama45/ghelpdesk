@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\UatService;
 use App\Services\UatWorkbook;
 use App\Support\CompanyContext;
+use App\Support\DepartmentContext;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -92,6 +93,27 @@ class UatController extends Controller implements HasMiddleware
 
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
+        }
+
+        // Department axis: a cycle owned by another department is somebody else's
+        // work, so it is scoped out of the listing entirely rather than merely
+        // filtered. Cycles with no owning department are shared and stay visible.
+        //
+        // Executive mode sees every department by design, and Dev/Admin/Solutions
+        // Admin can already switch "I belong to" — that is the escape hatch, so
+        // no separate override permission is needed here.
+        $user = $request->user();
+
+        if (!DepartmentContext::isExecutive($user)) {
+            $homeDepartmentId = DepartmentContext::homeDepartmentId($user);
+
+            $query->where(function ($q) use ($homeDepartmentId) {
+                $q->whereNull('department_id');
+
+                if ($homeDepartmentId) {
+                    $q->orWhere('department_id', $homeDepartmentId);
+                }
+            });
         }
 
         // Entity filter is a listing convenience, not an authorisation boundary.
@@ -263,7 +285,8 @@ class UatController extends Controller implements HasMiddleware
         $findings = $cycle->findings()
             ->with([
                 'assignee:id,name', 'testCase:id,case_key,title',
-                'ticket:id,ticket_key,status', 'participant:id,label',
+                // created_at drives the "ticket raised" timestamp in the register.
+                'ticket:id,ticket_key,status,created_at', 'participant:id,label',
                 // Screenshots are mandatory on a finding, so the register shows them.
                 'evidence',
             ])
@@ -305,7 +328,9 @@ class UatController extends Controller implements HasMiddleware
             'signoffs' => $signoffs,
             'statistics' => $this->uat->statistics($cases, $results, $participants),
             'participantProgress' => $this->uat->participantProgress($participants, $cases, $results),
-            'sectionProgress' => $this->uat->sectionProgress($cases, $results),
+            'sectionProgress' => $this->uat->sectionProgress($cases, $results, $participants),
+            // The matrix renders ONE column per department, not one per person.
+            'columns' => $this->uat->columns($participants),
             'readiness' => $this->uat->readiness($cycle, $cases, $results, $findings, $participants),
             'acceptance' => $this->uat->acceptanceLedger($participants),
             'options' => [

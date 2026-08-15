@@ -47,8 +47,11 @@
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Ref</th>
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Finding</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Evidence</th>
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Severity</th>
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Status</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Logged</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Resolved</th>
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Owner</th>
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Ticket</th>
                         <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Actions</th>
@@ -69,6 +72,10 @@
                                 Reported by {{ finding.reported_by_name || finding.participant.label }}
                             </div>
                         </td>
+                        <td class="px-4 py-3">
+                            <EvidenceGallery :items="finding.evidence || []" size="sm"
+                                             empty-text="—" />
+                        </td>
                         <td class="whitespace-nowrap px-4 py-3">
                             <span class="rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide" :class="SEVERITY_CHIPS[finding.severity]">
                                 {{ severityLabel(finding.severity) }}
@@ -79,14 +86,32 @@
                                 {{ statusLabel(finding.status) }}
                             </span>
                         </td>
+                        <td class="whitespace-nowrap px-4 py-3">
+                            <div class="text-sm text-gray-700 dark:text-gray-200">{{ dateOnly(finding.created_at) }}</div>
+                            <div class="text-xs text-gray-400">{{ timeOnly(finding.created_at) }}</div>
+                        </td>
+                        <td class="whitespace-nowrap px-4 py-3">
+                            <template v-if="finding.resolved_at">
+                                <div class="text-sm text-gray-700 dark:text-gray-200">{{ dateOnly(finding.resolved_at) }}</div>
+                                <div class="text-xs text-gray-400">{{ timeOnly(finding.resolved_at) }}</div>
+                                <div class="text-[10px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+                                    {{ statusLabel(finding.status) }}
+                                </div>
+                            </template>
+                            <span v-else class="text-xs text-gray-400">Open</span>
+                        </td>
                         <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
                             {{ finding.assignee?.name || '—' }}
                         </td>
                         <td class="whitespace-nowrap px-4 py-3">
-                            <Link v-if="finding.ticket" :href="`/tickets/${finding.ticket.id}/edit`"
-                                  class="font-mono text-xs font-semibold text-blue-600 hover:underline dark:text-blue-300">
-                                {{ finding.ticket.ticket_key }}
-                            </Link>
+                            <template v-if="finding.ticket">
+                                <Link :href="`/tickets/${finding.ticket.id}/edit`"
+                                      class="font-mono text-xs font-semibold text-blue-600 hover:underline dark:text-blue-300">
+                                    {{ finding.ticket.ticket_key }}
+                                </Link>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">{{ dateOnly(finding.ticket.created_at) }}</div>
+                                <div class="text-[10px] text-gray-400">{{ timeOnly(finding.ticket.created_at) }}</div>
+                            </template>
                             <span v-else class="text-xs text-gray-400">—</span>
                         </td>
                         <td class="whitespace-nowrap px-4 py-3 text-right">
@@ -180,6 +205,7 @@ import Modal from '@/Components/Modal.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
 import InputError from '@/Components/InputError.vue'
 import UatIconBtn from './UatIconBtn.vue'
+import EvidenceGallery from './EvidenceGallery.vue'
 import FindingModal from './FindingModal.vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { compressImages, MAX_UPLOAD_MB } from '@/Composables/useImageCompressor.js'
@@ -190,6 +216,7 @@ const props = defineProps({
     sections: Array,
     cases: Array,
     participants: Array,
+    columns: Array,
     results: Array,
     findings: Array,
     signoffs: Array,
@@ -249,6 +276,24 @@ const departmentOptions = computed(() => [{ label: '—', value: null }, ...(pro
 
 const severityLabel = (value) => (props.options?.severities || []).find(s => s.value === value)?.label || value
 const statusLabel = (value) => (props.options?.findingStatuses || []).find(s => s.value === value)?.label || value
+
+// Date and time are stacked rather than shown on one line: the register is
+// already wide, and the date is what people scan for.
+const dateOnly = (value) => {
+    if (!value) return '—'
+    const d = new Date(value)
+    return Number.isNaN(d.getTime())
+        ? '—'
+        : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+const timeOnly = (value) => {
+    if (!value) return ''
+    const d = new Date(value)
+    return Number.isNaN(d.getTime())
+        ? ''
+        : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+}
 
 const UNRESOLVED = ['open', 'in_progress', 'for_retest']
 

@@ -80,9 +80,15 @@
                 </template>
 
                 <template #body="{ data }">
-                    <tr v-for="cycle in data" :key="cycle.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
+                    <tr v-for="cycle in data" :key="cycle.id"
+                        @click="openCycle(cycle)"
+                        :title="`Open ${cycle.title}`"
+                        class="cursor-pointer hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                         <td class="px-6 py-4">
-                            <Link :href="route('uat.show', cycle.id)" class="text-sm font-semibold text-blue-700 hover:underline dark:text-blue-300">
+                            <!-- Stops the row handler firing too: the Link already
+                                 navigates, and both would fire twice. -->
+                            <Link :href="route('uat.show', cycle.id)" @click.stop
+                                  class="text-sm font-semibold text-blue-700 hover:underline dark:text-blue-300">
                                 {{ cycle.title }}
                             </Link>
                             <div class="mt-0.5 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-300">
@@ -133,15 +139,10 @@
                             <div v-if="cycle.qa_lead" class="text-xs text-gray-400 dark:text-gray-400">QA: {{ cycle.qa_lead.name }}</div>
                         </td>
 
-                        <td class="px-6 py-4 whitespace-nowrap text-right">
+                        <!-- Row-level click opens the cycle, so the actions cell must
+                             not bubble — otherwise Edit/Delete would also navigate. -->
+                        <td class="px-6 py-4 whitespace-nowrap text-right" @click.stop>
                             <div class="flex justify-end space-x-1">
-                                <Link :href="route('uat.show', cycle.id)" title="Open cycle"
-                                      class="p-2 rounded-full transition-colors text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
-                                </Link>
                                 <button v-if="hasPermission('uat.edit')" @click="openEditModal(cycle)" title="Edit cycle details"
                                         class="p-2 rounded-full transition-colors text-blue-600 hover:text-blue-900 hover:bg-blue-50 dark:hover:bg-blue-900/30">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
@@ -299,6 +300,18 @@ watch(() => [filters.status, filters.company_id], () => {
         search: pagination.search.value || undefined,
     }, { preserveState: true, preserveScroll: true, replace: true })
 })
+
+/**
+ * Whole-row navigation. The title stays a real <Link> so it can still be
+ * keyboard-focused, middle-clicked or opened in a new tab — a click handler
+ * alone would take that away.
+ */
+const openCycle = (cycle) => {
+    // Don't hijack a text selection the user is making inside the row.
+    if (window.getSelection()?.toString()) return
+
+    router.visit(route('uat.show', cycle.id))
+}
 
 const summaryOf = (cycle) => cycle.summary || emptySummary
 
