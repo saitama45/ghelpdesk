@@ -55,6 +55,15 @@ class EnsureUatCycleInDepartment
             return true;
         }
 
+        // The assigned Dev is named on the cycle, and that naming is the grant.
+        // They build what is under test and are routinely in a different
+        // department to the one that owns it. Kept in step with the listing
+        // scope in UatController::index — the two rules must never disagree, or
+        // a row appears in the list and then 403s when opened.
+        if ($cycle->dev_lead_id && (int) $cycle->dev_lead_id === (int) $user->id) {
+            return true;
+        }
+
         return (int) $cycle->department_id === (int) DepartmentContext::homeDepartmentId($user);
     }
 }

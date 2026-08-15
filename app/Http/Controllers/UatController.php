@@ -107,12 +107,18 @@ class UatController extends Controller implements HasMiddleware
         if (!DepartmentContext::isExecutive($user)) {
             $homeDepartmentId = DepartmentContext::homeDepartmentId($user);
 
-            $query->where(function ($q) use ($homeDepartmentId) {
+            $query->where(function ($q) use ($homeDepartmentId, $user) {
                 $q->whereNull('department_id');
 
                 if ($homeDepartmentId) {
                     $q->orWhere('department_id', $homeDepartmentId);
                 }
+
+                // The assigned Dev builds what is being tested and is routinely
+                // from a different department to the one that owns the cycle.
+                // Being named on it is the grant — without this they could not
+                // see the cycle reporting bugs against their own work.
+                $q->orWhere('dev_lead_id', $user->id);
             });
         }
 
