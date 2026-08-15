@@ -1,6 +1,24 @@
 <template>
     <AppLayout title="UAT Tracker" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
         <div class="py-8">
+            <!-- Rows excluded by the entity filter. Without this, a cycle created
+                 under another entity simply vanishes from the list. -->
+            <div v-if="hiddenByEntity > 0"
+                 class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+                <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>
+                    <span class="font-semibold">{{ hiddenByEntity }}</span>
+                    cycle{{ hiddenByEntity === 1 ? '' : 's' }} hidden by the entity filter —
+                    they belong to a different entity than the one you are viewing.
+                </span>
+                <button @click="filters.company_id = 'all'"
+                        class="ml-auto whitespace-nowrap rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-700">
+                    Show all entities
+                </button>
+            </div>
+
             <DataTable
                 title="UAT Tracker"
                 subtitle="Acceptance test cycles, the department/stakeholder verdict matrix, findings and sign-off — replacing the test-script workbook and the walkthrough checklist."
@@ -124,6 +142,12 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                     </svg>
                                 </Link>
+                                <button v-if="hasPermission('uat.edit')" @click="openEditModal(cycle)" title="Edit cycle details"
+                                        class="p-2 rounded-full transition-colors text-blue-600 hover:text-blue-900 hover:bg-blue-50 dark:hover:bg-blue-900/30">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                </button>
                                 <a v-if="hasPermission('uat.export')" :href="route('uat.export', cycle.id)" title="Export workbook"
                                    class="p-2 rounded-full transition-colors text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 dark:hover:bg-indigo-900/30">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
@@ -149,150 +173,14 @@
             </DataTable>
         </div>
 
-        <!-- Create cycle -->
-        <Modal :show="showModal" @close="closeModal" maxWidth="3xl">
-            <div class="p-6">
-                <div class="flex items-start justify-between border-b border-gray-200 pb-4 dark:border-gray-700">
-                    <div>
-                        <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100">New UAT Cycle</h3>
-                        <p class="mt-1 text-sm text-gray-500 dark:text-gray-300">
-                            A cycle is one round of acceptance testing. Add the roster and test cases once it exists — or import them from an existing workbook.
-                        </p>
-                    </div>
-                    <button type="button" @click="closeModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
-
-                <form @submit.prevent="submitForm" class="mt-6 space-y-5">
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                        <div class="sm:col-span-2">
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Cycle Title</label>
-                            <input v-model="form.title" type="text" required placeholder="e.g. System Testing of Planning Website"
-                                   class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
-                            <InputError :message="errors.title" class="mt-1" />
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Round #</label>
-                            <input v-model.number="form.cycle_no" type="number" min="1" max="99" required
-                                   class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">System Under Test</label>
-                            <input v-model="form.system_name" type="text" placeholder="e.g. Planning Service Website"
-                                   class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Environment</label>
-                            <Autocomplete v-model="form.environment" :options="environments" placeholder="Select environment..." />
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Entity</label>
-                            <Autocomplete v-model="form.company_id" :options="companyOptions" placeholder="Select entity..." />
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Owning Department</label>
-                            <Autocomplete v-model="form.department_id" :options="departmentOptions" placeholder="Select department..." />
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Assigned QA</label>
-                            <Autocomplete v-model="form.qa_lead_id" :options="userOptions" placeholder="Search user..." />
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Assigned Dev</label>
-                            <Autocomplete v-model="form.dev_lead_id" :options="userOptions" placeholder="Search user..." />
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                        <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Start Date</label>
-                            <input v-model="form.start_date" type="date"
-                                   class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Target Sign-off</label>
-                            <input v-model="form.target_signoff_date" type="date"
-                                   class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
-                            <InputError :message="errors.target_signoff_date" class="mt-1" />
-                        </div>
-                        <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Go-Live</label>
-                            <input v-model="form.go_live_date" type="date"
-                                   class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
-                        </div>
-                    </div>
-
-                    <div>
-                        <div class="mb-1 flex items-center justify-between">
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-200">Environment Links</label>
-                            <button type="button" @click="addLink" class="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-300">+ Add link</button>
-                        </div>
-                        <div v-for="(link, index) in form.links" :key="index" class="mb-2 flex items-center gap-2">
-                            <input v-model="link.label" type="text" placeholder="Label (e.g. Front-end)"
-                                   class="w-1/3 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
-                            <input v-model="link.url" type="url" placeholder="https://..."
-                                   class="flex-1 rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
-                            <button type="button" @click="form.links.splice(index, 1)" title="Remove link"
-                                    class="rounded-full p-2 text-red-600 transition-colors hover:bg-red-50 hover:text-red-900 dark:hover:bg-red-900/30">
-                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                        <p v-if="!form.links.length" class="text-xs text-gray-400 dark:text-gray-500">
-                            The URLs testers should open — they appear at the top of every tester's screen.
-                        </p>
-                    </div>
-
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Description</label>
-                        <textarea v-model="form.description" rows="2" placeholder="Scope of this round, what changed since the last cycle..."
-                                  class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"></textarea>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-                            <input v-model="form.signoff_requires_all" type="checkbox" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                            <span>
-                                <span class="block text-sm font-medium text-gray-800 dark:text-gray-100">Require every approver</span>
-                                <span class="block text-xs text-gray-500 dark:text-gray-400">Final sign-off stays locked until all nominated approvers accept.</span>
-                            </span>
-                        </label>
-                        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-                            <input v-model="form.gate_on_critical_only" type="checkbox" class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                            <span>
-                                <span class="block text-sm font-medium text-gray-800 dark:text-gray-100">Gate on critical items only</span>
-                                <span class="block text-xs text-gray-500 dark:text-gray-400">Non-critical cases are reported but never block go-live.</span>
-                            </span>
-                        </label>
-                    </div>
-
-                    <div class="flex justify-end gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
-                        <button type="button" @click="closeModal"
-                                class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
-                            Cancel
-                        </button>
-                        <button type="submit" :disabled="processing"
-                                class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50">
-                            {{ processing ? 'Creating...' : 'Create Cycle' }}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </Modal>
-
+        <!-- Create / edit cycle (same form, shared component) -->
+        <CycleFormModal
+            :show="showModal"
+            :cycle="editing"
+            :options="formOptions"
+            :default-company-id="activeCompanyId"
+            @close="closeModal"
+        />
         <!-- Duplicate for a re-test round -->
         <Modal :show="duplicateModal.open" @close="duplicateModal.open = false" maxWidth="lg">
             <div class="p-6">
@@ -344,7 +232,7 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import Modal from '@/Components/Modal.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
-import InputError from '@/Components/InputError.vue'
+import CycleFormModal from './Partials/CycleFormModal.vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
 import { usePagination } from '@/Composables/usePagination'
@@ -352,6 +240,8 @@ import { usePermission } from '@/Composables/usePermission'
 
 const props = defineProps({
     cycles: Object,
+    hiddenByEntity: { type: Number, default: 0 },
+    activeCompanyId: { type: Number, default: null },
     filters: { type: Object, default: () => ({}) },
     statuses: { type: Array, default: () => [] },
     environments: { type: Array, default: () => [] },
@@ -367,49 +257,37 @@ const pagination = usePagination(props.cycles, 'uat.index')
 const { hasPermission } = usePermission()
 
 const showModal = ref(false)
+// null = create mode; a cycle object = edit mode. Both use CycleFormModal.
+const editing = ref(null)
 const processing = ref(false)
-const errors = ref({})
 
 const emptySummary = { passed: 0, failed: 0, blocked: 0, pending: 0, total: 0, open_findings: 0 }
-
-const form = reactive({
-    title: '',
-    system_name: '',
-    description: '',
-    cycle_no: 1,
-    environment: 'Web',
-    links: [],
-    company_id: null,
-    department_id: null,
-    qa_lead_id: null,
-    dev_lead_id: null,
-    status: 'draft',
-    start_date: '',
-    target_signoff_date: '',
-    go_live_date: '',
-    signoff_requires_all: true,
-    gate_on_critical_only: true,
-})
 
 const duplicateModal = reactive({ open: false, cycle: null })
 const duplicateForm = reactive({ title: '', cycle_no: 2, copy_participants: true })
 
 const filters = reactive({
     status: props.filters?.status ?? null,
-    company_id: props.filters?.company_id ?? 'active',
+    // Defaults to every entity — see the controller for why.
+    company_id: props.filters?.company_id ?? 'all',
 })
 
 const statusFilterOptions = computed(() => [{ label: 'All statuses', value: null }, ...props.statuses])
 
 const entityFilterOptions = computed(() => [
-    { label: 'Active entity', value: 'active' },
     { label: 'All entities', value: 'all' },
+    { label: 'Active entity only', value: 'active' },
     ...props.companies.map(c => ({ label: c.label, value: String(c.value) })),
 ])
 
-const companyOptions = computed(() => [{ label: '—', value: null }, ...props.companies])
-const departmentOptions = computed(() => [{ label: '—', value: null }, ...props.departments])
-const userOptions = computed(() => [{ label: '—', value: null }, ...props.users])
+/** Option lists the shared cycle form needs. */
+const formOptions = computed(() => ({
+    statuses: props.statuses,
+    environments: props.environments,
+    companies: props.companies,
+    departments: props.departments,
+    users: props.users,
+}))
 
 onMounted(() => pagination.updateData(props.cycles))
 watch(() => props.cycles, (value) => pagination.updateData(value), { deep: true })
@@ -449,37 +327,19 @@ const formatDate = (value) => {
 }
 
 const openCreateModal = () => {
-    errors.value = {}
-    Object.assign(form, {
-        title: '', system_name: '', description: '', cycle_no: 1, environment: 'Web', links: [],
-        company_id: null, department_id: null, qa_lead_id: null, dev_lead_id: null,
-        status: 'draft', start_date: '', target_signoff_date: '', go_live_date: '',
-        signoff_requires_all: true, gate_on_critical_only: true,
-    })
+    editing.value = null
     showModal.value = true
 }
 
-const closeModal = () => { showModal.value = false }
+/** Same modal, seeded with the row — fixes a typo without touching any verdicts. */
+const openEditModal = (cycle) => {
+    editing.value = cycle
+    showModal.value = true
+}
 
-const addLink = () => form.links.push({ label: '', url: '' })
-
-const submitForm = () => {
-    processing.value = true
-    errors.value = {}
-
-    post('/uat', {
-        ...form,
-        // Blank rows would otherwise fail the url rule on an empty string.
-        links: form.links.filter(l => l.url),
-        start_date: form.start_date || null,
-        target_signoff_date: form.target_signoff_date || null,
-        go_live_date: form.go_live_date || null,
-    }, {
-        preserveScroll: true,
-        onSuccess: () => { showModal.value = false },
-        onError: (e) => { errors.value = e },
-        onFinish: () => { processing.value = false },
-    })
+const closeModal = () => {
+    showModal.value = false
+    editing.value = null
 }
 
 const openDuplicateModal = (cycle) => {

@@ -307,6 +307,7 @@ Route::middleware('auth')->group(function () {
     Route::get('uat/template', [\App\Http\Controllers\UatController::class, 'template'])->name('uat.template');
     Route::get('uat', [\App\Http\Controllers\UatController::class, 'index'])->name('uat.index');
     Route::post('uat', [\App\Http\Controllers\UatController::class, 'store'])->name('uat.store');
+    Route::get('uat/{cycle}/edit-data', [\App\Http\Controllers\UatController::class, 'editData'])->name('uat.edit-data');
     Route::get('uat/{cycle}', [\App\Http\Controllers\UatController::class, 'show'])->name('uat.show');
     Route::put('uat/{cycle}', [\App\Http\Controllers\UatController::class, 'update'])->name('uat.update');
     Route::delete('uat/{cycle}', [\App\Http\Controllers\UatController::class, 'destroy'])->name('uat.destroy');

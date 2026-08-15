@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Department;
 use App\Models\UatCase;
 use App\Models\UatCaseResult;
 use App\Models\UatCycle;
@@ -438,11 +439,44 @@ class UatWorkbook
             'uat_cycle_id' => $cycle->id,
             'kind' => UatParticipant::KIND_DEPARTMENT,
             'label' => $label,
+            // A column headed with a department code is linked to that
+            // department, so the participant is a real org unit rather than a
+            // loose string. Unmatched headings still import as plain columns.
+            'department_id' => $this->departmentIdForCode($label),
             'role' => UatParticipant::ROLE_TESTER,
             'is_active' => true,
             'order' => $order + 1,
         ]);
     }
+
+    /** Matches a matrix column heading to a department by code, then by name. */
+    private function departmentIdForCode(string $label): ?int
+    {
+        $needle = $this->normalize($label);
+
+        if ($needle === '') {
+            return null;
+        }
+
+        $this->departmentLookup ??= Department::query()
+            ->where('is_active', true)
+            ->get(['id', 'code', 'name'])
+            ->reduce(function (array $carry, Department $department) {
+                foreach ([$department->code, $department->name] as $key) {
+                    $key = $this->normalize($key);
+                    if ($key !== '' && !isset($carry[$key])) {
+                        $carry[$key] = $department->id;
+                    }
+                }
+
+                return $carry;
+            }, []);
+
+        return $this->departmentLookup[$needle] ?? null;
+    }
+
+    /** @var array<string,int>|null */
+    private ?array $departmentLookup = null;
 
     private function highestSequence(UatCycle $cycle): int
     {
@@ -766,14 +800,41 @@ class UatWorkbook
 
         $matrix = $spreadsheet->createSheet(1);
         $matrix->setTitle('Walkthrough Matrix');
-        $matrix->fromArray(['Title', 'BD', 'Ops Support', 'Ops', 'Accounting', 'Warehouse', 'Admin', 'Remark'], null, 'A1');
-        $this->styleHeaderRow($matrix, 1, 8);
+
+        // Columns are the live department codes from /departments, so the sheet
+        // a tester receives already matches the organisation rather than the
+        // department names of whoever the original checklist belonged to.
+        $codes = $this->departmentCodes();
+        $headers = array_merge(['Title'], $codes, ['Remark']);
+        $matrix->fromArray($headers, null, 'A1');
+        $this->styleHeaderRow($matrix, 1, count($headers));
+
+        // Example rows: a section banner, then two items answered by the first
+        // couple of columns so the expected shape is obvious.
+        $pad = array_fill(0, count($codes), '');
+        $mark = function (array $values) use ($codes) {
+            $row = array_fill(0, count($codes), '');
+            foreach (array_values($values) as $index => $value) {
+                if ($index < count($codes)) {
+                    $row[$index] = $value;
+                }
+            }
+
+            return $row;
+        };
+
         $matrix->fromArray([
-            ['ITEM'],
-            ['1. Understand types of Items available', '', '', 'Yes', '', '', 'Yes', ''],
-            ['2. Able to add Item', '', '', 'Yes', '', '', 'Yes', ''],
+            array_merge(['ITEM'], $pad, ['']),
+            array_merge(['1. Understand types of Items available'], $mark(['Yes']), ['']),
+            array_merge(['2. Able to add Item'], $mark(['Yes', 'No']), ['Example remark for the row']),
         ], null, 'A2');
+
         $matrix->getColumnDimension('A')->setWidth(60);
+        for ($i = 2; $i < count($headers); $i++) {
+            $matrix->getColumnDimension(Coordinate::stringFromColumnIndex($i))->setWidth(12);
+        }
+        $matrix->getColumnDimension(Coordinate::stringFromColumnIndex(count($headers)))->setWidth(40);
+        $matrix->freezePane('B2');
 
         $instructions = $spreadsheet->createSheet(2);
         $instructions->setTitle('Instructions');
@@ -790,9 +851,12 @@ class UatWorkbook
             [''],
             ['B. Walkthrough Matrix layout'],
             ['1. First column must be headed Title. Every column after it is treated as a participant, except a trailing Remark column.'],
-            ['2. A row with a title but no verdicts is read as a section banner (e.g. ITEM, BILLING).'],
-            ['3. Verdict cells accept Yes / No / Ongoing / N/A as well as Passed / Failed / Blocked / Pending.'],
-            ['4. Participants are matched to existing columns by label, and created when they do not exist yet.'],
+            ['2. The department columns are generated from the active departments on the /departments page, using their CODE.'],
+            ['   Delete any column your test does not involve, and add your own heading for an external client or a team that is not a department.'],
+            ['3. A column whose heading matches a department code (or name) is linked to that department automatically.'],
+            ['4. A row with a title but no verdicts is read as a section banner (e.g. ITEM, BILLING).'],
+            ['5. Verdict cells accept Yes / No / Ongoing / N/A as well as Passed / Failed / Blocked / Pending.'],
+            ['6. Participants are matched to existing columns by label, and created when they do not exist yet.'],
             [''],
             ['Test Case IDs are generated automatically for matrix rows, following whatever prefix the cycle already uses.'],
         ], null, 'A1');
@@ -804,6 +868,33 @@ class UatWorkbook
         $spreadsheet->setActiveSheetIndex(0);
 
         return $spreadsheet;
+    }
+
+    /**
+     * Active department codes, in the order /departments lists them.
+     *
+     * Codes rather than names: they are short enough to make a readable column
+     * header, and they are what the importer matches a column back to.
+     *
+     * @return array<int,string>
+     */
+    private function departmentCodes(): array
+    {
+        $codes = Department::query()
+            ->where('is_active', true)
+            ->whereNotNull('code')
+            ->where('code', '!=', '')
+            ->orderBy('name')
+            ->pluck('code')
+            ->map(fn ($code) => trim((string) $code))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        // A fresh install has no departments yet — keep the template usable by
+        // still demonstrating the shape it expects.
+        return $codes !== [] ? $codes : ['DEPT-A', 'DEPT-B', 'DEPT-C'];
     }
 
     private function styleHeaderRow(Worksheet $sheet, int $row, int $columnCount): void

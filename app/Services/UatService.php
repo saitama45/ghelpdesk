@@ -244,14 +244,29 @@ class UatService
             ? empty($pendingApprovers)
             : $accepted > 0);
 
+        // "No outstanding cases" is vacuously true for a cycle with no cases at
+        // all, which would otherwise report an empty draft as testing-complete.
+        // A cycle is only testable once it has both something to test and
+        // somebody to test it.
+        $hasCases = $cases->isNotEmpty();
+        $hasParticipants = $participants
+            ->filter(fn ($p) => $p->is_active && $p->canRecordVerdicts())
+            ->isNotEmpty();
+        $isSetUp = $hasCases && $hasParticipants;
+
+        $testingReady = $isSetUp && empty($outstandingCases) && empty($blockingFindings);
+
         return [
             'gate_on_critical_only' => (bool) $cycle->gate_on_critical_only,
             'outstanding_cases' => $outstandingCases,
             'blocking_findings' => $blockingFindings,
             'pending_approvers' => $pendingApprovers,
-            'testing_ready' => empty($outstandingCases) && empty($blockingFindings),
+            'has_cases' => $hasCases,
+            'has_participants' => $hasParticipants,
+            'is_set_up' => $isSetUp,
+            'testing_ready' => $testingReady,
             'signoff_ready' => $signoffReady,
-            'is_ready' => empty($outstandingCases) && empty($blockingFindings) && $signoffReady,
+            'is_ready' => $testingReady && $signoffReady,
         ];
     }
 

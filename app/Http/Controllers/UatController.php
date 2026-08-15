@@ -45,6 +45,7 @@ class UatController extends Controller implements HasMiddleware
     {
         return [
             new Middleware('can:uat.view', only: ['index', 'show', 'caseDetail']),
+            new Middleware('can:uat.edit', only: ['editData']),
             new Middleware('can:uat.create', only: ['store', 'duplicate']),
             new Middleware('can:uat.edit', only: [
                 'update', 'storeSection', 'updateSection', 'destroySection',
@@ -93,9 +94,17 @@ class UatController extends Controller implements HasMiddleware
             $query->where('status', $request->input('status'));
         }
 
-        // Entity filter is a listing convenience, not an authorisation boundary:
-        // 'all' is always available to anyone who can see the module.
-        $entity = $request->input('company_id', 'active');
+        // Entity filter is a listing convenience, not an authorisation boundary.
+        // Defaults to every entity: a UAT cycle is a project-shaped thing that
+        // often spans entities, and scoping it to the active one by default hid
+        // cycles the user had just created.
+        $entity = $request->input('company_id', 'all');
+
+        // Counted before the entity filter narrows things, so the page can say
+        // how many rows it is hiding. Creating a cycle under one entity and then
+        // not finding it under another is otherwise silent and baffling.
+        $totalBeforeEntityFilter = (clone $query)->count();
+
         if ($entity === 'active') {
             $activeId = CompanyContext::activeCompanyId();
             if ($activeId) {
@@ -106,6 +115,8 @@ class UatController extends Controller implements HasMiddleware
         } elseif ($entity !== 'all' && is_numeric($entity)) {
             $query->where('company_id', (int) $entity);
         }
+
+        $hiddenByEntity = max(0, $totalBeforeEntityFilter - (clone $query)->count());
 
         $cycles = $query->orderByDesc('id')
             ->paginate($request->get('per_page', 12))
@@ -121,6 +132,8 @@ class UatController extends Controller implements HasMiddleware
 
         return Inertia::render('Uat/Index', [
             'cycles' => $cycles,
+            'hiddenByEntity' => $hiddenByEntity,
+            'activeCompanyId' => CompanyContext::activeCompanyId(),
             'filters' => [
                 'search' => $request->input('search'),
                 'status' => $request->input('status'),
@@ -130,8 +143,7 @@ class UatController extends Controller implements HasMiddleware
             'environments' => collect(UatCycle::environments())->map(fn ($e) => ['label' => $e, 'value' => $e])->all(),
             'companies' => CompanyContext::accessibleCompanies($request->user())
                 ->map(fn ($c) => ['label' => $c->name, 'value' => $c->id])->values()->all(),
-            'departments' => Department::where('is_active', true)->orderBy('name')
-                ->get(['id', 'name'])->map(fn ($d) => ['label' => $d->name, 'value' => $d->id])->all(),
+            'departments' => $this->departmentOptions(),
             'users' => $this->userOptions(),
         ]);
     }
@@ -303,10 +315,39 @@ class UatController extends Controller implements HasMiddleware
                 'participantRoles' => $this->options(UatParticipant::roles()),
                 'companies' => CompanyContext::accessibleCompanies($request->user())
                     ->map(fn ($c) => ['label' => $c->name, 'value' => $c->id])->values()->all(),
-                'departments' => Department::where('is_active', true)->orderBy('name')
-                    ->get(['id', 'name'])->map(fn ($d) => ['label' => $d->name, 'value' => $d->id])->all(),
+                'departments' => $this->departmentOptions(),
                 'users' => $this->userOptions(),
             ],
+        ]);
+    }
+
+    /**
+     * Every editable field of a cycle, for the edit form.
+     *
+     * The index listing deliberately selects a narrow column set (it never needs
+     * `description` or `links`, which are nvarchar(MAX)). Handing that partial
+     * row to the edit form meant the missing fields posted back as blank and
+     * silently wiped stored values, so the form fetches the whole record here
+     * instead of trusting whatever the calling page happened to have.
+     */
+    public function editData(UatCycle $cycle)
+    {
+        return response()->json([
+            'cycle' => array_merge($cycle->only([
+                'id', 'code', 'title', 'system_name', 'description', 'cycle_no',
+                'environment', 'links', 'company_id', 'department_id',
+                'qa_lead_id', 'dev_lead_id', 'status',
+                'signoff_requires_all', 'gate_on_critical_only',
+            ]), [
+                // Formatted, not handed over as Carbon. `only()` returns the raw
+                // cast value, and json_encode renders a Carbon in UTC — which
+                // moves an Asia/Manila calendar date back a day (2026-08-01
+                // became 2026-07-31T16:00Z), so every save walked dates
+                // backwards. These columns are calendar dates with no time.
+                'start_date' => $cycle->start_date?->format('Y-m-d'),
+                'target_signoff_date' => $cycle->target_signoff_date?->format('Y-m-d'),
+                'go_live_date' => $cycle->go_live_date?->format('Y-m-d'),
+            ]),
         ]);
     }
 
@@ -959,6 +1000,24 @@ class UatController extends Controller implements HasMiddleware
     private function options(array $map): array
     {
         return collect($map)->map(fn ($label, $value) => ['label' => $label, 'value' => $value])->values()->all();
+    }
+
+    /**
+     * Active departments, carrying the code separately so the participant form
+     * can use it as the matrix column heading.
+     */
+    private function departmentOptions(): array
+    {
+        return Department::where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'code'])
+            ->map(fn ($d) => [
+                'label' => $d->code ? "{$d->code} — {$d->name}" : $d->name,
+                'value' => $d->id,
+                'code' => $d->code,
+                'name' => $d->name,
+            ])
+            ->all();
     }
 
     private function userOptions(): array

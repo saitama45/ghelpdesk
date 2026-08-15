@@ -220,34 +220,43 @@
                             <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Type</label>
                             <Autocomplete v-model="participantForm.kind" :options="options.participantKinds || []" placeholder="Select type..." />
                         </div>
-                        <div>
+
+                        <!-- Department columns are picked from /departments; the
+                             department's code becomes the matrix column heading.
+                             Free-text labels stay available for external clients. -->
+                        <div v-if="isDepartmentKind">
+                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Department</label>
+                            <Autocomplete v-model="participantForm.department_id" :options="departmentPickerOptions" placeholder="Select department..." />
+                            <p class="mt-1 text-xs text-gray-400">
+                                Column heading will be
+                                <span class="font-semibold text-gray-600 dark:text-gray-300">{{ participantForm.label || '—' }}</span>
+                            </p>
+                            <InputError :message="participantModal.errors.label" class="mt-1" />
+                        </div>
+
+                        <div v-else>
                             <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Column Label</label>
-                            <input v-model="participantForm.label" type="text" required maxlength="80" placeholder="e.g. BD, Ops Support, Accounting"
+                            <input v-model="participantForm.label" type="text" required maxlength="80" placeholder="e.g. Client QA, Coffee Bean"
                                    class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
                             <InputError :message="participantModal.errors.label" class="mt-1" />
                         </div>
                     </div>
 
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Role</label>
-                        <Autocomplete v-model="participantForm.role" :options="options.participantRoles || []" placeholder="Select role..." />
-                        <p class="mt-1 text-xs text-gray-400">
-                            Only approvers appear on the acceptance roster and gate the final sign-off.
-                        </p>
-                    </div>
-
-                    <div v-if="participantForm.kind === 'department'" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Department</label>
-                            <Autocomplete v-model="participantForm.department_id" :options="departmentOptions" placeholder="Select department..." />
+                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Role</label>
+                            <Autocomplete v-model="participantForm.role" :options="options.participantRoles || []" placeholder="Select role..." />
+                            <p class="mt-1 text-xs text-gray-400">
+                                Only approvers appear on the acceptance roster and gate the final sign-off.
+                            </p>
                         </div>
-                        <div>
+                        <div v-if="isDepartmentKind">
                             <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Representative</label>
                             <Autocomplete v-model="participantForm.user_id" :options="userOptions" placeholder="Search user..." />
                         </div>
                     </div>
 
-                    <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div v-if="!isDepartmentKind" class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-200">Company</label>
                             <Autocomplete v-model="participantForm.company_id" :options="companyOptions" placeholder="Select entity..." />
@@ -412,7 +421,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, inject } from 'vue'
+import { ref, reactive, computed, watch, inject } from 'vue'
 import { router } from '@inertiajs/vue3'
 import Modal from '@/Components/Modal.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
@@ -467,6 +476,49 @@ const caseForm = reactive({
 })
 
 const departmentOptions = computed(() => [{ label: '—', value: null }, ...(props.options?.departments || [])])
+
+const isDepartmentKind = computed(() => participantForm.kind === 'department')
+
+/**
+ * Department picker for the participant form. An imported column whose heading
+ * matched no department (e.g. "QA", "Ops Support") keeps a synthetic entry so
+ * editing that row does not silently wipe its label.
+ */
+const departmentPickerOptions = computed(() => {
+    const base = (props.options?.departments || []).map(d => ({ ...d }))
+    const record = participantModal.record
+
+    if (record && !record.department_id && record.label) {
+        base.unshift({ label: `${record.label} (custom column)`, value: null, code: record.label, name: record.label })
+    }
+
+    return base
+})
+
+/** Selecting a department sets the column heading to its code. */
+watch(() => participantForm.department_id, (id) => {
+    if (!isDepartmentKind.value) return
+
+    const picked = departmentPickerOptions.value.find(d => d.value === id)
+    if (picked) {
+        participantForm.label = (picked.code || picked.name || '').slice(0, 80)
+    }
+})
+
+// Switching type clears the other branch's fields so a half-filled form cannot
+// save a stakeholder with a department id, or vice versa.
+watch(() => participantForm.kind, (kind, previous) => {
+    if (kind === previous || previous === undefined) return
+
+    if (kind === 'department') {
+        participantForm.company_id = null
+        participantForm.contact_name = ''
+        participantForm.contact_email = ''
+    } else {
+        participantForm.department_id = null
+        participantForm.user_id = null
+    }
+})
 const companyOptions = computed(() => [{ label: '—', value: null }, ...(props.options?.companies || [])])
 const userOptions = computed(() => [{ label: '—', value: null }, ...(props.options?.users || [])])
 
@@ -530,6 +582,13 @@ const openParticipant = (record = null) => {
 }
 
 const submitParticipant = () => {
+    // A department column takes its heading from the picker, so guard the case
+    // where nothing was chosen rather than posting an empty label.
+    if (isDepartmentKind.value && !participantForm.label.trim()) {
+        participantModal.errors = { label: 'Choose a department — its code becomes the column heading.' }
+        return
+    }
+
     participantModal.saving = true
     participantModal.errors = {}
 

@@ -35,11 +35,50 @@
             </span>
         </div>
 
-        <div v-if="!columns.length" class="rounded-xl border border-dashed border-gray-300 p-10 text-center dark:border-gray-600">
-            <p class="text-sm text-gray-500 dark:text-gray-400">
-                No participants yet. The matrix needs at least one department or stakeholder column —
-                add them in the <span class="font-semibold">Setup</span> tab.
+        <!-- Nothing to show yet: say exactly what is missing and how to add it.
+             Verdicts are not created directly — a cell exists where a test case
+             meets a participant, so both have to exist first. -->
+        <div v-if="!columns.length || !cases.length"
+             class="rounded-xl border border-dashed border-gray-300 p-10 text-center dark:border-gray-600">
+            <h3 class="text-base font-bold text-gray-800 dark:text-gray-100">Nothing to record verdicts against yet</h3>
+            <p class="mx-auto mt-2 max-w-xl text-sm text-gray-500 dark:text-gray-400">
+                The matrix is a grid of <span class="font-semibold">test cases</span> (rows) against
+                <span class="font-semibold">participants</span> (columns). A verdict is the cell where the two meet,
+                so this cycle needs both before anything is clickable.
             </p>
+
+            <ul class="mx-auto mt-4 max-w-sm space-y-2 text-left text-sm">
+                <li class="flex items-center gap-2">
+                    <span class="inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold text-white"
+                          :class="cases.length ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'">
+                        {{ cases.length ? '✓' : '1' }}
+                    </span>
+                    <span :class="cases.length ? 'text-gray-400 line-through' : 'text-gray-700 dark:text-gray-200'">
+                        Add test cases ({{ cases.length }} so far)
+                    </span>
+                </li>
+                <li class="flex items-center gap-2">
+                    <span class="inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold text-white"
+                          :class="columns.length ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'">
+                        {{ columns.length ? '✓' : '2' }}
+                    </span>
+                    <span :class="columns.length ? 'text-gray-400 line-through' : 'text-gray-700 dark:text-gray-200'">
+                        Add participants — the departments or clients doing the testing ({{ columns.length }} so far)
+                    </span>
+                </li>
+                <li class="flex items-center gap-2">
+                    <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-300 text-[11px] font-bold text-white dark:bg-gray-600">3</span>
+                    <span class="text-gray-700 dark:text-gray-200">Click any cell here to record its verdict</span>
+                </li>
+            </ul>
+
+            <div class="mt-5 flex flex-wrap items-center justify-center gap-2">
+                <button v-if="can('uat.edit')" @click="$emit('go', 'setup')"
+                        class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700">
+                    Open Setup
+                </button>
+                <span v-else class="text-xs text-gray-400">Ask a cycle owner to set this up — you do not hold uat.edit.</span>
+            </div>
         </div>
 
         <div v-else-if="!visibleCases.length" class="rounded-xl border border-dashed border-gray-300 p-10 text-center dark:border-gray-600">
@@ -232,7 +271,7 @@ const props = defineProps({
     options: Object,
 })
 
-defineEmits(['open-case'])
+defineEmits(['open-case', 'go'])
 
 const can = inject('uatCan', () => false)
 const canExecute = computed(() => can('uat.execute') && cycleOpen.value)

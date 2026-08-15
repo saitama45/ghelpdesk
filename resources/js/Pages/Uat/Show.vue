@@ -63,6 +63,13 @@
                     </div>
 
                     <div class="flex items-center gap-2">
+                        <button v-if="can('uat.edit')" @click="editModal = true"
+                                class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-medium text-blue-700 shadow-sm transition-colors hover:bg-blue-50 dark:border-blue-400/30 dark:bg-slate-900 dark:text-blue-200 dark:hover:bg-blue-500/15">
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Edit
+                        </button>
                         <a v-if="can('uat.export')" :href="route('uat.export', cycle.id)"
                            class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-medium text-indigo-700 shadow-sm transition-colors hover:bg-indigo-50 dark:border-indigo-400/30 dark:bg-slate-900 dark:text-indigo-200 dark:hover:bg-indigo-500/15">
                             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
@@ -84,15 +91,31 @@
                 <div class="mt-4 rounded-lg border p-3 text-sm" :class="readinessClass">
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
                         <span class="font-bold">{{ readinessHeadline }}</span>
-                        <span v-if="readiness.outstanding_cases.length">
-                            {{ readiness.outstanding_cases.length }} {{ readiness.gate_on_critical_only ? 'critical ' : '' }}case(s) outstanding
-                        </span>
-                        <span v-if="readiness.blocking_findings.length">
-                            {{ readiness.blocking_findings.length }} blocker/major finding(s) open
-                        </span>
-                        <span v-if="readiness.pending_approvers.length">
-                            {{ readiness.pending_approvers.length }} approver(s) yet to accept
-                        </span>
+
+                        <!-- Empty cycle: say what is missing and offer the way in -->
+                        <template v-if="setupGaps.length">
+                            <span>It still needs {{ setupGaps.join(' and ') }}.</span>
+                            <button v-if="can('uat.edit')" @click="activeTab = 'setup'"
+                                    class="rounded-lg bg-blue-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-blue-700">
+                                Go to Setup
+                            </button>
+                            <button v-if="can('uat.import')" @click="importModal = true"
+                                    class="rounded-lg border border-blue-300 px-3 py-1 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-50 dark:border-blue-400/40 dark:text-blue-200 dark:hover:bg-blue-500/15">
+                                Import a workbook
+                            </button>
+                        </template>
+
+                        <template v-else>
+                            <span v-if="readiness.outstanding_cases.length">
+                                {{ readiness.outstanding_cases.length }} {{ readiness.gate_on_critical_only ? 'critical ' : '' }}case(s) outstanding
+                            </span>
+                            <span v-if="readiness.blocking_findings.length">
+                                {{ readiness.blocking_findings.length }} blocker/major finding(s) open
+                            </span>
+                            <span v-if="readiness.pending_approvers.length">
+                                {{ readiness.pending_approvers.length }} approver(s) yet to accept
+                            </span>
+                        </template>
                     </div>
                 </div>
             </div>
@@ -117,13 +140,21 @@
 
             <div class="mt-5">
                 <OverviewTab v-if="activeTab === 'overview'" v-bind="tabProps" @go="activeTab = $event" />
-                <MatrixTab v-else-if="activeTab === 'matrix'" v-bind="tabProps" @open-case="openCase" />
+                <MatrixTab v-else-if="activeTab === 'matrix'" v-bind="tabProps" @open-case="openCase" @go="activeTab = $event" />
                 <ExecuteTab v-else-if="activeTab === 'execute'" v-bind="tabProps" />
                 <FindingsTab v-else-if="activeTab === 'findings'" v-bind="tabProps" />
                 <SignoffTab v-else-if="activeTab === 'signoff'" v-bind="tabProps" />
                 <SetupTab v-else-if="activeTab === 'setup'" v-bind="tabProps" />
             </div>
         </div>
+
+        <!-- Edit the cycle header -->
+        <CycleFormModal
+            :show="editModal"
+            :cycle="cycle"
+            :options="options"
+            @close="editModal = false"
+        />
 
         <!-- Import workbook -->
         <Modal :show="importModal" @close="importModal = false" maxWidth="lg">
@@ -172,6 +203,7 @@ import ExecuteTab from './Partials/ExecuteTab.vue'
 import FindingsTab from './Partials/FindingsTab.vue'
 import SignoffTab from './Partials/SignoffTab.vue'
 import SetupTab from './Partials/SetupTab.vue'
+import CycleFormModal from './Partials/CycleFormModal.vue'
 
 const props = defineProps({
     cycle: { type: Object, required: true },
@@ -194,6 +226,7 @@ const { hasPermission } = usePermission()
 const can = (permission) => hasPermission(permission)
 
 const activeTab = ref('overview')
+const editModal = ref(false)
 const importModal = ref(false)
 const importing = ref(false)
 const importError = ref('')
@@ -248,8 +281,19 @@ const statusClass = computed(() => ({
     cancelled: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-300',
 }[props.cycle.status] || 'bg-gray-100 text-gray-600'))
 
+/** What is missing before this cycle can even be tested. */
+const setupGaps = computed(() => {
+    const gaps = []
+    if (!props.readiness?.has_cases) gaps.push('test cases')
+    if (!props.readiness?.has_participants) gaps.push('participants')
+    return gaps
+})
+
 const readinessHeadline = computed(() => {
     if (props.cycle.status === 'signed_off') return 'Signed off.'
+    // Checked before readiness: an empty cycle has no outstanding cases, which
+    // would otherwise read as "testing complete".
+    if (setupGaps.value.length) return 'This cycle is not set up yet.'
     if (props.readiness?.is_ready) return 'Ready for final sign-off.'
     if (props.readiness?.testing_ready) return 'Testing complete — waiting on approvers.'
     return 'Not ready for sign-off yet.'
