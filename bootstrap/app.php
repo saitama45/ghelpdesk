@@ -20,6 +20,14 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\UpdateUserPresence::class,
         ]);
         $middleware->trustProxies(at: '*');
+
+        // Hiding a sidebar link is not access control. Every permission-gated
+        // module must also refuse the bare URL, or anyone who types or guesses
+        // the path walks straight in. Use it as ->middleware('permission:x.view')
+        // on the module's route group.
+        $middleware->alias([
+            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // When a session expires mid-request, an exception (e.g. auth) renders a 302

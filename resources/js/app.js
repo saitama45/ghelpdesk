@@ -8,6 +8,7 @@ import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import ClickAway from './Directives/ClickAway.js';
 import ToastPlugin from './Plugins/toast.js';
 import { useTheme } from './Composables/useTheme.js';
+import { trackNavigationHistory } from './Composables/useNavigationHistory.js';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -20,6 +21,7 @@ createInertiaApp({
         ),
     setup({ el, App, props, plugin }) {
         useTheme().init();
+        trackNavigationHistory();
 
         return createApp({ render: () => h(App, props) })
             .use(plugin)

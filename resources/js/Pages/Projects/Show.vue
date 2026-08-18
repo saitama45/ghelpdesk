@@ -16,6 +16,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import { useConfirm } from '@/Composables/useConfirm.js';
 import { usePermission } from '@/Composables/usePermission.js';
+import { useNavigationHistory } from '@/Composables/useNavigationHistory.js';
 import {
     ChevronLeftIcon,
     CalendarIcon,
@@ -132,6 +133,22 @@ watch(activeTab, (tab) => {
     }
 
     window.history.replaceState({}, '', url);
+});
+
+// Back returns to wherever the project was opened from (the type tab and its
+// filters, the dashboard pipeline, a task board, global search…). With no
+// recorded origin — a bookmark, a pasted link — fall back to this project's own
+// type tab, which opens on its Overview, rather than dumping the user on "All".
+const { backHref } = useNavigationHistory();
+
+const backUrl = computed(() => {
+    const fallback = props.project.project_type
+        ? route('projects.index', { type: props.project.project_type })
+        : route('projects.index');
+
+    // Never treat another project's detail page as the origin — it is not
+    // reachable from here, so a stale entry would only send the user sideways.
+    return backHref(fallback, (url) => !/^\/projects\/[^/]+/.test(url));
 });
 
 const { confirm: confirmAction } = useConfirm();
@@ -813,7 +830,7 @@ const getStatusColor = (status) => {
                 <div class="bg-gradient-to-r from-blue-600 to-indigo-700 h-2"></div>
                 <div class="p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
                     <div class="flex items-start">
-                        <Link :href="route('projects.index')" class="mr-6 p-3 rounded-xl bg-gray-50 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-all border border-gray-100 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
+                        <Link :href="backUrl" data-testid="project-back" title="Back" class="mr-6 p-3 rounded-xl bg-gray-50 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-all border border-gray-100 dark:bg-gray-900/50 dark:text-gray-400 dark:border-gray-700">
                             <ChevronLeftIcon class="h-6 w-6" />
                         </Link>
                         <div>

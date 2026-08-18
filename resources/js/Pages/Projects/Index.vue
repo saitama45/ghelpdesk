@@ -119,7 +119,18 @@ let searchTimeout = null;
 // 'dashboard' = the lazy-loaded weekly progress chart.
 // Landing on /projects?type=Store%20Opening opens that type's Overview, same as
 // clicking the tab. "All" has no Overview and stays on the list.
-const activeTab = ref(props.filters?.type && props.canViewOverview ? 'overview' : 'projects');
+// The tab a given type lands on when nothing else is asked for.
+const defaultTabFor = (type) => (type && props.canViewOverview ? 'overview' : 'projects');
+
+// ?tab= lets a Back/refresh land on the exact sub-tab the user left, instead of
+// the type's default. Anything unrecognised falls through to the default.
+const requestedTab = new URLSearchParams(window.location.search).get('tab');
+const activeTab = ref(
+    ['overview', 'projects', 'dashboard'].includes(requestedTab)
+    && !(requestedTab === 'overview' && !(props.filters?.type && props.canViewOverview))
+        ? requestedTab
+        : defaultTabFor(props.filters?.type)
+);
 
 const openDashboard = () => {
     activeTab.value = 'dashboard';
@@ -143,6 +154,10 @@ const openOverview = () => {
 // Direct hit on /projects?type=… — the tab is already Overview, so fetch it.
 onMounted(() => {
     if (activeTab.value === 'overview') loadOverview();
+    // Restored ?tab=dashboard — its payload is optional, so ask for it.
+    if (activeTab.value === 'dashboard' && !props.dashboard) {
+        router.reload({ only: ['dashboard', 'dashboardProjectOptions', 'dashboardFilters'] });
+    }
 });
 
 const visibleProjects = computed(() => props.projects?.data || []);
@@ -153,6 +168,8 @@ const filterParams = () => ({
     status:   statusFilter.value || undefined,
     store_id: storeFilter.value || undefined,
     type:     activeType.value || undefined,
+    // Only when it differs from the default, to keep the URL tidy.
+    tab:      activeTab.value !== defaultTabFor(activeType.value) ? activeTab.value : undefined,
 });
 
 const applyFilters = (options = {}) => {
@@ -196,6 +213,20 @@ const resetFilters = () => {
     clearTimeout(searchTimeout);
     applyFilters();
 };
+
+// Switching sub-tabs is client-side only, so mirror it into the URL by hand —
+// that is what makes the detail page's Back button able to restore this view.
+watch(activeTab, (tab) => {
+    const url = new URL(window.location.href);
+
+    if (tab && tab !== defaultTabFor(activeType.value)) {
+        url.searchParams.set('tab', tab);
+    } else {
+        url.searchParams.delete('tab');
+    }
+
+    window.history.replaceState({}, '', url);
+});
 
 watch(searchQuery, () => {
     clearTimeout(searchTimeout);

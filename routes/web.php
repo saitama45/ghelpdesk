@@ -491,15 +491,32 @@ Route::middleware('auth')->group(function () {
     Route::post('/notifications/{id}/read', [\App\Http\Controllers\NotificationController::class, 'markRead'])->name('notifications.read');
 
     // NSO Project Tracker
-    Route::post('projects/{project}/task-board', [\App\Http\Controllers\TaskBoardController::class, 'openProjectBoard'])->name('projects.task-board');
-    Route::post('projects/{project}/duplicate', [\App\Http\Controllers\ProjectController::class, 'duplicate'])->name('projects.duplicate');
-    Route::resource('projects', \App\Http\Controllers\ProjectController::class);
-    Route::post('projects/{project}/apply-templates', [\App\Http\Controllers\ProjectTaskController::class, 'applyTemplates'])->name('projects.apply-templates');
-    Route::delete('projects/{project}/milestone-tasks', [\App\Http\Controllers\ProjectTaskController::class, 'destroyMilestone'])->name('projects.milestones.destroy');
-    Route::post('projects/tasks/gantt', [\App\Http\Controllers\ProjectTaskController::class, 'updateGantt'])->name('projects.tasks.gantt-update');
-    Route::resource('projects-tasks', \App\Http\Controllers\ProjectTaskController::class)->only(['store', 'update', 'destroy']);
-    Route::resource('projects-assets', \App\Http\Controllers\ProjectAssetController::class)->only(['store', 'update', 'destroy']);
-    Route::resource('projects-team-members', \App\Http\Controllers\ProjectTeamMemberController::class)->only(['store', 'destroy']);
+    //
+    // Everything here sits behind projects.view. The sidebar already hides the
+    // module from users without it, but hiding a link is not access control —
+    // until this group existed, typing /projects or /projects/{id} rendered the
+    // whole tracker for any logged-in user. Writes carry their own, narrower
+    // permission on top; per-row edit ownership (creator/assignee) stays in the
+    // controllers, which is a rule the permission layer cannot express.
+    Route::middleware('permission:projects.view')->group(function () {
+        Route::post('projects/{project}/task-board', [\App\Http\Controllers\TaskBoardController::class, 'openProjectBoard'])->name('projects.task-board');
+        Route::post('projects/{project}/duplicate', [\App\Http\Controllers\ProjectController::class, 'duplicate'])->middleware('permission:projects.create')->name('projects.duplicate');
+        // No `edit` route: the project header is edited from a modal on the detail
+        // page, which PUTs straight to projects.update. The resource registered
+        // projects.edit anyway, pointing at a ProjectController::edit() that does
+        // not exist — /projects/{id}/edit was a 500 for everyone.
+        Route::resource('projects', \App\Http\Controllers\ProjectController::class)
+            ->except(['edit'])
+            ->middlewareFor(['create', 'store'], 'permission:projects.create')
+            ->middlewareFor('update', 'permission:projects.edit')
+            ->middlewareFor('destroy', 'permission:projects.delete');
+        Route::post('projects/{project}/apply-templates', [\App\Http\Controllers\ProjectTaskController::class, 'applyTemplates'])->middleware('permission:projects.manage_tasks')->name('projects.apply-templates');
+        Route::delete('projects/{project}/milestone-tasks', [\App\Http\Controllers\ProjectTaskController::class, 'destroyMilestone'])->middleware('permission:projects.manage_tasks')->name('projects.milestones.destroy');
+        Route::post('projects/tasks/gantt', [\App\Http\Controllers\ProjectTaskController::class, 'updateGantt'])->middleware('permission:projects.manage_tasks')->name('projects.tasks.gantt-update');
+        Route::resource('projects-tasks', \App\Http\Controllers\ProjectTaskController::class)->only(['store', 'update', 'destroy'])->middleware('permission:projects.manage_tasks');
+        Route::resource('projects-assets', \App\Http\Controllers\ProjectAssetController::class)->only(['store', 'update', 'destroy'])->middleware('permission:projects.manage_assets');
+        Route::resource('projects-team-members', \App\Http\Controllers\ProjectTeamMemberController::class)->only(['store', 'destroy'])->middleware('permission:projects.edit');
+    });
 
     // Payments & SOA Monitoring
     Route::prefix('payments')->name('payments.')->group(function () {
