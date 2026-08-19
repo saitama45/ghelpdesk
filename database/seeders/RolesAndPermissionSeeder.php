@@ -233,6 +233,16 @@ class RolesAndPermissionSeeder extends Seeder
             'holidays.delete' => 'Delete holidays',
 
             // UAT Tracker
+            'qat.view' => 'View QAT cycles',
+            'qat.create' => 'Create QAT cycles',
+            'qat.edit' => 'Edit QAT cycles, test cases and participants',
+            'qat.execute' => 'Record QAT verdicts and log findings',
+            'qat.submit' => 'Submit a QAT cycle for manager sign-off',
+            'qat.approve' => 'Sign off a QAT cycle as the approving manager',
+            'qat.promote' => 'Promote a signed-off QAT cycle into a UAT cycle',
+            'qat.import' => 'Import QAT workbooks',
+            'qat.export' => 'Export QAT workbooks',
+            'qat.delete' => 'Delete QAT cycles and test cases',
             'uat.view' => 'View UAT cycles',
             'uat.create' => 'Create UAT cycles',
             'uat.edit' => 'Edit UAT cycles, test cases and participants',
@@ -388,6 +398,9 @@ class RolesAndPermissionSeeder extends Seeder
             'alaga.edit',
             // Tech Support runs the tests and logs what breaks; owning the cycle
             // and signing it off stay with the project/QA lead.
+            'qat.view',
+            'qat.execute',
+            'qat.export',
             'uat.view',
             'uat.execute',
             'uat.export',

@@ -1,0 +1,7 @@
+node_modules/
+.auth/
+.env.e2e
+test-results/
+playwright-report/
+backups/
+screenshots/

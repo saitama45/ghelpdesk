@@ -8,17 +8,19 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * One test case (test-script row) or walkthrough item (checklist row). Steps and
- * expected results stay as authored text so procedures can be pasted straight in
- * from the source document without being shredded into child rows.
+ * One QAT test case. Sibling of {@see UatCase} — same shape, so cases copy
+ * between the two modules without translation.
+ *
+ * Steps and expected results stay as authored text so procedures can be pasted
+ * straight in from the source document without being shredded into child rows.
  */
-class UatCase extends Model
+class QatCase extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'uat_cycle_id',
-        'uat_section_id',
+        'qat_cycle_id',
+        'qat_section_id',
         'case_key',
         'screen',
         'title',
@@ -28,20 +30,20 @@ class UatCase extends Model
         'is_critical',
         'priority',
         'order',
-        'source_qat_case_id',
+        'source_uat_case_id',
         'created_by',
         'updated_by',
     ];
 
     // The sqlsrv driver hands back foreign keys as strings while the identity
-    // column comes back as an int, so `$case->uat_cycle_id === $cycle->id`
+    // column comes back as an int, so `$case->qat_cycle_id === $cycle->id`
     // silently fails without these. Every FK on the module is cast explicitly.
     protected $casts = [
         'is_critical' => 'boolean',
         'order' => 'integer',
-        'uat_cycle_id' => 'integer',
-        'uat_section_id' => 'integer',
-        'source_qat_case_id' => 'integer',
+        'qat_cycle_id' => 'integer',
+        'qat_section_id' => 'integer',
+        'source_uat_case_id' => 'integer',
         'created_by' => 'integer',
         'updated_by' => 'integer',
     ];
@@ -58,11 +60,11 @@ class UatCase extends Model
 
     /**
      * Next free key inside a cycle. Follows whatever prefix the cycle already
-     * uses (the source workbook used UI-UX-01…96), defaulting to TC.
+     * uses, defaulting to TC.
      */
     public static function nextKey(int $cycleId, string $prefix = 'TC'): string
     {
-        $keys = static::where('uat_cycle_id', $cycleId)->pluck('case_key');
+        $keys = static::where('qat_cycle_id', $cycleId)->pluck('case_key');
 
         $highest = 0;
         foreach ($keys as $key) {
@@ -77,7 +79,7 @@ class UatCase extends Model
     /** The prefix already in use in this cycle, so new keys stay consistent. */
     public static function keyPrefix(int $cycleId): string
     {
-        $sample = static::where('uat_cycle_id', $cycleId)->orderBy('id')->value('case_key');
+        $sample = static::where('qat_cycle_id', $cycleId)->orderBy('id')->value('case_key');
 
         if ($sample && preg_match('/^(.*?)[-_ ]?\d+\s*$/', $sample, $m) && $m[1] !== '') {
             return rtrim($m[1], '-_ ');
@@ -88,22 +90,22 @@ class UatCase extends Model
 
     public function cycle(): BelongsTo
     {
-        return $this->belongsTo(UatCycle::class, 'uat_cycle_id');
+        return $this->belongsTo(QatCycle::class, 'qat_cycle_id');
     }
 
     public function section(): BelongsTo
     {
-        return $this->belongsTo(UatSection::class, 'uat_section_id');
+        return $this->belongsTo(QatSection::class, 'qat_section_id');
     }
 
     public function results(): HasMany
     {
-        return $this->hasMany(UatCaseResult::class);
+        return $this->hasMany(QatCaseResult::class);
     }
 
     public function findings(): HasMany
     {
-        return $this->hasMany(UatFinding::class);
+        return $this->hasMany(QatFinding::class);
     }
 
     public function creator(): BelongsTo

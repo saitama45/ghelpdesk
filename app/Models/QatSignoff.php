@@ -2,27 +2,35 @@
 
 namespace App\Models;
 
+use App\Support\SignatureImage;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * An acceptance event. The source pack had two tables — per-department "User
- * Acceptance" and a management "Final Sign-off" — which are the two stages here.
+ * A sign-off event on a QAT cycle.
  *
- * Re-signing appends a new row and flips the previous one's `is_current`, so the
- * ledger keeps the full history instead of overwriting a date in a cell.
+ * The one that matters is the MANAGER stage, recorded with a null participant:
+ * the decision by the submitter's immediate manager that gates promotion to UAT.
+ * The optional REVIEW stage lets a department acknowledge its own column first.
+ *
+ * Re-deciding appends a new row and flips the previous one's `is_current`, so the
+ * ledger keeps the full history — including a rejection that was later overturned
+ * — instead of overwriting a date in a cell.
  */
-class UatSignoff extends Model
+class QatSignoff extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'uat_cycle_id',
-        'uat_participant_id',
+        'qat_cycle_id',
+        'qat_participant_id',
         'stage',
         'result',
         'remarks',
+        'waived_finding_ids',
+        'waiver_reason',
+        'resolved_approver_ids',
         'confirmed_at',
         'confirmed_by_user_id',
         'confirmed_name',
@@ -38,16 +46,21 @@ class UatSignoff extends Model
     protected $casts = [
         'confirmed_at' => 'datetime',
         'is_current' => 'boolean',
-        'uat_cycle_id' => 'integer',
-        'uat_participant_id' => 'integer',
+        'waived_finding_ids' => 'array',
+        'resolved_approver_ids' => 'array',
+        'qat_cycle_id' => 'integer',
+        'qat_participant_id' => 'integer',
         'confirmed_by_user_id' => 'integer',
     ];
 
-    public const STAGE_ACCEPTANCE = 'acceptance';
-    public const STAGE_FINAL = 'final';
+    public const STAGE_REVIEW = 'review';
+
+    public const STAGE_MANAGER = 'manager';
 
     public const RESULT_PASSED = 'passed';
+
     public const RESULT_PASSED_WITH_RESERVATION = 'passed_with_reservation';
+
     public const RESULT_NOT_ACCEPTED = 'not_accepted';
 
     public static function results(): array
@@ -67,12 +80,12 @@ class UatSignoff extends Model
 
     public function cycle(): BelongsTo
     {
-        return $this->belongsTo(UatCycle::class, 'uat_cycle_id');
+        return $this->belongsTo(QatCycle::class, 'qat_cycle_id');
     }
 
     public function participant(): BelongsTo
     {
-        return $this->belongsTo(UatParticipant::class, 'uat_participant_id');
+        return $this->belongsTo(QatParticipant::class, 'qat_participant_id');
     }
 
     public function confirmedBy(): BelongsTo
@@ -90,12 +103,13 @@ class UatSignoff extends Model
         return in_array($this->result, self::ACCEPTING_RESULTS, true);
     }
 
-    /**
-     * Origin-relative URL of the hand-drawn signature, or null when the sign-off
-     * predates the signature pad (every existing row) or was typed only.
-     */
+    public function hasWaiver(): bool
+    {
+        return ! empty($this->waived_finding_ids);
+    }
+
     public function getSignatureUrlAttribute(): ?string
     {
-        return \App\Support\SignatureImage::url($this->signature_path);
+        return SignatureImage::url($this->signature_path);
     }
 }

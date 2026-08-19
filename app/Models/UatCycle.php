@@ -24,6 +24,7 @@ class UatCycle extends Model
         'department_id',
         'qa_lead_id',
         'dev_lead_id',
+        'qat_cycle_id',
         'status',
         'start_date',
         'target_signoff_date',
@@ -46,6 +47,7 @@ class UatCycle extends Model
         'department_id' => 'integer',
         'qa_lead_id' => 'integer',
         'dev_lead_id' => 'integer',
+        'qat_cycle_id' => 'integer',
         'created_by' => 'integer',
         'updated_by' => 'integer',
     ];
@@ -116,6 +118,18 @@ class UatCycle extends Model
     public function devLead(): BelongsTo
     {
         return $this->belongsTo(User::class, 'dev_lead_id');
+    }
+
+    /**
+     * The upstream internal QA cycle this one was promoted from, if any.
+     *
+     * The link carries no foreign key on purpose — QAT and UAT are independent
+     * modules and neither may block the other's deletes — so a dangling id simply
+     * resolves to null, which is what the upstream-QA banner checks for.
+     */
+    public function qatCycle(): BelongsTo
+    {
+        return $this->belongsTo(QatCycle::class, 'qat_cycle_id');
     }
 
     public function creator(): BelongsTo

@@ -334,12 +334,12 @@ class PublicUatController extends Controller
 
         abort_unless($participant->isApprover(), 403, 'You are not nominated to sign off on this cycle.');
 
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'result' => ['required', Rule::in(array_keys(UatSignoff::results()))],
             'remarks' => 'nullable|string|max:4000',
             // Typing your own name is the acknowledgement, as on the paper pack.
             'confirmed_name' => 'required|string|max:255',
-        ]);
+        ], \App\Support\SignatureImage::rules()));
 
         if ($validated['result'] !== UatSignoff::RESULT_PASSED && blank($validated['remarks'] ?? null)) {
             throw ValidationException::withMessages([
@@ -352,6 +352,13 @@ class PublicUatController extends Controller
             'remarks' => $validated['remarks'] ?? null,
             'confirmed_name' => $validated['confirmed_name'],
             'confirmed_email' => $participant->display_email,
+            // Optional here, unlike the typed name: a stakeholder signing on a
+            // phone may not manage a legible finger-drawn signature, and refusing
+            // their acceptance over it would be absurd.
+            'signature_path' => \App\Support\SignatureImage::store(
+                $validated['signature'] ?? null,
+                "signatures/uat/{$cycle->id}"
+            ),
             'ip_address' => $request->ip(),
         ]);
 

@@ -16,10 +16,22 @@
                     </p>
                 </div>
 
-                <button v-if="can('uat.approve')" @click="finalModal.open = true"
-                        class="shrink-0 whitespace-nowrap rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700">
-                    Record Final Sign-off
-                </button>
+                <div class="flex shrink-0 flex-wrap items-center gap-2">
+                    <!-- Opens a new tab; the endpoint streams the PDF inline so the
+                         browser renders it rather than downloading it. -->
+                    <a v-if="finalSignoff" :href="route('uat.signoff.pdf', cycle.id)" target="_blank" rel="noopener"
+                       class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-slate-900 dark:text-gray-200 dark:hover:bg-gray-700">
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        Print sign-off PDF
+                    </a>
+
+                    <button v-if="can('uat.approve')" @click="finalModal.open = true"
+                            class="whitespace-nowrap rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700">
+                        Record Final Sign-off
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -36,6 +48,13 @@
                 <span class="text-gray-500 dark:text-gray-400">{{ formatDateTime(finalSignoff.confirmed_at) }}</span>
             </div>
             <p v-if="finalSignoff.remarks" class="mt-2 text-sm text-gray-600 dark:text-gray-300">{{ finalSignoff.remarks }}</p>
+
+            <div v-if="finalSignoff.signature_url" class="mt-3">
+                <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">Signature</span>
+                <div class="mt-1 inline-block rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-600">
+                    <img :src="finalSignoff.signature_url" alt="Signature" class="h-20 object-contain">
+                </div>
+            </div>
         </div>
 
         <!-- Acceptance roster -->
@@ -59,6 +78,7 @@
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Email</th>
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Date Confirmed</th>
                         <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Overall Result</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Signature</th>
                         <th class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-300">Actions</th>
                     </tr>
                 </thead>
@@ -87,6 +107,16 @@
                             <p v-if="acceptance[approver.id]?.remarks" class="mt-1 max-w-md text-xs text-gray-500 dark:text-gray-400">
                                 {{ acceptance[approver.id].remarks }}
                             </p>
+                        </td>
+                        <td class="px-4 py-3">
+                            <!-- Most acceptances are signed on the tokenised portal
+                                 rather than in here, so this column is how what the
+                                 client actually drew becomes visible internally. -->
+                            <img v-if="acceptance[approver.id]?.signature_url"
+                                 :src="acceptance[approver.id].signature_url"
+                                 alt="Signature"
+                                 class="h-10 max-w-[9rem] rounded border border-gray-200 bg-white object-contain p-0.5 dark:border-gray-600" />
+                            <span v-else class="text-xs italic text-gray-400">—</span>
                         </td>
                         <td class="whitespace-nowrap px-4 py-3 text-right">
                             <div class="flex justify-end space-x-1">
@@ -151,12 +181,20 @@
                             Remarks <span v-if="acceptForm.result !== 'passed'" class="text-rose-600">*</span>
                         </label>
                         <textarea v-model="acceptForm.remarks" rows="3"
+                                  data-uat-accept-remarks
                                   :placeholder="acceptForm.result === 'passed'
                                       ? 'Optional note.'
                                       : 'State the reservation, or why this is not accepted.'"
                                   class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"></textarea>
                         <InputError :message="acceptModal.error" class="mt-1" />
                     </div>
+
+                    <SignaturePad
+                        v-model="acceptForm.signature"
+                        label="Sign here"
+                        hint="Optional, but a drawn signature is what appears on the printed certificate."
+                        placeholder="Draw your signature"
+                    />
 
                     <div class="flex justify-end gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
                         <button type="button" @click="acceptModal.open = false"
@@ -209,6 +247,13 @@
                         <InputError :message="finalModal.error" class="mt-1" />
                     </div>
 
+                    <SignaturePad
+                        v-model="finalForm.signature"
+                        label="Sign here"
+                        hint="Optional, but a drawn signature is what appears on the printed certificate."
+                        placeholder="Draw your signature"
+                    />
+
                     <div class="flex justify-end gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
                         <button type="button" @click="finalModal.open = false"
                                 class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
@@ -231,6 +276,7 @@ import { router } from '@inertiajs/vue3'
 import Modal from '@/Components/Modal.vue'
 import InputError from '@/Components/InputError.vue'
 import UatIconBtn from './UatIconBtn.vue'
+import SignaturePad from '@/Components/SignaturePad.vue'
 import { SIGNOFF_CHIPS, formatDateTime } from '../uatVerdict.js'
 
 const props = defineProps({
@@ -251,11 +297,13 @@ const props = defineProps({
 })
 
 const can = inject('uatCan', () => false)
+// Ziggy is registered globally; this partial previously only used raw paths.
+const route = window.route
 
 const acceptModal = reactive({ open: false, approver: null, saving: false, error: '' })
-const acceptForm = reactive({ result: 'passed', remarks: '' })
+const acceptForm = reactive({ result: 'passed', remarks: '', signature: null })
 const finalModal = reactive({ open: false, saving: false, error: '' })
-const finalForm = reactive({ result: 'passed', remarks: '' })
+const finalForm = reactive({ result: 'passed', remarks: '', signature: null })
 
 const approvers = computed(() =>
     (props.participants || []).filter(p => p.is_active && p.role === 'approver')
@@ -309,6 +357,8 @@ const openAcceptance = (approver) => {
     const existing = props.acceptance?.[approver.id]
     acceptForm.result = existing?.result || 'passed'
     acceptForm.remarks = existing?.remarks || ''
+    // Never inherited from a previous signer — a signature belongs to one person.
+    acceptForm.signature = null
     acceptModal.open = true
 }
 
@@ -322,6 +372,7 @@ const submitAcceptance = () => {
 
     acceptModal.saving = true
     router.post(`/uat/${props.cycle.id}/signoff`, {
+        signature: acceptForm.signature,
         uat_participant_id: acceptModal.approver.id,
         result: acceptForm.result,
         remarks: acceptForm.remarks || null,

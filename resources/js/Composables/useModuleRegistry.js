@@ -1,5 +1,6 @@
 import {
     HomeIcon,
+    BeakerIcon,
     ClipboardDocumentListIcon,
     QueueListIcon,
     PresentationChartLineIcon,
@@ -372,6 +373,15 @@ export const MODULE_REGISTRY = [
                 routeName: 'holidays.index',
                 activeMatch: ['holidays.*'],
                 permission: 'holidays.view',
+            },
+            {
+                id: 'qat',
+                label: 'QAT Tracker',
+                description: 'Internal quality test cycles, findings and manager sign-off',
+                icon: BeakerIcon,
+                routeName: 'qat.index',
+                activeMatch: ['qat.*'],
+                permission: 'qat.view',
             },
             {
                 id: 'uat',

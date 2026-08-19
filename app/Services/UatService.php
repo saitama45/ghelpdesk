@@ -408,6 +408,9 @@ class UatService
                 'confirmed_at' => $signoff->confirmed_at?->toIso8601String(),
                 'confirmed_name' => $signoff->confirmed_name,
                 'confirmed_email' => $signoff->confirmed_email,
+                // Most acceptances are signed on the tokenised portal, so the
+                // roster inside the app is where that signature has to surface.
+                'signature_url' => $signoff->signature_url,
             ] : null];
         })->all();
     }

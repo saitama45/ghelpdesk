@@ -347,6 +347,16 @@
                             </p>
                         </div>
 
+                        <!-- Optional on purpose: a finger-drawn signature on a phone
+                             is often unusable, and refusing an acceptance over it
+                             would be absurd. The typed name is the binding part. -->
+                        <SignaturePad
+                            v-model="signoffForm.signature"
+                            label="Signature (optional)"
+                            placeholder="Sign with your finger or mouse"
+                            hint="If you sign here it appears on the printed acceptance certificate."
+                        />
+
                         <p v-if="signoffError" class="text-sm font-medium text-rose-600">{{ signoffError }}</p>
 
                         <button type="submit" :disabled="signoffSaving"
@@ -370,6 +380,7 @@ import { Head, router, usePage } from '@inertiajs/vue3'
 import { verdict, SIGNOFF_CHIPS, formatDateTime } from '../Uat/uatVerdict.js'
 import { compressImages } from '@/Composables/useImageCompressor.js'
 import EvidenceGallery from '../Uat/Partials/EvidenceGallery.vue'
+import SignaturePad from '@/Components/SignaturePad.vue'
 
 const props = defineProps({
     token: String,
@@ -423,6 +434,7 @@ const signoffForm = reactive({
     result: props.signoff?.result || 'passed',
     remarks: props.signoff?.remarks || '',
     confirmed_name: props.participant?.name || '',
+    signature: null,
 })
 const signoffSaving = ref(false)
 const signoffError = ref('')

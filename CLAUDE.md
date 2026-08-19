@@ -32,7 +32,7 @@
 
 **ghelpdesk** — an internal service-management platform for a multi-entity retail/restaurant group. It began as a helpdesk (email + web ticketing with SLA) and now also covers project delivery, task boards, inventory and assets, purchase/approval workflows, compliance monitoring, scheduling/attendance, UAT, and executive reporting.
 
-**Main modules** (sidebar sections, defined in `resources/js/Composables/useModuleRegistry.js`): Dashboard · Project Tracker · **Services** (Tickets, Queue Monitor, Task Board, POS Requests, SAP Requests, Loyalty Stamps) · **Inventory** (Assets, Stock In/Transfer/Receiving, Inventory Report) · **Monitoring** (NPC Status, CCTV, ALAGA, WIGS, Payments & SOA, Accounting Documents, Mall Hookup) · **Administrative** (DTR, Attendance Logs, Scheduling, Service Vehicle Trips, Presence, KB Articles, Holidays, UAT Tracker) · **References** (Companies, Departments, Clusters, Stores, Vendors, Activity Templates, Categories, Sub-Categories, Items, Request Types, Form Builder) · **Reports** · **User Management** · **Settings**.
+**Main modules** (sidebar sections, defined in `resources/js/Composables/useModuleRegistry.js`): Dashboard · Project Tracker · **Services** (Tickets, Queue Monitor, Task Board, POS Requests, SAP Requests, Loyalty Stamps) · **Inventory** (Assets, Stock In/Transfer/Receiving, Inventory Report) · **Monitoring** (NPC Status, CCTV, ALAGA, WIGS, Payments & SOA, Accounting Documents, Mall Hookup) · **Administrative** (DTR, Attendance Logs, Scheduling, Service Vehicle Trips, Presence, KB Articles, Holidays, QAT Tracker, UAT Tracker) · **References** (Companies, Departments, Clusters, Stores, Vendors, Activity Templates, Categories, Sub-Categories, Items, Request Types, Form Builder) · **Reports** · **User Management** · **Settings**.
 
 ## Stack in one line
 
@@ -144,11 +144,17 @@ blocks everything queued behind it, so a single blocking endpoint stalls a whole
 - **`daviddb` is a different app's database on this machine** (the one served on port 8000) and is protected machine-wide by `~/.claude/rules/database-safety.md`. Nothing in this repository should ever touch it.
 - **Never** run `migrate:fresh`, `migrate:refresh`, `migrate:reset`, `db:wipe`, destructive seeders, `DROP`, `TRUNCATE`, bulk row deletion, or restore-with-replace against either database — or any other developer database — from Claude Code.
 - **Laravel tests must always use an isolated test database.** `phpunit.xml` and `.env.testing` force `sqlite` `:memory:`; never run tests using `RefreshDatabase` against a live connection.
-- **Verify the active connection before running any test, migration, seeder or database-modifying command.** `APP_ENV=testing` alone is not proof:
+- **Before running any test**, verify the effective test connection. `APP_ENV=testing` alone is not proof:
   ```bash
   php artisan tinker --execute='$c=config("database.default"); echo $c." -> ".config("database.connections.$c.database");'
   ```
-  Proceed only if it resolves to `:memory:` or a name ending in `_test`/`_testing`. Otherwise stop and report the exact unsafe connection.
+  Run tests only if it resolves to `:memory:` or a name ending in `_test`/`_testing`. Otherwise stop and report the exact unsafe connection.
+- **Forward `php artisan migrate` on `tashelpdeskdb` is allowed and expected.** It is additive, it is
+  how the schema evolves, and `startup.sh` runs `migrate --force` on every Azure deploy — a rule that
+  banned it locally would forbid the project's own deployment step. The bans above still stand in full:
+  `migrate:fresh/refresh/reset/rollback`, `db:wipe`, `DROP`, `TRUNCATE`, bulk deletes and
+  restore-with-replace are never run from Claude Code. Say what a migration will do before running it,
+  and check `migrate:status` first if the pending list is not obvious.
 - Restores, drops, truncations and bulk deletions are run **by the user, manually, outside Claude Code**.
 - A global `PreToolUse` hook (`~/.claude/hooks/database_safety_guard.py`) enforces this. Never bypass it or use `--dangerously-skip-permissions`.
 - The local `.env` database (`tashelpdeskdb` @ 127.0.0.1) is a **snapshot**; the user's app runs against the Azure cloud database, so record counts will differ. Cloud schema changes ship as migrations (auto-run by `startup.sh`), never as hand-written SQL.

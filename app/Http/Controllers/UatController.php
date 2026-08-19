@@ -16,6 +16,8 @@ use App\Services\UatService;
 use App\Services\UatWorkbook;
 use App\Support\CompanyContext;
 use App\Support\DepartmentContext;
+use App\Support\SignatureImage;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -58,6 +60,8 @@ class UatController extends Controller implements HasMiddleware
             new Middleware('can:uat.signoff', only: ['storeSignoff']),
             new Middleware('can:uat.approve', only: ['finalSignoff']),
             new Middleware('can:uat.delete', only: ['destroy']),
+            // Printing the certificate records nothing — seeing the cycle is enough.
+            new Middleware('can:uat.view', only: ['signoffPdf']),
             new Middleware('can:uat.export', only: ['export', 'template']),
             new Middleware('can:uat.import', only: ['import']),
         ];
@@ -274,6 +278,8 @@ class UatController extends Controller implements HasMiddleware
             'qaLead:id,name,email',
             'devLead:id,name,email',
             'creator:id,name',
+            // Upstream internal QA pass, when this cycle was promoted from one.
+            'qatCycle:id,code,title,status',
         ]);
 
         $sections = $cycle->sections()->get();
@@ -838,11 +844,11 @@ class UatController extends Controller implements HasMiddleware
 
     public function storeSignoff(Request $request, UatCycle $cycle)
     {
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'uat_participant_id' => ['required', Rule::exists('uat_participants', 'id')->where('uat_cycle_id', $cycle->id)],
             'result' => ['required', Rule::in(array_keys(UatSignoff::results()))],
             'remarks' => 'nullable|string|max:4000',
-        ]);
+        ], SignatureImage::rules()));
 
         $participant = UatParticipant::findOrFail($validated['uat_participant_id']);
 
@@ -860,6 +866,7 @@ class UatController extends Controller implements HasMiddleware
             'confirmed_by_user_id' => $request->user()->id,
             'confirmed_name' => $request->user()->name,
             'confirmed_email' => $request->user()->email,
+            'signature_path' => SignatureImage::store($validated['signature'] ?? null, "signatures/uat/{$cycle->id}"),
             'ip_address' => $request->ip(),
         ]);
 
@@ -868,10 +875,10 @@ class UatController extends Controller implements HasMiddleware
 
     public function finalSignoff(Request $request, UatCycle $cycle)
     {
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'result' => ['required', Rule::in(array_keys(UatSignoff::results()))],
             'remarks' => 'nullable|string|max:4000',
-        ]);
+        ], SignatureImage::rules()));
 
         $cases = $cycle->cases()->get(self::CASE_LIST_COLUMNS);
         $results = $cycle->results()->get(['id', 'uat_case_id', 'uat_participant_id', 'result']);
@@ -887,13 +894,18 @@ class UatController extends Controller implements HasMiddleware
             ]);
         }
 
-        DB::transaction(function () use ($cycle, $validated, $request) {
+        // Stored before the transaction: writing the file is not transactional, so
+        // doing it inside would leave an orphan image if a later statement failed.
+        $signaturePath = SignatureImage::store($validated['signature'] ?? null, "signatures/uat/{$cycle->id}");
+
+        DB::transaction(function () use ($cycle, $validated, $request, $signaturePath) {
             $this->uat->recordSignoff($cycle, null, UatSignoff::STAGE_FINAL, [
                 'result' => $validated['result'],
                 'remarks' => $validated['remarks'] ?? null,
                 'confirmed_by_user_id' => $request->user()->id,
                 'confirmed_name' => $request->user()->name,
                 'confirmed_email' => $request->user()->email,
+                'signature_path' => $signaturePath,
                 'ip_address' => $request->ip(),
             ]);
 
@@ -906,6 +918,55 @@ class UatController extends Controller implements HasMiddleware
         });
 
         return redirect()->back()->with('success', 'Final sign-off recorded.');
+    }
+
+    /**
+     * The sign-off certificate, rendered inline so the browser shows it in the tab
+     * rather than downloading it. `stream()` sets Content-Disposition: inline;
+     * `download()` would defeat the point of opening a new tab.
+     *
+     * Shares one Blade template with the QAT certificate: both record the same
+     * facts, and a certificate that differed between the two would only invite the
+     * question of why.
+     */
+    public function signoffPdf(Request $request, UatCycle $cycle)
+    {
+        $cycle->load([
+            'company:id,name',
+            'department:id,name',
+            'qaLead:id,name',
+            'devLead:id,name',
+        ]);
+
+        $signoff = $cycle->signoffs()
+            ->with('confirmedBy:id,name,email')
+            ->where('stage', UatSignoff::STAGE_FINAL)
+            ->where('is_current', true)
+            ->first();
+
+        $cases = $cycle->cases()->get(self::CASE_LIST_COLUMNS);
+        $results = $cycle->results()->get(['id', 'uat_case_id', 'uat_participant_id', 'result']);
+        $participants = $cycle->participants()->get();
+
+        $pdf = Pdf::loadView('pdf.testing-signoff', [
+            'module' => 'UAT — User Acceptance Testing',
+            'approverTitle' => 'Accepting authority',
+            'cycle' => $cycle,
+            'signoff' => $signoff,
+            'statistics' => $this->uat->statistics($cases, $results, $participants),
+            // UAT has no waiver mechanism; the template renders the block only
+            // when there is something in it.
+            'waivedFindings' => collect(),
+            'signatureDataUri' => SignatureImage::dataUri($signoff?->signature_path),
+            'resultLabels' => UatSignoff::results(),
+            'ledger' => $cycle->signoffs()
+                ->where('stage', UatSignoff::STAGE_FINAL)
+                ->orderByDesc('confirmed_at')
+                ->get(),
+            'generatedBy' => $request->user()?->name,
+        ])->setPaper('a4');
+
+        return $pdf->stream("{$cycle->code}-signoff.pdf");
     }
 
     // ------------------------------------------------------------------

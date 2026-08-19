@@ -301,6 +301,61 @@ Route::middleware('auth')->group(function () {
     Route::post('holidays/generate', [\App\Http\Controllers\HolidayController::class, 'generate'])->name('holidays.generate');
     Route::resource('holidays', \App\Http\Controllers\HolidayController::class)->except(['show', 'create', 'edit']);
 
+    // QAT Tracker — the internal quality pass that runs before UAT. Same matrix
+    // shape, but gated on a sign-off from the submitter's immediate manager, and
+    // only a signed-off cycle can be promoted into a UAT cycle.
+    //
+    // The literal /qat/template and /qat/from-uat must be declared before
+    // /qat/{cycle}, otherwise route-model binding tries to resolve them as cycles.
+    Route::get('qat/template', [\App\Http\Controllers\QatController::class, 'template'])->name('qat.template');
+    Route::post('qat/from-uat', [\App\Http\Controllers\QatController::class, 'seedFromUat'])->name('qat.from-uat');
+    Route::get('qat', [\App\Http\Controllers\QatController::class, 'index'])->name('qat.index');
+    Route::post('qat', [\App\Http\Controllers\QatController::class, 'store'])->name('qat.store');
+    // Everything below acts on ONE cycle, so it all sits behind the department
+    // boundary. Grouping rather than per-route middleware means a route added here
+    // later cannot forget it.
+    Route::middleware(\App\Http\Middleware\EnsureQatCycleInDepartment::class)->group(function () {
+        Route::get('qat/{cycle}/edit-data', [\App\Http\Controllers\QatController::class, 'editData'])->name('qat.edit-data');
+        Route::get('qat/{cycle}', [\App\Http\Controllers\QatController::class, 'show'])->name('qat.show');
+        Route::put('qat/{cycle}', [\App\Http\Controllers\QatController::class, 'update'])->name('qat.update');
+        Route::delete('qat/{cycle}', [\App\Http\Controllers\QatController::class, 'destroy'])->name('qat.destroy');
+        Route::post('qat/{cycle}/duplicate', [\App\Http\Controllers\QatController::class, 'duplicate'])->name('qat.duplicate');
+        Route::get('qat/{cycle}/export', [\App\Http\Controllers\QatController::class, 'export'])->name('qat.export');
+        Route::post('qat/{cycle}/import', [\App\Http\Controllers\QatController::class, 'import'])->name('qat.import');
+
+        Route::post('qat/{cycle}/sections', [\App\Http\Controllers\QatController::class, 'storeSection'])->name('qat.sections.store');
+        Route::put('qat/{cycle}/sections/{section}', [\App\Http\Controllers\QatController::class, 'updateSection'])->name('qat.sections.update');
+        Route::delete('qat/{cycle}/sections/{section}', [\App\Http\Controllers\QatController::class, 'destroySection'])->name('qat.sections.destroy');
+
+        // reorder before {case}, for the same reason template comes before {cycle}.
+        Route::post('qat/{cycle}/cases/reorder', [\App\Http\Controllers\QatController::class, 'reorderCases'])->name('qat.cases.reorder');
+        Route::post('qat/{cycle}/cases', [\App\Http\Controllers\QatController::class, 'storeCase'])->name('qat.cases.store');
+        Route::get('qat/{cycle}/cases/{case}', [\App\Http\Controllers\QatController::class, 'caseDetail'])->name('qat.cases.show');
+        Route::put('qat/{cycle}/cases/{case}', [\App\Http\Controllers\QatController::class, 'updateCase'])->name('qat.cases.update');
+        Route::delete('qat/{cycle}/cases/{case}', [\App\Http\Controllers\QatController::class, 'destroyCase'])->name('qat.cases.destroy');
+
+        Route::post('qat/{cycle}/participants', [\App\Http\Controllers\QatController::class, 'storeParticipant'])->name('qat.participants.store');
+        Route::put('qat/{cycle}/participants/{participant}', [\App\Http\Controllers\QatController::class, 'updateParticipant'])->name('qat.participants.update');
+        Route::delete('qat/{cycle}/participants/{participant}', [\App\Http\Controllers\QatController::class, 'destroyParticipant'])->name('qat.participants.destroy');
+
+        Route::post('qat/{cycle}/results', [\App\Http\Controllers\QatController::class, 'storeResult'])->name('qat.results.store');
+        Route::post('qat/{cycle}/results/bulk', [\App\Http\Controllers\QatController::class, 'bulkResults'])->name('qat.results.bulk');
+        Route::post('qat/{cycle}/evidence', [\App\Http\Controllers\QatController::class, 'storeEvidence'])->name('qat.evidence.store');
+        Route::delete('qat/{cycle}/evidence/{evidence}', [\App\Http\Controllers\QatController::class, 'destroyEvidence'])->name('qat.evidence.destroy');
+
+        Route::post('qat/{cycle}/findings', [\App\Http\Controllers\QatFindingController::class, 'store'])->name('qat.findings.store');
+        Route::put('qat/{cycle}/findings/{finding}', [\App\Http\Controllers\QatFindingController::class, 'update'])->name('qat.findings.update');
+        Route::delete('qat/{cycle}/findings/{finding}', [\App\Http\Controllers\QatFindingController::class, 'destroy'])->name('qat.findings.destroy');
+        Route::post('qat/{cycle}/findings/{finding}/ticket', [\App\Http\Controllers\QatFindingController::class, 'convertToTicket'])->name('qat.findings.ticket');
+
+        // The sign-off spine, and the promotion it gates.
+        Route::post('qat/{cycle}/signoff/submit', [\App\Http\Controllers\QatSignoffController::class, 'submit'])->name('qat.signoff.submit');
+        Route::post('qat/{cycle}/signoff/cancel', [\App\Http\Controllers\QatSignoffController::class, 'cancel'])->name('qat.signoff.cancel');
+        Route::post('qat/{cycle}/signoff/decide', [\App\Http\Controllers\QatSignoffController::class, 'decide'])->name('qat.signoff.decide');
+        Route::get('qat/{cycle}/signoff/pdf', [\App\Http\Controllers\QatSignoffController::class, 'pdf'])->name('qat.signoff.pdf');
+        Route::post('qat/{cycle}/promote', [\App\Http\Controllers\QatSignoffController::class, 'promote'])->name('qat.promote');
+    });
+
     // UAT Tracker — cycles, the verdict matrix, findings and sign-off.
     // The literal /uat/template must be declared before /uat/{cycle}, otherwise
     // route-model binding tries to resolve "template" as a cycle.
@@ -343,6 +398,8 @@ Route::middleware('auth')->group(function () {
 
     Route::post('uat/{cycle}/signoff', [\App\Http\Controllers\UatController::class, 'storeSignoff'])->name('uat.signoff.store');
     Route::post('uat/{cycle}/final-signoff', [\App\Http\Controllers\UatController::class, 'finalSignoff'])->name('uat.signoff.final');
+    // Streamed inline so the button can just open a new tab and show the PDF.
+    Route::get('uat/{cycle}/signoff/pdf', [\App\Http\Controllers\UatController::class, 'signoffPdf'])->name('uat.signoff.pdf');
 
     Route::post('uat/{cycle}/findings', [\App\Http\Controllers\UatFindingController::class, 'store'])->name('uat.findings.store');
     Route::put('uat/{cycle}/findings/{finding}', [\App\Http\Controllers\UatFindingController::class, 'update'])->name('uat.findings.update');

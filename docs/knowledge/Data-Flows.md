@@ -77,3 +77,67 @@ Shared shape: request table + `*_approvals` rows per step → approvers notified
 
 ## 9. File storage
 Uploads land on the `public` disk; served through the symlink-free route `GET /serve-storage/{path}` (`routes/web.php:16`). Client-side compression is mandatory for image uploads (`resources/js/Composables/useImageCompressor.js`) — an oversized POST dies at PHP's limit before validation runs.
+
+---
+
+## QAT → UAT: the internal quality gate
+
+Two independent modules, deliberately not one. `/qat` is the **internal** pass run by
+staff; `/uat` is the **client-facing** acceptance. Either can exist alone, and the
+link between them carries **no foreign key in either direction** — a real constraint
+would let one module block the other's deletes.
+
+### The flow
+
+1. A tester builds a QAT cycle (sections → cases → department columns), records a
+   verdict per case × participant, and logs findings with mandatory screenshots.
+2. A finding becomes a helpdesk ticket **manually, one at a time**
+   (`QatFindingController::convertToTicket`). Never automatic: a long cycle produces
+   far more failed verdicts than real work, and flooding the queue is what makes
+   teams stop trusting the register.
+3. The tester **submits for sign-off**. The approver is resolved from the org chart
+   by `ManagerApproverResolver` — direct managers (`manager_user` pivot) → climb
+   `department_nodes` for an `is_manager` user → Admin/Solutions Admin fallback,
+   each stage filtered by `->can('qat.approve')` and never the requester themselves.
+   The resolved ids are **snapshotted onto `qat_cycles.approver_user_ids`** so a
+   later org change cannot orphan a pending decision; membership of that snapshot,
+   not a live re-resolution, is who may decide.
+4. The manager decides. **An unresolved blocker/major finding refuses an approval.**
+   The only way past is to name the findings and write a reason (≥10 chars), which
+   is stamped on each finding (`waived_at/waived_by_user_id/waiver_reason`) and on
+   the sign-off row. Rejecting is never gated.
+5. Only a signed-off cycle can be **promoted to UAT**, which copies sections and
+   cases and nothing else — no verdicts, findings, evidence or participants. The
+   resulting UAT cycle carries `uat_cycles.qat_cycle_id` and shows an upstream-QA
+   banner.
+
+### Two rules that are easy to get wrong
+
+- **Submission is gated on cases being ANSWERED, not on their having PASSED.** An
+  earlier build blocked submission on any failing case, which made the waiver
+  unreachable: a test fails → you log a finding → and the manager who is supposed to
+  judge it can never receive the cycle. `readiness()` therefore separates
+  `unanswered_cases` (blocks) from `failing_cases` (travels to the manager).
+- **The approving manager is usually in a different department to the cycle.**
+  `QatCycle::scopeVisibleTo()` / `isVisibleTo()` therefore admit the snapshotted
+  approvers as well as the owning department. The rule lives in **one** place in two
+  forms precisely because UAT states the same rule twice and they can drift — the
+  symptom being a row that lists and then 403s when opened.
+
+### Digital signatures (both modules)
+
+Sign-offs carry a hand-drawn signature captured by `resources/js/Components/SignaturePad.vue`
+(pointer events, so mouse/finger/stylus are one code path) and stored by
+`App\Support\SignatureImage` as a **PNG file** on the public disk — never as a base64
+data URL in the row, which would drag the image into every query touching the ledger.
+
+For UAT the **portal is the primary signing path**: clients have no account and sign
+at `/public/uat/{token}`, and that signature surfaces on the in-app acceptance
+roster. The admin-side roster sign-off remains and is still required for internal
+approvers. `signoff_requires_all` keeps the final sign-off locked until every
+nominated approver has accepted, whichever route they used.
+
+Both modules print the same certificate (`resources/views/pdf/testing-signoff.blade.php`)
+via dompdf, **streamed inline** so the button opens a tab rather than downloading.
+The signature is embedded as a base64 data URI because dompdf resolves `<img src>`
+against its own chroot and cannot fetch an app URL.
