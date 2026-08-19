@@ -2468,8 +2468,41 @@ class TicketController extends Controller
 
     public function sync(\App\Services\EmailTicketService $service)
     {
-        $result = $service->fetchAndProcess();
+        // fetchAndProcess() opens IMAP and walks the mailbox synchronously — tens of
+        // seconds on a full inbox. Nothing here was serialised before, so two browser
+        // tabs (or an impatient double-click) each opened their own IMAP session and
+        // raced to file the same messages. The scheduler already guards its own run
+        // with withoutOverlapping(5); this gives the HTTP entry point the same
+        // protection instead of queueing another full fetch behind the first.
+        $lock = \Illuminate\Support\Facades\Cache::lock('tickets:sync', 300);
+
+        if (! $lock->get()) {
+            return response()->json([
+                'status'  => 'warning',
+                'message' => 'An email sync is already running. Please wait for it to finish.',
+            ], 409);
+        }
+
+        try {
+            $result = $service->fetchAndProcess();
+        } finally {
+            $lock->release();
+        }
+
         return response()->json($result);
+    }
+
+    /**
+     * Fire-and-forget intake trigger for page loads (the dashboard).
+     *
+     * Returns immediately instead of holding a PHP worker for the length of an IMAP
+     * fetch. Use sync() only where a human is waiting on the result (Settings).
+     */
+    public function syncBackground()
+    {
+        \App\Jobs\FetchEmailsJob::dispatch();
+
+        return response()->json(['status' => 'queued'], 202);
     }
 
     public function bulkUpdate(Request $request)

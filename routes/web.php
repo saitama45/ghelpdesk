@@ -384,6 +384,8 @@ Route::middleware('auth')->group(function () {
     Route::get('assets/generate-code', [\App\Http\Controllers\AssetController::class, 'generateCode'])->name('assets.generate-code');
     Route::resource('assets', \App\Http\Controllers\AssetController::class)->except(['show', 'create', 'edit']);
     Route::post('tickets/sync', [\App\Http\Controllers\TicketController::class, 'sync'])->name('tickets.sync');
+    // Queued variant for page-load triggers — returns 202 immediately (see FetchEmailsJob).
+    Route::post('tickets/sync-background', [\App\Http\Controllers\TicketController::class, 'syncBackground'])->name('tickets.sync-background');
 
     Route::post('tickets/bulk-update', [\App\Http\Controllers\TicketController::class, 'bulkUpdate'])->name('tickets.bulk-update');
     Route::post('tickets/bulk-response', [\App\Http\Controllers\TicketController::class, 'bulkResponse'])->name('tickets.bulk-response');

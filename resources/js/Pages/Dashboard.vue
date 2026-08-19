@@ -46,10 +46,26 @@ const props = defineProps({
 const { hasPermission } = usePermission();
 
 onMounted(() => {
-    // Trigger email sync in the background when dashboard loads
-    if (hasPermission('tickets.view')) {
-        axios.post(route('tickets.sync', undefined, false)).catch(e => console.warn("Email sync failed", e));
-    }
+    if (!hasPermission('tickets.view')) return;
+
+    // Opening the dashboard still pulls mail — but it now only *queues* the fetch.
+    // `tickets/sync-background` dispatches FetchEmailsJob and returns 202 in a few ms,
+    // so no PHP worker is held. That matters because the local dev server handles one
+    // request at a time: when this endpoint ran IMAP inline, the fetch blocked whatever
+    // the user clicked next for ~30s (first load after login measured 47s, and a
+    // sidebar click during the fetch still cost 10s even after deferring it).
+    //
+    // FetchEmailsJob is ShouldBeUnique and takes the same Cache::lock('tickets:sync')
+    // as the scheduler and the manual Settings sync, so concurrent dashboard opens
+    // collapse into a single fetch instead of stacking IMAP sessions.
+    // The 30s `tickets:fetch-emails` schedule remains the primary intake path.
+    const kickSync = () => {
+        axios.post(route('tickets.sync-background', undefined, false))
+            .catch(e => console.warn('Email sync could not be queued', e));
+    };
+
+    // Small delay so the request does not join this page's own initial burst.
+    setTimeout(kickSync, 1000);
 });
 
 const page = usePage();
