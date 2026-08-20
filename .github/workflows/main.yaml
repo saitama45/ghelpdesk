@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - master
+  # Manual "Run workflow" button. A push whose ref update lands but whose receive
+  # operation errors out (the "cannot lock ref ... is at X but expected Y" race)
+  # advances master WITHOUT emitting a push event, so the commit sits on GitHub
+  # with no run and never deploys. Re-running the previous run is no help — it
+  # redeploys the older SHA. This lets that commit be deployed without inventing
+  # an empty commit to trigger it.
+  workflow_dispatch:
 
 permissions:
   contents: read
