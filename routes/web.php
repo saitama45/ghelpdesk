@@ -159,18 +159,35 @@ Route::middleware('auth')->group(function () {
         Route::put('locations/{mallHookup}', [\App\Http\Controllers\MallHookupController::class, 'updateHookup'])->name('locations.update');
     });
 
+    // User management. The index, the form helpers and every write verb sit behind
+    // a permission: a hidden sidebar link is not access control, and these two pages
+    // hand out the permission catalogue itself. Export/import keep their own gates.
     Route::get('users/export', [UserController::class, 'export'])->name('users.export')->middleware('can:users.export');
     Route::get('users/template', [UserController::class, 'template'])->name('users.template')->middleware('can:users.create');
     Route::post('users/import', [UserController::class, 'import'])->name('users.import')->middleware('can:users.create');
-    Route::get('users/form-options', [UserController::class, 'formOptions'])->name('users.form-options');
-    Route::get('users/{user}/details', [UserController::class, 'details'])->name('users.details');
-    Route::resource('users', UserController::class);
-    Route::put('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
-    
+
+    Route::middleware('permission:users.view')->group(function () {
+        Route::get('users/form-options', [UserController::class, 'formOptions'])->name('users.form-options');
+        Route::get('users/{user}/details', [UserController::class, 'details'])->name('users.details');
+        Route::resource('users', UserController::class)
+            ->middlewareFor(['create', 'store'], 'permission:users.create')
+            ->middlewareFor(['edit', 'update'], 'permission:users.edit')
+            ->middlewareFor('destroy', 'permission:users.delete');
+        Route::put('users/{user}/reset-password', [UserController::class, 'resetPassword'])
+            ->name('users.reset-password')->middleware('permission:users.edit');
+    });
+
     Route::get('roles/export', [RoleController::class, 'export'])->name('roles.export')->middleware('can:roles.export');
     Route::post('roles/import', [RoleController::class, 'import'])->name('roles.import')->middleware('can:roles.import');
-    Route::get('roles/{role}/editor-data', [RoleController::class, 'editorData'])->name('roles.editor-data');
-    Route::resource('roles', RoleController::class)->except(['show', 'create', 'edit']);
+
+    Route::middleware('permission:roles.view')->group(function () {
+        Route::get('roles/{role}/editor-data', [RoleController::class, 'editorData'])->name('roles.editor-data');
+        Route::resource('roles', RoleController::class)
+            ->except(['show', 'create', 'edit'])
+            ->middlewareFor('store', 'permission:roles.create')
+            ->middlewareFor('update', 'permission:roles.edit')
+            ->middlewareFor('destroy', 'permission:roles.delete');
+    });
     Route::post('companies/switch', [CompanyController::class, 'switch'])->name('companies.switch');
     // Department axis: set the viewed department (nested inside the active entity).
     Route::post('department-context/switch', [\App\Http\Controllers\DepartmentContextController::class, 'switch'])->name('department-context.switch');

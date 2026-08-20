@@ -23,6 +23,7 @@ Session config: `SESSION_DRIVER=database`, 120-minute lifetime. `bootstrap/app.p
 - Per-user permission lists are cached for 1h in `HandleInertiaRequests`, keyed by `user.updated_at` + a global `permissions_version` counter that must be bumped whenever a role's permissions change.
 
 **Route gating is mandatory.** Hiding a sidebar link is not access control: every permission-gated module also puts its route group behind `->middleware('permission:{module}.view')` (alias registered in `bootstrap/app.php`). Every QA run must probe the bare URL without the permission and expect **403**.
+User Management itself was open until 2026-08-20 — `/users` and `/roles` (index **and** every write verb) carried only `auth`, so any logged-in user could reach the permission catalogue. Both are now `permission:users.view` / `permission:roles.view` groups with per-verb `create/edit/delete` gates via `middlewareFor()`.
 
 ### 2. Entity (company) scope — `app/Support/CompanyContext.php`
 - Accessible entities = union of the companies attached to the user's **roles** (`role_company`) plus `users.company_id`, restricted to active companies.
