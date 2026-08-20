@@ -36,6 +36,7 @@ Session config: `SESSION_DRIVER=database`, 120-minute lifetime. `bootstrap/app.p
 - Access is derived, never assigned: **provider** of your own department's work, **customer** of every other department's.
 - `TicketAccess::isCustomerOf()` renders a ticket read-only for internal customers; only `tickets.resolve` lets the requester close the loop. Bypass roles: `Dev`, `Admin`, `Solutions Admin` (same list as `DepartmentContext::HOME_SWITCH_ROLES`) plus Executive mode.
 - Department-scoped lists must hide other departments' rows via `DepartmentContext::homeDepartmentId()` **and** block direct URL access with route middleware. NULL department = shared; Executive sees all.
+- UAT/QAT cycles are the one department-scoped list with a role-wide override: `App\Support\TestCycleAccess::seesAllDepartments()` (Executive **or** the `Dev` role) is consumed by `UatController::index`, `EnsureUatCycleInDepartment` and `QatCycle::scopeVisibleTo()`/`isVisibleTo()` — all four must agree, or a row lists and then 403s.
 - Ownership overrides exist per module, e.g. `/projects/{id}` structure edits require creator (`created_by`) or the Admin/Solutions Admin **roles** — not `projects.delete`, which is broadly granted.
 
 ## Adding a module — required touch points

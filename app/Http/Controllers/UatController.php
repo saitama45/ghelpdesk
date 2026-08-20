@@ -17,6 +17,7 @@ use App\Services\UatWorkbook;
 use App\Support\CompanyContext;
 use App\Support\DepartmentContext;
 use App\Support\SignatureImage;
+use App\Support\TestCycleAccess;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -103,12 +104,12 @@ class UatController extends Controller implements HasMiddleware
         // work, so it is scoped out of the listing entirely rather than merely
         // filtered. Cycles with no owning department are shared and stay visible.
         //
-        // Executive mode sees every department by design, and Dev/Admin/Solutions
-        // Admin can already switch "I belong to" — that is the escape hatch, so
-        // no separate override permission is needed here.
+        // Executive mode and the Dev role see every department by design — see
+        // {@see TestCycleAccess}. Admin/Solutions Admin can already switch
+        // "I belong to", which is their escape hatch.
         $user = $request->user();
 
-        if (!DepartmentContext::isExecutive($user)) {
+        if (! TestCycleAccess::seesAllDepartments($user)) {
             $homeDepartmentId = DepartmentContext::homeDepartmentId($user);
 
             $query->where(function ($q) use ($homeDepartmentId, $user) {
@@ -261,7 +262,7 @@ class UatController extends Controller implements HasMiddleware
                     'updated_by' => $userId,
                 ]));
             } catch (Throwable $e) {
-                if ($attempt === 3 || !str_contains(strtolower($e->getMessage()), 'duplicate')) {
+                if ($attempt === 3 || ! str_contains(strtolower($e->getMessage()), 'duplicate')) {
                     throw $e;
                 }
             }
@@ -802,7 +803,7 @@ class UatController extends Controller implements HasMiddleware
             'files.*' => 'file|max:10240|mimes:png,jpg,jpeg,gif,webp,pdf,doc,docx,xlsx,txt,log',
         ]);
 
-        if (!($validated['uat_case_result_id'] ?? null) && !($validated['uat_finding_id'] ?? null)) {
+        if (! ($validated['uat_case_result_id'] ?? null) && ! ($validated['uat_finding_id'] ?? null)) {
             throw ValidationException::withMessages([
                 'files' => 'Evidence must be attached to either a verdict or a finding.',
             ]);
@@ -888,7 +889,7 @@ class UatController extends Controller implements HasMiddleware
         $readiness = $this->uat->readiness($cycle, $cases, $results, $findings, $participants);
 
         // Accepting is gated; recording a rejection never is.
-        if ($validated['result'] !== UatSignoff::RESULT_NOT_ACCEPTED && !$readiness['is_ready']) {
+        if ($validated['result'] !== UatSignoff::RESULT_NOT_ACCEPTED && ! $readiness['is_ready']) {
             throw ValidationException::withMessages([
                 'result' => 'This cycle is not ready for final sign-off yet. Clear the outstanding items listed on the Sign-off tab first.',
             ]);

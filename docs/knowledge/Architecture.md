@@ -40,7 +40,7 @@
 | `app/Http/Services/` | `RoleService` (permission catalogue/grouping), `WigsService` |
 | `app/Services/` | 29 domain services — the real business logic |
 | `app/Services/DynamicForms/` | `FormServiceFactory` → per-slug service, default `DefaultFormService` |
-| `app/Support/` | `CompanyContext` (entity axis), `DepartmentContext` (department axis), `TicketAccess`, `CfeTicketStore`, `PhilippineHolidays` |
+| `app/Support/` | `CompanyContext` (entity axis), `DepartmentContext` (department axis), `TicketAccess`, `TestCycleAccess` (who sees every department's UAT/QAT cycles), `CfeTicketStore`, `PhilippineHolidays` |
 | `app/Models/` | 126 Eloquent models |
 | `app/Models/Scopes/ActiveEntityScope.php` | Global entity filter on transactional models |
 | `app/Observers/` | `TicketObserver` (ticket key, company backfill, SLA), `ProjectTaskObserver` |

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\DepartmentContext;
+use App\Support\TestCycleAccess;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -283,7 +284,9 @@ class QatCycle extends Model
      */
     public function scopeVisibleTo($query, ?User $user)
     {
-        if (! $user || DepartmentContext::isExecutive($user)) {
+        // Executive mode and the Dev role are not bound to the department axis
+        // at all — see {@see TestCycleAccess}.
+        if (! $user || TestCycleAccess::seesAllDepartments($user)) {
             return $query;
         }
 
@@ -330,7 +333,7 @@ class QatCycle extends Model
             return false;
         }
 
-        if (DepartmentContext::isExecutive($user)) {
+        if (TestCycleAccess::seesAllDepartments($user)) {
             return true;
         }
 

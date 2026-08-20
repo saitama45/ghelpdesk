@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\UatCycle;
 use App\Support\DepartmentContext;
+use App\Support\TestCycleAccess;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -18,11 +19,12 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * Mirrors the listing rule exactly, so what a user can reach always matches what
  * they can see:
- *   - Executive mode may reach every department.
+ *   - Executive mode and the Dev role may reach every department
+ *     ({@see TestCycleAccess}).
  *   - A cycle with no owning department is shared and reachable by everyone.
  *   - Otherwise the cycle must belong to the user's "I belong to" department.
  *
- * Dev/Admin/Solutions Admin are not special-cased: they can already switch
+ * Admin/Solutions Admin are not special-cased: they can already switch
  * "I belong to", which is the intended escape hatch.
  */
 class EnsureUatCycleInDepartment
@@ -31,7 +33,7 @@ class EnsureUatCycleInDepartment
     {
         $cycle = $request->route('cycle');
 
-        if (!$cycle instanceof UatCycle) {
+        if (! $cycle instanceof UatCycle) {
             return $next($request);
         }
 
@@ -46,7 +48,7 @@ class EnsureUatCycleInDepartment
     {
         $user = $request->user();
 
-        if (!$user || DepartmentContext::isExecutive($user)) {
+        if (! $user || TestCycleAccess::seesAllDepartments($user)) {
             return (bool) $user;
         }
 
