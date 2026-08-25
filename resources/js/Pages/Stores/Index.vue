@@ -27,6 +27,13 @@
                                 <option value="">All Sectors</option>
                                 <option v-for="n in 9" :key="n" :value="n - 1">Sector {{ n - 1 }}</option>
                             </select>
+                            <div class="w-44">
+                                <Autocomplete
+                                    v-model="filterClass"
+                                    :options="classFilterOptions"
+                                    placeholder="All Classes"
+                                />
+                            </div>
                             <button
                                 @click="openImportModal"
                                 class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm whitespace-nowrap"
@@ -684,11 +691,13 @@ const { post, put, destroy } = useErrorHandler()
 const { hasPermission } = usePermission()
 
 const filterSector = ref('')
+const filterClass = ref('')
 const pagination = usePagination(props.stores, 'stores.index', () => ({
     sector: filterSector.value || undefined,
+    class: filterClass.value || undefined,
 }))
 
-watch(filterSector, () => {
+watch([filterSector, filterClass], () => {
     pagination.currentPage.value = 1
     pagination.performSearch()
 })
@@ -737,6 +746,7 @@ const storeTabs = [
 
 // Local copies of managed reference-option lists (kept in sync via @options-changed)
 const classOptionsLocal = ref([...props.classOptions])
+const classFilterOptions = computed(() => [{ label: 'All Classes', value: null }, ...classOptionsLocal.value])
 const hookupOptionsLocal = ref([...props.hookupOptions])
 const systemOptionsLocal = ref([...props.systemOptions])
 const telcoOptionsLocal = ref([...props.telcoOptions])

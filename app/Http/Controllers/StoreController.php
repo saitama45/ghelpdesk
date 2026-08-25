@@ -47,6 +47,10 @@ class StoreController extends Controller implements HasMiddleware
             $query->where('sector', (int) $request->sector);
         }
 
+        if ($request->filled('class')) {
+            $query->where('class', $request->class);
+        }
+
         if ($request->filled('search')) {
             $query->where(function ($q) use ($request) {
                 $q->where('name', 'like', "%{$request->search}%")

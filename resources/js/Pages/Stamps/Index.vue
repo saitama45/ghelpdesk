@@ -248,8 +248,8 @@ const openEntriesModal = async (card) => {
 }
 const stampRemaining = computed(() => {
     const card = stampModal.card
-    if (!card) return 1
-    return Math.max(1, (card.program?.stamps_required ?? 1) - (card.stamps_count ?? 0))
+    if (!card?.program) return 0
+    return Math.max(0, (card.program.stamps_required ?? 0) - (card.stamps_count ?? 0))
 })
 const openStampModal = (card) => {
     stampForm.clearErrors()
@@ -732,7 +732,10 @@ const submitRedeem = () => {
         <Modal :show="stampModal.open" @close="stampModal.open = false" max-width="md">
             <div class="p-6 space-y-4">
                 <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Add Stamps</h3>
-                <p class="text-sm text-gray-500 dark:text-gray-300">{{ stampModal.card?.customer?.name }} — {{ stampModal.card?.program?.name }}</p>
+                <p class="text-sm text-gray-500 dark:text-gray-300">{{ stampModal.card?.customer?.name }} — {{ stampModal.card?.program?.name ?? 'No program assigned' }}</p>
+                <div v-if="!stampModal.card?.program" class="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700 dark:bg-red-500/10 dark:border-red-500/30 dark:text-red-300">
+                    This card has no stamp program assigned, so stamps can't be added. Edit the card (or contact an admin) to assign it a valid program first.
+                </div>
                 <div>
                     <div class="flex items-baseline justify-between mb-1">
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Number of stamps <span class="text-red-500">*</span></label>
@@ -740,26 +743,26 @@ const submitRedeem = () => {
                             {{ stampModal.card?.stamps_count ?? 0 }} / {{ stampModal.card?.program?.stamps_required ?? '?' }} &mdash; <span class="font-medium text-blue-600">{{ stampRemaining }} remaining</span>
                         </span>
                     </div>
-                    <input v-model.number="stampForm.quantity" type="number" :min="1" :max="stampRemaining" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
+                    <input v-model.number="stampForm.quantity" type="number" :disabled="!stampModal.card?.program" :min="1" :max="stampRemaining" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600 disabled:bg-gray-50 disabled:text-gray-400 dark:disabled:bg-gray-800" />
                     <p v-if="stampForm.errors.quantity" class="text-xs text-red-600 mt-1">{{ stampForm.errors.quantity }}</p>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Purchase amount (₱) <span class="text-red-500">*</span></label>
-                    <input v-model.number="stampForm.purchase_amount" type="number" min="0.01" step="0.01" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
+                    <input v-model.number="stampForm.purchase_amount" type="number" :disabled="!stampModal.card?.program" min="0.01" step="0.01" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600 disabled:bg-gray-50 disabled:text-gray-400 dark:disabled:bg-gray-800" />
                     <p v-if="stampForm.errors.purchase_amount" class="text-xs text-red-600 mt-1">{{ stampForm.errors.purchase_amount }}</p>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Store</label>
-                    <Autocomplete v-model="stampForm.store_id" :options="storeOptions" placeholder="Select store..." />
+                    <Autocomplete v-model="stampForm.store_id" :options="storeOptions" :disabled="!stampModal.card?.program" placeholder="Select store..." />
                     <p v-if="stampForm.errors.store_id" class="text-xs text-red-600 mt-1">{{ stampForm.errors.store_id }}</p>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Note</label>
-                    <input v-model="stampForm.note" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
+                    <input v-model="stampForm.note" type="text" :disabled="!stampModal.card?.program" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600 disabled:bg-gray-50 disabled:text-gray-400 dark:disabled:bg-gray-800" />
                 </div>
                 <div class="flex justify-end gap-2 pt-2">
                     <button @click="stampModal.open = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
-                    <button @click="submitStamp" :disabled="stampForm.processing" class="px-4 py-2 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">Add</button>
+                    <button @click="submitStamp" :disabled="stampForm.processing || !stampModal.card?.program" class="px-4 py-2 text-sm rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-50">Add</button>
                 </div>
             </div>
         </Modal>

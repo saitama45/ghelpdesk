@@ -69,7 +69,11 @@ class StampController extends Controller implements HasMiddleware
                 ->when($activeCompanyId, $forActiveEntity('card.store'))
                 ->orderByDesc('id')
                 ->get(),
+            // Stamp cards belong to customer-facing outlets only — warehouses and
+            // offices never sell to a walk-in customer, so exclude every non-Regular
+            // class rather than just filtering the dropdown's label.
             'stores' => Store::query()
+                ->where('class', 'Regular')
                 ->when($activeCompanyId, fn ($q) => $q->where('company_id', $activeCompanyId))
                 ->orderBy('code')
                 ->get(['id', 'code', 'name']),
@@ -259,7 +263,12 @@ class StampController extends Controller implements HasMiddleware
         ]);
 
         $program = $card->program;
-        if (! $program || ! $program->auto_stamp_amount || (float) $program->auto_stamp_amount <= 0) {
+        if (! $program) {
+            throw ValidationException::withMessages([
+                'purchase_amount' => 'This card has no stamp program assigned. Contact an admin to reassign it to a valid program.',
+            ]);
+        }
+        if (! $program->auto_stamp_amount || (float) $program->auto_stamp_amount <= 0) {
             throw ValidationException::withMessages([
                 'purchase_amount' => 'This program has no amount-based earning rule configured.',
             ]);
@@ -289,7 +298,19 @@ class StampController extends Controller implements HasMiddleware
             ]);
         }
 
-        $required = (int) ($card->program->stamps_required ?? 0);
+        // A card's stamp_program_id is a required, FK-constrained column, but a
+        // card can still end up pointing at a program that's since become
+        // unreachable (e.g. legacy/imported data). Without this check the missing
+        // program silently reads as 0 stamps required below, and the card gets
+        // reported as "already full" — which is misleading; the real problem is
+        // the missing program.
+        if (! $card->program) {
+            throw ValidationException::withMessages([
+                'quantity' => 'This card has no stamp program assigned, so stamps cannot be added. Contact an admin to reassign it to a valid program.',
+            ]);
+        }
+
+        $required = (int) $card->program->stamps_required;
         $remaining = max(0, $required - $card->stamps_count);
         $applied = min($quantity, $remaining);
 
