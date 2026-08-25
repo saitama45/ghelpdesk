@@ -10,6 +10,8 @@ use App\Models\Garden;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\OtpController;
+use App\Http\Controllers\Api\CampaignsController;
+use App\Http\Controllers\Api\RegisterController;
 
 /*
 |--------------------------------------------------------------------------
@@ -24,12 +26,26 @@ use App\Http\Controllers\Api\OtpController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
+// Mobile app self-registration (bms / "Coffee Bean & Tea Leaf" members).
+// Throttled — this creates a customers + users row per call, more
+// expensive to abuse than a login attempt.
+Route::post('/register', [RegisterController::class, 'register'])
+    ->middleware('throttle:5,1');
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
     // Mobile app post-login verification (bms / TAS Service Center)
     Route::post('/otp/send', [OtpController::class, 'send']);
     Route::post('/otp/verify', [OtpController::class, 'verify']);
+
+    // Mobile app campaign catalogue sync (mirrors stamp_programs read-only)
+    Route::get('/campaigns', [CampaignsController::class, 'index']);
+
+    // Mobile app "My Member Code" QR + real stamp progress pull-down.
+    Route::get('/loyalty/qr-card', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'qrCard']);
+    Route::get('/loyalty/my-cards', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'myCards']);
+    Route::get('/loyalty/my-transactions', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'myTransactions']);
 
     // DTR / Attendance Routes
     Route::get('/dtr/status', [AttendanceController::class, 'status']);

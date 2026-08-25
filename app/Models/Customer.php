@@ -29,6 +29,12 @@ class Customer extends Model
         return $this->hasMany(StampCard::class);
     }
 
+    /** The mobile-app login this CRM record belongs to, if they've registered. */
+    public function user()
+    {
+        return $this->hasOne(User::class);
+    }
+
     public function redemptions()
     {
         return $this->hasMany(StampRedemption::class);

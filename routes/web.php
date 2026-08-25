@@ -671,6 +671,10 @@ Route::middleware('auth')->group(function () {
         Route::put('programs/{program}', [\App\Http\Controllers\StampController::class, 'updateProgram'])->name('programs.update');
         Route::delete('programs/{program}', [\App\Http\Controllers\StampController::class, 'destroyProgram'])->name('programs.destroy');
 
+        // Scan Customer (member QR → auto-fill; only Program is picked manually)
+        Route::post('scan/resolve', [\App\Http\Controllers\StampController::class, 'resolveScan'])->name('scan.resolve');
+        Route::post('scan/add-stamp', [\App\Http\Controllers\StampController::class, 'scanAddStamp'])->name('scan.add-stamp');
+
         // Cards & stamps
         Route::post('cards', [\App\Http\Controllers\StampController::class, 'storeCard'])->name('cards.store');
         Route::delete('cards/{card}', [\App\Http\Controllers\StampController::class, 'destroyCard'])->name('cards.destroy');

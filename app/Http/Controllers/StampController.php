@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\LocatesInventoryUnits;
 use App\Models\Asset;
+use App\Models\Company;
 use App\Models\Customer;
 use App\Models\InventoryTransaction;
 use App\Models\StampCard;
@@ -11,6 +12,7 @@ use App\Models\StampEntry;
 use App\Models\StampProgram;
 use App\Models\StampRedemption;
 use App\Models\Store;
+use App\Services\LoyaltyQrService;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -28,6 +30,7 @@ class StampController extends Controller implements HasMiddleware
             new Middleware('can:stamps.view', only: ['index', 'assetsAtLocation', 'cardEntries']),
             new Middleware('can:stamps.create', only: [
                 'storeCustomer', 'storeProgram', 'storeCard', 'addStamps', 'recordPurchase',
+                'resolveScan', 'scanAddStamp',
             ]),
             new Middleware('can:stamps.edit', only: ['updateCustomer', 'updateProgram']),
             new Middleware('can:stamps.delete', only: ['destroyCustomer', 'destroyProgram', 'destroyCard']),
@@ -49,7 +52,24 @@ class StampController extends Controller implements HasMiddleware
         return Inertia::render('Stamps/Index', [
             'tab' => $request->get('tab', 'cards'),
             'customers' => Customer::orderBy('name')->get(),
-            'programs' => StampProgram::orderBy('name')->get(),
+            // Programs assigned to another entity are hidden; unassigned ones
+            // (company_id still null — every row before this scoping existed)
+            // stay visible everywhere until explicitly assigned a company, so
+            // nothing that was showing yesterday silently disappears today.
+            //
+            // Explicitly bypasses ActiveEntityScope (auto-applied because
+            // StampProgram is in CompanyContext::SCOPED_MODELS) — that scope
+            // does a strict equality match with no "or unassigned" allowance,
+            // which would silently hide every legacy program the moment
+            // company_id existed, contradicting the comment above.
+            'programs' => StampProgram::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+                ->with('company:id,code,name')
+                ->when($activeCompanyId, fn ($q) => $q->where(
+                    fn ($q2) => $q2->where('company_id', $activeCompanyId)->orWhereNull('company_id')
+                ))
+                ->orderBy('name')
+                ->get(),
+            'companies' => Company::orderBy('name')->get(['id', 'code', 'name']),
             'cards' => StampCard::with(['customer:id,name,email', 'program:id,name,stamps_required,auto_stamp_amount', 'store:id,code,name'])
                 ->when($activeCompanyId, $forActiveEntity('store'))
                 ->orderByDesc('id')
@@ -143,11 +163,16 @@ class StampController extends Controller implements HasMiddleware
             'name' => 'required|string|max:255',
             'year' => 'required|integer|min:2000|max:2100',
             'description' => 'nullable|string|max:1000',
+            'company_id' => 'nullable|exists:companies,id',
             'stamps_required' => 'required|integer|min:1|max:1000',
             'auto_stamp_amount' => 'nullable|numeric|min:0.01',
             'is_active' => 'boolean',
         ]);
 
+        // No explicit default here: AppServiceProvider's `eloquent.creating`
+        // listener already stamps the active entity onto company_id when it's
+        // left empty (stamp_programs is in CompanyContext::MODULE_TABLES) —
+        // the same mechanism every other module's controller relies on.
         $data['created_by'] = $request->user()->id;
         $data['updated_by'] = $request->user()->id;
         StampProgram::create($data);
@@ -161,6 +186,7 @@ class StampController extends Controller implements HasMiddleware
             'name' => 'required|string|max:255',
             'year' => 'required|integer|min:2000|max:2100',
             'description' => 'nullable|string|max:1000',
+            'company_id' => 'nullable|exists:companies,id',
             'stamps_required' => 'required|integer|min:1|max:1000',
             'auto_stamp_amount' => 'nullable|numeric|min:0.01',
             'is_active' => 'boolean',
@@ -215,6 +241,107 @@ class StampController extends Controller implements HasMiddleware
         ]);
 
         return back()->with('success', 'Stamp card created.');
+    }
+
+    /**
+     * Resolve a scanned member QR to a customer, without committing anything
+     * yet. Step 1 of the "Scan Customer" flow — lets the UI show who was
+     * scanned (and their existing open cards) before staff pick a Program.
+     */
+    public function resolveScan(Request $request)
+    {
+        $data = $request->validate(['token' => 'required|string|max:255']);
+
+        $customerId = LoyaltyQrService::decode($data['token']);
+        if (! $customerId) {
+            throw ValidationException::withMessages([
+                'token' => 'That code is not a valid loyalty member QR.',
+            ]);
+        }
+
+        $customer = Customer::find($customerId);
+        if (! $customer || ! $customer->is_active) {
+            throw ValidationException::withMessages([
+                'token' => 'That member could not be found or is inactive.',
+            ]);
+        }
+
+        return response()->json([
+            'customer' => $customer->only(['id', 'name', 'email', 'phone']),
+            'cards' => $customer->stampCards()
+                ->with('program:id,name,stamps_required')
+                ->whereIn('status', ['active', 'completed'])
+                ->get(['id', 'stamp_program_id', 'stamps_count', 'status']),
+        ]);
+    }
+
+    /**
+     * Step 2 of the "Scan Customer" flow: given the same token plus Program
+     * (the field staff actually search/pick), add a single stamp — reusing
+     * the customer's open card for that program if one exists, auto-creating
+     * one otherwise. Store can't come from the QR itself — it's generated
+     * once on the customer's phone before any store is involved — so the
+     * frontend remembers "my current store" per browser (localStorage) and
+     * sends it along here; staff pick it once per shift, not per scan.
+     * Purchase amount is required (same rule as the manual Add Stamps modal);
+     * note is optional.
+     */
+    public function scanAddStamp(Request $request)
+    {
+        $data = $request->validate([
+            'token' => 'required|string|max:255',
+            'stamp_program_id' => 'required|exists:stamp_programs,id',
+            'store_id' => 'nullable|exists:stores,id',
+            'purchase_amount' => 'required|numeric|min:0.01',
+            'note' => 'nullable|string|max:255',
+        ]);
+
+        $customerId = LoyaltyQrService::decode($data['token']);
+        if (! $customerId) {
+            throw ValidationException::withMessages([
+                'token' => 'That code is not a valid loyalty member QR.',
+            ]);
+        }
+
+        $customer = Customer::find($customerId);
+        if (! $customer || ! $customer->is_active) {
+            throw ValidationException::withMessages([
+                'token' => 'That member could not be found or is inactive.',
+            ]);
+        }
+
+        $card = DB::transaction(function () use ($customer, $data, $request) {
+            $card = StampCard::where('customer_id', $customer->id)
+                ->where('stamp_program_id', $data['stamp_program_id'])
+                ->whereIn('status', ['active', 'completed'])
+                ->first();
+
+            if (! $card) {
+                $card = StampCard::create([
+                    'customer_id' => $customer->id,
+                    'stamp_program_id' => $data['stamp_program_id'],
+                    'store_id' => $data['store_id'] ?? null,
+                    'stamps_count' => 0,
+                    'status' => 'active',
+                    'created_by' => $request->user()->id,
+                    'updated_by' => $request->user()->id,
+                ]);
+            }
+
+            $this->applyStamps(
+                $card,
+                1,
+                'scan',
+                $data['purchase_amount'],
+                $data['note'] ?? null,
+                $request->user()->id,
+                $data['store_id'] ?? null,
+            );
+
+            return $card->fresh(['customer:id,name', 'program:id,name,stamps_required']);
+        });
+
+        return response()->json(['card' => $card]);
     }
 
     public function destroyCard(StampCard $card)

@@ -1,10 +1,12 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useForm, router } from '@inertiajs/vue3'
+import axios from 'axios'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import Modal from '@/Components/Modal.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
+import { QrCodeIcon } from '@heroicons/vue/24/outline'
 import { useConfirm } from '@/Composables/useConfirm.js'
 import { useToast } from '@/Composables/useToast.js'
 import { usePermission } from '@/Composables/usePermission.js'
@@ -16,6 +18,7 @@ const props = defineProps({
     cards: { type: Array, default: () => [] },
     redemptions: { type: Array, default: () => [] },
     stores: { type: Array, default: () => [] },
+    companies: { type: Array, default: () => [] },
     summary: { type: Object, default: () => ({}) },
 })
 
@@ -81,6 +84,8 @@ const storeOptions = computed(() =>
     props.stores.map(s => ({ label: s.name ? `${s.code} — ${s.name}` : s.code, value: s.id })))
 const storeLocationOptions = computed(() =>
     props.stores.map(s => ({ label: s.name ? `${s.code} — ${s.name}` : s.code, value: s.code })))
+const companyOptions = computed(() =>
+    props.companies.map(c => ({ label: c.name, value: c.id })))
 
 /* ------------------------------------------------------------------ *
  | Formatting helpers
@@ -154,7 +159,7 @@ const deleteCustomerInline = async () => {
  | Program modal
  * ------------------------------------------------------------------ */
 const programModal = ref(false)
-const programForm = useForm({ id: null, name: '', year: new Date().getFullYear(), description: '', stamps_required: 12, auto_stamp_amount: null, is_active: true })
+const programForm = useForm({ id: null, name: '', year: new Date().getFullYear(), description: '', company_id: null, stamps_required: 12, auto_stamp_amount: null, is_active: true })
 const programInlineCtx = ref(false)
 const programPrevIds = ref(new Set())
 const openProgramModal = (p = null, fromCard = false) => {
@@ -164,6 +169,7 @@ const openProgramModal = (p = null, fromCard = false) => {
     if (p) {
         programForm.id = p.id; programForm.name = p.name; programForm.year = p.year ?? new Date().getFullYear()
         programForm.description = p.description
+        programForm.company_id = p.company_id ?? null
         programForm.stamps_required = p.stamps_required; programForm.auto_stamp_amount = p.auto_stamp_amount
         programForm.is_active = !!p.is_active
     } else {
@@ -219,6 +225,153 @@ const submitCard = () => {
 const deleteCard = async (card) => {
     if (!await confirm({ title: 'Delete card', message: `Delete this card for ${card.customer?.name}?`, confirmLabel: 'Delete' })) return
     router.delete(route('stamps.cards.destroy', card.id), { preserveScroll: true, preserveState: true })
+}
+
+/* ------------------------------------------------------------------ *
+ | Scan Customer modal — member QR in, staff only pick Program (Store is
+ | remembered per device, not re-asked every scan). Two steps against the
+ | barcode-scanner-friendly token input:
+ |   1) resolve the scanned code to a customer (stamps.scan.resolve)
+ |   2) pick a Program and add the stamp (stamps.scan.add-stamp), which
+ |      reuses or auto-creates the customer's card for that program.
+ * ------------------------------------------------------------------ */
+const scanModal = reactive({ open: false, step: 'scan', resolving: false, submitting: false, customer: null, cards: [], error: null })
+const scanTokenInput = ref('')
+const scanTokenInputRef = ref(null)
+const scanPurchaseAmountInputRef = ref(null)
+// Per-transaction, unlike scanStoreId/scanProgramId below — reset on every
+// scan rather than remembered, since the sale amount is never the same twice.
+const scanPurchaseAmount = ref(null)
+const scanNote = ref('')
+
+// Small helper: a ref backed by localStorage under `key`, read once on load
+// and written back on every change. Used for the two fields staff pick once
+// per shift/device rather than re-choosing on every single scan — "My Store"
+// (which a QR can never carry, since it's generated once on the customer's
+// phone before any store is involved) and, per feedback, the Program too
+// (staff typically run one campaign at a time at the counter). Per-browser
+// only, deliberately not synced server-side.
+const rememberedRef = (key, parse = Number) => {
+    const r = ref((() => {
+        try {
+            const saved = localStorage.getItem(key)
+            return saved ? parse(saved) : null
+        } catch { return null }
+    })())
+    watch(r, (val) => {
+        try {
+            if (val) localStorage.setItem(key, String(val))
+            else localStorage.removeItem(key)
+        } catch { /* private browsing etc. — remembering is a convenience, not required */ }
+    })
+    return r
+}
+const scanStoreId = rememberedRef('stamps:currentStoreId')
+const scanProgramId = rememberedRef('stamps:currentProgramId')
+
+const openScanModal = () => {
+    scanModal.open = true
+    scanModal.step = 'scan'
+    scanModal.resolving = false
+    scanModal.submitting = false
+    scanModal.customer = null
+    scanModal.cards = []
+    scanModal.error = null
+    scanTokenInput.value = ''
+    scanPurchaseAmount.value = null
+    scanNote.value = ''
+    // scanStoreId / scanProgramId are deliberately NOT reset — that's the
+    // "remembered per shift" behavior staff asked for.
+    // A hardware barcode scanner types into whatever input has focus, so the
+    // scan step needs the token field focused the instant the modal opens —
+    // no click required before scanning.
+    nextTick(() => scanTokenInputRef.value?.focus())
+}
+const closeScanModal = () => { scanModal.open = false }
+
+const submitScanToken = async () => {
+    const token = scanTokenInput.value.trim()
+    if (!token || scanModal.resolving) return
+    scanModal.resolving = true
+    scanModal.error = null
+    try {
+        const res = await axios.post(route('stamps.scan.resolve'), { token })
+        scanModal.customer = res.data.customer
+        scanModal.cards = res.data.cards || []
+        scanModal.step = 'assign'
+        // Program and Store are usually already remembered from a prior
+        // scan (see rememberedRef), so Purchase amount is the field staff
+        // actually need to fill in next — send focus straight there instead
+        // of leaving it on the now-hidden token input.
+        nextTick(() => scanPurchaseAmountInputRef.value?.focus())
+    } catch (e) {
+        scanModal.error = e.response?.data?.errors?.token?.[0] || 'That code could not be read. Try scanning again.'
+        scanTokenInput.value = ''
+        nextTick(() => scanTokenInputRef.value?.focus())
+    } finally {
+        scanModal.resolving = false
+    }
+}
+
+// Auto-submit the instant a scan looks complete, instead of requiring staff
+// to press Enter or click "Look Up" — a barcode scanner types fast but not
+// all of them send a terminating Enter/Tab keystroke, and this covers that
+// case (plus paste) too. Debounced briefly so a human manually typing the
+// code doesn't fire a request on every partial keystroke; a real scanner's
+// burst-typed input clears the debounce almost immediately either way.
+// Matches LoyaltyQrService::encode's exact shape: "LCARD1:{customer_id}:{24 hex chars}".
+const SCAN_TOKEN_PATTERN = /^LCARD1:\d+:[0-9a-f]{24}$/
+let scanAutoSubmitTimer = null
+watch(scanTokenInput, (val) => {
+    if (scanAutoSubmitTimer) clearTimeout(scanAutoSubmitTimer)
+    const trimmed = val.trim()
+    if (scanModal.step !== 'scan' || scanModal.resolving || !SCAN_TOKEN_PATTERN.test(trimmed)) return
+    scanAutoSubmitTimer = setTimeout(() => {
+        if (scanTokenInput.value.trim() === trimmed) submitScanToken()
+    }, 150)
+})
+
+const scanCardForSelectedProgram = computed(() =>
+    scanModal.cards.find(c => c.stamp_program_id === scanProgramId.value) || null)
+
+const submitScanAddStamp = async () => {
+    if (!scanProgramId.value || !scanPurchaseAmount.value || scanModal.submitting) return
+    scanModal.submitting = true
+    scanModal.error = null
+    try {
+        await axios.post(route('stamps.scan.add-stamp'), {
+            token: scanTokenInput.value.trim(),
+            stamp_program_id: scanProgramId.value,
+            store_id: scanStoreId.value,
+            purchase_amount: scanPurchaseAmount.value,
+            note: scanNote.value || null,
+        })
+        addToast(`Stamp added for ${scanModal.customer?.name}.`, 'success')
+        closeScanModal()
+        router.reload({ only: ['cards', 'summary'] })
+    } catch (e) {
+        scanModal.error = e.response?.data?.errors?.stamp_program_id?.[0]
+            || e.response?.data?.errors?.token?.[0]
+            || e.response?.data?.errors?.quantity?.[0]
+            || e.response?.data?.errors?.store_id?.[0]
+            || e.response?.data?.errors?.purchase_amount?.[0]
+            || e.response?.data?.errors?.note?.[0]
+            || 'Could not add a stamp. Try again.'
+    } finally {
+        scanModal.submitting = false
+    }
+}
+
+const rescan = () => {
+    scanModal.step = 'scan'
+    scanModal.customer = null
+    scanModal.cards = []
+    // scanProgramId is deliberately kept — staff scanning several members in
+    // a row for the same running campaign shouldn't have to re-pick it each time.
+    scanTokenInput.value = ''
+    scanPurchaseAmount.value = null
+    scanNote.value = ''
+    nextTick(() => scanTokenInputRef.value?.focus())
 }
 
 /* ------------------------------------------------------------------ *
@@ -432,6 +585,7 @@ const submitRedeem = () => {
                     <template #header>
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Company</th>
                             <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Year</th>
                             <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Stamps Required</th>
                             <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Auto Rule</th>
@@ -444,6 +598,10 @@ const submitRedeem = () => {
                             <td class="px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">
                                 {{ p.name }}
                                 <p v-if="p.description" class="text-xs text-gray-500 font-normal dark:text-gray-300">{{ p.description }}</p>
+                            </td>
+                            <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">
+                                <span v-if="p.company" class="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">{{ p.company.code }}</span>
+                                <span v-else class="text-gray-400 dark:text-gray-500 text-xs italic">Shared</span>
                             </td>
                             <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{{ p.year }}</td>
                             <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{{ p.stamps_required }}</td>
@@ -484,7 +642,13 @@ const submitRedeem = () => {
                     @changePerPage="cardTable.changePerPage"
                 >
                     <template #actions>
-                        <button @click="openCardModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg whitespace-nowrap inline-flex items-center">+ New Card</button>
+                        <div class="flex items-center gap-2">
+                            <button @click="openScanModal()" title="Scan a member's QR code to add a stamp — no manual customer/store lookup" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg whitespace-nowrap inline-flex items-center gap-1.5">
+                                <QrCodeIcon class="w-4 h-4" />
+                                Scan Customer
+                            </button>
+                            <button @click="openCardModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg whitespace-nowrap inline-flex items-center">+ New Card</button>
+                        </div>
                     </template>
                     <template #header>
                         <tr>
@@ -625,6 +789,12 @@ const submitRedeem = () => {
                     <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Description</label>
                     <textarea v-model="programForm.description" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600"></textarea>
                 </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Company</label>
+                    <Autocomplete v-model="programForm.company_id" :options="companyOptions" placeholder="Leave blank = shared across every entity" />
+                    <p v-if="programForm.errors.company_id" class="text-xs text-red-600 mt-1">{{ programForm.errors.company_id }}</p>
+                    <p class="text-xs text-gray-400 mt-1">Which entity's app/portal this program shows on. The mobile loyalty app only ever shows CBTL's programs.</p>
+                </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Stamps Required <span class="text-red-500">*</span></label>
@@ -725,6 +895,77 @@ const submitRedeem = () => {
                     <button @click="cardModal = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
                     <button @click="submitCard" :disabled="cardForm.processing" class="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">Create</button>
                 </div>
+            </div>
+        </Modal>
+
+        <!-- Scan Customer Modal — QR in, only Program picked manually -->
+        <Modal :show="scanModal.open" @close="closeScanModal" max-width="md">
+            <div class="p-6 space-y-4">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    <QrCodeIcon class="w-5 h-5 text-emerald-600" /> Scan Customer
+                </h3>
+
+                <!-- Step 1: scan -->
+                <template v-if="scanModal.step === 'scan'">
+                    <p class="text-sm text-gray-500 dark:text-gray-300">Point the barcode scanner at the customer's member QR code — no need to click first.</p>
+                    <div>
+                        <input
+                            ref="scanTokenInputRef"
+                            v-model="scanTokenInput"
+                            type="text"
+                            autocomplete="off"
+                            placeholder="Waiting for scan…"
+                            :disabled="scanModal.resolving"
+                            @keydown.enter.prevent="submitScanToken"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-center tracking-wide focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:border-gray-600"
+                        />
+                        <p v-if="scanModal.error" class="text-xs text-red-600 mt-1">{{ scanModal.error }}</p>
+                    </div>
+                    <p v-if="scanModal.resolving" class="text-xs text-gray-500 dark:text-gray-300">Looking up member…</p>
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button @click="closeScanModal" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
+                        <button @click="submitScanToken" :disabled="!scanTokenInput.trim() || scanModal.resolving" class="px-4 py-2 text-sm rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">Look Up</button>
+                    </div>
+                </template>
+
+                <!-- Step 2: pick Program only (Store is remembered per shift below) -->
+                <template v-else>
+                    <div class="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 dark:bg-emerald-500/10 dark:border-emerald-500/30">
+                        <p class="text-sm font-semibold text-emerald-800 dark:text-emerald-300">{{ scanModal.customer?.name }}</p>
+                        <p class="text-xs text-emerald-700 dark:text-emerald-400">{{ scanModal.customer?.email || scanModal.customer?.phone || 'Member scanned' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Program <span class="text-red-500">*</span></label>
+                        <Autocomplete v-model="scanProgramId" :options="programOptions" placeholder="Search program..." />
+                        <p v-if="scanCardForSelectedProgram" class="text-xs text-gray-500 mt-1 dark:text-gray-400">
+                            Existing card: {{ scanCardForSelectedProgram.stamps_count }} / {{ scanCardForSelectedProgram.program?.stamps_required }} stamps
+                        </p>
+                        <p v-else-if="scanProgramId" class="text-xs text-gray-500 mt-1 dark:text-gray-400">No open card yet — one will be created automatically.</p>
+                        <p v-if="scanModal.error" class="text-xs text-red-600 mt-1">{{ scanModal.error }}</p>
+                    </div>
+                    <div>
+                        <div class="flex items-baseline justify-between mb-1">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">My Store</label>
+                            <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Remembered for this device</span>
+                        </div>
+                        <Autocomplete v-model="scanStoreId" :options="storeOptions" placeholder="Select store..." />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Purchase amount (₱) <span class="text-red-500">*</span></label>
+                        <input ref="scanPurchaseAmountInputRef" v-model.number="scanPurchaseAmount" type="number" min="0.01" step="0.01" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:border-gray-600" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Note</label>
+                        <input v-model="scanNote" type="text" placeholder="Optional" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:border-gray-600" />
+                    </div>
+                    <div class="flex justify-between gap-2 pt-2">
+                        <button @click="rescan" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Scan Different Member</button>
+                        <div class="flex gap-2">
+                            <button @click="closeScanModal" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
+                            <button @click="submitScanAddStamp" :disabled="!scanProgramId || !scanPurchaseAmount || scanModal.submitting" class="px-4 py-2 text-sm rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">Add Stamp</button>
+                        </div>
+                    </div>
+                </template>
             </div>
         </Modal>
 

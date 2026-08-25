@@ -36,10 +36,21 @@ class User extends Authenticatable
         'profile_photo',
         'org_sort_order',
         'company_id',
+        'customer_id',
         'date_hired',
         'created_by',
         'updated_by',
     ];
+
+    /**
+     * Set only for a self-registered mobile-app member (see
+     * `Api\RegisterController`) — links back to their Loyalty Stamps CRM
+     * record. Null for every staff account.
+     */
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class);
+    }
 
     public function managers()
     {
@@ -159,6 +170,7 @@ class User extends Authenticatable
             'is_manager' => 'boolean',
             'is_vacant' => 'boolean',
             'company_id' => 'integer',
+            'customer_id' => 'integer',
             'department_id' => 'integer',
             'department_node_id' => 'integer',
             'date_hired' => 'date:Y-m-d',
