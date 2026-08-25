@@ -44,7 +44,6 @@ const {
     homeName: myDeptName,
     isProvider: viewingOwnDepartment,
     isExecutive,
-    moduleInScope,
     formInScope,
 } = useDepartmentContext();
 const { init: initSidebar, getSectionLabel, getChildLabel, getChildOrder, ensureDynamicFormChildren } = useSidebarOrder();
@@ -93,8 +92,12 @@ const permitted = (permission) => {
 /** Visible children in the user's saved order, each with its resolved label. */
 const tiles = computed(() => {
     if (!section.value) return [];
+    // A module's own permission (granted per-role in Roles > Edit) is the access
+    // control. ownerDepartments only scopes the department-owned catalogue used
+    // for browsing/form routing (see formInScope above) — a module explicitly
+    // granted to a role must appear regardless of the currently viewed department.
     const registryTiles = section.value.children
-        .filter((child) => permitted(child.permission) && moduleInScope(child))
+        .filter((child) => permitted(child.permission))
         .map((child) => {
             const label = getChildLabel(section.value.id, child.id);
             return {

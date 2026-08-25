@@ -16,7 +16,7 @@ const page = usePage();
 const route = window.route;
 const { hasPermission } = usePermission();
 const { getSectionLabel, getChildLabel, getChildOrder } = useSidebarOrder();
-const { moduleInScope, formInScope } = useDepartmentContext();
+const { formInScope } = useDepartmentContext();
 
 const permitted = (permission) => {
     if (!permission) return true;
@@ -66,7 +66,12 @@ const tabs = computed(() => {
     const section = currentSection.value;
     if (!section || section.direct) return [];
     const base = section.children
-        .filter((c) => permitted(c.permission) && moduleInScope(c))
+        // A module's own permission (granted per-role in Roles > Edit) is the
+        // access control. ownerDepartments only scopes the DEPARTMENT-OWNED
+        // catalogue used for browsing/form routing (see formInScope below) — a
+        // module explicitly granted to a role must appear regardless of which
+        // department tab is currently being viewed.
+        .filter((c) => permitted(c.permission))
         .map((c) => {
             const label = getChildLabel(section.id, c.id);
             return { ...c, resolvedLabel: label === c.id ? c.label : label };
