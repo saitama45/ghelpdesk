@@ -7,6 +7,7 @@ import AssetsBoard from '@/Components/ProjectTracker/AssetsBoard.vue';
 import ProjectDepartmentWorkspace from '@/Components/ProjectTracker/ProjectDepartmentWorkspace.vue';
 import ProjectMonitoring from '@/Components/ProjectTracker/ProjectMonitoring.vue';
 import ProjectReports from '@/Components/ProjectTracker/ProjectReports.vue';
+import ProjectWeeklyTimeline from '@/Components/ProjectTracker/ProjectWeeklyTimeline.vue';
 import Modal from '@/Components/Modal.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
 import InputLabel from '@/Components/InputLabel.vue';
@@ -20,6 +21,7 @@ import { useNavigationHistory } from '@/Composables/useNavigationHistory.js';
 import {
     ChevronLeftIcon,
     CalendarIcon,
+    CalendarDaysIcon,
     UserGroupIcon,
     ChartBarIcon,
     CpuChipIcon,
@@ -107,11 +109,14 @@ const activeTab = ref(initialTab || 'overview');
  */
 const ganttFocusDepartment = ref(null);
 const openDepartmentOnGantt = (department) => {
-    if (!department) return;
-
+    // A bare "Gantt Chart →" link (no department) must still switch tabs —
+    // only the focus-scroll step needs a real department to act on.
     ganttFocusDepartment.value = null;
     activeTab.value = 'gantt';
-    nextTick(() => { ganttFocusDepartment.value = department; });
+
+    if (department) {
+        nextTick(() => { ganttFocusDepartment.value = department; });
+    }
 };
 
 // Badge on the Monitoring tab: how many things actually need a look.
@@ -903,6 +908,13 @@ const getStatusColor = (status) => {
                         <ChartBarIcon class="w-4 h-4 mr-2" />
                         Gantt Chart
                     </button>
+                    <button 
+                        @click="activeTab = 'weekly-timeline'"
+                        :class="[activeTab === 'weekly-timeline' ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-300' : 'text-gray-500 hover:text-gray-700 dark:text-slate-300 dark:hover:text-slate-100', 'px-6 py-2.5 rounded-xl text-sm font-bold flex items-center transition-all']"
+                    >
+                        <CalendarDaysIcon class="w-4 h-4 mr-2" />
+                        Weekly Timeline
+                    </button>
                     <button
                         @click="activeTab = 'monitoring'"
                         :class="[activeTab === 'monitoring' ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-300' : 'text-gray-500 hover:text-gray-700 dark:text-slate-300 dark:hover:text-slate-100', 'px-6 py-2.5 rounded-xl text-sm font-bold flex items-center transition-all']"
@@ -1044,6 +1056,21 @@ const getStatusColor = (status) => {
                         :holidays="holidays"
                         :manualStatuses="manualStatuses"
                         :focusDepartment="ganttFocusDepartment"
+                    />
+                </div>
+
+                <!-- Weekly Timeline Tab -->
+                <div v-if="activeTab === 'weekly-timeline'">
+                    <ProjectWeeklyTimeline
+                        :project="project"
+                        :users="users"
+                        :holidays="holidays"
+                        :taskListTargets="taskListTargets"
+                        :canManage="canManageProject"
+                        :currentUserId="currentUser?.id"
+                        :manualStatuses="manualStatuses"
+                        @open-department="openDepartmentOnGantt"
+                        @open-gantt="openDepartmentOnGantt"
                     />
                 </div>
 

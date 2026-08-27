@@ -13,9 +13,9 @@ Session, cache and queue all use the `database` driver in dev/prod (`sessions`, 
 
 ## Safety rules (non-negotiable)
 - This project's local database is **`tashelpdeskdb`**; the machine also hosts **`daviddb`**, which belongs to a different app and is protected machine-wide. Never run destructive SQL, `migrate:fresh`, `migrate:refresh`, `migrate:reset`, `db:wipe`, destructive seeders, `DROP`, `TRUNCATE`, or restore-with-replace against either.
-- Before any test, migration, seeder or DB-modifying command, **verify the effective connection** (`php artisan db:show` / `php artisan tinker --execute="echo config('database.default').' '.config('database.connections.'.config('database.default').'.database');"`). `APP_ENV=testing` alone is not proof.
+- Before tests or potentially destructive commands, **verify the effective connection** (`php artisan db:show` / `php artisan tinker --execute="echo config('database.default').' '.config('database.connections.'.config('database.default').'.database');"`). `APP_ENV=testing` alone is not proof. Routine reads, inserts, updates, upserts, safe backfills/seeders and additive forward migrations on `tashelpdeskdb` are allowed; Claude should run them directly.
 - Tests must resolve to SQLite `:memory:` or a database whose name ends in `_test`/`_testing`. If isolation cannot be proven, stop and report the exact unsafe connection.
-- Restores, drops, truncations and bulk deletes are executed **by the user**, manually, outside Claude Code.
+- Never execute physical-delete actions, restores, drops, truncations, resets or destructive schema changes against protected development data; those require the isolated test database. Soft-delete must never be executed anywhere, including isolated tests—verify it without invoking the action.
 - A global `PreToolUse` hook (`~/.claude/hooks/database_safety_guard.py`) blocks these commands; never bypass it or use `--dangerously-skip-permissions`.
 - Direct connections to the cloud DB get blocked — hand the user reviewed SSMS SQL instead.
 
