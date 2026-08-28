@@ -28,6 +28,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class TicketController extends Controller
@@ -2249,6 +2250,8 @@ class TicketController extends Controller
 
         $this->authorizeTicketStatusChange($request->input('status'), $ticket->status);
 
+        $this->assertTicketClassifiedForResponse($ticket, $request);
+
         $request->validate([
             'comment_text' => [Rule::requiredIf(!$isTerminalStatusChange && !$hasAttachments), 'nullable', 'string'],
             'is_internal' => 'nullable|boolean',
@@ -2375,6 +2378,45 @@ class TicketController extends Controller
         }
 
         return redirect()->back()->with('success', $successMessage);
+    }
+
+    /**
+     * A response is the desk's answer of record, so the ticket must be routable
+     * before one leaves: Department, Store, Company, Item and Assignee.
+     *
+     * Internal notes are exempt (they are the desk's own scratchpad, written while
+     * the ticket is still being classified), as are customers — they cannot set any
+     * of these fields, so demanding them would trap a requester inside their own
+     * ticket — and partner-escalation children, whose responsibility sits with the
+     * partner rather than an assignee.
+     */
+    private function assertTicketClassifiedForResponse(Ticket $ticket, Request $request): void
+    {
+        if ($request->boolean('is_internal')) {
+            return;
+        }
+
+        if (TicketAccess::isCustomerOf($ticket, $request->user())) {
+            return;
+        }
+
+        $isVendorEscalationChild = $ticket->parent_id && $ticket->vendor_id;
+
+        $missing = collect([
+            'Department' => $ticket->department_id || filled($ticket->department),
+            'Store' => (bool) $ticket->store_id,
+            'Company' => (bool) $ticket->company_id,
+            'Item' => (bool) $ticket->item_id,
+            'Assignee' => $isVendorEscalationChild || (bool) $ticket->assignee_id,
+        ])->reject(fn ($isSet) => $isSet)->keys();
+
+        if ($missing->isEmpty()) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'classification' => 'Complete the ticket classification before sending a response — missing: ' . $missing->implode(', ') . '.',
+        ]);
     }
 
     private function commentSuccessMessage(?string $kbGenerationStatus): string

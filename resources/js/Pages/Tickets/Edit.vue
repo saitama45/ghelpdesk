@@ -1086,6 +1086,47 @@ const hasValidResolutionDetails = () => {
 
 const hasSelectedItemForResolution = () => !!editForm.item_id;
 
+// A response is the desk's answer of record, so the ticket has to be classified
+// before one goes out: an unclassified ticket cannot be routed, reported on, or
+// held to an SLA once its clock has been answered.
+// Exempt: customer-view users (they cannot set any of these fields — requiring
+// them would trap a requester inside their own ticket) and partner-escalation
+// children, whose responsibility sits with the partner instead of an assignee.
+const requiredResponseFields = computed(() => {
+    const fields = [
+        { label: 'Department', filled: !!editForm.department },
+        { label: 'Store', filled: !!editForm.store_id },
+        { label: 'Company', filled: !!editForm.company_id },
+        { label: 'Item', filled: !!editForm.item_id },
+    ];
+
+    if (!isVendorEscalationChild.value) {
+        fields.push({ label: 'Assignee', filled: !!editForm.assignee_id });
+    }
+
+    return fields;
+});
+
+const missingResponseFields = computed(() =>
+    isCustomerView.value ? [] : requiredResponseFields.value.filter(field => !field.filled).map(field => field.label)
+);
+
+const canSendResponse = computed(() => missingResponseFields.value.length === 0);
+
+// Assignee sits behind `tickets.assign` and the rest behind `tickets.edit`, so a
+// user can be blocked by a field their own panel does not offer. Telling them to
+// "set it below" would be a dead end — point them at the desk that can instead.
+const canFixMissingResponseFields = computed(() =>
+    missingResponseFields.value.every(field => hasPermission(field === 'Assignee' ? 'tickets.assign' : 'tickets.edit'))
+);
+
+const validateResponseClassification = () => {
+    if (canSendResponse.value) return true;
+
+    showError(`Complete the ticket classification before sending a response — missing: ${missingResponseFields.value.join(', ')}.`);
+    return false;
+};
+
 const validateResolutionItem = (contextLabel = 'continue') => {
     if (hasSelectedItemForResolution()) {
         return true;
@@ -1120,6 +1161,8 @@ const validateResolutionBeforeSubmit = (newStatus) => {
 };
 
 const canSubmitCurrentComment = () => {
+    if (!validateResponseClassification()) return false;
+
     if (commentForm.comment_text.trim() || commentForm.attachments.length > 0) {
         return true;
     }
@@ -1138,6 +1181,11 @@ const canSubmitCurrentComment = () => {
 };
 
 const submitWithStatus = (newStatus) => {
+    if (!validateResponseClassification()) {
+        showStatusDropdown.value = false;
+        return;
+    }
+
     if (newStatus && !canChangeTicketStatus(newStatus)) {
         showError(`You do not have permission to set this ticket to ${getStatusLabel(newStatus)}.`);
         showStatusDropdown.value = false;
@@ -1851,6 +1899,17 @@ watch(() => editForm.status, (newStatus, oldStatus) => {
 
     if (!canChangeTicketStatus(newStatus)) {
         showError(`You do not have permission to set this ticket to ${getStatusLabel(newStatus)}.`);
+        syncingTicketState.value = true;
+        editForm.status = oldStatus;
+        nextTick(() => {
+            syncingTicketState.value = false;
+        });
+        return;
+    }
+
+    // Terminal statuses set from the sidebar post a resolution comment, so the
+    // same classification gate applies before the resolution modal even opens.
+    if (requiresResolutionDetails(newStatus) && !validateResponseClassification()) {
         syncingTicketState.value = true;
         editForm.status = oldStatus;
         nextTick(() => {
@@ -3489,6 +3548,21 @@ const linkify = (text) => {
                                     </div>
                                 </div>
                                 <div class="flex-grow">
+                                    <!-- Classification gate: the desk cannot answer a ticket it has not
+                                         yet routed, so the send controls stay locked until every field is set. -->
+                                    <div v-if="!canSendResponse" class="mb-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] font-bold text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+                                        <svg class="w-4 h-4 flex-shrink-0 mt-px" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                        <span>
+                                            <template v-if="canFixMissingResponseFields">
+                                                Set <span class="uppercase tracking-wide">{{ missingResponseFields.join(', ') }}</span>
+                                                in the ticket details panel before sending a response.
+                                            </template>
+                                            <template v-else>
+                                                This ticket still needs <span class="uppercase tracking-wide">{{ missingResponseFields.join(', ') }}</span>
+                                                before anyone can respond — ask the desk that owns it to complete the classification.
+                                            </template>
+                                        </span>
+                                    </div>
                                     <div
                                         ref="responseComposerRef"
                                         class="ticket-response-composer bg-white border-2 border-blue-100 rounded-xl shadow-sm focus-within:ring-2 focus-within:ring-blue-400 focus-within:border-blue-400 transition-all duration-200 dark:!border-slate-700 dark:!bg-slate-900 dark:focus-within:!border-blue-500 dark:focus-within:ring-blue-500/40"
@@ -3703,7 +3777,7 @@ const linkify = (text) => {
                                                         <button 
                                                         type="button" 
                                                         @click="submitWithStatus('')" 
-                                                        :disabled="commentForm.processing || (!commentForm.comment_text.trim() && commentForm.attachments.length === 0)"
+                                                        :disabled="commentForm.processing || !canSendResponse || (!commentForm.comment_text.trim() && commentForm.attachments.length === 0)"
                                                         class="inline-flex items-center justify-center flex-1 sm:flex-none px-4 py-2 text-xs sm:text-sm font-black rounded-l-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 transition-all active:transform active:scale-95 whitespace-nowrap uppercase tracking-widest"
                                                     >
                                                         <span v-if="commentForm.processing">Saving...</span>
@@ -3713,7 +3787,7 @@ const linkify = (text) => {
                                                         <button 
                                                             type="button"
                                                             @click="showStatusDropdown = !showStatusDropdown"
-                                                            :disabled="commentForm.processing"
+                                                            :disabled="commentForm.processing || !canSendResponse"
                                                             class="inline-flex items-center p-2 text-sm font-bold rounded-r-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none transition-all"
                                                         >
                                                             <ChevronDownIcon class="w-5 h-5" />

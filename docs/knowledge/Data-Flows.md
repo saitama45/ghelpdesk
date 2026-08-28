@@ -20,6 +20,17 @@ intake → TicketObserver (key/company/SLA) → assignment → work → resolve 
 3. Issues `queue_track_token` for the public track page.
 4. Creates `ticket_sla_metrics` via `app/Services/SlaService.php` (business-hours arithmetic, holiday-aware, per-department settings overrides).
 
+**Responding requires a classified ticket** (`TicketController@storeComment` + `Tickets/Edit.vue`)
+- A public response cannot be sent until the ticket has **Department, Store, Company, Item and Assignee**.
+  The composer shows the missing fields and disables both send buttons; the controller repeats the check
+  (`assertTicketClassifiedForResponse`) so a direct POST is refused with a `classification` validation error.
+- Three exemptions: **internal notes** (the desk's own scratchpad while it is still classifying),
+  **customer-view users** (`TicketAccess::isCustomerOf` — they cannot set any of these fields, so requiring
+  them would silence the requester), and **partner-escalation children** (`parent_id` + `vendor_id`, where
+  the partner holds the work instead of an assignee).
+- A user with `tickets.edit` but not `tickets.assign` has no Assignee control, so the banner switches to
+  "ask the desk that owns it" rather than telling them to set a field they cannot see.
+
 **Serving vs requesting department**
 - `tickets.department_id` = the REQUESTER's department.
 - `tickets.serving_department_id` = the desk that owns the work (from the plus-address it arrived on, the form's owning department, or an override); falls back to the assignee's department. See `Ticket::scopeOwnedByDepartment()`.
