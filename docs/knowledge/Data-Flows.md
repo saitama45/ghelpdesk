@@ -20,6 +20,18 @@ intake → TicketObserver (key/company/SLA) → assignment → work → resolve 
 3. Issues `queue_track_token` for the public track page.
 4. Creates `ticket_sla_metrics` via `app/Services/SlaService.php` (business-hours arithmetic, holiday-aware, per-department settings overrides).
 
+**Missing Schedules starts at the hire date** (`User::wasEmployedOn` + `ScheduleController@missingSchedules`)
+- The Missing tab and its "Export Missing" PDF only report unscheduled days on or after the person's
+  `users.date_hired`. A new hire no longer arrives with a full month of red chips for days that predate them.
+- A user with **no** recorded hire date is reported for the whole range — we cannot invent a start date, and
+  hiding their real gaps would be the worse failure.
+- The floor applies **only** to the "no schedule at all" column. Missing Location / Actual Time In / Actual Time
+  Out describe schedule rows that genuinely exist, so they are never suppressed.
+- The screen and the export duplicate ~150 lines of this logic in two controllers; the shared rule lives on the
+  model so they cannot drift. Both call sites are covered by `tests/Feature/MissingSchedulesHireDateTest.php`.
+- Gotcha: `/users` requires `employee_id_no` on **every** update, so a Date Hired cannot be saved on a user who
+  has no Employee ID No until that is filled in too.
+
 **Ticket URLs are keyed, not UUID'd** (`Ticket::getRouteKeyName/resolveRouteBinding` + `TicketController@edit`)
 - The canonical URL is `/tickets/TGI-4096/edit`. `getRouteKeyName()` is `ticket_key`, so `route('tickets.edit', $ticket)`
   and Ziggy both emit the key; `getRouteKey()` falls back to the UUID for a ticket whose key has not been generated.

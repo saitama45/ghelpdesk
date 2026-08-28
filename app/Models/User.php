@@ -184,6 +184,26 @@ class User extends Authenticatable
         return $query->where('is_active', true);
     }
 
+    /**
+     * Whether this person was already employed on the given calendar date.
+     *
+     * Nobody can be missing a schedule for a day before they joined, so the
+     * Missing Schedules screen and its export both floor their date range here
+     * rather than reporting a month of red chips against a new hire.
+     *
+     * A user with no recorded hire date counts as employed throughout: we cannot
+     * invent a start date, and silently swallowing their real gaps would be a
+     * worse failure than showing days that predate them.
+     */
+    public function wasEmployedOn(string $date): bool
+    {
+        if (! $this->date_hired) {
+            return true;
+        }
+
+        return $date >= $this->date_hired->toDateString();
+    }
+
     public function updateLastLogin(): void
     {
         $this->last_login = now();

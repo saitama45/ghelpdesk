@@ -2647,7 +2647,7 @@ class ScheduleController extends Controller implements HasMiddleware
         $users = $query->orderByRaw("CASE WHEN org_path IS NULL OR org_path = '' THEN 1 ELSE 0 END")
             ->orderBy('org_path')
             ->orderBy('name')
-            ->get(['id', 'name', 'org_path', 'email']);
+            ->get(['id', 'name', 'org_path', 'email', 'date_hired']);
         $userIds = $users->pluck('id');
 
         // Fetch all schedules for these users in range
@@ -2751,7 +2751,9 @@ class ScheduleController extends Controller implements HasMiddleware
             $missingActualTimeIns = [];
             $missingActualTimeOuts = [];
             foreach ($allDates as $date) {
-                if (!isset($userScheduledDates[$user->id][$date])) {
+                // A day before the person was hired is not a gap in their
+                // schedule — there was nobody to schedule yet.
+                if (!isset($userScheduledDates[$user->id][$date]) && $user->wasEmployedOn($date)) {
                     $missing[] = Carbon::parse($date)->format('M j');
                 }
 
