@@ -12,6 +12,8 @@ qa-watch      # headed + slowed, with the narration banner. Use to watch it work
 
 qa-watch --project=workflow qat-signoff     # just the QAT story
 qa-watch --project=workflow uat-signature   # just the UAT signing story
+
+qa --config=playwright.readonly.config.js   # the read-only specs, no backup/purge
 ```
 
 `package.json` here exists only to set `"type": "commonjs"` — the app's root
@@ -24,11 +26,18 @@ CommonJS specs as ESM.
 |---|---|
 | `qat-signoff.workflow.spec.js` | A tester builds a QAT cycle, records verdicts, logs a blocker finding, raises a ticket from it, submits for sign-off. The manager is **refused** an approval while the blocker is open, refused again for waiving without a reason, then signs by hand and promotes to UAT. A user with no `qat.*` gets 403 on both the index and the cycle. |
 | `uat-signature.workflow.spec.js` | A client signs a UAT acceptance on the **tokenised portal with no account**, that signature appears on the in-app roster, an internal approver then signs from the admin roster, and the certificate PDF is served inline. |
+| `attendance-visibility.readonly.spec.js` | Three contrasting accounts open `/attendance/logs`. A department administrator sees his own department and not one person outside it; a colleague in that same department who manages nobody sees only himself, on a day two dozen others clocked in; an account without `attendance.logs` gets 403 from the URL. Read-only — run it with `playwright.readonly.config.js`. |
 
 ## Safety
 
 - **A full SQL Server backup runs before every suite** (`global-setup.js`) and is a
   hard gate — no backup, no run.
+- **`playwright.readonly.config.js` is for specs that write nothing.** The main
+  config's globalSetup also PURGES leftover `E2E-` fixtures, which is a physical
+  delete against the protected developer database. A spec that only signs in and
+  reads a page creates nothing to purge, so it runs under the read-only config and
+  triggers no delete. Its project matches `*.readonly.spec.js` only — never point
+  it at a spec that writes.
 - Every fixture is titled `E2E-…`; `php artisan qat:e2e-purge` removes only those
   and runs both before and after the suite. It refuses to run in production.
 - If a run is interrupted, clean up with `php artisan qat:e2e-purge`.

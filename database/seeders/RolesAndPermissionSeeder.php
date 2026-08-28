@@ -3,19 +3,21 @@
 namespace Database\Seeders;
 
 use App\Models\User;
+use App\Support\AttendanceVisibility;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
-use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
 
 class RolesAndPermissionSeeder extends Seeder
 {
     public function run(): void
     {
         // Reset cached roles and permissions
-        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
         Cache::forever('permissions_version', now()->timestamp);
 
         // Define help desk permissions
@@ -46,7 +48,7 @@ class RolesAndPermissionSeeder extends Seeder
             'task_boards.edit' => 'Edit task cards and boards',
             'task_boards.delete' => 'Close and delete task boards/cards',
             'task_boards.manage_members' => 'Manage task board members',
-            
+
             // Users
             'users.view' => 'View users',
             'users.create' => 'Create users',
@@ -59,7 +61,7 @@ class RolesAndPermissionSeeder extends Seeder
             'roles.edit' => 'Edit roles',
             'roles.export' => 'Export roles to Excel',
             'roles.import' => 'Import roles from Excel',
-            
+
             // Reports
             'reports.view' => 'View reports',
             'reports.export' => 'Export reports',
@@ -160,15 +162,16 @@ class RolesAndPermissionSeeder extends Seeder
             'stock_receivings.delete' => 'Delete Receiving Stock',
 
             // Service Vehicle Trips
-            'service_vehicle_trips.view'    => 'View Service Vehicle Trips',
-            'service_vehicle_trips.create'  => 'Book Service Vehicle Trip',
-            'service_vehicle_trips.edit'    => 'Edit Service Vehicle Trip',
-            'service_vehicle_trips.delete'  => 'Delete Service Vehicle Trip',
+            'service_vehicle_trips.view' => 'View Service Vehicle Trips',
+            'service_vehicle_trips.create' => 'Book Service Vehicle Trip',
+            'service_vehicle_trips.edit' => 'Edit Service Vehicle Trip',
+            'service_vehicle_trips.delete' => 'Delete Service Vehicle Trip',
             'service_vehicle_trips.approve' => 'Approve / Reject Service Vehicle Trip',
 
             // Administrative - Attendance
             'attendance.view' => 'View DTR',
             'attendance.logs' => 'View attendance logs',
+            'attendance.logs_department' => 'View attendance logs for the whole department (grant per account)',
             'attendance.create' => 'Can log attendance',
 
             // Monitoring - NPC Status
@@ -221,9 +224,9 @@ class RolesAndPermissionSeeder extends Seeder
             'stores.edit' => 'Edit stores',
 
             // Vendors
-            'vendors.view'   => 'View vendors',
+            'vendors.view' => 'View vendors',
             'vendors.create' => 'Create vendors',
-            'vendors.edit'   => 'Edit vendors',
+            'vendors.edit' => 'Edit vendors',
             'vendors.delete' => 'Delete vendors',
 
             // Holidays
@@ -328,9 +331,16 @@ class RolesAndPermissionSeeder extends Seeder
         $user->update(['landing_page' => 'dashboard']);
 
         // Assign permissions to roles
-        $admin->givePermissionTo(Permission::all());
-        Role::where('name', 'Solutions Admin')->first()?->givePermissionTo(Permission::all());
-        
+        // `attendance.logs_department` is deliberately withheld from the blanket
+        // grants: attendance visibility follows the reporting line, and this
+        // override is handed to named accounts, not to whole roles.
+        $blanketPermissions = Permission::whereNotIn('name', [
+            AttendanceVisibility::DEPARTMENT_WIDE_PERMISSION,
+        ])->get();
+
+        $admin->givePermissionTo($blanketPermissions);
+        Role::where('name', 'Solutions Admin')->first()?->givePermissionTo($blanketPermissions);
+
         $techSupport->givePermissionTo([
             'dashboard.view',
             'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.resolve', 'tickets.close', 'tickets.canned_messages', 'tickets.internal_notes',
@@ -405,7 +415,7 @@ class RolesAndPermissionSeeder extends Seeder
             'uat.execute',
             'uat.export',
         ]);
-        
+
         $user->givePermissionTo([
             'dashboard.view',
             'tickets.view', 'tickets.create',

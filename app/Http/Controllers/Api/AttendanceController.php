@@ -8,6 +8,7 @@ use App\Models\Schedule;
 use App\Models\ScheduleStore;
 use App\Models\Store;
 use App\Models\User;
+use App\Support\AttendanceVisibility;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -150,9 +151,9 @@ class AttendanceController extends Controller
             ->notVoided()
             ->latest('log_time');
 
-        if (! $user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin']) && ! $user->is_manager) {
-            $query->where('user_id', $user->id);
-        }
+        // Reporting line, not role — the same rule the web listing enforces.
+        $visibleUserIds = AttendanceVisibility::visibleUserIds($user);
+        $query->whereIn('user_id', $visibleUserIds);
 
         if ($request->filled('sub_unit')) {
             $query->whereHas('user', function ($q) use ($request) {
@@ -179,7 +180,7 @@ class AttendanceController extends Controller
         }
 
         $logs = $query->paginate($request->get('perPage', 10))->withQueryString();
-        $users = User::active()->orderBy('name')->get(['id', 'name', 'org_path']);
+        $users = User::active()->whereIn('id', $visibleUserIds)->orderBy('name')->get(['id', 'name', 'org_path']);
         $stores = Store::where('is_active', true)->orderBy('name')->get(['id', 'name']);
 
         $workHoursSummary = $this->buildWorkHoursSummary($request, $dateFrom, $dateTo);
@@ -433,16 +434,14 @@ class AttendanceController extends Controller
     private function buildWorkHoursSummary(Request $request, string $dateFrom, string $dateTo): array
     {
         $authUser = auth()->user();
-        $isPrivileged = $authUser->hasAnyRole(['Admin', 'Dev', 'Solutions Admin']) || $authUser->is_manager;
+        $visibleUserIds = AttendanceVisibility::visibleUserIds($authUser);
 
         $scheduleQuery = Schedule::whereIn('status', ['On-site', 'Off-site', 'WFH'])
             ->where('start_time', '<=', $dateTo.' 23:59:59')
             ->where('end_time', '>=', $dateFrom.' 00:00:00')
             ->with('user:id,name');
 
-        if (! $isPrivileged) {
-            $scheduleQuery->where('user_id', $authUser->id);
-        }
+        $scheduleQuery->whereIn('user_id', $visibleUserIds);
 
         if ($request->filled('sub_unit')) {
             $scheduleQuery->whereHas('user', fn ($q) => $q->where('org_path', 'like', '%'.$request->sub_unit.'%'));
@@ -500,9 +499,7 @@ class AttendanceController extends Controller
             ->orderBy('log_time')
             ->select('user_id', 'schedule_id', 'schedule_store_id', 'type', 'log_time');
 
-        if (! $isPrivileged) {
-            $logQuery->where('user_id', $authUser->id);
-        }
+        $logQuery->whereIn('user_id', $visibleUserIds);
 
         if ($request->filled('sub_unit')) {
             $logQuery->whereHas('user', fn ($q) => $q->where('org_path', 'like', '%'.$request->sub_unit.'%'));

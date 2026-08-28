@@ -282,6 +282,9 @@ class AttendanceLogNativeLocationTest extends TestCase
         $otherUser = User::factory()->create(['name' => 'Earlier User']);
         $targetUser = User::factory()->create(['name' => 'Gen Magbanua']);
 
+        // Attendance is scoped to the reporting line drawn on /departments.
+        $manager->subordinates()->attach([$otherUser->id, $targetUser->id]);
+
         $store = Store::create([
             'code' => 'STR-WORK-HOURS',
             'name' => 'Work Hours Store',

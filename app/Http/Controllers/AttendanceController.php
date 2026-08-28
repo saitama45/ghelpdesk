@@ -7,6 +7,7 @@ use App\Models\Schedule;
 use App\Models\ScheduleStore;
 use App\Models\Store;
 use App\Models\User;
+use App\Support\AttendanceVisibility;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -116,11 +117,9 @@ class AttendanceController extends Controller implements HasMiddleware
             ->whereBetween('log_time', [$windowStart, $windowEnd])
             ->orderBy('log_time');
 
-        $isPrivileged = $user->hasAnyRole(['Admin', 'Dev', 'Solutions Admin']) || $user->is_manager;
-
-        if (! $isPrivileged) {
-            $query->where('user_id', $user->id);
-        }
+        // Reporting line, not role — see App\Support\AttendanceVisibility.
+        $visibleUserIds = AttendanceVisibility::visibleUserIds($user);
+        $query->whereIn('user_id', $visibleUserIds);
 
         if ($request->filled('sub_unit')) {
             $query->whereHas('user', function ($q) use ($request) {
@@ -158,7 +157,9 @@ class AttendanceController extends Controller implements HasMiddleware
             ]
         );
 
-        $users = User::active()->orderBy('name')->get(['id', 'name', 'org_path']);
+        // The people filter offers only the people this user is allowed to see,
+        // so it cannot be used to enumerate staff outside their subtree.
+        $users = User::active()->whereIn('id', $visibleUserIds)->orderBy('name')->get(['id', 'name', 'org_path']);
         $stores = Store::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code', 'class']);
 
         $workHoursSummary = $this->buildWorkHoursSummary($request, $dateFrom, $dateTo);
@@ -649,7 +650,7 @@ class AttendanceController extends Controller implements HasMiddleware
     private function buildWorkHoursSummary(Request $request, string $dateFrom, string $dateTo): array
     {
         $authUser = auth()->user();
-        $isPrivileged = $authUser->hasAnyRole(['Admin', 'Dev', 'Solutions Admin']) || $authUser->is_manager;
+        $visibleUserIds = AttendanceVisibility::visibleUserIds($authUser);
 
         // --- Scheduled hours ---
         $scheduleQuery = Schedule::whereIn('status', ['On-site', 'Off-site', 'WFH'])
@@ -657,9 +658,7 @@ class AttendanceController extends Controller implements HasMiddleware
             ->where('end_time', '>=', $dateFrom.' 00:00:00')
             ->with('user:id,name');
 
-        if (! $isPrivileged) {
-            $scheduleQuery->where('user_id', $authUser->id);
-        }
+        $scheduleQuery->whereIn('user_id', $visibleUserIds);
 
         if ($request->filled('sub_unit')) {
             $scheduleQuery->whereHas('user', fn ($q) => $q->where('org_path', 'like', '%'.$request->sub_unit.'%'));
@@ -720,9 +719,7 @@ class AttendanceController extends Controller implements HasMiddleware
             ->orderBy('log_time')
             ->select('user_id', 'schedule_id', 'schedule_store_id', 'type', 'log_time');
 
-        if (! $isPrivileged) {
-            $logQuery->where('user_id', $authUser->id);
-        }
+        $logQuery->whereIn('user_id', $visibleUserIds);
 
         if ($request->filled('sub_unit')) {
             $logQuery->whereHas('user', fn ($q) => $q->where('org_path', 'like', '%'.$request->sub_unit.'%'));

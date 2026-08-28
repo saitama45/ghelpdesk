@@ -35,6 +35,10 @@ class AttendanceLogsPageTest extends TestCase
         $openEmployee = User::factory()->create(['name' => 'Open Session Employee']);
         $regularEmployee = User::factory()->create(['name' => 'Regular Store Employee']);
 
+        // Attendance is scoped to the reporting line, so the manager only sees
+        // these three because they report to them.
+        $manager->subordinates()->attach([$employee->id, $openEmployee->id, $regularEmployee->id]);
+
         $office = $this->createStore('OFF-001', 'Main Corporate Office', 'Office');
         $emptyOffice = $this->createStore('OFF-002', 'Zero Activity Office', 'Office');
         $this->createStore('OFF-003', 'Inactive Office', 'Office', false);
@@ -106,6 +110,7 @@ class AttendanceLogsPageTest extends TestCase
         $manager = User::factory()->create(['is_manager' => true]);
         $manager->givePermissionTo('attendance.logs');
         $employee = User::factory()->create();
+        $manager->subordinates()->attach($employee->id);
         $office = $this->createStore('OFF-010', 'Filtered Office', 'Office');
         $regularStore = $this->createStore('REG-010', 'Filtered Regular Store', 'Regular');
 
@@ -170,6 +175,7 @@ class AttendanceLogsPageTest extends TestCase
         $manager = User::factory()->create(['is_manager' => true]);
         $manager->givePermissionTo('attendance.logs');
         $employee = User::factory()->create();
+        $manager->subordinates()->attach($employee->id);
         $store = $this->createStore('REG-030', 'Adjusted Store', 'Regular');
         [$schedule, $scheduleStore] = $this->createSchedule(
             $employee,

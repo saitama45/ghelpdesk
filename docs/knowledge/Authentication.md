@@ -40,6 +40,12 @@ User Management itself was open until 2026-08-20 — `/users` and `/roles` (inde
 - UAT/QAT cycles are the one department-scoped list with a role-wide override: `App\Support\TestCycleAccess::seesAllDepartments()` (Executive **or** the `Dev` role) is consumed by `UatController::index`, `EnsureUatCycleInDepartment` and `QatCycle::scopeVisibleTo()`/`isVisibleTo()` — all four must agree, or a row lists and then 403s.
 - Ownership overrides exist per module, e.g. `/projects/{id}` structure edits require creator (`created_by`) or the Admin/Solutions Admin **roles** — not `projects.delete`, which is broadly granted.
 
+### 4. Reporting line — `app/Support/AttendanceVisibility.php`
+- `/attendance/logs` (and its mobile twin `Api\AttendanceController::logs`) is scoped by the **org chart**, not by role or department: `users.is_manager` opens the manager's own `manager_user` subtree (`User::transitiveSubordinateIds()`), everyone else sees only themselves.
+- The Admin / Dev / Solutions Admin roles used to reveal every employee here and no longer do. Attendance carries a selfie, a GPS fix and a work pattern, so the reporting line drawn on `/departments` is the boundary.
+- `attendance.logs_department` is the one override: it opens the holder's whole `users.department_id`, and is granted **per account** (migration `2026_08_28_100001…`), never to a role. It is read with `hasPermissionTo()` rather than `can()` on purpose — `Gate::before` would otherwise hand it back to the Admin role.
+- Four enforcement points must agree: the web listing, its `buildWorkHoursSummary`, and the same pair on the API. All four call `AttendanceVisibility::visibleUserIds()`.
+
 ## Adding a module — required touch points
 1. Permission entries in `RolesAndPermissionSeeder`.
 2. Category placement in `RoleService::getPermissionsByCategory()`.
