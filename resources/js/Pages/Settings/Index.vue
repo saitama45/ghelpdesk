@@ -544,7 +544,6 @@ const addressProblem = (mailbox) => {
     const clean = normalizeAddress(mailbox.mail_address);
     if (!clean) return null;
     if (!addressIsValid(clean)) return 'Enter a complete address, e.g. fm@tablegroup.com';
-    if (clean === supportMailbox.value) return 'This is the shared support mailbox';
     if (duplicateAddresses.value.has(clean)) return 'Already used by another department';
     return null;
 };
@@ -552,11 +551,27 @@ const addressProblem = (mailbox) => {
 const addressHint = (mailbox) => {
     const clean = normalizeAddress(mailbox.mail_address);
     if (!clean || addressProblem(mailbox)) return null;
+    // Claiming the shared mailbox is allowed and often what you want: it makes this
+    // desk the owner of everything sent to the address requesters actually know,
+    // instead of that mail being answered with the "wrong address" directory notice.
+    if (clean === supportMailbox.value) {
+        return 'Shared support mailbox — this desk receives all unrouted mail';
+    }
     if (domainOf(clean) !== domainOf(supportMailbox.value)) {
         return `Forward ${clean} to ${supportMailbox.value}`;
     }
     return null;
 };
+
+// The department that has claimed the shared mailbox, if any. While one has, the
+// "wrong address" notice can never fire for mail sent there — it routes to that
+// desk instead — so the toggle's description has to say something different.
+const sharedMailboxOwner = computed(() => {
+    const base = supportMailbox.value;
+    if (!base) return null;
+
+    return form.mailboxes.find((m) => normalizeAddress(m.mail_address) === base)?.name ?? null;
+});
 
 const mailboxesHaveProblems = computed(() => form.mailboxes.some((m) => addressProblem(m) !== null));
 
@@ -868,11 +883,21 @@ const syncEmails = () => {
                                         />
                                         <span class="text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">
                                             <span class="font-bold">Require a department address for new requests.</span>
-                                            New mail sent to
-                                            <span class="font-mono">{{ supportMailbox || 'the support mailbox' }}</span>
-                                            is not turned into a ticket — the sender is emailed the list of department addresses
-                                            below and asked to resend. Replies on existing tickets are unaffected and still
-                                            arrive normally.
+                                            <template v-if="sharedMailboxOwner">
+                                                New mail sent to an address no department owns is not turned into a ticket — the
+                                                sender is emailed the list of department addresses below and asked to resend.
+                                                <span class="font-mono">{{ supportMailbox }}</span> is claimed by
+                                                <span class="font-bold">{{ sharedMailboxOwner }}</span>, so mail sent there is
+                                                still ticketed and served by that desk. Replies on existing tickets are
+                                                unaffected and still arrive normally.
+                                            </template>
+                                            <template v-else>
+                                                New mail sent to
+                                                <span class="font-mono">{{ supportMailbox || 'the support mailbox' }}</span>
+                                                is not turned into a ticket — the sender is emailed the list of department
+                                                addresses below and asked to resend. Replies on existing tickets are unaffected
+                                                and still arrive normally.
+                                            </template>
 
                                             <span v-if="!canRequireDepartmentAddress" class="mt-2 block font-bold text-amber-700 dark:text-amber-300">
                                                 Department routing is not active yet. No department has an address, so there is

@@ -86,7 +86,7 @@ class SettingsController extends Controller implements HasMiddleware
      * key-value settings — the caller strips them out of the flat writer first.
      * A null/absent payload means the page never sent them, so leave them alone.
      */
-    private function saveDepartmentMailboxes($mailboxes, ?string $submittedSupportAddress = null): void
+    private function saveDepartmentMailboxes($mailboxes): void
     {
         if (! is_array($mailboxes)) {
             return;
@@ -122,22 +122,17 @@ class SettingsController extends Controller implements HasMiddleware
             ]);
         }
 
-        // The support mailbox is the catch-all; handing it to a department would
-        // make every unrouted message land on that desk instead of the pool.
+        // The support mailbox MAY be claimed by one department — the desk that owns
+        // unrouted mail. Refusing it used to look like prudence and was in fact a
+        // trap: with "require a departmental address" on, every message sent to the
+        // shared mailbox is answered with the directory notice instead of becoming
+        // a ticket, and the shared address is precisely the one requesters know. On
+        // 2026-08-26 that turned off email intake for 59 real requests in two days.
+        // Assigning it here routes that mail to a named desk instead of refusing it.
         //
-        // Compared against the SUBMITTED support address, not the stored one: this
-        // runs before the settings write, so a user changing the mailbox and
-        // assigning its old value to a department in the same save would otherwise
-        // slip past.
-        $base = strtolower(trim((string) ($submittedSupportAddress ?? '')))
-            ?: app(DepartmentMailRouter::class)->baseAddress();
-
-        if ($base !== '' && $addresses->contains($base)) {
-            throw ValidationException::withMessages([
-                'mailboxes' => "{$base} is the shared support mailbox and cannot be assigned to a single department.",
-            ]);
-        }
-
+        // The duplicate check above still applies, so at most ONE department can
+        // hold it — two would make the routing map depend on row order.
+        //
         foreach ($rows as $row) {
             Department::whereKey($row['id'])->update([
                 'mail_address' => $row['mail_address'],
@@ -158,7 +153,7 @@ class SettingsController extends Controller implements HasMiddleware
         // save button, but they are department ROWS rather than key-value settings
         // — pull them out before the mass-assign loop below, which would otherwise
         // json_encode the whole array into a bogus `mailboxes` setting.
-        $this->saveDepartmentMailboxes($request->input('mailboxes'), $request->input('imap_username'));
+        $this->saveDepartmentMailboxes($request->input('mailboxes'));
         unset($settings['mailboxes']);
 
         foreach ($settings as $key => $value) {

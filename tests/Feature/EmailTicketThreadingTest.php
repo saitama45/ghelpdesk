@@ -975,6 +975,55 @@ class EmailTicketThreadingTest extends TestCase
         Mail::assertNotSent(\App\Mail\DepartmentAddressDirectory::class);
     }
 
+    public function test_a_department_owning_the_shared_mailbox_still_gets_tickets_while_enforcement_is_on(): void
+    {
+        // The shared mailbox is the address requesters actually know. When a desk
+        // claims it, mail sent there must become that desk's ticket rather than be
+        // answered with the directory notice — otherwise switching enforcement on
+        // silently stops email intake (2026-08-26: 59 real requests turned away).
+        $owner = $this->makeDepartment('Technology and Solutions', 'support@example.test');
+        $this->makeDepartment('SCM', 'scm@example.test');
+        Setting::set('mail_require_department_address', '1', 'mail');
+        Mail::fake();
+
+        $processed = $this->service->processFake(new FakeEmailMessage(
+            messageId: '<claimed-shared-mailbox@example.test>',
+            senderEmail: 'customer@example.test',
+            senderName: 'Store Manager',
+            subject: 'Cannot perform Zread',
+            body: 'The terminal will not let us run the Zread at closing time.',
+            toRecipients: ['support@example.test'],
+        ));
+
+        $this->assertTrue($processed);
+        $this->assertSame(1, Ticket::count());
+        $this->assertSame($owner->id, Ticket::firstOrFail()->serving_department_id);
+        Mail::assertNotSent(\App\Mail\DepartmentAddressDirectory::class);
+    }
+
+    public function test_claiming_the_shared_mailbox_does_not_make_us_accept_mail_addressed_elsewhere(): void
+    {
+        // Claiming the shared mailbox removes the "wrong address" outcome for mail
+        // sent to it, but must not widen what counts as ours: a message addressed
+        // to nobody we own is still ignored, ticket or notice alike.
+        $this->makeDepartment('Technology and Solutions', 'support@example.test');
+        $this->makeDepartment('SCM', 'scm@example.test');
+        Setting::set('mail_require_department_address', '1', 'mail');
+        Mail::fake();
+
+        $processed = $this->service->processFake(new FakeEmailMessage(
+            messageId: '<not-ours@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Aircon not working',
+            body: 'The aircon in our branch stockroom has stopped cooling since this morning.',
+            toRecipients: ['someone-else@example.test'],
+        ));
+
+        $this->assertFalse($processed);
+        $this->assertSame(0, Ticket::count());
+        Mail::assertNotSent(\App\Mail\DepartmentAddressDirectory::class);
+    }
+
     private function makeDepartment(string $name, ?string $address, ?string $fromName = null): \App\Models\Department
     {
         return \App\Models\Department::create([
