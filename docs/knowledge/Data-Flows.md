@@ -20,6 +20,21 @@ intake → TicketObserver (key/company/SLA) → assignment → work → resolve 
 3. Issues `queue_track_token` for the public track page.
 4. Creates `ticket_sla_metrics` via `app/Services/SlaService.php` (business-hours arithmetic, holiday-aware, per-department settings overrides).
 
+**Deleting a user names its blockers** (`App\Support\UserDeletionBlockers` + `UserController@destroy`)
+- `destroy()` clears ~25 known references, then asks the schema which columns *still* point at the user. If any
+  do, it throws a ValidationException naming the areas and where to find them ("4 in Customers — see Stamps →
+  Customers tab") instead of surfacing `SQLSTATE[23000] ... REFERENCE constraint "customers_created_by_foreign"`.
+- The scan runs **inside** the transaction, **after** the cleanup — otherwise it would refuse deletions that
+  work today (a user with tickets, schedules, presence logs, etc. that `destroy()` was about to clear).
+- It is one metadata query (`sys.foreign_keys` on SQL Server, `Schema::getForeignKeys` elsewhere) plus **one**
+  `UNION ALL` count query. Counting per foreign key instead took minutes: there are ~115 columns pointing at
+  `users`.
+- Results are grouped per table and sorted **actionable-first** (a mapped location beats a bigger count), then
+  capped at four named areas plus "and N other areas" — a toast cannot carry seventy clauses.
+- A `QueryException` catch parses the driver message as a fallback for any constraint the scan cannot see.
+- Add new user-facing tables to `UserDeletionBlockers::LOCATIONS`; anything unmapped still reports precisely,
+  it just falls back to a humanised table name.
+
 **Missing Schedules starts at the hire date** (`User::wasEmployedOn` + `ScheduleController@missingSchedules`)
 - The Missing tab and its "Export Missing" PDF only report unscheduled days on or after the person's
   `users.date_hired`. A new hire no longer arrives with a full month of red chips for days that predate them.

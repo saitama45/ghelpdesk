@@ -243,6 +243,9 @@ const scanPurchaseAmountInputRef = ref(null)
 // scan rather than remembered, since the sale amount is never the same twice.
 const scanPurchaseAmount = ref(null)
 const scanNote = ref('')
+// Defaults to 1 — the one-scan-one-stamp rhythm at the counter — but a
+// purchase that earns several is a single scan, not several.
+const scanQuantity = ref(1)
 
 // Small helper: a ref backed by localStorage under `key`, read once on load
 // and written back on every change. Used for the two fields staff pick once
@@ -280,6 +283,7 @@ const openScanModal = () => {
     scanTokenInput.value = ''
     scanPurchaseAmount.value = null
     scanNote.value = ''
+    scanQuantity.value = 1
     // scanStoreId / scanProgramId are deliberately NOT reset — that's the
     // "remembered per shift" behavior staff asked for.
     // A hardware barcode scanner types into whatever input has focus, so the
@@ -334,19 +338,45 @@ watch(scanTokenInput, (val) => {
 const scanCardForSelectedProgram = computed(() =>
     scanModal.cards.find(c => c.stamp_program_id === scanProgramId.value) || null)
 
+// The card the stamps land on may not exist yet (one is auto-created on the
+// server), so the room left has to fall back to the program's own requirement.
+const scanStampsRequired = computed(() =>
+    scanCardForSelectedProgram.value?.program?.stamps_required
+        ?? props.programs.find(p => p.id === scanProgramId.value)?.stamps_required
+        ?? 0)
+const scanRemaining = computed(() => Math.max(
+    0, scanStampsRequired.value - (scanCardForSelectedProgram.value?.stamps_count ?? 0)))
+
+// Mirrors the server's own rules (`StampController::applyStamps`) so a full
+// card is said out loud here instead of coming back as a failed request.
+const scanQuantityError = computed(() => {
+    if (!scanProgramId.value) return null
+    if (scanRemaining.value < 1) return 'This card is already full — redeem it before adding more stamps.'
+    if (!scanQuantity.value || scanQuantity.value < 1) return 'Enter at least 1 stamp.'
+    if (scanQuantity.value > scanRemaining.value) {
+        return `Only ${scanRemaining.value} stamp${scanRemaining.value === 1 ? '' : 's'} left on this card.`
+    }
+    return null
+})
+
 const submitScanAddStamp = async () => {
     if (!scanProgramId.value || !scanPurchaseAmount.value || scanModal.submitting) return
+    if (scanQuantityError.value) return
     scanModal.submitting = true
     scanModal.error = null
     try {
-        await axios.post(route('stamps.scan.add-stamp'), {
+        const res = await axios.post(route('stamps.scan.add-stamp'), {
             token: scanTokenInput.value.trim(),
             stamp_program_id: scanProgramId.value,
+            quantity: scanQuantity.value,
             store_id: scanStoreId.value,
             purchase_amount: scanPurchaseAmount.value,
             note: scanNote.value || null,
         })
-        addToast(`Stamp added for ${scanModal.customer?.name}.`, 'success')
+        // The server says how many actually fit on the card, which can be fewer
+        // than were asked for — report that number, not the one staff typed.
+        const applied = res.data?.applied ?? scanQuantity.value
+        addToast(`${applied} stamp${applied === 1 ? '' : 's'} added for ${scanModal.customer?.name}.`, 'success')
         closeScanModal()
         router.reload({ only: ['cards', 'summary'] })
     } catch (e) {
@@ -371,6 +401,7 @@ const rescan = () => {
     scanTokenInput.value = ''
     scanPurchaseAmount.value = null
     scanNote.value = ''
+    scanQuantity.value = 1
     nextTick(() => scanTokenInputRef.value?.focus())
 }
 
@@ -643,7 +674,7 @@ const submitRedeem = () => {
                 >
                     <template #actions>
                         <div class="flex items-center gap-2">
-                            <button @click="openScanModal()" title="Scan a member's QR code to add a stamp — no manual customer/store lookup" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg whitespace-nowrap inline-flex items-center gap-1.5">
+                            <button v-if="hasPermission('stamps.create')" @click="openScanModal()" title="Scan a member's QR code to add a stamp — no manual customer/store lookup" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg whitespace-nowrap inline-flex items-center gap-1.5">
                                 <QrCodeIcon class="w-4 h-4" />
                                 Scan Customer
                             </button>
@@ -945,6 +976,16 @@ const submitRedeem = () => {
                     </div>
                     <div>
                         <div class="flex items-baseline justify-between mb-1">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Number of stamps <span class="text-red-500">*</span></label>
+                            <span v-if="scanProgramId" class="text-xs text-gray-500 dark:text-gray-300">
+                                <span class="font-medium" :class="scanRemaining ? 'text-emerald-600' : 'text-red-600'">{{ scanRemaining }} remaining</span>
+                            </span>
+                        </div>
+                        <input v-model.number="scanQuantity" type="number" :min="1" :max="scanRemaining || 1" :disabled="!scanProgramId" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:border-gray-600 disabled:bg-gray-50 disabled:text-gray-400 dark:disabled:bg-gray-800" />
+                        <p v-if="scanQuantityError" class="text-xs text-red-600 mt-1">{{ scanQuantityError }}</p>
+                    </div>
+                    <div>
+                        <div class="flex items-baseline justify-between mb-1">
                             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">My Store</label>
                             <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Remembered for this device</span>
                         </div>
@@ -962,7 +1003,9 @@ const submitRedeem = () => {
                         <button @click="rescan" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Scan Different Member</button>
                         <div class="flex gap-2">
                             <button @click="closeScanModal" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
-                            <button @click="submitScanAddStamp" :disabled="!scanProgramId || !scanPurchaseAmount || scanModal.submitting" class="px-4 py-2 text-sm rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">Add Stamp</button>
+                            <button @click="submitScanAddStamp" :disabled="!scanProgramId || !scanPurchaseAmount || !!scanQuantityError || scanModal.submitting" class="px-4 py-2 text-sm rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50">
+                                Add {{ scanQuantity > 1 ? scanQuantity + ' Stamps' : 'Stamp' }}
+                            </button>
                         </div>
                     </div>
                 </template>

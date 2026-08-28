@@ -277,9 +277,13 @@ class StampController extends Controller implements HasMiddleware
 
     /**
      * Step 2 of the "Scan Customer" flow: given the same token plus Program
-     * (the field staff actually search/pick), add a single stamp — reusing
-     * the customer's open card for that program if one exists, auto-creating
-     * one otherwise. Store can't come from the QR itself — it's generated
+     * (the field staff actually search/pick), add stamps — reusing the
+     * customer's open card for that program if one exists, auto-creating one
+     * otherwise. Quantity defaults to 1, the one-scan-one-stamp behaviour this
+     * flow started with; staff can raise it for a purchase that earns several
+     * at once, exactly like the manual Add Stamps modal.
+     *
+     * Store can't come from the QR itself — it's generated
      * once on the customer's phone before any store is involved — so the
      * frontend remembers "my current store" per browser (localStorage) and
      * sends it along here; staff pick it once per shift, not per scan.
@@ -291,6 +295,7 @@ class StampController extends Controller implements HasMiddleware
         $data = $request->validate([
             'token' => 'required|string|max:255',
             'stamp_program_id' => 'required|exists:stamp_programs,id',
+            'quantity' => 'nullable|integer|min:1|max:1000',
             'store_id' => 'nullable|exists:stores,id',
             'purchase_amount' => 'required|numeric|min:0.01',
             'note' => 'nullable|string|max:255',
@@ -310,7 +315,9 @@ class StampController extends Controller implements HasMiddleware
             ]);
         }
 
-        $card = DB::transaction(function () use ($customer, $data, $request) {
+        $applied = 0;
+
+        $card = DB::transaction(function () use ($customer, $data, $request, &$applied) {
             $card = StampCard::where('customer_id', $customer->id)
                 ->where('stamp_program_id', $data['stamp_program_id'])
                 ->whereIn('status', ['active', 'completed'])
@@ -328,9 +335,9 @@ class StampController extends Controller implements HasMiddleware
                 ]);
             }
 
-            $this->applyStamps(
+            $applied = $this->applyStamps(
                 $card,
-                1,
+                (int) ($data['quantity'] ?? 1),
                 'scan',
                 $data['purchase_amount'],
                 $data['note'] ?? null,
@@ -341,7 +348,10 @@ class StampController extends Controller implements HasMiddleware
             return $card->fresh(['customer:id,name', 'program:id,name,stamps_required']);
         });
 
-        return response()->json(['card' => $card]);
+        // `applied` can be lower than what was asked for: `applyStamps` fills the
+        // card and stops. The counter tells the toast what actually happened
+        // rather than echoing the request back at the staff member.
+        return response()->json(['card' => $card, 'applied' => $applied]);
     }
 
     public function destroyCard(StampCard $card)
@@ -416,8 +426,11 @@ class StampController extends Controller implements HasMiddleware
     /**
      * Apply stamps to a card, capping at the program threshold and flipping
      * the card to "completed" when the threshold is reached.
+     *
+     * Returns how many were actually applied, which is what the card had room
+     * for rather than what was asked for.
      */
-    private function applyStamps(StampCard $card, int $quantity, string $source, $purchaseAmount, ?string $note, int $userId, ?int $storeId): void
+    private function applyStamps(StampCard $card, int $quantity, string $source, $purchaseAmount, ?string $note, int $userId, ?int $storeId): int
     {
         if ($card->status !== 'active') {
             throw ValidationException::withMessages([
@@ -469,6 +482,8 @@ class StampController extends Controller implements HasMiddleware
 
             $card->save();
         });
+
+        return $applied;
     }
 
     /* ----------------------------------------------------------------------
