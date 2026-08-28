@@ -185,6 +185,49 @@ class UserIndexPerformanceTest extends TestCase
             ->assertJsonFragment(['name' => 'users.view']);
     }
 
+    public function test_employee_id_is_required_when_creating_a_user(): void
+    {
+        $admin = $this->admin();
+        $role = Role::firstOrCreate(['name' => 'Employee', 'guard_name' => 'web']);
+
+        $this->actingAs($admin)
+            ->from(route('users.index'))
+            ->post(route('users.store'), [
+                'name' => 'No Employee Id',
+                'employee_id_no' => '',
+                'email' => 'no.employee.id@example.com',
+                'password' => 'password123',
+                'role' => $role->name,
+                'is_active' => true,
+                'is_manager' => false,
+            ])
+            ->assertSessionHasErrors('employee_id_no');
+
+        $this->assertDatabaseMissing('users', ['email' => 'no.employee.id@example.com']);
+    }
+
+    public function test_employee_id_is_required_when_updating_a_user(): void
+    {
+        $admin = $this->admin();
+        $role = Role::firstOrCreate(['name' => 'Employee', 'guard_name' => 'web']);
+        $user = User::factory()->create(['employee_id_no' => 'EMP-KEEP']);
+        $user->assignRole($role);
+
+        $this->actingAs($admin)
+            ->from(route('users.index'))
+            ->put(route('users.update', $user), [
+                'name' => $user->name,
+                'employee_id_no' => '',
+                'email' => $user->email,
+                'role' => $role->name,
+                'is_active' => true,
+                'is_manager' => false,
+            ])
+            ->assertSessionHasErrors('employee_id_no');
+
+        $this->assertSame('EMP-KEEP', $user->refresh()->employee_id_no);
+    }
+
     private function admin(): User
     {
         $admin = User::factory()->create();

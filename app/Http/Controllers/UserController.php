@@ -247,7 +247,7 @@ class UserController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:255',
-            'employee_id_no' => 'nullable|string|max:255|unique:users,employee_id_no',
+            'employee_id_no' => 'required|string|max:255|unique:users,employee_id_no',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8',
             'role' => 'required|string|exists:roles,name',
@@ -297,7 +297,7 @@ class UserController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:255',
-            'employee_id_no' => 'nullable|string|max:255|unique:users,employee_id_no,' . $user->id,
+            'employee_id_no' => 'required|string|max:255|unique:users,employee_id_no,' . $user->id,
             'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
             'role' => 'required|string|exists:roles,name',
             'department_id' => 'nullable|integer|exists:departments,id',
