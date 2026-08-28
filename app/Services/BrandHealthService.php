@@ -519,7 +519,7 @@ class BrandHealthService
                 'concern_type' => $ticket->item?->concern_type,
                 'assignee' => $ticket->assignee?->name ?? 'Unassigned',
                 'created_at' => $ticket->created_at?->format('M j, Y'),
-                'url' => route('tickets.edit', $ticket->id),
+                'url' => route('tickets.edit', $ticket),
             ])->all(),
         ];
     }
@@ -572,7 +572,7 @@ class BrandHealthService
                     'entered_at' => $enteredAt->format('M j, Y'),
                     'age_days' => $ageDays,
                     'over_threshold' => $ageDays >= $agingDays,
-                    'url' => route('tickets.edit', $ticket->id),
+                    'url' => route('tickets.edit', $ticket),
                 ];
             })
             ->groupBy('brand_id');

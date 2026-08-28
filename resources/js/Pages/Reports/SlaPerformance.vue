@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue';
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { Head, router, Link } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
@@ -273,12 +274,12 @@ const getStatusLabel = (status) => {
                         <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                             <tr v-for="ticket in selectedTickets" :key="ticket.id" class="hover:bg-blue-50 transition-colors">
                                 <td class="px-4 py-3 whitespace-nowrap text-sm font-bold text-blue-600">
-                                    <Link :href="route('tickets.edit', ticket.id)" class="hover:underline">
+                                    <Link :href="ticketUrl(ticket)" class="hover:underline">
                                         {{ ticket.ticket_key }}
                                     </Link>
                                 </td>
                                 <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
-                                    <Link :href="route('tickets.edit', ticket.id)" class="hover:underline line-clamp-1">
+                                    <Link :href="ticketUrl(ticket)" class="hover:underline line-clamp-1">
                                         {{ ticket.title }}
                                     </Link>
                                 </td>

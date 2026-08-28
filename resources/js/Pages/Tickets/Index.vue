@@ -1,5 +1,6 @@
 <script setup>
 import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { ref, reactive, onMounted, watch, computed } from 'vue';
 import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -1350,7 +1351,7 @@ const editTicket = (ticket) => {
         showError('You do not have permission to edit this ticket.');
         return;
     }
-    router.visit(route('tickets.edit', ticket.id));
+    router.visit(ticketUrl(ticket));
 };
 
 const openInNewTab = (ticket) => {
@@ -1358,7 +1359,7 @@ const openInNewTab = (ticket) => {
         showError('You do not have permission to edit this ticket.');
         return;
     }
-    window.open(route('tickets.edit', ticket.id), '_blank');
+    window.open(ticketUrl(ticket), '_blank');
 };
 
 const handleAuxClick = (event, ticket) => {
@@ -1876,8 +1877,8 @@ const closeRequesterModal = () => {
     showRequesterModal.value = false;
 };
 
-const goToTicket = (ticketId) => {
-    router.visit(route('tickets.edit', ticketId));
+const goToTicket = (ticket) => {
+    router.visit(ticketUrl(ticket));
 };
 
 const filteredRequesterTickets = computed(() => {
@@ -2541,7 +2542,7 @@ const requesterTabs = computed(() => {
 
                                 <Link
                                     v-if="ticket.parent"
-                                    :href="route('tickets.edit', ticket.parent.id)"
+                                    :href="ticketUrl(ticket.parent)"
                                     @click.stop
                                     class="block rounded-xl border border-indigo-200 bg-indigo-50 p-3 transition-colors hover:border-indigo-400 hover:bg-indigo-100 dark:border-indigo-400/30 dark:bg-indigo-500/15 dark:hover:bg-indigo-500/25"
                                 >
@@ -2580,7 +2581,7 @@ const requesterTabs = computed(() => {
                                         <Link
                                             v-for="child in ticket.children"
                                             :key="child.id"
-                                            :href="route('tickets.edit', child.id)"
+                                            :href="ticketUrl(child)"
                                             @click.stop
                                             class="flex items-start justify-between gap-3 rounded-lg p-1.5 text-xs transition-colors hover:bg-blue-50 dark:hover:bg-blue-500/15"
                                         >
@@ -3309,7 +3310,7 @@ const requesterTabs = computed(() => {
                                 No tickets found for this status.
                             </div>
                             <div v-else class="space-y-3 pr-2">
-                                <div v-for="t in filteredRequesterTickets" :key="t.id" @click="goToTicket(t.id)" class="group flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-lg hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-all">
+                                <div v-for="t in filteredRequesterTickets" :key="t.id" @click="goToTicket(t)" class="group flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-lg hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition-all">
                                     <div>
                                         <div class="flex items-center gap-2 mb-1">
                                             <span class="text-xs font-bold text-blue-600">{{ t.ticket_key }}</span>

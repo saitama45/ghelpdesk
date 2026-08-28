@@ -102,7 +102,7 @@
                     <ul class="divide-y divide-gray-100 dark:divide-gray-700">
                         <li v-for="(ticket, index) in results.tickets" :key="'ticket-' + index">
                             <Link
-                                :href="route('tickets.show', ticket.id)"
+                                :href="ticketUrl(ticket, 'tickets.show')"
                                 class="flex items-center px-4 py-3 hover:bg-blue-50 transition-colors group"
                                 :class="{ 'bg-blue-50': isSelected('ticket', index) }"
                                 @click.prevent="openSearchResult('ticket', ticket)"
@@ -398,6 +398,7 @@
 
 <script setup>
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
 import {
@@ -681,7 +682,7 @@ const getInventoryLink = (item) => {
 
 const getResultUrl = (type, data) => {
     if (type === 'menu') return data.url;
-    if (type === 'ticket') return route('tickets.show', data.id);
+    if (type === 'ticket') return ticketUrl(data, 'tickets.show');
     if (type === 'request') return route(data.source === 'pos' ? 'pos-requests.show' : 'sap-requests.show', data.id);
     if (type === 'form') return getFormLink(data);
     if (type === 'project') return route('projects.show', data.id);

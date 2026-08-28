@@ -20,6 +20,20 @@ intake → TicketObserver (key/company/SLA) → assignment → work → resolve 
 3. Issues `queue_track_token` for the public track page.
 4. Creates `ticket_sla_metrics` via `app/Services/SlaService.php` (business-hours arithmetic, holiday-aware, per-department settings overrides).
 
+**Ticket URLs are keyed, not UUID'd** (`Ticket::getRouteKeyName/resolveRouteBinding` + `TicketController@edit`)
+- The canonical URL is `/tickets/TGI-4096/edit`. `getRouteKeyName()` is `ticket_key`, so `route('tickets.edit', $ticket)`
+  and Ziggy both emit the key; `getRouteKey()` falls back to the UUID for a ticket whose key has not been generated.
+- `resolveRouteBinding()` accepts **all three** forms — current key, UUID (every link already mailed out carries one),
+  and a key retired by a renumber via `ticket_key_aliases`. The UUID branch is guarded by `Str::isUuid` because handing a
+  non-UUID to a `uniqueidentifier` column is a SQL Server conversion error, not a miss.
+- `canonicalKeyRedirect()` bounces any non-canonical form to the key, carrying the query string and **reflashing the
+  session** so a validation error or success toast is not eaten by the extra hop.
+- The Vue pages still POST `ticket.id` to the write routes — that keeps working, and is why the binding must stay
+  permissive. Navigation links go through `resources/js/Composables/useTicketLink.js` (`ticketUrl()`), which prefers
+  `ticket_key` and degrades to the id.
+- **Classifying a ticket can renumber it** (the key follows the store's owning company), so a key is not stable —
+  always link through `ticketUrl()`/the model, never by caching a key string.
+
 **Responding requires a classified ticket** (`TicketController@storeComment` + `Tickets/Edit.vue`)
 - A public response cannot be sent until the ticket has **Department, Store, Company, Item and Assignee**.
   The composer shows the missing fields and disables both send buttons; the controller repeats the check

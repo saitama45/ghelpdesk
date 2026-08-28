@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { Link, useForm, router, usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermission } from '@/Composables/usePermission'
@@ -379,7 +380,7 @@ const getFileUrl = (value) => {
                                 </div>
                                 <div v-if="sapRequest.ticket">
                                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">Linked Ticket</label>
-                                    <Link :href="route('tickets.edit', sapRequest.ticket.id)" class="text-sm font-black text-teal-600 hover:text-teal-800 font-mono">
+                                    <Link :href="ticketUrl(sapRequest.ticket)" class="text-sm font-black text-teal-600 hover:text-teal-800 font-mono">
                                         {{ sapRequest.ticket.ticket_key }}
                                     </Link>
                                 </div>

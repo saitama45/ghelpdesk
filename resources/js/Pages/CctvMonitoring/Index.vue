@@ -123,7 +123,7 @@
                                         {{ statusChipLabel(row.months[m].status) }}
                                     </button>
                                     <a v-if="row.months[m].ticket_key && row.months[m].ticket_id"
-                                        :href="route('tickets.edit', row.months[m].ticket_id)"
+                                        :href="ticketUrl(row.months[m].ticket_key)"
                                         target="_blank"
                                         @click.stop
                                         class="block mt-0.5 text-[9px] font-bold text-blue-500 hover:text-blue-800 hover:underline leading-tight truncate">
@@ -300,7 +300,7 @@
                         <div class="p-4 bg-blue-50/50 rounded-lg border border-blue-100 dark:bg-blue-900/10 dark:border-blue-900/30">
                             <div class="flex items-center justify-between mb-2">
                                 <h4 class="text-xs font-black text-blue-600 uppercase tracking-widest">Linked Ticket <span class="text-red-500">(required)</span></h4>
-                                <a v-if="existingTicket" :href="route('tickets.edit', existingTicket.id)" target="_blank"
+                                <a v-if="existingTicket" :href="ticketUrl(existingTicket)" target="_blank"
                                    class="text-[11px] font-bold text-blue-700 hover:text-blue-900 hover:underline">🎫 {{ existingTicket.ticket_key }} ↗</a>
                             </div>
                             <div v-if="existingTicket" class="text-xs text-gray-600 dark:text-gray-300">
@@ -510,6 +510,7 @@
 
 <script setup>
 import { ref, reactive, computed } from 'vue'
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'

@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { Link, router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermission } from '@/Composables/usePermission'
@@ -225,7 +226,7 @@ function getStageDisplay(request) {
                                         </span>
                                     </td>
                                     <td class="px-6 py-4">
-                                        <Link v-if="r.ticket" :href="route('tickets.show', r.ticket.id)"
+                                        <Link v-if="r.ticket" :href="ticketUrl(r.ticket, 'tickets.show')"
                                             class="text-xs font-black text-teal-600 hover:text-teal-800 font-mono">
                                             {{ r.ticket.ticket_key }}
                                         </Link>

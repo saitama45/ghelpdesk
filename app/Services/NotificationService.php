@@ -74,7 +74,7 @@ class NotificationService
             'message' => $message,
             'severity' => $severity,
             'subject' => 'ticket:' . $ticket->id,
-            'url' => $this->relativeRoute('tickets.edit', $ticket->id),
+            'url' => $this->relativeRoute('tickets.edit', $ticket),
         ]);
     }
 

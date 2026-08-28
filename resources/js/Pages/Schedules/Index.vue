@@ -1308,7 +1308,7 @@
                                                 <div class="h-6 w-6 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center dark:bg-blue-500/15 dark:text-blue-400">
                                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2H7a2 2 0 01-2-2V5z" /></svg>
                                                 </div>
-                                                <Link :href="route('tickets.edit', entry.ticket.id)" class="text-xs font-black text-blue-600 hover:underline">#{{ entry.ticket.ticket_key }}</Link>
+                                                <Link :href="ticketUrl(entry.ticket)" class="text-xs font-black text-blue-600 hover:underline">#{{ entry.ticket.ticket_key }}</Link>
                                             </div>
 
                                             <div class="flex gap-4 text-[10px] font-black">
@@ -1488,6 +1488,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { router, usePage, useRemember, Link } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import Calendar from '@/Components/Calendar.vue'

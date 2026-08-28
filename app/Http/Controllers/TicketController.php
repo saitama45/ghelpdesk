@@ -22,6 +22,7 @@ use App\Models\Schedule;
 use App\Services\TicketKnowledgeBaseService;
 use App\Support\DepartmentContext;
 use App\Support\TicketAccess;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -995,10 +996,39 @@ class TicketController extends Controller
     }
 
     /**
+     * The canonical ticket URL is its key. A request that arrived on the UUID (every
+     * link mailed out before the switch, and any page still building hrefs from an
+     * id), on a retired key, or on a differently-cased one is bounced to the current
+     * key so the address bar always reads `/tickets/TGI-4096/edit`.
+     *
+     * Query strings ride along — the page deep-links its own tabs through them.
+     */
+    private function canonicalKeyRedirect(Ticket $ticket): ?RedirectResponse
+    {
+        $requested = request()->route()?->originalParameter('ticket');
+
+        if (! $ticket->ticket_key || $requested === null || $requested === $ticket->ticket_key) {
+            return null;
+        }
+
+        // The rewrite is an internal hop, not a page the user asked for, so it must
+        // not swallow the flash: without this a validation error or success toast
+        // redirected back onto a UUID URL would be consumed by the redirect itself
+        // and never reach the page that finally renders.
+        session()->reflash();
+
+        return redirect()->route('tickets.edit', array_merge([$ticket], request()->query()));
+    }
+
+    /**
      * Show the form for editing the specified resource.
      */
     public function edit(Ticket $ticket)
     {
+        if ($redirect = $this->canonicalKeyRedirect($ticket)) {
+            return $redirect;
+        }
+
         $childTicketRelations = [
             'scheduleStore.schedule',
             'scheduleStore.store',
@@ -2212,7 +2242,7 @@ class TicketController extends Controller
             ]);
         });
 
-        return redirect()->route('tickets.edit', $newTicket->id)
+        return redirect()->route('tickets.edit', $newTicket)
             ->with('success', "Ticket duplicated successfully as {$newTicket->ticket_key}.");
     }
 
@@ -2350,7 +2380,7 @@ class TicketController extends Controller
                 'title' => 'Internal note added',
                 'message' => "{$ticket->ticket_key}: " . \Illuminate\Support\Str::limit($comment->comment_text, 100),
                 'subject' => 'ticket:' . $ticket->id,
-                'url' => route('tickets.edit', $ticket->id, false),
+                'url' => route('tickets.edit', $ticket, false),
             ]);
             return redirect()->back()->with('success', 'Internal note added.');
         }

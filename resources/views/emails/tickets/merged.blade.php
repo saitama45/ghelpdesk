@@ -85,7 +85,7 @@
             </div>
 
             <div style="text-align: center;">
-                <a href="{{ route('tickets.edit', $parentTicket->id) }}" class="action-button">
+                <a href="{{ route('tickets.edit', $parentTicket) }}" class="action-button">
                     View Parent Ticket
                 </a>
             </div>

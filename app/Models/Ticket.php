@@ -6,8 +6,10 @@ use App\Models\Scopes\ActiveEntityScope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class Ticket extends Model
 {
@@ -50,11 +52,65 @@ class Ticket extends Model
         'deleted_by',
     ];
 
+    /**
+     * Tickets are addressed by their human key — `/tickets/TGI-4096/edit` — not by
+     * the UUID primary key. The key is what people read, quote in email and search
+     * for; a UUID in the address bar tells them nothing about which ticket they are
+     * looking at.
+     */
+    public function getRouteKeyName(): string
+    {
+        return 'ticket_key';
+    }
+
+    /**
+     * A ticket whose key has not been generated yet (a row mid-import, or one whose
+     * company could not be resolved) still has to be linkable, so fall back to the
+     * UUID rather than minting `/tickets//edit`.
+     */
+    public function getRouteKey()
+    {
+        return $this->ticket_key ?: $this->getKey();
+    }
+
+    /**
+     * Accepts all three ways a ticket has ever been addressed, so no link anyone
+     * holds stops working:
+     *   1. the current ticket_key,
+     *   2. the UUID — every link mailed out before the switch carries one,
+     *   3. a key retired by a renumber ({@see TicketKeyAlias}).
+     *
+     * Unscoped by entity on purpose: ActiveEntityScope is a listing filter, not an
+     * access boundary, and applying it here 404s a ticket the user may legitimately
+     * open from another entity.
+     */
     public function resolveRouteBinding($value, $field = null)
     {
-        return $this->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
-            ->where($field ?? $this->getRouteKeyName(), $value)
-            ->firstOrFail();
+        $query = fn () => $this->withoutGlobalScope(ActiveEntityScope::class);
+
+        if ($field) {
+            return $query()->where($field, $value)->firstOrFail();
+        }
+
+        $value = (string) $value;
+
+        if ($ticket = $query()->where('ticket_key', $value)->first()) {
+            return $ticket;
+        }
+
+        // Guarded: handing a non-UUID to a uniqueidentifier column is a SQL Server
+        // conversion error, not a miss.
+        if (Str::isUuid($value) && ($ticket = $query()->whereKey($value)->first())) {
+            return $ticket;
+        }
+
+        $aliasedId = TicketKeyAlias::where('ticket_key', $value)->value('ticket_id');
+
+        if ($aliasedId && ($ticket = $query()->whereKey($aliasedId)->first())) {
+            return $ticket;
+        }
+
+        throw (new ModelNotFoundException)->setModel(static::class, [$value]);
     }
 
     /**

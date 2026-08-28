@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { Link, useForm, usePage, Head, router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import { usePermission } from '@/Composables/usePermission'
@@ -557,7 +558,7 @@ const lineItems = computed(() => props.record.data?.items ?? [])
                                 </span>
                             </div>
                             <div class="space-y-4">
-                                <Link :href="route('tickets.edit', record.ticket.id)" class="block w-full py-3 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-bold text-center transition-colors">
+                                <Link :href="ticketUrl(record.ticket)" class="block w-full py-3 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-bold text-center transition-colors">
                                     {{ record.ticket.ticket_key }}
                                 </Link>
 

@@ -337,7 +337,7 @@ class PartnerPerformanceService
             'brand' => $row['brand']['name'],
             'store' => $row['store'],
             'parent_key' => $row['parent_key'],
-            'parent_url' => $row['parent_id'] ? route('tickets.edit', $row['parent_id']) : null,
+            'parent_url' => $row['parent_id'] ? route('tickets.edit', $row['parent_key'] ?: $row['parent_id']) : null,
             'is_closed' => $row['is_closed'],
             'is_breached' => $row['is_breached'],
             'is_aging' => $row['is_aging'],
@@ -345,7 +345,7 @@ class PartnerPerformanceService
             'days_to_close' => $row['days_to_close'],
             'created_at' => $row['created_at'],
             'closed_at' => $row['closed_at'],
-            'url' => route('tickets.edit', $row['id']),
+            'url' => route('tickets.edit', $row['key']),
         ];
     }
 

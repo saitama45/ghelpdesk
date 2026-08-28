@@ -64,7 +64,7 @@
                         <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
                             <span v-if="finding.assignee">Assigned to {{ finding.assignee.name }}</span>
                             <span v-if="finding.reported_by_name">Reported by {{ finding.reported_by_name }}</span>
-                            <a v-if="finding.ticket" :href="route('tickets.edit', finding.ticket.id)"
+                            <a v-if="finding.ticket" :href="ticketUrl(finding.ticket)"
                                class="font-semibold text-indigo-600 hover:underline dark:text-indigo-300">
                                 Ticket {{ finding.ticket.ticket_key }}
                             </a>
@@ -145,6 +145,7 @@
 
 <script setup>
 import { ref, computed, inject } from 'vue'
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { useForm, router } from '@inertiajs/vue3'
 import Modal from '@/Components/Modal.vue'
 import InputError from '@/Components/InputError.vue'

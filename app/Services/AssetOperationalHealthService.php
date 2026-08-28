@@ -440,7 +440,7 @@ class AssetOperationalHealthService
                         'eta' => $eta?->format('M j, Y'),
                         'eta_sort' => $eta?->getTimestamp(),
                         'created_at' => $ticket->created_at?->format('M j, Y'),
-                        'url' => route('tickets.edit', $ticket->id),
+                        'url' => route('tickets.edit', $ticket),
                     ];
                 })
                 ->values());

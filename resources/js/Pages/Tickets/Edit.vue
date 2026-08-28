@@ -1,5 +1,6 @@
 <script setup>
 import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { ref, computed, reactive, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -3020,7 +3021,7 @@ const linkify = (text) => {
                             <div v-for="child in ticket.children" :key="child.id" class="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3 dark:bg-gray-900/50 dark:border-gray-700">
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0 flex-1">
-                                        <Link :href="route('tickets.edit', child.id)" class="text-sm font-black text-blue-600 hover:underline">
+                                        <Link :href="ticketUrl(child)" class="text-sm font-black text-blue-600 hover:underline">
                                             {{ child.ticket_key }}
                                         </Link>
                                         <div class="mt-0.5 text-xs font-bold text-gray-900 break-words dark:text-gray-100">{{ child.title }}</div>
@@ -3159,7 +3160,7 @@ const linkify = (text) => {
                                             <div v-if="hasRichHtml(ticket.parent.description_html)" class="email-html-body text-sm text-gray-600 leading-relaxed line-clamp-3 dark:text-gray-300" v-html="ticket.parent.description_html"></div>
                                             <div v-else class="text-sm text-gray-600 leading-relaxed line-clamp-3 italic whitespace-pre-wrap dark:text-gray-300" v-html="linkify(ticket.parent.description)"></div>
                                             <div class="mt-3 flex justify-end">
-                                                <Link :href="route('tickets.edit', ticket.parent_id)" class="text-[10px] font-black text-purple-600 hover:text-purple-800 uppercase tracking-widest flex items-center group">
+                                                <Link :href="ticketUrl(ticket.parent || ticket.parent_id)" class="text-[10px] font-black text-purple-600 hover:text-purple-800 uppercase tracking-widest flex items-center group">
                                                     View Parent Details
                                                     <svg class="w-3 h-3 ml-1 transform group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                                                 </Link>
@@ -3434,7 +3435,7 @@ const linkify = (text) => {
                                         <span class="font-bold text-gray-900 text-sm dark:text-gray-100">{{ activity.user ? activity.user.name : 'Unknown User' }}</span>
                                         <span class="text-[10px] sm:text-xs text-gray-500 font-medium dark:text-gray-300">
                                             {{ activity.child_event_type === 'merged' ? 'merged ticket' : 'created child ticket' }}
-                                            <Link :href="route('tickets.edit', activity.id)" class="font-black text-blue-600 hover:underline">{{ activity.ticket_key }}</Link>
+                                            <Link :href="ticketUrl(activity)" class="font-black text-blue-600 hover:underline">{{ activity.ticket_key }}</Link>
                                             {{ activity.child_event_type === 'merged' ? 'into this parent' : '' }}
                                             on {{ formatDate(activity.date) }}
                                         </span>
@@ -3443,7 +3444,7 @@ const linkify = (text) => {
                                     <div class="text-xs bg-purple-50 border border-purple-100 rounded-lg p-3 space-y-1.5">
                                         <div class="flex items-start justify-between gap-3 border-b border-purple-100 pb-2">
                                             <div class="min-w-0">
-                                                <Link :href="route('tickets.edit', activity.id)" class="text-sm font-black text-blue-700 hover:underline break-words">{{ activity.ticket_key }}</Link>
+                                                <Link :href="ticketUrl(activity)" class="text-sm font-black text-blue-700 hover:underline break-words">{{ activity.ticket_key }}</Link>
                                                 <div class="mt-0.5 text-sm font-bold text-gray-900 break-words dark:text-gray-100">{{ activity.title }}</div>
                                             </div>
                                             <div class="flex shrink-0 flex-col items-end gap-1">

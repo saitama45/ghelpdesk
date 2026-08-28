@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue';
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import { useToast } from '@/Composables/useToast.js';
@@ -114,7 +115,7 @@ const summaryTabs = computed(() => ({
                         <tbody>
                             <tr v-for="r in assetRequests" :key="r.id" class="border-b border-gray-50 hover:bg-gray-50 dark:border-gray-700/50 dark:hover:bg-gray-700/30">
                                 <td class="px-4 py-2">
-                                    <Link v-if="r.ticket_id" :href="route('tickets.edit', r.ticket_id)" class="font-mono text-xs font-bold text-blue-600 hover:underline dark:text-blue-400">{{ r.ticket_key }}</Link>
+                                    <Link v-if="r.ticket_id" :href="ticketUrl(r.ticket_key || r.ticket_id)" class="font-mono text-xs font-bold text-blue-600 hover:underline dark:text-blue-400">{{ r.ticket_key }}</Link>
                                     <span v-else class="text-xs text-gray-400">—</span>
                                 </td>
                                 <td class="px-4 py-2 text-xs text-gray-600 dark:text-gray-300">{{ r.store || '—' }}</td>

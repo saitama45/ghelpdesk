@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { PuzzlePieceIcon, Squares2X2Icon, ChevronRightIcon } from '@heroicons/vue/24/outline';
 import AppLayout from '@/Layouts/AppLayout.vue';
@@ -280,7 +281,7 @@ const showGenericKpis = computed(() =>
                                 <tbody>
                                     <tr v-for="r in sectionData.requests" :key="r.id" class="border-b border-gray-50 hover:bg-gray-50 dark:border-gray-700/50 dark:hover:bg-gray-700/30">
                                         <td class="px-4 py-2">
-                                            <Link :href="route('tickets.edit', r.id)" class="font-mono text-xs font-bold text-blue-600 hover:underline dark:text-blue-400">{{ r.key }}</Link>
+                                            <Link :href="ticketUrl(r)" class="font-mono text-xs font-bold text-blue-600 hover:underline dark:text-blue-400">{{ r.key }}</Link>
                                         </td>
                                         <td class="px-4 py-2 max-w-[22rem] truncate text-gray-800 dark:text-gray-200">{{ r.title }}</td>
                                         <td class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400 truncate max-w-[12rem]">{{ r.requester || '—' }}</td>
@@ -323,7 +324,7 @@ const showGenericKpis = computed(() =>
                             <Link
                                 v-for="r in sectionData.requestsTo.latest"
                                 :key="r.id"
-                                :href="route('tickets.edit', r.id)"
+                                :href="ticketUrl(r)"
                                 class="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-blue-800 hover:underline dark:bg-blue-900/40 dark:text-blue-200"
                             >
                                 <span class="font-mono font-bold">{{ r.key }}</span> · {{ statusLabel(r.status) }}
@@ -399,7 +400,7 @@ const showGenericKpis = computed(() =>
                         </div>
                         <ul class="divide-y divide-gray-50 dark:divide-gray-700/50">
                             <li v-for="r in sectionData.recentRequests" :key="r.id" class="flex items-center gap-3 px-4 py-2.5">
-                                <Link :href="route('tickets.edit', r.id)" class="font-mono text-xs font-bold text-blue-600 hover:underline dark:text-blue-400 shrink-0">{{ r.key }}</Link>
+                                <Link :href="ticketUrl(r)" class="font-mono text-xs font-bold text-blue-600 hover:underline dark:text-blue-400 shrink-0">{{ r.key }}</Link>
                                 <span class="min-w-0 flex-1 truncate text-sm text-gray-800 dark:text-gray-200">{{ r.title }}</span>
                                 <span class="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider" :class="priorityClass(r.priority)">{{ r.priority }}</span>
                                 <span class="shrink-0 text-[11px] font-semibold capitalize text-gray-500 dark:text-gray-400 hidden sm:inline">{{ statusLabel(r.status) }}</span>

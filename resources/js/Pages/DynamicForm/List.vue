@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { Link, Head, router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
@@ -301,7 +302,7 @@ const toggleAllColumns = () => {
                                 <!-- Live ticket: clickable. -->
                                 <Link
                                     v-if="record.ticket_state === 'live'"
-                                    :href="route('tickets.edit', record.ticket.id)"
+                                    :href="ticketUrl(record.ticket)"
                                     class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-black hover:bg-blue-600 hover:text-white transition-all shadow-sm dark:bg-blue-500/15 dark:text-blue-200 dark:hover:bg-blue-600 dark:hover:text-white"
                                 >
                                     {{ record.ticket.ticket_key }}

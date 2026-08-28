@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { Link, usePage } from '@inertiajs/vue3';
 import Modal from '@/Components/Modal.vue';
 import HierarchySelector from '@/Components/HierarchySelector.vue';
@@ -903,7 +904,7 @@ const getAreaItemClass = (count, maxCols) => {
                         <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                             <tr v-for="ticket in selectedStoreTickets" :key="ticket.id" class="hover:bg-blue-50 transition-colors">
                                 <td class="px-4 py-3 whitespace-nowrap text-sm font-bold text-blue-600">
-                                    <Link :href="route('tickets.edit', ticket.id)" class="hover:underline">
+                                    <Link :href="ticketUrl(ticket)" class="hover:underline">
                                         {{ ticket.ticket_key }}
                                     </Link>
                                 </td>
@@ -911,7 +912,7 @@ const getAreaItemClass = (count, maxCols) => {
                                     {{ ticket.store ? ticket.store.code : 'N/A' }}
                                 </td>
                                 <td class="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">
-                                    <Link :href="route('tickets.edit', ticket.id)" class="hover:underline line-clamp-1">
+                                    <Link :href="ticketUrl(ticket)" class="hover:underline line-clamp-1">
                                         {{ ticket.title }}
                                     </Link>
                                 </td>

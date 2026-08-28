@@ -1,5 +1,6 @@
 <script setup>
 import { Head, usePage, Link, router } from '@inertiajs/vue3';
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { ref, computed, reactive, watch, onMounted } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
@@ -863,7 +864,7 @@ const exportChartTickets = () => {
                                     <Link
                                         v-for="ticket in getKanbanCell(group, column.key).tickets"
                                         :key="ticket.id"
-                                        :href="route('tickets.edit', ticket.id)"
+                                        :href="ticketUrl(ticket)"
                                         class="block rounded-lg border border-gray-200 bg-white p-3 shadow-sm hover:border-blue-200 hover:shadow-md transition-all dark:bg-gray-800 dark:border-gray-700"
                                     >
                                         <div class="flex items-start justify-between gap-2">
@@ -1920,7 +1921,7 @@ const exportChartTickets = () => {
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-100 dark:bg-gray-800 dark:divide-gray-700">
-                                <tr v-for="ticket in myTickets" :key="ticket.id" class="hover:bg-blue-50/30 transition-colors cursor-pointer" @click="router.visit(route('tickets.edit', ticket.id))">
+                                <tr v-for="ticket in myTickets" :key="ticket.id" class="hover:bg-blue-50/30 transition-colors cursor-pointer" @click="router.visit(ticketUrl(ticket))">
                                     <td class="px-6 py-4">
                                         <div class="flex flex-col">
                                             <div class="flex items-center space-x-2">
@@ -1968,7 +1969,7 @@ const exportChartTickets = () => {
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-100 dark:bg-gray-800 dark:divide-gray-700">
-                                <tr v-for="ticket in recentTickets" :key="ticket.id" class="hover:bg-gray-50/50 transition-colors cursor-pointer" @click="router.visit(route('tickets.edit', ticket.id))">
+                                <tr v-for="ticket in recentTickets" :key="ticket.id" class="hover:bg-gray-50/50 transition-colors cursor-pointer" @click="router.visit(ticketUrl(ticket))">
                                     <td class="px-6 py-4">
                                         <div class="flex flex-col">
                                             <div class="flex items-center space-x-2">
@@ -2031,7 +2032,7 @@ const exportChartTickets = () => {
                                             <div class="text-sm">
                                                 <span class="font-bold text-gray-900 dark:text-gray-100">{{ activity.user }}</span>
                                                 <span class="text-gray-500 ml-1 dark:text-gray-300">{{ activity.action }}</span>
-                                                <Link :href="route('tickets.edit', activity.ticket_id)" class="ml-1 font-bold text-blue-600 hover:underline">{{ activity.ticket_key }}</Link>
+                                                <Link :href="ticketUrl(activity.ticket_key || activity.ticket_id)" class="ml-1 font-bold text-blue-600 hover:underline">{{ activity.ticket_key }}</Link>
                                             </div>
                                             <p v-if="activity.type === 'comment'" class="mt-1 text-sm text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100 italic line-clamp-2 dark:bg-gray-900/50 dark:text-gray-300 dark:border-gray-700">
                                                 "{{ truncate(activity.comment_text, 80) }}"
@@ -2072,7 +2073,7 @@ const exportChartTickets = () => {
                         <thead class="sticky top-0 bg-gray-50 dark:bg-gray-800"><tr><th v-for="heading in ['Ticket','Status','Concern','Location','Assignee','Created']" :key="heading" class="px-4 py-3 text-left text-xs font-black uppercase text-gray-500">{{ heading }}</th></tr></thead>
                         <tbody class="divide-y divide-gray-100 bg-white dark:divide-gray-700 dark:bg-gray-900">
                             <tr v-for="ticket in chartTickets" :key="ticket.id" class="hover:bg-blue-50/50 dark:hover:bg-gray-800">
-                                <td class="px-4 py-3"><Link :href="route('tickets.edit', ticket.id)" class="font-black text-blue-600 hover:underline">{{ ticket.ticket_key }}</Link><div class="max-w-xs truncate text-xs text-gray-600 dark:text-gray-300">{{ ticket.title }}</div></td>
+                                <td class="px-4 py-3"><Link :href="ticketUrl(ticket)" class="font-black text-blue-600 hover:underline">{{ ticket.ticket_key }}</Link><div class="max-w-xs truncate text-xs text-gray-600 dark:text-gray-300">{{ ticket.title }}</div></td>
                                 <td class="px-4 py-3 font-bold capitalize">{{ ticket.status.replaceAll('_', ' ') }}</td>
                                 <td class="px-4 py-3">{{ ticket.concern_type || '—' }}</td><td class="px-4 py-3">{{ ticket.store || ticket.company || '—' }}</td><td class="px-4 py-3">{{ ticket.assignee }}</td><td class="whitespace-nowrap px-4 py-3">{{ ticket.created_at }}</td>
                             </tr>
@@ -2111,7 +2112,7 @@ const exportChartTickets = () => {
                             <div class="flex justify-between items-start">
                                 <div class="flex flex-col">
                                     <div class="flex items-center space-x-2">
-                                        <Link :href="route('tickets.edit', ticket.id)" class="text-sm font-black text-blue-600 hover:underline">
+                                        <Link :href="ticketUrl(ticket)" class="text-sm font-black text-blue-600 hover:underline">
                                             {{ ticket.key }}
                                         </Link>
                                         <span :class="['px-2 py-0.5 text-[10px] font-black uppercase rounded-full border', getStatusColor(ticket.status)]">
@@ -2131,7 +2132,7 @@ const exportChartTickets = () => {
                                 </div>
                             </div>
                             <div class="mt-3 flex justify-end">
-                                <Link :href="route('tickets.edit', ticket.id)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
+                                <Link :href="ticketUrl(ticket)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
                                     Open Ticket
                                     <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                                 </Link>
@@ -2179,7 +2180,7 @@ const exportChartTickets = () => {
                             <div class="flex justify-between items-start">
                                 <div class="flex flex-col">
                                     <div class="flex items-center space-x-2">
-                                        <Link :href="route('tickets.edit', ticket.id)" class="text-sm font-black text-blue-600 hover:underline">
+                                        <Link :href="ticketUrl(ticket)" class="text-sm font-black text-blue-600 hover:underline">
                                             {{ ticket.key }}
                                         </Link>
                                         <span :class="['px-2 py-0.5 text-[10px] font-black uppercase rounded-full border', getStatusColor(ticket.status)]">
@@ -2202,7 +2203,7 @@ const exportChartTickets = () => {
                                 </div>
                             </div>
                             <div class="mt-3 flex justify-end">
-                                <Link :href="route('tickets.edit', ticket.id)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
+                                <Link :href="ticketUrl(ticket)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
                                     Open Ticket
                                     <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                                 </Link>
@@ -2249,7 +2250,7 @@ const exportChartTickets = () => {
                             <div class="flex justify-between items-start">
                                 <div class="flex flex-col">
                                     <div class="flex items-center space-x-2">
-                                        <Link :href="route('tickets.edit', ticket.id)" class="text-sm font-black text-blue-600 hover:underline">
+                                        <Link :href="ticketUrl(ticket)" class="text-sm font-black text-blue-600 hover:underline">
                                             {{ ticket.key }}
                                         </Link>
                                         <span :class="['px-2 py-0.5 text-[10px] font-black uppercase rounded-full border', getStatusColor(ticket.status)]">
@@ -2269,7 +2270,7 @@ const exportChartTickets = () => {
                                 </div>
                             </div>
                             <div class="mt-3 flex justify-end">
-                                <Link :href="route('tickets.edit', ticket.id)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
+                                <Link :href="ticketUrl(ticket)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
                                     Open Ticket <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                                 </Link>
                             </div>
@@ -2310,7 +2311,7 @@ const exportChartTickets = () => {
                             <div class="flex justify-between items-start">
                                 <div class="flex flex-col">
                                     <div class="flex items-center space-x-2">
-                                        <Link :href="route('tickets.edit', ticket.id)" class="text-sm font-black text-blue-600 hover:underline">
+                                        <Link :href="ticketUrl(ticket)" class="text-sm font-black text-blue-600 hover:underline">
                                             {{ ticket.key }}
                                         </Link>
                                         <span :class="['px-2 py-0.5 text-[10px] font-black uppercase rounded-full border', getStatusColor(ticket.status)]">
@@ -2330,7 +2331,7 @@ const exportChartTickets = () => {
                                 </div>
                             </div>
                             <div class="mt-3 flex justify-end">
-                                <Link :href="route('tickets.edit', ticket.id)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
+                                <Link :href="ticketUrl(ticket)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
                                     Open Ticket <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                                 </Link>
                             </div>
@@ -2371,7 +2372,7 @@ const exportChartTickets = () => {
                             <div class="flex justify-between items-start">
                                 <div class="flex flex-col">
                                     <div class="flex items-center space-x-2">
-                                        <Link :href="route('tickets.edit', ticket.id)" class="text-sm font-black text-blue-600 hover:underline">
+                                        <Link :href="ticketUrl(ticket)" class="text-sm font-black text-blue-600 hover:underline">
                                             {{ ticket.key }}
                                         </Link>
                                         <span :class="['px-2 py-0.5 text-[10px] font-black uppercase rounded-full border', getStatusColor(ticket.status)]">
@@ -2391,7 +2392,7 @@ const exportChartTickets = () => {
                                 </div>
                             </div>
                             <div class="mt-3 flex justify-end">
-                                <Link :href="route('tickets.edit', ticket.id)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
+                                <Link :href="ticketUrl(ticket)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
                                     Open Ticket <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                                 </Link>
                             </div>
@@ -2432,7 +2433,7 @@ const exportChartTickets = () => {
                             <div class="flex justify-between items-start">
                                 <div class="flex flex-col">
                                     <div class="flex items-center space-x-2">
-                                        <Link :href="route('tickets.edit', ticket.id)" class="text-sm font-black text-blue-600 hover:underline">
+                                        <Link :href="ticketUrl(ticket)" class="text-sm font-black text-blue-600 hover:underline">
                                             {{ ticket.key }}
                                         </Link>
                                         <span :class="['px-2 py-0.5 text-[10px] font-black uppercase rounded-full border', getStatusColor(ticket.status)]">
@@ -2452,7 +2453,7 @@ const exportChartTickets = () => {
                                 </div>
                             </div>
                             <div class="mt-3 flex justify-end">
-                                <Link :href="route('tickets.edit', ticket.id)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
+                                <Link :href="ticketUrl(ticket)" class="text-xs font-bold text-blue-600 group-hover:text-blue-800 flex items-center">
                                     Open Ticket <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                                 </Link>
                             </div>
@@ -2519,7 +2520,7 @@ const exportChartTickets = () => {
                     <tbody class="divide-y divide-gray-100 bg-white dark:divide-gray-700 dark:bg-gray-900">
                         <tr v-for="ticket in chartTickets" :key="ticket.id" class="hover:bg-blue-50/50 dark:hover:bg-gray-800">
                             <td class="px-4 py-3">
-                                <Link :href="route('tickets.edit', ticket.id)" class="font-black text-blue-600 hover:underline">{{ ticket.ticket_key }}</Link>
+                                <Link :href="ticketUrl(ticket)" class="font-black text-blue-600 hover:underline">{{ ticket.ticket_key }}</Link>
                                 <div class="max-w-xs truncate text-xs text-gray-600 dark:text-gray-300">{{ ticket.title }}</div>
                             </td>
                             <td class="px-4 py-3 font-bold capitalize">{{ ticket.status.replaceAll('_', ' ') }}</td>

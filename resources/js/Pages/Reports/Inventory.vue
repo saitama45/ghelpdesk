@@ -557,7 +557,7 @@
                                     </td>
                                     <td class="px-4 py-3 whitespace-nowrap text-xs text-gray-600 dark:text-gray-300">{{ row.store_code || row.store_name || '—' }}</td>
                                     <td class="px-4 py-3 whitespace-nowrap text-xs">
-                                        <a :href="ticketEditHref(row.ticket_id)" target="_blank" rel="noopener noreferrer" class="font-bold text-blue-600 underline underline-offset-2 hover:text-blue-700">
+                                        <a :href="ticketEditHref(row.ticket_key || row.ticket_id)" target="_blank" rel="noopener noreferrer" class="font-bold text-blue-600 underline underline-offset-2 hover:text-blue-700">
                                             {{ row.ticket_key }}
                                         </a>
                                         <div class="text-[10px] text-gray-500 max-w-[180px] truncate dark:text-gray-300">{{ row.title }}</div>
@@ -590,6 +590,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ticketUrl } from '@/Composables/useTicketLink';
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
@@ -896,7 +897,7 @@ const loadTicketActivity = async () => {
     }
 }
 
-const ticketEditHref = (ticketId) => route('tickets.edit', ticketId)
+const ticketEditHref = (ticket) => ticketUrl(ticket)
 
 const formatTicketStatus = (status) => {
     if (!status) return ''

@@ -120,7 +120,7 @@
             </div>
 
             <div style="text-align: center;">
-                <a href="{{ route('tickets.edit', $ticket->id) }}" class="action-button">
+                <a href="{{ route('tickets.edit', $ticket) }}" class="action-button">
                     View Ticket Details
                 </a>
             </div>
