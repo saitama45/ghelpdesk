@@ -14,11 +14,14 @@ import {
     ArrowsPointingOutIcon,
     PencilSquareIcon,
     XMarkIcon,
-    DocumentDuplicateIcon
+    DocumentDuplicateIcon,
+    UserPlusIcon,
+    DocumentChartBarIcon
 } from '@heroicons/vue/24/outline';
 
 import { useToast } from '@/Composables/useToast.js';
 import { useConfirm } from '@/Composables/useConfirm.js';
+import { canonicalDepartment, sameDepartment, uniqueDepartmentNames } from '@/Composables/useDepartmentNames.js';
 import Modal from '@/Components/Modal.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
@@ -43,6 +46,10 @@ const props = defineProps({
     // Set by the Reports tab: focus the plan on one department. Watched below —
     // applies the department filter and scrolls to that department's first row.
     focusDepartment: { type: String, default: null },
+    // The /departments table — the single source for how a department is spelled.
+    // Task departments are free text on two columns and disagree on case, so this
+    // is what keeps one department from appearing twice in the filter.
+    departments: { type: Array, default: () => [] },
 });
 
 // Y-m-d -> holiday name, for the working-day helpers and the column tooltips.
@@ -83,6 +90,11 @@ const selectedTemplateId = ref('');
 const localTasks = ref([]);
 const draggedTaskId = ref(null);
 const dragOverTaskId = ref(null);
+const quickAssignEnabled = ref(false);
+const quickAssigneeId = ref('');
+const quickOnlyUnassigned = ref(false);
+const quickIncludeSubtasks = ref(true);
+const isBulkAssigning = ref(false);
 
 const missingTaskListTargets = computed(() => props.taskListTargets?.missing || []);
 
@@ -234,6 +246,90 @@ const projectTeamMembers = computed(() => {
     });
 });
 
+const internalProjectTeamMembers = computed(() => projectTeamMembers.value.filter(member => !member.is_external));
+const quickAssignReady = computed(() => quickAssigneeId.value !== '');
+
+const quickAssignmentTaskIds = (tasks, includeSubtasks = quickIncludeSubtasks.value) => {
+    return [...new Set((tasks || []).flatMap(task => [
+        Number(task.id),
+        ...(includeSubtasks ? (task.subTasks || []).map(subTask => Number(subTask.id)) : []),
+    ]))];
+};
+
+const quickAssignRows = async (taskIds, scopeLabel) => {
+    if (!props.canManage || isBulkAssigning.value) return;
+    if (!quickAssignReady.value) {
+        info('Choose a project team member first.');
+        return;
+    }
+
+    const uniqueIds = [...new Set((taskIds || []).map(Number).filter(Boolean))];
+    if (!uniqueIds.length) {
+        info('There are no rows in this scope.');
+        return;
+    }
+
+    const clearing = quickAssigneeId.value === '__unassign__';
+    const assignedTo = clearing ? null : Number(quickAssigneeId.value);
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    isBulkAssigning.value = true;
+
+    try {
+        const response = await fetch(route('projects.tasks.bulk-assign', props.project.id), {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            body: JSON.stringify({
+                task_ids: uniqueIds,
+                assigned_to: assignedTo,
+                only_unassigned: quickOnlyUnassigned.value,
+            }),
+        });
+        const payload = await response.json();
+
+        if (!response.ok) {
+            const message = Object.values(payload.errors || {}).flat()[0] || payload.message || 'Unable to assign the selected rows.';
+            throw new Error(message);
+        }
+
+        const changedIds = new Set((payload.task_ids || []).map(Number));
+        localTasks.value = localTasks.value.map(task => changedIds.has(Number(task.id)) ? {
+            ...task,
+            assigned_to: payload.assigned_to,
+            assigned_user: payload.assignee,
+            external_assignment: null,
+        } : task);
+
+        if (payload.updated > 0) {
+            success(`${clearing ? 'Cleared' : 'Assigned'} ${payload.updated} row${payload.updated === 1 ? '' : 's'} in ${scopeLabel}.`);
+        } else {
+            info(`No assignments changed in ${scopeLabel}.`);
+        }
+    } catch (exception) {
+        error(exception.message || 'Unable to assign the selected rows.');
+    } finally {
+        isBulkAssigning.value = false;
+    }
+};
+
+const quickAssignActivity = (task) => quickAssignRows(
+    quickAssignmentTaskIds([task]),
+    task.name
+);
+
+const quickAssignMilestone = (category, tasks) => quickAssignRows(
+    quickAssignmentTaskIds(groupedTasks.value[category] || tasks),
+    `milestone ${category}`
+);
+
+const quickAssignProject = () => {
+    const roots = Object.values(groupedTasks.value).flat();
+    return quickAssignRows(quickAssignmentTaskIds(roots), 'the whole project');
+};
+
 const applyActivityTemplates = () => {
     if (!props.canManage) return;
     if (!props.projectTemplates || props.projectTemplates.length === 0) {
@@ -293,6 +389,12 @@ const confirmApplyTemplate = async () => {
             auto_create_monthly_boards: true,
         }, {
             preserveScroll: true,
+            // A rejected apply comes back as a redirect carrying an error bag that
+            // nothing on this page renders — the modal is already closed by then, so
+            // the button looked like it simply did nothing. Say what went wrong.
+            onError: (errors) => {
+                error(errors.project_template_id || 'The template could not be applied.');
+            },
             onFinish: () => {
                 isApplyingTemplates.value = false;
                 selectedTemplateId.value = '';
@@ -561,6 +663,19 @@ const formatDisplayDate = (dateString) => {
     return d ? d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '-';
 };
 
+const formatDateRange = (start, end) => {
+    if (!start || !end) return null;
+    const s = parseLocalDate(start);
+    const e = parseLocalDate(end);
+    if (!s || !e) return null;
+    const sMonth = s.toLocaleString('en-US', { month: 'short' });
+    const eMonth = e.toLocaleString('en-US', { month: 'short' });
+    if (sMonth === eMonth && s.getFullYear() === e.getFullYear()) {
+        return `${sMonth} ${s.getDate()} – ${e.getDate()}`;
+    }
+    return `${sMonth} ${s.getDate()} – ${eMonth} ${e.getDate()}`;
+};
+
 const calculateDays = (start, end) => {
     if (!start || !end) return '-';
     const s = parseLocalDate(start);
@@ -729,18 +844,15 @@ const userFilterOptions = computed(() => [
     })),
 ]);
 
-// Only departments actually present on this plan, so the list stays short.
+// Only departments actually present on this plan, so the list stays short. One
+// department appears once: the spellings differ by case across user records, and
+// two entries reading "Technology and Solutions" is a broken filter, not a choice.
 const departmentFilterOptions = computed(() => {
-    const names = new Set();
-
-    localTasks.value.forEach((task) => {
-        const department = taskDepartment(task);
-        if (department) names.add(department);
-    });
+    const names = localTasks.value.map(taskDepartment).filter(Boolean);
 
     return [
         { label: 'No department', value: NO_DEPARTMENT },
-        ...[...names].sort().map(name => ({ label: name, value: name })),
+        ...uniqueDepartmentNames(names, props.departments).map(name => ({ label: name, value: name })),
     ];
 });
 
@@ -761,7 +873,7 @@ const matchesFilters = (task) => {
         const department = taskDepartment(task);
         const wantsNone = filterDepartments.value.includes(NO_DEPARTMENT);
         const matched = department
-            ? filterDepartments.value.some(value => String(value).toLowerCase() === department.toLowerCase())
+            ? filterDepartments.value.some(value => sameDepartment(value, department))
             : wantsNone;
 
         if (!matched) return false;
@@ -1002,7 +1114,12 @@ const taskDepartment = (task) => {
         ? props.users.find(user => user.id == task.assigned_to)
         : null;
 
-    return (assignee?.department || '').trim() || (task.department || '').trim() || '';
+    const name = (assignee?.department || '').trim() || (task.department || '').trim() || '';
+
+    // Canonicalised here, at the one place every label, filter option and
+    // milestone tally reads a department from — otherwise the same department
+    // renders under two spellings depending on who is assigned to the row.
+    return canonicalDepartment(name, props.departments);
 };
 
 const taskOrganizationLabel = (task) => {
@@ -1012,8 +1129,7 @@ const taskOrganizationLabel = (task) => {
 
     // sub_unit belongs to the row, so it only makes sense alongside the row's own
     // department — pairing it with an assignee's department would invent an org path.
-    const ownDepartment = (task.department || '').trim();
-    const subUnit = department === ownDepartment ? (task.sub_unit || '').trim() : '';
+    const subUnit = sameDepartment(department, task.department) ? (task.sub_unit || '').trim() : '';
 
     return [department, subUnit].filter(Boolean).join(' / ');
 };
@@ -1142,74 +1258,137 @@ const isWeekend = (date) => {
 <template>
     <div class="bg-slate-50 rounded-xl border border-slate-200 shadow-xl flex flex-col h-[750px] overflow-hidden dark:border-slate-700 dark:bg-slate-950 dark:shadow-black/30">
         <!-- Modern Toolbar -->
-        <div class="bg-white px-6 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 dark:border-slate-700 dark:bg-slate-900">
-            <div class="flex items-center space-x-4">
+        <div class="bg-white px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 dark:border-slate-700 dark:bg-slate-900">
+            <div class="flex items-center space-x-3">
                 <div class="p-2 bg-indigo-50 rounded-lg dark:bg-indigo-500/15">
-                    <CalendarIcon class="w-6 h-6 text-indigo-600 dark:text-indigo-300" />
+                    <CalendarIcon class="w-5 h-5 text-indigo-600 dark:text-indigo-300" />
                 </div>
                 <div>
-                    <h3 class="text-lg font-bold text-slate-900 dark:text-slate-100">Project Timeline</h3>
-                    <p class="text-xs text-slate-500 font-medium dark:text-slate-300">Manage tasks and schedule visualize</p>
+                    <h3 class="text-base font-bold text-slate-900 dark:text-slate-100">Project Timeline</h3>
+                    <p class="text-xs text-slate-500 font-medium dark:text-slate-400">Gantt schedule and progress tracking</p>
                 </div>
             </div>
 
             <!-- Stats Summary -->
-            <div class="hidden lg:flex items-center space-x-6 px-6 border-l border-r border-slate-100 dark:border-slate-700">
-                <div class="text-center">
-                    <p class="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-300">Completion</p>
-                    <p class="text-sm font-bold text-slate-900 dark:text-slate-100">{{ stats.progress }}%</p>
+            <div class="hidden lg:flex items-center space-x-4 px-4 py-1 bg-slate-50 rounded-xl border border-slate-100 dark:border-slate-700/60 dark:bg-slate-800/50">
+                <div class="text-center px-2">
+                    <p class="text-[9px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-400">Completion</p>
+                    <p class="text-xs font-black text-indigo-600 dark:text-indigo-300">{{ stats.progress }}%</p>
                 </div>
-                <div class="h-8 w-px bg-slate-100 dark:bg-slate-700"></div>
-                <div class="text-center">
-                    <p class="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-300">Total Tasks</p>
-                    <p class="text-sm font-bold text-slate-900 dark:text-slate-100">{{ stats.total }}</p>
+                <div class="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
+                <div class="text-center px-2">
+                    <p class="text-[9px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-400">Total Tasks</p>
+                    <p class="text-xs font-black text-slate-800 dark:text-slate-100">{{ stats.total }}</p>
                 </div>
-                <div class="h-8 w-px bg-slate-100 dark:bg-slate-700"></div>
-                <div class="text-center">
-                    <p class="text-[10px] uppercase tracking-wider font-bold text-emerald-500 dark:text-emerald-300">Done</p>
-                    <p class="text-sm font-bold text-slate-900 dark:text-slate-100">{{ stats.completed }}</p>
+                <div class="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
+                <div class="text-center px-2">
+                    <p class="text-[9px] uppercase tracking-wider font-bold text-emerald-600 dark:text-emerald-400">Done</p>
+                    <p class="text-xs font-black text-emerald-600 dark:text-emerald-400">{{ stats.completed }}</p>
                 </div>
-                <div class="h-8 w-px bg-slate-100 dark:bg-slate-700"></div>
-                <div class="text-center" :title="`How long the plan runs end to end — the first start to the last finish, counted in ${countsEveryDay ? 'calendar' : 'working'} days. Rows that run in parallel share those days, so this is not the sum of every row's lead time.`">
-                    <p class="text-[10px] uppercase tracking-wider font-bold text-indigo-500 dark:text-indigo-300">Grand Total Days</p>
-                    <p class="text-sm font-bold text-slate-900 dark:text-slate-100">{{ grandTotalLeadTime }} {{ grandTotalLeadTime === 1 ? 'day' : 'days' }}</p>
+                <div class="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
+                <div class="text-center px-2" :title="`How long the plan runs end to end — the first start to the last finish, counted in ${countsEveryDay ? 'calendar' : 'working'} days. Rows that run in parallel share those days, so this is not the sum of every row's lead time.`">
+                    <p class="text-[9px] uppercase tracking-wider font-bold text-indigo-500 dark:text-indigo-400">Duration</p>
+                    <p class="text-xs font-black text-slate-800 dark:text-slate-100">{{ grandTotalLeadTime }} {{ grandTotalLeadTime === 1 ? 'day' : 'days' }}</p>
                 </div>
             </div>
 
-            <div class="flex items-center space-x-2">
+            <div class="flex items-center flex-wrap gap-2">
                 <span v-if="!canManage"
-                      class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-200"
+                      class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-200"
                       title="Only the project owner can change the plan. You can edit the rows assigned to you.">
-                    <PencilSquareIcon class="w-4 h-4" />
+                    <PencilSquareIcon class="w-3.5 h-3.5" />
                     You can edit only your assigned rows
                 </span>
+                <button v-if="canManage"
+                        type="button"
+                        @click="quickAssignEnabled = !quickAssignEnabled"
+                        :class="[
+                            'inline-flex items-center px-3 py-1.5 border text-xs font-bold rounded-lg shadow-xs transition-all active:scale-95',
+                            quickAssignEnabled
+                                ? 'border-violet-600 bg-violet-600 text-white hover:bg-violet-700'
+                                : 'border-violet-200 bg-white text-violet-700 hover:bg-violet-50 dark:border-violet-400/30 dark:bg-slate-900 dark:text-violet-200 dark:hover:bg-violet-500/15'
+                        ]">
+                    <UserPlusIcon class="w-3.5 h-3.5 mr-1.5" />
+                    Quick Assign
+                </button>
+                <a :href="route('projects.gantt-pdf', project.id)"
+                   target="_blank"
+                   rel="noopener"
+                   class="inline-flex items-center rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-bold text-emerald-700 shadow-xs transition-all hover:bg-emerald-50 active:scale-95 dark:border-emerald-400/30 dark:bg-slate-900 dark:text-emerald-200 dark:hover:bg-emerald-500/15"
+                   title="Export project Gantt chart as PDF">
+                    <DocumentChartBarIcon class="mr-1.5 h-3.5 w-3.5" />
+                    Export PDF
+                </a>
                 <button v-if="canManage" @click="applyActivityTemplates"
-                        class="inline-flex items-center px-4 py-2 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 text-sm font-bold rounded-lg shadow-sm transition-all transform active:scale-95 disabled:opacity-50 dark:border-indigo-400/30 dark:bg-slate-900 dark:text-indigo-200 dark:hover:bg-indigo-500/15"
+                        class="inline-flex items-center px-3 py-1.5 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg shadow-xs transition-all active:scale-95 disabled:opacity-50 dark:border-indigo-400/30 dark:bg-slate-900 dark:text-indigo-200 dark:hover:bg-indigo-500/15"
                         :disabled="isApplyingTemplates"
                 >
-                    <DocumentDuplicateIcon class="w-4 h-4 mr-2" />
+                    <DocumentDuplicateIcon class="w-3.5 h-3.5 mr-1.5" />
                     {{ isApplyingTemplates ? 'Applying...' : 'Apply Templates' }}
                 </button>
                 <button @click="showFilters = !showFilters"
                         :class="[
-                            'relative p-2 rounded-lg transition-colors',
+                            'relative p-1.5 rounded-lg border transition-colors',
                             hasFilters
-                                ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-500/20 dark:text-indigo-200'
-                                : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:text-slate-300 dark:hover:bg-indigo-500/15 dark:hover:text-indigo-200'
+                                ? 'text-indigo-600 bg-indigo-50 border-indigo-200 dark:bg-indigo-500/20 dark:border-indigo-400/30 dark:text-indigo-200'
+                                : 'text-slate-400 border-slate-200 hover:text-indigo-600 hover:bg-indigo-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-indigo-500/15 dark:hover:text-indigo-200'
                         ]"
                         title="Filter the plan by assigned user or department">
-                    <FunnelIcon class="w-5 h-5" />
+                    <FunnelIcon class="w-4 h-4" />
                     <span v-if="hasFilters" class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-indigo-600"></span>
                 </button>
                 <button
                     v-if="canManage"
                     @click="openMilestoneForm"
-                    class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg shadow-sm transition-all transform active:scale-95"
+                    class="inline-flex items-center px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-xs transition-all active:scale-95"
                 >
-                    <PlusIcon class="w-4 h-4 mr-2" />
+                    <PlusIcon class="w-3.5 h-3.5 mr-1.5" />
                     Add Milestone
                 </button>
             </div>
+        </div>
+
+        <!-- Choose once, then assign project/milestone/activity/sub-task with one click. -->
+        <div v-if="quickAssignEnabled && canManage"
+             class="border-b border-violet-200 bg-violet-50/80 px-5 py-3 dark:border-violet-400/30 dark:bg-violet-500/10">
+            <div class="flex flex-wrap items-end gap-3">
+                <div class="min-w-[240px] flex-1">
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-200">
+                        Assign to
+                    </label>
+                    <select v-model="quickAssigneeId"
+                            class="w-full rounded-xl border-violet-200 bg-white text-sm font-semibold focus:border-violet-500 focus:ring-violet-500 dark:border-violet-400/30 dark:bg-slate-900 dark:text-slate-100">
+                        <option value="">Choose a project team member</option>
+                        <option v-for="member in internalProjectTeamMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
+                        <option value="__unassign__">Clear assignment</option>
+                    </select>
+                </div>
+                <label class="flex h-[38px] items-center gap-2 rounded-xl border border-violet-200 bg-white px-3 text-xs font-bold text-slate-600 dark:border-violet-400/30 dark:bg-slate-900 dark:text-slate-200">
+                    <input v-model="quickIncludeSubtasks" type="checkbox" class="rounded border-slate-300 text-violet-600 focus:ring-violet-500">
+                    Include sub-tasks
+                </label>
+                <label class="flex h-[38px] items-center gap-2 rounded-xl border border-violet-200 bg-white px-3 text-xs font-bold text-slate-600 dark:border-violet-400/30 dark:bg-slate-900 dark:text-slate-200">
+                    <input v-model="quickOnlyUnassigned" type="checkbox" class="rounded border-slate-300 text-violet-600 focus:ring-violet-500">
+                    Only unassigned
+                </label>
+                <button type="button"
+                        @click="quickAssignProject"
+                        :disabled="!quickAssignReady || isBulkAssigning"
+                        class="inline-flex h-[38px] items-center rounded-xl bg-violet-600 px-4 text-sm font-black text-white shadow-sm transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-40">
+                    <UserPlusIcon class="mr-2 h-4 w-4" />
+                    {{ isBulkAssigning ? 'Assigning...' : 'Assign Entire Project' }}
+                </button>
+                <button type="button" @click="quickAssignEnabled = false"
+                        class="h-[38px] rounded-xl px-3 text-xs font-black text-violet-600 hover:bg-violet-100 dark:text-violet-200 dark:hover:bg-violet-500/20">
+                    Done
+                </button>
+            </div>
+            <p class="mt-2 text-[11px] font-semibold text-violet-700 dark:text-violet-200">
+                Choose a user, then click a milestone's Assign button or any Responsible circle. Activity clicks include its sub-tasks when enabled.
+            </p>
+            <p v-if="internalProjectTeamMembers.length === 0" class="mt-1 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+                Add internal users to the Project Team first; external members cannot receive user assignments.
+            </p>
         </div>
 
         <!-- Filter the plan by who owns the work -->
@@ -1397,36 +1576,36 @@ const isWeekend = (date) => {
 
         <!-- Main Workspace: Unified Scroll -->
         <div class="flex-1 overflow-auto relative bg-[#fafbfc] dark:bg-slate-950" ref="mainWorkspaceRef">
-            <div :style="{ width: (480 + timelineDays.length * 48) + 'px' }" class="relative min-h-full">
+            <div :style="{ width: (560 + timelineDays.length * 40) + 'px' }" class="relative min-h-full">
                 
                 <!-- STICKY HEADER ROW -->
-                <div class="sticky top-0 z-50 flex h-14 bg-white border-b border-slate-200 dark:border-slate-700 dark:bg-slate-900">
+                <div class="sticky top-0 z-50 flex h-12 bg-white border-b border-slate-200 dark:border-slate-700 dark:bg-slate-900">
                     <!-- Left Header -->
-                    <div class="sticky left-0 z-50 w-[480px] h-full flex items-center bg-slate-50 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:shadow-black/20">
-                        <div class="w-1/2">Activity</div>
-                        <div class="w-1/4 px-2 text-center">Responsible</div>
-                        <div class="w-1/4 pl-2 pr-6 text-right">Status</div>
+                    <div class="sticky left-0 z-50 w-[560px] h-full flex items-center bg-slate-50 border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:shadow-black/20 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                        <div class="w-[280px] px-3">Activity / Sub-task</div>
+                        <div class="w-[130px] px-2 text-left">Responsible</div>
+                        <div class="w-[150px] px-3 text-right">Status</div>
                     </div>
                     <!-- Right Header (Timeline) -->
                     <div class="flex-1 flex flex-col z-0">
-                        <div class="h-7 flex items-center px-4 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest relative bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                        <div class="h-6 flex items-center px-2 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest relative bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                             <template v-for="(day, idx) in timelineDays" :key="'m'+idx">
                                 <div v-if="day.getDate() === 1 || idx === 0" 
-                                     class="absolute flex items-center space-x-2"
-                                     :style="{ left: (idx * 48 + 16) + 'px' }">
-                                    <span class="text-slate-900 dark:text-slate-100">{{ day.toLocaleString('en-US', { month: 'short' }) }}</span>
-                                    <span class="text-slate-300 dark:text-slate-400">{{ day.getFullYear() }}</span>
+                                     class="absolute flex items-center space-x-1.5"
+                                     :style="{ left: (idx * 40 + 10) + 'px' }">
+                                    <span class="text-slate-900 font-bold dark:text-slate-100">{{ day.toLocaleString('en-US', { month: 'short' }) }}</span>
+                                    <span class="text-slate-400 dark:text-slate-500 font-normal">{{ day.getFullYear() }}</span>
                                 </div>
                             </template>
                         </div>
-                        <div class="h-7 flex text-[10px] font-bold text-slate-500 bg-white dark:bg-slate-900 dark:text-slate-300">
+                        <div class="h-6 flex text-[10px] font-bold text-slate-500 bg-white dark:bg-slate-900 dark:text-slate-300">
                             <div v-for="(day, idx) in timelineDays" :key="idx" 
                                  :title="holidayNameFor(day) || ''"
-                                 class="flex-shrink-0 w-12 flex items-center justify-center border-r border-slate-100 dark:border-slate-800"
+                                 class="flex-shrink-0 w-10 flex items-center justify-center border-r border-slate-100 dark:border-slate-800"
                                  :class="[
-                                    isWeekend(day) ? 'bg-slate-50/50 text-slate-300 dark:bg-slate-800/60 dark:text-slate-400' : 'text-slate-400 dark:text-slate-300',
+                                    isWeekend(day) ? 'bg-slate-50/70 text-slate-300 dark:bg-slate-800/60 dark:text-slate-400' : 'text-slate-500 dark:text-slate-300',
                                     isHoliday(day) && !isToday(day) ? 'bg-rose-50 text-rose-400 dark:bg-rose-500/15 dark:text-rose-300' : '',
-                                    isToday(day) ? 'bg-indigo-600 text-white z-20 rounded-t-sm shadow-lg' : ''
+                                    isToday(day) ? 'bg-indigo-600 text-white z-20 font-black shadow-sm' : ''
                                  ]">
                                 {{ day.getDate() }}
                             </div>
@@ -1438,11 +1617,11 @@ const isWeekend = (date) => {
                 <div class="relative">
                     <!-- Vertical Grid Lines (Background) -->
                     <div class="absolute inset-0 flex pointer-events-none z-0">
-                         <div class="w-[480px] flex-shrink-0"></div>
+                         <div class="w-[560px] flex-shrink-0"></div>
                          <div v-for="(day, idx) in timelineDays" :key="'grid'+idx" 
-                             class="flex-shrink-0 w-12 border-r border-slate-100 h-full dark:border-slate-800"
+                             class="flex-shrink-0 w-10 border-r border-slate-100 h-full dark:border-slate-800"
                              :class="[
-                                isWeekend(day) ? 'bg-slate-50/10 dark:bg-slate-800/30' : '',
+                                isWeekend(day) ? 'bg-slate-50/20 dark:bg-slate-800/30' : '',
                                 isHoliday(day) ? 'bg-rose-50/40 dark:bg-rose-500/10' : '',
                                 isToday(day) ? 'bg-indigo-50/20 dark:bg-indigo-500/10' : ''
                              ]">
@@ -1451,46 +1630,54 @@ const isWeekend = (date) => {
 
                     <!-- Today Indicator Line -->
                     <div v-for="(day, idx) in timelineDays" :key="'line'+idx">
-                         <div v-if="isToday(day)" class="absolute h-full w-px bg-indigo-500/30 z-0 pointer-events-none" :style="{ left: (480 + idx * 48 + 24) + 'px' }">
-                            <div class="bg-indigo-600 text-[8px] text-white px-1.5 py-0.5 rounded-b shadow-sm absolute top-0 transform -translate-x-1/2 font-black uppercase tracking-tighter whitespace-nowrap">Today</div>
+                         <div v-if="isToday(day)" class="absolute h-full w-px bg-indigo-500/40 z-0 pointer-events-none" :style="{ left: (560 + idx * 40 + 20) + 'px' }">
+                            <div class="bg-indigo-600 text-[8px] text-white px-1 py-0.5 rounded-b shadow-sm absolute top-0 transform -translate-x-1/2 font-black uppercase tracking-tighter whitespace-nowrap">Today</div>
                          </div>
                     </div>
 
                     <!-- Rows -->
                     <template v-for="(tasks, category) in visibleGroupedTasks" :key="category">
                         <!-- Category Row -->
-                        <div class="flex sticky top-14 z-30">
-                            <div class="sticky left-0 z-40 w-[480px] h-10 bg-slate-100 flex items-center justify-between px-4 border-b border-slate-200 border-r shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/20">
-                                <div class="flex items-center space-x-2">
-                                    <ChevronRightIcon class="w-3 h-3 text-slate-400 transform rotate-90 dark:text-slate-300" />
-                                    <span class="text-[11px] font-black text-slate-600 uppercase tracking-wider dark:text-slate-100">{{ category }}</span>
-                                    <span class="ml-2 px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded text-[9px] font-bold dark:bg-slate-700 dark:text-slate-200">{{ visibleTaskCount(tasks) }}</span>
-                                    <span class="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[9px] font-black uppercase whitespace-nowrap dark:bg-indigo-500/20 dark:text-indigo-200"
+                        <div class="flex sticky top-12 z-30">
+                            <div class="sticky left-0 z-40 w-[560px] h-9 bg-slate-100/95 flex items-center justify-between px-3 border-b border-slate-200 border-r shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/20">
+                                <div class="flex items-center space-x-2 min-w-0 mr-2">
+                                    <ChevronRightIcon class="w-3 h-3 text-slate-400 transform rotate-90 shrink-0 dark:text-slate-300" />
+                                    <span class="text-xs font-black text-slate-700 uppercase tracking-wider truncate max-w-[220px] dark:text-slate-100" :title="category">{{ category }}</span>
+                                    <span class="px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded text-[9px] font-bold shrink-0 dark:bg-slate-700 dark:text-slate-200">{{ visibleTaskCount(tasks) }}</span>
+                                    <span class="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[9px] font-black uppercase whitespace-nowrap shrink-0 dark:bg-indigo-500/20 dark:text-indigo-200"
                                           :title="`How long this milestone runs — its first start to its last finish. Its rows total ${milestoneLeadTime(tasks)} lead-time days, but rows running in parallel share the same days.`">
                                         {{ milestoneSpanDays(tasks) }} {{ milestoneSpanDays(tasks) === 1 ? 'day' : 'days' }}
                                     </span>
                                     <span v-if="milestoneDepartmentLabel(tasks)"
-                                          class="truncate px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-indigo-500 dark:text-indigo-300"
-                                          title="Department most of this milestone's rows belong to">
+                                          class="truncate px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-indigo-500 shrink-0 dark:text-indigo-300"
+                                          :title="`Department: ${milestoneDepartmentLabel(tasks)}`">
                                         {{ milestoneDepartmentLabel(tasks) }}
                                     </span>
                                 </div>
-                                <div v-if="canManage" class="flex items-center gap-1.5">
+                                <div v-if="canManage" class="flex items-center gap-1 shrink-0">
+                                    <button v-if="quickAssignEnabled"
+                                            type="button"
+                                            @click.stop="quickAssignMilestone(category, tasks)"
+                                            :disabled="!quickAssignReady || isBulkAssigning"
+                                            class="inline-flex items-center rounded border border-violet-200 bg-white px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-violet-400/30 dark:bg-slate-900 dark:text-violet-200 dark:hover:bg-violet-500/15">
+                                        <UserPlusIcon class="mr-1 h-3 w-3" />
+                                        Assign
+                                    </button>
                                     <button type="button"
                                             @click.stop="openActivityForm(category)"
-                                            class="inline-flex items-center px-2.5 py-1 bg-white border border-indigo-100 text-[10px] font-black text-indigo-700 uppercase tracking-wider rounded-md hover:bg-indigo-50 transition-colors dark:border-indigo-400/30 dark:bg-slate-900 dark:text-indigo-200 dark:hover:bg-indigo-500/15">
-                                        <PlusIcon class="w-3.5 h-3.5 mr-1" />
-                                        Add Activity
+                                            class="inline-flex items-center px-2 py-0.5 bg-white border border-indigo-200 text-[10px] font-bold text-indigo-700 uppercase tracking-wider rounded hover:bg-indigo-50 transition-colors dark:border-indigo-400/30 dark:bg-slate-900 dark:text-indigo-200 dark:hover:bg-indigo-500/15">
+                                        <PlusIcon class="w-3 h-3 mr-0.5" />
+                                        Activity
                                     </button>
                                     <button type="button"
                                             @click.stop="deleteMilestone(category, tasks)"
-                                            class="p-1.5 bg-white border border-red-100 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors dark:border-red-400/30 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-red-500/15"
+                                            class="p-1 bg-white border border-red-100 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors dark:border-red-400/30 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-red-500/15"
                                             title="Delete Milestone">
-                                        <TrashIcon class="w-3.5 h-3.5" />
+                                        <TrashIcon class="w-3 h-3" />
                                     </button>
                                 </div>
                             </div>
-                            <div class="flex-1 h-10 bg-slate-100/30 border-b border-slate-200 dark:border-slate-700 dark:bg-slate-800/40"></div>
+                            <div class="flex-1 h-9 bg-slate-100/30 border-b border-slate-200 dark:border-slate-700 dark:bg-slate-800/40"></div>
                         </div>
 
                         <!-- Task Rows -->
@@ -1501,15 +1688,17 @@ const isWeekend = (date) => {
                                  @drop.prevent="handleTaskDrop(row.task)"
                                  :class="[
                                      dragOverTaskId === row.task.id ? 'bg-indigo-50/60 ring-1 ring-inset ring-indigo-200 dark:bg-indigo-500/10 dark:ring-indigo-400/30' : '',
-                                    row.isSubTask ? 'min-h-[3rem]' : 'min-h-[3.5rem]',
-                                    canEditTask(row.task) ? 'cursor-pointer' : 'cursor-default'
+                                     row.isSubTask ? 'min-h-[36px]' : 'min-h-[40px]',
+                                     canEditTask(row.task) ? 'cursor-pointer' : 'cursor-default'
                                  ]"
-                                  class="flex border-b border-slate-100 hover:bg-indigo-50/10 group transition-colors relative z-10 dark:border-slate-800 dark:hover:bg-indigo-500/5">
+                                  class="flex border-b border-slate-100 hover:bg-indigo-50/15 group transition-colors relative z-10 dark:border-slate-800 dark:hover:bg-indigo-500/5">
                                 
                                 <!-- Left Task Info (Sticky) -->
-                                <div class="sticky left-0 z-30 w-[480px] flex items-center border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-800 dark:shadow-black/20"
-                                     :class="row.isSubTask ? 'bg-slate-50 group-hover:bg-slate-100/70 dark:bg-slate-900/80 dark:group-hover:bg-slate-800' : 'bg-white group-hover:bg-slate-50 dark:bg-slate-950 dark:group-hover:bg-slate-900'">
-                                    <div class="w-1/2 flex items-center space-x-3 py-2" :class="row.isSubTask ? 'pl-9 pr-4' : 'px-4'">
+                                <div class="sticky left-0 z-30 w-[560px] flex items-center border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-800 dark:shadow-black/20"
+                                     :class="row.isSubTask ? 'bg-slate-50/90 group-hover:bg-slate-100/70 dark:bg-slate-900/80 dark:group-hover:bg-slate-800' : 'bg-white group-hover:bg-slate-50 dark:bg-slate-950 dark:group-hover:bg-slate-900'">
+                                    
+                                    <!-- Activity / Sub-task Column -->
+                                    <div class="w-[280px] flex items-center gap-2 py-1.5" :class="row.isSubTask ? 'pl-6 pr-3' : 'px-3'">
                                         <div class="relative flex-shrink-0" @click.stop>
                                             <input v-if="!hasSubTasks(row.task)"
                                                    type="checkbox"
@@ -1517,65 +1706,90 @@ const isWeekend = (date) => {
                                                    :disabled="!canToggleDone(row.task)"
                                                    @change="toggleTaskDone(row.task)"
                                                    :title="canToggleDone(row.task) ? (isTaskComplete(row.task) ? 'Mark as not done (0%)' : 'Mark as done (100%)') : 'You cannot edit this row'"
-                                                   class="w-5 h-5 rounded border-2 border-slate-300 text-emerald-600 cursor-pointer transition-colors focus:ring-2 focus:ring-emerald-500 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900">
+                                                   class="w-4 h-4 rounded border border-slate-300 text-emerald-600 cursor-pointer transition-colors focus:ring-1 focus:ring-emerald-500 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900">
                                             <div v-else
                                                  title="Rolled up from its sub-tasks — tick those instead"
-                                                 class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"
-                                                 :class="row.task.status === 'Done' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/15' : 'border-slate-200 group-hover:border-indigo-300 dark:border-slate-700 dark:group-hover:border-indigo-400'">
-                                                <CheckCircleIcon v-if="row.task.status === 'Done'" class="w-3.5 h-3.5 text-emerald-600" />
+                                                 class="w-4 h-4 rounded-full border flex items-center justify-center transition-colors"
+                                                 :class="row.task.status === 'Done' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/15' : 'border-slate-300 group-hover:border-indigo-300 dark:border-slate-600 dark:group-hover:border-indigo-400'">
+                                                <CheckCircleIcon v-if="row.task.status === 'Done'" class="w-3 h-3 text-emerald-600" />
                                             </div>
                                         </div>
-                                        <div v-if="canManage" class="flex items-center self-stretch" @click.stop>
+                                        <div v-if="canManage" class="flex items-center shrink-0" @click.stop>
                                             <button type="button"
                                                     draggable="true"
                                                     @dragstart="handleTaskDragStart(row.task)"
                                                     @dragend="handleTaskDragEnd"
-                                                     class="h-full px-1.5 text-slate-300 hover:text-indigo-500 cursor-grab active:cursor-grabbing transition-colors dark:text-slate-500 dark:hover:text-indigo-300"
+                                                    class="p-0.5 text-slate-300 hover:text-indigo-500 cursor-grab active:cursor-grabbing transition-colors dark:text-slate-500 dark:hover:text-indigo-300"
                                                     title="Drag to reorder task">
-                                                <ArrowsPointingOutIcon class="w-4 h-4" />
+                                                <ArrowsPointingOutIcon class="w-3.5 h-3.5" />
                                             </button>
                                         </div>
+                                        <span v-if="row.isSubTask" class="text-indigo-600 dark:text-indigo-400 font-bold text-xs shrink-0 select-none mr-0.5">↳</span>
                                         <div class="flex-1 min-w-0">
-                                            <div class="flex items-center justify-between mb-0.5">
-                                                <div class="font-bold text-slate-700 whitespace-normal break-words leading-tight mr-2 dark:text-slate-100"
-                                                     :class="row.isSubTask ? 'text-[12px]' : 'text-[13px]'">
-                                                    <span v-if="row.isSubTask" class="mr-1 text-[10px] font-black text-slate-400 uppercase dark:text-slate-300">Sub</span>
+                                            <div class="flex items-center justify-between gap-1 mb-0.5">
+                                                <div class="font-semibold text-slate-800 dark:text-slate-100 truncate"
+                                                     :class="row.isSubTask ? 'text-[11px]' : 'text-xs'"
+                                                     :title="row.task.name">
                                                     {{ row.task.name }}
                                                 </div>
-                                                <span class="text-[10px] font-black text-slate-400 tabular-nums flex-shrink-0 dark:text-slate-300">{{ row.task.progress }}%</span>
+                                                <span class="text-[10px] font-bold text-slate-400 tabular-nums shrink-0 dark:text-slate-400">{{ row.task.progress }}%</span>
                                             </div>
-                                            <div v-if="taskOrganizationLabel(row.task)" class="mb-1 truncate text-[10px] font-black uppercase tracking-wider text-indigo-500">
-                                                {{ taskOrganizationLabel(row.task) }}
+                                            <div class="flex items-center gap-1.5 text-[9px] text-slate-400 dark:text-slate-400 truncate leading-tight">
+                                                <span v-if="formatDateRange(row.task.start_date, row.task.end_date)" class="font-medium text-slate-500 dark:text-slate-400">
+                                                    {{ formatDateRange(row.task.start_date, row.task.end_date) }}
+                                                </span>
+                                                <span v-if="formatDateRange(row.task.start_date, row.task.end_date) && (taskOrganizationLabel(row.task) || row.task.lead_time_days)">·</span>
+                                                <span v-if="taskOrganizationLabel(row.task)" class="font-bold text-indigo-500 truncate">
+                                                    {{ taskOrganizationLabel(row.task) }}
+                                                </span>
                                             </div>
-                                            <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden dark:bg-slate-800">
-                                                <div class="h-full transition-all duration-500" 
+                                            <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden mt-0.5 dark:bg-slate-800">
+                                                <div class="h-full transition-all duration-300" 
                                                      :class="getBarColorClass(row.task.status)" 
                                                      :style="{ width: row.task.progress + '%' }"></div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="w-1/4 px-2 text-center py-2">
-                                         <div v-if="getAssigneeName(row.task)" class="mx-auto h-7 w-7 rounded-lg bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-700 border border-indigo-200 dark:border-indigo-400/30 dark:bg-indigo-500/15 dark:text-indigo-200" :title="getAssigneeName(row.task)">
+
+                                    <!-- Responsible Column -->
+                                    <div class="w-[130px] px-2 py-1 flex items-center justify-start gap-1.5"
+                                         @click.stop="quickAssignEnabled ? quickAssignActivity(row.task) : editTask(row.task)"
+                                         :title="quickAssignEnabled ? (row.isSubTask ? 'Assign this sub-task' : 'Assign this activity and optionally its sub-tasks') : 'Edit assignment'"
+                                         :class="quickAssignEnabled ? 'cursor-copy rounded-lg hover:bg-violet-100 dark:hover:bg-violet-500/15' : 'cursor-pointer'">
+                                        <div v-if="getAssigneeName(row.task)" class="h-6 w-6 shrink-0 rounded-md bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-700 border border-indigo-200 dark:border-indigo-400/30 dark:bg-indigo-500/15 dark:text-indigo-200" :title="getAssigneeName(row.task)">
                                             {{ getAssigneeInitial(row.task) }}
                                         </div>
-                                        <div v-else class="mx-auto h-7 w-7 rounded-lg border border-dashed border-slate-200 flex items-center justify-center text-slate-300 dark:border-slate-700 dark:text-slate-500">?</div>
+                                        <div v-else class="h-6 w-6 shrink-0 rounded-md border border-dashed border-slate-300 flex items-center justify-center text-[10px] text-slate-400 dark:border-slate-700 dark:text-slate-500">?</div>
+                                        <span class="text-[11px] font-medium text-slate-700 truncate max-w-[65px] dark:text-slate-300" :title="getAssigneeName(row.task) || 'Unassigned'">
+                                            {{ getAssigneeName(row.task) || 'Unassigned' }}
+                                        </span>
+                                        <button v-if="quickAssignEnabled && canManage"
+                                                type="button"
+                                                @click.stop="quickAssignActivity(row.task)"
+                                                :disabled="!quickAssignReady || isBulkAssigning"
+                                                class="inline-flex items-center rounded border border-violet-200 bg-white px-1 py-0.5 text-[8px] font-black uppercase tracking-wide text-violet-700 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-40 shrink-0 dark:border-violet-400/30 dark:bg-slate-900 dark:text-violet-200 dark:hover:bg-violet-500/15"
+                                                :title="row.isSubTask ? 'Assign this sub-task' : (quickIncludeSubtasks ? 'Assign this activity and its sub-tasks' : 'Assign this activity only')">
+                                            <UserPlusIcon class="h-2.5 w-2.5" />
+                                        </button>
                                     </div>
-                                    <div class="w-1/4 pl-2 pr-6 flex items-center justify-end gap-2 group/actions relative py-2">
-                                        <div class="flex-shrink-0">
-                                            <span class="px-3 py-1 border rounded-full text-[10px] font-black uppercase tracking-widest transition-all shadow-sm min-w-[70px] inline-block text-center"
+
+                                    <!-- Status & Actions Column -->
+                                    <div class="w-[150px] px-3 py-1 flex items-center justify-between gap-1">
+                                        <div class="shrink-0">
+                                            <span class="px-2 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider inline-block text-center shadow-2xs"
                                                   :class="getStatusStyles(row.task.status)">
                                                 {{ row.task.status }}
                                             </span>
                                         </div>
-                                        <div v-if="canManage" class="flex items-center">
+                                        <div v-if="canManage" class="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <button v-if="!row.isSubTask"
                                                     @click.stop="openSubTaskForm(row.task)"
-                                                    class="p-1 text-indigo-400 hover:text-indigo-700 transition-colors opacity-40 group-hover:opacity-100 flex-shrink-0"
+                                                    class="p-1 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded transition-colors dark:hover:bg-indigo-500/20"
                                                     title="Add Sub-task">
-                                                <PlusIcon class="w-4 h-4" />
+                                                <PlusIcon class="w-3.5 h-3.5" />
                                             </button>
-                                            <button @click.stop="deleteTask(row.task.id)" class="p-1 text-red-400 hover:text-red-600 transition-colors opacity-40 group-hover:opacity-100 flex-shrink-0" title="Delete Task">
-                                                <TrashIcon class="w-4 h-4" />
+                                            <button @click.stop="deleteTask(row.task.id)" class="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors dark:hover:bg-red-500/20" title="Delete Task">
+                                                <TrashIcon class="w-3.5 h-3.5" />
                                             </button>
                                         </div>
                                     </div>
@@ -1583,22 +1797,24 @@ const isWeekend = (date) => {
 
                                 <!-- Right Gantt Bar Area -->
                                 <div class="flex-1 relative">
-                                    <div class="absolute inset-0 grid h-full py-2.5 px-[1px]" :style="{ gridTemplateColumns: `repeat(${timelineDays.length}, 48px)` }">
+                                    <div class="absolute inset-0 grid h-full py-1.5 px-[1px] items-center" :style="{ gridTemplateColumns: `repeat(${timelineDays.length}, 40px)` }">
                                         <div v-if="row.task.start_date && row.task.end_date"
-                                             class="h-full rounded-lg relative overflow-hidden group/bar transition-all hover:scale-[1.01] hover:shadow-lg cursor-pointer z-20"
-                                             :class="row.isSubTask ? 'opacity-85' : ''"
+                                             class="rounded-md relative overflow-hidden group/bar transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer z-20 flex items-center"
+                                             :class="[
+                                                row.isSubTask ? 'h-5 opacity-90' : 'h-6',
+                                             ]"
                                              :style="getGanttBarStyles(row.task)"
                                              @click="isAddingTask = false"
                                         >
                                             <div class="absolute inset-0" :class="getBarColorClass(row.task.status)"></div>
-                                            <div class="absolute top-0 left-0 h-full bg-black/15 flex items-center justify-end pr-2 overflow-hidden" :style="{ width: row.task.progress + '%' }">
+                                            <div class="absolute top-0 left-0 h-full bg-black/15 flex items-center justify-end pr-1.5 overflow-hidden" :style="{ width: row.task.progress + '%' }">
                                                 <div v-if="row.task.progress > 0" class="h-full w-full bg-gradient-to-r from-transparent to-white/10"></div>
                                             </div>
-                                            <div class="absolute inset-0 flex items-center px-2 justify-between gap-1.5">
-                                                <span class="text-[10px] font-black text-white truncate shadow-sm tracking-tight flex-1">{{ row.task.name }}</span>
-                                                <span class="text-[9px] font-bold text-white/80 whitespace-nowrap">{{ row.task.progress }}%</span>
+                                            <div class="absolute inset-0 flex items-center px-1.5 justify-between gap-1">
+                                                <span class="text-[10px] font-bold text-white truncate drop-shadow-xs tracking-tight flex-1">{{ row.task.name }}</span>
+                                                <span class="text-[9px] font-semibold text-white/90 whitespace-nowrap">{{ row.task.progress }}%</span>
                                             </div>
-                                            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-[9px] rounded opacity-0 group-hover/bar:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 font-bold">
+                                            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1.5 px-2 py-1 bg-slate-800 text-white text-[9px] rounded-md opacity-0 group-hover/bar:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 font-bold shadow-lg">
                                                 {{ row.task.name }}: {{ row.task.start_date.split('T')[0] }} to {{ row.task.end_date.split('T')[0] }}
                                             </div>
                                         </div>

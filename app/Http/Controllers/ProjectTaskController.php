@@ -39,14 +39,12 @@ class ProjectTaskController extends Controller
         ]);
 
         $template = ProjectTemplate::with('activities')->findOrFail($request->project_template_id);
-        if ($template->entity_company_id && (int) $template->entity_company_id !== (int) $project->company_id) {
-            return redirect()->back()->withErrors(['project_template_id' => 'This template belongs to a different entity.']);
-        }
-        if ($template->brand_company_id && (int) $template->brand_company_id !== (int) $project->brand_company_id) {
-            return redirect()->back()->withErrors(['project_template_id' => 'This template belongs to a different brand.']);
-        }
-        if (filled($template->project_name) && mb_strtolower(trim($template->project_name)) !== mb_strtolower(trim($project->name))) {
-            return redirect()->back()->withErrors(['project_template_id' => 'This template is recommended for project name '.$template->project_name.'.']);
+
+        // The same rule that decides which templates the modal lists, so the list
+        // and this guard can never disagree — they used to, and a template the list
+        // offered was refused here with an error nothing rendered.
+        if ($reason = $template->applicabilityErrorFor($project)) {
+            return redirect()->back()->withErrors(['project_template_id' => $reason]);
         }
         $activities = $this->withResolvedMilestoneOrders($template->activities);
 
@@ -606,7 +604,17 @@ class ProjectTaskController extends Controller
         // An activity with sub-tasks derives its lead time, progress and span
         // from them — drop those keys so a stale form can't overwrite the
         // rollup that syncParentRollups() is about to recompute.
-        if (!$projects_task->parent_task_id && $projects_task->subTasks()->exists()) {
+        $isRolledUpActivity = ! $projects_task->parent_task_id && $projects_task->subTasks()->exists();
+
+        if ($isRolledUpActivity
+            && array_key_exists('progress', $validated)
+            && (int) $validated['progress'] !== (int) $projects_task->progress) {
+            throw ValidationException::withMessages([
+                'progress' => 'This activity progress is calculated from its sub-tasks. Update the sub-task percentages instead.',
+            ]);
+        }
+
+        if ($isRolledUpActivity) {
             unset($validated['lead_time_days'], $validated['progress'], $validated['status'], $validated['start_date'], $validated['end_date']);
         }
 
@@ -709,6 +717,95 @@ class ProjectTaskController extends Controller
         }
 
         return $this->backToTab($request, $projects_task->project_id, 'success', 'Task updated successfully.');
+    }
+
+    /**
+     * Assign one internal project-team member to many Gantt rows in one action.
+     * The client supplies explicit row ids for project, milestone, activity, or
+     * sub-task scope; every id is re-scoped to this project on the server.
+     */
+    public function bulkAssign(Request $request, Project $project)
+    {
+        abort_unless($project->isManagedBy($request->user()), 403, 'You do not have permission to assign project tasks.');
+
+        $validated = $request->validate([
+            'task_ids' => 'required|array|min:1|max:2000',
+            'task_ids.*' => 'required|integer|distinct',
+            'assigned_to' => 'nullable|integer|exists:users,id',
+            'only_unassigned' => 'sometimes|boolean',
+        ]);
+
+        $taskIds = collect($validated['task_ids'])->map(fn ($id) => (int) $id)->unique()->values();
+        $projectTaskIds = $project->tasks()->whereIn('id', $taskIds)->pluck('id');
+
+        if ($projectTaskIds->count() !== $taskIds->count()) {
+            throw ValidationException::withMessages([
+                'task_ids' => 'One or more selected tasks do not belong to this project.',
+            ]);
+        }
+
+        $assigneeId = $validated['assigned_to'] ?? null;
+        if ($assigneeId && ! $project->teamMembers()->where('user_id', $assigneeId)->exists()) {
+            throw ValidationException::withMessages([
+                'assigned_to' => 'The selected user must be an internal member of this project team.',
+            ]);
+        }
+
+        $query = $project->tasks()->whereIn('id', $projectTaskIds);
+        if ($request->boolean('only_unassigned')) {
+            $query->whereNull('assigned_to')->whereNull('external_assignment');
+        }
+
+        $changedIds = (clone $query)
+            ->where(function ($changed) use ($assigneeId) {
+                if ($assigneeId) {
+                    $changed->whereNull('assigned_to')
+                        ->orWhere('assigned_to', '!=', $assigneeId)
+                        ->orWhereNotNull('external_assignment');
+                } else {
+                    $changed->whereNotNull('assigned_to')->orWhereNotNull('external_assignment');
+                }
+            })
+            ->pluck('id');
+
+        if ($changedIds->isNotEmpty()) {
+            ProjectTask::whereIn('id', $changedIds)->update([
+                'assigned_to' => $assigneeId,
+                'external_assignment' => null,
+                'updated_by' => $request->user()->id,
+                'updated_at' => now(),
+            ]);
+
+            $this->projectTaskBoards->syncProject(
+                $project->fresh(['teamMembers.user', 'tasks']),
+                $request->user(),
+                null,
+                false
+            );
+            $this->projectTaskBoards->syncLinkedBoardItemsFromProject($project->fresh());
+
+            if ($assigneeId) {
+                $this->notifications->dispatch([$assigneeId], $request->user()->id, [
+                    'domain' => 'project_task',
+                    'event' => 'assignment',
+                    'title' => 'Assigned to project tasks',
+                    'message' => "You were assigned to {$changedIds->count()} task(s) in {$project->name}",
+                    'subject' => 'project:' . $project->id,
+                    'url' => route('projects.show', ['project' => $project->id, 'tab' => 'gantt'], false),
+                ]);
+            }
+        }
+
+        $assignee = $assigneeId
+            ? \App\Models\User::find($assigneeId, ['id', 'name', 'department', 'org_path'])
+            : null;
+
+        return response()->json([
+            'updated' => $changedIds->count(),
+            'task_ids' => $changedIds->values(),
+            'assigned_to' => $assigneeId,
+            'assignee' => $assignee,
+        ]);
     }
 
     public function destroy(Request $request, ProjectTask $projects_task)

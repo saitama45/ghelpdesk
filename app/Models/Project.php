@@ -254,6 +254,10 @@ class Project extends Model
         $total = (float) $milestoneWeights->sum();
         if (! $explicitMilestones || $total <= 0) return (int) round($milestoneValues->avg());
 
-        return (int) round($milestoneValues->sum(fn ($value, $name) => $value * $milestoneWeights[$name]) / $total);
+        $weightedTotal = $milestoneValues
+            ->map(fn ($value, $name) => $value * $milestoneWeights->get($name, 0))
+            ->sum();
+
+        return (int) round($weightedTotal / $total);
     }
 }

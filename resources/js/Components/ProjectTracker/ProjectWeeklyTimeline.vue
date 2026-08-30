@@ -26,6 +26,7 @@ import {
 import { router, useForm } from '@inertiajs/vue3';
 import { useToast } from '@/Composables/useToast.js';
 import { useConfirm } from '@/Composables/useConfirm.js';
+import { canonicalDepartment, sameDepartment, uniqueDepartmentNames } from '@/Composables/useDepartmentNames.js';
 import Autocomplete from '@/Components/Autocomplete.vue';
 import ProjectTaskStatusPill from './ProjectTaskStatusPill.vue';
 
@@ -40,6 +41,8 @@ const props = defineProps({
     currentUserId: { type: [Number, String], default: null },
     // Manual states a row can be flagged with (Blocked, For Approval …).
     manualStatuses: { type: Array, default: () => [] },
+    // The /departments table — the single source for how a department is spelled.
+    departments: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits(['open-department', 'open-gantt']);
@@ -525,23 +528,128 @@ const goToCurrentWeek = () => {
 };
 
 /* ------------------------------------------------------------- task helpers */
-const allFlatTasks = computed(() => {
-    const list = [];
+// Every row of the plan in one flat pool — the controller sends sub-tasks as
+// top-level rows, but a nested `subTasks` array is tolerated too (deduped by id).
+const taskPool = computed(() => {
+    const byId = new Map();
     localTasks.value.forEach(task => {
-        list.push(task);
-        if (task.subTasks && task.subTasks.length) {
-            task.subTasks.forEach(st => list.push(st));
-        }
+        byId.set(Number(task.id), task);
+        (task.subTasks || []).forEach(st => {
+            if (!byId.has(Number(st.id))) byId.set(Number(st.id), st);
+        });
     });
-    return list;
+    return [...byId.values()];
 });
+
+// Identical to the Gantt chart's sortTasks(): position first, id as tiebreak.
+const sortByOrderThenId = (tasks = []) => {
+    return [...tasks].sort((a, b) => {
+        const aOrder = Number.isFinite(Number(a.order)) ? Number(a.order) : Number.MAX_SAFE_INTEGER;
+        const bOrder = Number.isFinite(Number(b.order)) ? Number(b.order) : Number.MAX_SAFE_INTEGER;
+
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        return Number(a.id) - Number(b.id);
+    });
+};
+
+/**
+ * The plan in the Gantt chart's row order — this view must read top-to-bottom
+ * exactly like the Gantt tab, since both render the same project_tasks rows.
+ *
+ * Milestones are ordered by milestone_order (then by the position of their
+ * first activity), activities inside a milestone by `order`, and every
+ * activity is immediately followed by its own sub-tasks. A sub-task belongs to
+ * its PARENT's milestone, not to whatever its own `category` column says —
+ * again matching the Gantt, which nests sub-tasks under the parent row.
+ *
+ * Row objects are passed through by reference (never spread into copies) so
+ * the progress slider still writes to the live localTasks entry.
+ */
+const orderedTaskGroups = computed(() => {
+    const pool = taskPool.value;
+    if (!pool.length) return [];
+
+    const byId = new Map(pool.map(task => [Number(task.id), task]));
+    const childrenByParent = new Map();
+
+    pool.forEach(task => {
+        const parentId = task.parent_task_id ? Number(task.parent_task_id) : null;
+        if (!parentId || !byId.has(parentId)) return;
+        if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, []);
+        childrenByParent.get(parentId).push(task);
+    });
+
+    const groups = new Map();
+
+    pool.forEach(task => {
+        const parentId = task.parent_task_id ? Number(task.parent_task_id) : null;
+        if (parentId && byId.has(parentId)) return; // placed under its parent below
+
+        const category = task.category || 'General';
+        if (!groups.has(category)) groups.set(category, []);
+        groups.get(category).push(task);
+    });
+
+    return [...groups.entries()]
+        .map(([category, activities]) => {
+            const ordered = sortByOrderThenId(activities);
+            const tasks = [];
+
+            ordered.forEach(activity => {
+                tasks.push(activity);
+                sortByOrderThenId(childrenByParent.get(Number(activity.id)) || [])
+                    .forEach(child => tasks.push(child));
+            });
+
+            const milestoneOrder = Math.min(...ordered.map(act => (
+                Number.isFinite(Number(act.milestone_order)) ? Number(act.milestone_order) : Number.MAX_SAFE_INTEGER
+            )));
+            const firstOrder = Math.min(...ordered.map(act => Number(act.order) || 0));
+
+            return { category, tasks, milestoneOrder, firstOrder, firstId: Number(ordered[0]?.id) || 0 };
+        })
+        .sort((a, b) => {
+            if (a.milestoneOrder !== b.milestoneOrder) return a.milestoneOrder - b.milestoneOrder;
+            if (a.firstOrder !== b.firstOrder) return a.firstOrder - b.firstOrder;
+            return a.firstId - b.firstId;
+        });
+});
+
+const allFlatTasks = computed(() => orderedTaskGroups.value.flatMap(group => group.tasks));
+
+// A sub-task is filtered by the milestone it is DISPLAYED under (its parent's),
+// so the milestone dropdown selects the same rows the Gantt would show.
+const groupCategoryByTaskId = computed(() => {
+    const map = new Map();
+    orderedTaskGroups.value.forEach(group => {
+        group.tasks.forEach(task => map.set(Number(task.id), group.category));
+    });
+    return map;
+});
+
+const taskMilestone = (task) => groupCategoryByTaskId.value.get(Number(task?.id)) || task?.category || 'General';
+
+const subTaskCount = (task) => {
+    const nestedCount = task?.subTasks?.length || 0;
+    if (nestedCount > 0) return nestedCount;
+
+    return allFlatTasks.value.filter(candidate => Number(candidate.parent_task_id) === Number(task?.id)).length;
+};
+
+const isRolledUpProgress = (task) => !task?.parent_task_id && subTaskCount(task) > 0;
+const canEditTaskProgress = (task) => canEditTask(task) && !isRolledUpProgress(task);
 
 const taskDepartment = (task) => {
     const assignee = task.assigned_to
         ? props.users.find(user => String(user.id) === String(task.assigned_to))
         : null;
 
-    return (assignee?.department || '').trim() || (task.department || '').trim() || '';
+    const name = (assignee?.department || '').trim() || (task.department || '').trim() || '';
+
+    // Canonicalised at the single place a department is read from, so the filter
+    // dropdown and the row labels agree on one spelling — see the Gantt, which
+    // showed the same department twice before this.
+    return canonicalDepartment(name, props.departments);
 };
 
 const getAssigneeName = (task) => {
@@ -558,22 +666,13 @@ const selectedMilestoneFilter = ref('');
 const selectedStatusFilter = ref('');
 const searchQuery = ref('');
 
-const availableDepartments = computed(() => {
-    const depts = new Set();
-    allFlatTasks.value.forEach(t => {
-        const d = taskDepartment(t);
-        if (d) depts.add(d);
-    });
-    return [...depts].sort();
-});
+// One entry per department: the underlying free-text values disagree on case,
+// so a plain Set would offer the same department more than once.
+const availableDepartments = computed(() =>
+    uniqueDepartmentNames(allFlatTasks.value.map(taskDepartment).filter(Boolean), props.departments));
 
-const availableMilestones = computed(() => {
-    const ms = new Set();
-    localTasks.value.forEach(t => {
-        if (t.category) ms.add(t.category);
-    });
-    return [...ms];
-});
+// Listed in the Gantt's milestone order, not in whatever order the rows arrived.
+const availableMilestones = computed(() => orderedTaskGroups.value.map(group => group.category));
 
 /* --------------------------------------------------------- task-in-week logic */
 const isTaskActiveInWeek = (task, week) => {
@@ -598,61 +697,62 @@ const getTaskWeekStatus = (task, week) => {
     return 'pending';
 };
 
-// Filtered tasks for the selected week or entire project
-const tasksForSelectedWeek = computed(() => {
+// Does this row survive the week + the four filter controls?
+const matchesWeekFilters = (task, week) => {
+    // Filter by week active
+    if (!isTaskActiveInWeek(task, week)) return false;
+
+    // Department filter
+    if (selectedDepartmentFilter.value) {
+        if (!sameDepartment(taskDepartment(task), selectedDepartmentFilter.value)) return false;
+    }
+
+    // Milestone filter
+    if (selectedMilestoneFilter.value) {
+        if (taskMilestone(task) !== selectedMilestoneFilter.value) return false;
+    }
+
+    // Status filter
+    if (selectedStatusFilter.value) {
+        const weekStatus = getTaskWeekStatus(task, week);
+        if (selectedStatusFilter.value === 'done' && weekStatus !== 'completed') return false;
+        if (selectedStatusFilter.value === 'ongoing' && weekStatus !== 'in_progress') return false;
+        if (selectedStatusFilter.value === 'pending' && weekStatus !== 'pending') return false;
+        if (selectedStatusFilter.value === 'overdue' && weekStatus !== 'overdue') return false;
+        if (selectedStatusFilter.value === 'blocked' && weekStatus !== 'blocked') return false;
+    }
+
+    // Search query
+    if (searchQuery.value) {
+        const q = searchQuery.value.toLowerCase();
+        const name = (task.name || '').toLowerCase();
+        const wbs = (task.wbs || '').toLowerCase();
+        const dept = taskDepartment(task).toLowerCase();
+        const assignee = getAssigneeName(task).toLowerCase();
+        if (!name.includes(q) && !wbs.includes(q) && !dept.includes(q) && !assignee.includes(q)) return false;
+    }
+
+    return true;
+};
+
+// Grouped by milestone so each section can carry its own "+ Add Activity"
+// button — same organisation, and the same row order, as the Gantt chart's
+// per-milestone headers. Filtering only removes rows; it never reshuffles the
+// survivors, so the two tabs always read top-to-bottom the same way.
+const groupedTasksForSelectedWeek = computed(() => {
     const week = selectedWeek.value;
     if (!week) return [];
 
-    return allFlatTasks.value.filter(task => {
-        // Filter by week active
-        if (!isTaskActiveInWeek(task, week)) return false;
-
-        // Department filter
-        if (selectedDepartmentFilter.value) {
-            const dept = taskDepartment(task);
-            if (dept !== selectedDepartmentFilter.value) return false;
-        }
-
-        // Milestone filter
-        if (selectedMilestoneFilter.value) {
-            if ((task.category || 'General') !== selectedMilestoneFilter.value) return false;
-        }
-
-        // Status filter
-        if (selectedStatusFilter.value) {
-            const weekStatus = getTaskWeekStatus(task, week);
-            if (selectedStatusFilter.value === 'done' && weekStatus !== 'completed') return false;
-            if (selectedStatusFilter.value === 'ongoing' && weekStatus !== 'in_progress') return false;
-            if (selectedStatusFilter.value === 'pending' && weekStatus !== 'pending') return false;
-            if (selectedStatusFilter.value === 'overdue' && weekStatus !== 'overdue') return false;
-            if (selectedStatusFilter.value === 'blocked' && weekStatus !== 'blocked') return false;
-        }
-
-        // Search query
-        if (searchQuery.value) {
-            const q = searchQuery.value.toLowerCase();
-            const name = (task.name || '').toLowerCase();
-            const wbs = (task.wbs || '').toLowerCase();
-            const dept = taskDepartment(task).toLowerCase();
-            const assignee = getAssigneeName(task).toLowerCase();
-            if (!name.includes(q) && !wbs.includes(q) && !dept.includes(q) && !assignee.includes(q)) return false;
-        }
-
-        return true;
-    });
+    return orderedTaskGroups.value
+        .map(group => ({
+            category: group.category,
+            tasks: group.tasks.filter(task => matchesWeekFilters(task, week)),
+        }))
+        .filter(group => group.tasks.length > 0);
 });
 
-// Grouped by milestone so each section can carry its own "+ Add Activity"
-// button — same organisation as the Gantt chart's per-milestone headers.
-const groupedTasksForSelectedWeek = computed(() => {
-    const groups = new Map();
-    tasksForSelectedWeek.value.forEach(task => {
-        const category = task.category || 'General';
-        if (!groups.has(category)) groups.set(category, []);
-        groups.get(category).push(task);
-    });
-    return [...groups.entries()].map(([category, tasks]) => ({ category, tasks }));
-});
+// Filtered tasks for the selected week, flattened in the same display order.
+const tasksForSelectedWeek = computed(() => groupedTasksForSelectedWeek.value.flatMap(group => group.tasks));
 
 /* ---------------------------------------------------- day-by-day week schedule */
 const weekDays = computed(() => {
@@ -1050,6 +1150,12 @@ const commitTaskProgress = async (task, newProgress) => {
         return;
     }
 
+    if (isRolledUpProgress(task)) {
+        task.progress = lastSavedProgress.get(task.id) ?? (Number(task.progress) || 0);
+        toastError('This activity is calculated from its sub-tasks. Update the sub-task percentages instead.');
+        return;
+    }
+
     const prog = Math.max(0, Math.min(100, Number(newProgress)));
     const previousProgress = lastSavedProgress.has(task.id) ? lastSavedProgress.get(task.id) : (Number(task.progress) || 0);
     const previousStatus = task.status;
@@ -1092,20 +1198,20 @@ const jumpToGantt = (department = null) => {
 </script>
 
 <template>
-    <div class="space-y-6">
+    <div class="space-y-3.5">
         <!-- Header & Executive Weekly Horizon Banner (Sticky Freeze on Scroll) -->
-        <div class="sticky top-0 z-20 rounded-2xl border border-gray-200 bg-white/95 backdrop-blur-md p-6 shadow-md dark:border-gray-700 dark:bg-gray-800/95">
-            <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        <div class="sticky top-0 z-20 rounded-xl border border-gray-200 bg-white/95 backdrop-blur-md p-4 sm:p-5 shadow-xs dark:border-gray-700 dark:bg-gray-800/95">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                    <div class="flex items-center gap-3">
-                        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
-                            <CalendarDaysIcon class="h-6 w-6" />
+                    <div class="flex items-center gap-2.5">
+                        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                            <CalendarDaysIcon class="h-5 w-5" />
                         </div>
                         <div>
-                            <h3 class="text-xl font-black tracking-tight text-gray-900 dark:text-gray-100">
+                            <h3 class="text-base font-bold tracking-tight text-gray-900 dark:text-gray-100">
                                 Weekly Timeline &amp; Progress Plotting
                             </h3>
-                            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                            <p class="text-xs text-gray-500 dark:text-gray-400">
                                 Synchronized with Gantt Chart lead times, milestone dependencies, and departmental activities.
                             </p>
                         </div>
@@ -1114,44 +1220,44 @@ const jumpToGantt = (department = null) => {
 
                 <!-- Navigation Controls -->
                 <div class="flex flex-wrap items-center gap-2">
-                    <div class="flex items-center rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-900">
+                    <div class="flex items-center rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-gray-700 dark:bg-gray-900">
                         <button
                             type="button"
                             @click="activeViewMode = 's-curve'"
                             :class="[
-                                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all',
+                                'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-all',
                                 activeViewMode === 's-curve'
-                                    ? 'bg-white text-blue-600 shadow-sm dark:bg-gray-800 dark:text-blue-400'
+                                    ? 'bg-white text-blue-600 shadow-xs dark:bg-gray-800 dark:text-blue-400'
                                     : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
                             ]"
                         >
-                            <ChartBarIcon class="h-4 w-4" />
+                            <ChartBarIcon class="h-3.5 w-3.5" />
                             S-Curve &amp; Trend
                         </button>
                         <button
                             type="button"
                             @click="activeViewMode = 'schedule-matrix'"
                             :class="[
-                                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all',
+                                'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-all',
                                 activeViewMode === 'schedule-matrix'
-                                    ? 'bg-white text-blue-600 shadow-sm dark:bg-gray-800 dark:text-blue-400'
+                                    ? 'bg-white text-blue-600 shadow-xs dark:bg-gray-800 dark:text-blue-400'
                                     : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
                             ]"
                         >
-                            <ViewColumnsIcon class="h-4 w-4" />
+                            <ViewColumnsIcon class="h-3.5 w-3.5" />
                             Week Schedule Matrix
                         </button>
                         <button
                             type="button"
                             @click="activeViewMode = 'departments'"
                             :class="[
-                                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all',
+                                'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-semibold transition-all',
                                 activeViewMode === 'departments'
-                                    ? 'bg-white text-blue-600 shadow-sm dark:bg-gray-800 dark:text-blue-400'
+                                    ? 'bg-white text-blue-600 shadow-xs dark:bg-gray-800 dark:text-blue-400'
                                     : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
                             ]"
                         >
-                            <BuildingOfficeIcon class="h-4 w-4" />
+                            <BuildingOfficeIcon class="h-3.5 w-3.5" />
                             Departments
                         </button>
                     </div>
@@ -1159,7 +1265,7 @@ const jumpToGantt = (department = null) => {
                     <button
                         type="button"
                         @click="jumpToGantt()"
-                        class="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-black text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300"
+                        class="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300"
                         title="Jump straight to full Gantt Chart view"
                     >
                         <span>Gantt Chart</span>
@@ -1168,185 +1274,185 @@ const jumpToGantt = (department = null) => {
                 </div>
             </div>
 
-                <!-- Week Navigator Ribbon (Placed directly below title and navigation) -->
-                <div class="mt-6 border-t border-gray-100 pt-5 dark:border-gray-700">
-                    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <!-- Navigation Arrows & Active Label -->
-                        <div class="flex items-center gap-3">
-                            <div class="flex items-center gap-1">
-                                <button
-                                    type="button"
-                                    @click="goToPrevWeek"
-                                    :disabled="selectedWeekIndex <= 1"
-                                    class="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30 dark:hover:bg-gray-700 dark:hover:text-gray-200"
-                                    title="Previous week"
-                                >
-                                    <ChevronLeftIcon class="h-5 w-5" />
-                                </button>
-                                <button
-                                    type="button"
-                                    @click="goToNextWeek"
-                                    :disabled="selectedWeekIndex >= projectWeeks.length"
-                                    class="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30 dark:hover:bg-gray-700 dark:hover:text-gray-200"
-                                    title="Next week"
-                                >
-                                    <ChevronRightIcon class="h-5 w-5" />
-                                </button>
-                            </div>
-
-                            <div>
-                                <div class="flex items-center gap-2">
-                                    <span class="text-base font-black text-gray-900 dark:text-gray-100">
-                                        {{ selectedWeek?.label }}
-                                    </span>
-                                    <span v-if="selectedWeek?.isCurrentWeek" class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                                        Current Week
-                                    </span>
-                                    <span class="text-xs text-gray-500 dark:text-gray-400">
-                                        ({{ selectedWeek?.formattedRange }})
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Jump Buttons -->
-                        <div class="flex items-center gap-2">
+            <!-- Week Navigator Ribbon -->
+            <div class="mt-3.5 border-t border-gray-100 pt-2.5 dark:border-gray-700">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <!-- Navigation Arrows & Active Label -->
+                    <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-0.5">
                             <button
                                 type="button"
-                                @click="goToCurrentWeek"
-                                class="rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-bold text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                                @click="goToPrevWeek"
+                                :disabled="selectedWeekIndex <= 1"
+                                class="rounded-lg p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                                title="Previous week"
                             >
-                                Jump to Current Week
+                                <ChevronLeftIcon class="h-4 w-4" />
                             </button>
+                            <button
+                                type="button"
+                                @click="goToNextWeek"
+                                :disabled="selectedWeekIndex >= projectWeeks.length"
+                                class="rounded-lg p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                                title="Next week"
+                            >
+                                <ChevronRightIcon class="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-sm font-black text-gray-900 dark:text-gray-100">
+                                    {{ selectedWeek?.label }}
+                                </span>
+                                <span v-if="selectedWeek?.isCurrentWeek" class="rounded-full bg-emerald-100 px-1.5 py-0.2 text-[9px] font-black uppercase text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                    Current Week
+                                </span>
+                                <span class="text-[11px] text-gray-500 dark:text-gray-400">
+                                    ({{ selectedWeek?.formattedRange }})
+                                </span>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Horizontal Week Scroller Strip -->
-                    <div class="mt-4 flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                    <!-- Jump Buttons -->
+                    <div class="flex items-center gap-2">
                         <button
-                            v-for="w in projectWeeks"
-                            :key="w.index"
                             type="button"
-                            @click="selectedWeekIndex = w.index"
-                            :class="[
-                                'flex shrink-0 flex-col rounded-xl border p-2.5 text-left transition-all',
-                                selectedWeekIndex === w.index
-                                    ? 'border-blue-500 bg-blue-50/80 ring-2 ring-blue-200 dark:border-blue-500 dark:bg-blue-900/20 dark:ring-blue-900'
-                                    : w.isCurrentWeek
-                                        ? 'border-emerald-300 bg-emerald-50/40 hover:border-emerald-400 dark:border-emerald-700 dark:bg-emerald-950/20'
-                                        : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800'
-                            ]"
-                            style="min-width: 108px;"
+                            @click="goToCurrentWeek"
+                            class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-bold text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
                         >
-                            <div class="flex items-center justify-between gap-1">
-                                <span :class="['text-xs font-black', selectedWeekIndex === w.index ? 'text-blue-700 dark:text-blue-400' : 'text-gray-800 dark:text-gray-200']">
-                                    {{ w.label }}
-                                </span>
-                                <span
-                                    v-if="w.isCurrentWeek"
-                                    class="h-2 w-2 rounded-full bg-emerald-500"
-                                    title="Current Active Week"
-                                ></span>
-                            </div>
-                            <span class="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">
-                                {{ formatShortDate(w.start) }}
-                            </span>
-                            <div class="mt-2 flex items-center justify-between text-[10px]">
-                                <span class="font-bold text-gray-600 dark:text-gray-300">
-                                    {{ weeklyCurveData.planned[w.index - 1] }}%
-                                </span>
-                                <span
-                                    v-if="weeklyCurveData.actual[w.index - 1] !== null"
-                                    class="font-black text-emerald-600 dark:text-emerald-400"
-                                >
-                                    {{ weeklyCurveData.actual[w.index - 1] }}%
-                                </span>
-                            </div>
+                            Jump to Current Week
                         </button>
                     </div>
                 </div>
 
-                <!-- Milestone Horizon Bar (Hidden by default, toggleable on click) -->
-                <div class="mt-5 border-t border-gray-100 pt-4 dark:border-gray-700">
+                <!-- Horizontal Week Scroller Strip -->
+                <div class="mt-2.5 flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-thin">
                     <button
+                        v-for="w in projectWeeks"
+                        :key="w.index"
                         type="button"
-                        @click="showMilestonesHorizon = !showMilestonesHorizon"
-                        class="flex w-full items-center justify-between py-1 text-left transition hover:opacity-80 group"
-                        title="Click to toggle key milestones horizon cards"
+                        @click="selectedWeekIndex = w.index"
+                        :class="[
+                            'flex shrink-0 flex-col rounded-lg border p-2 text-left transition-all',
+                            selectedWeekIndex === w.index
+                                ? 'border-blue-500 bg-blue-50/80 ring-1 ring-blue-300 dark:border-blue-500 dark:bg-blue-900/20 dark:ring-blue-900'
+                                : w.isCurrentWeek
+                                    ? 'border-emerald-300 bg-emerald-50/40 hover:border-emerald-400 dark:border-emerald-700 dark:bg-emerald-950/20'
+                                    : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800'
+                        ]"
+                        style="min-width: 96px;"
                     >
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs font-black uppercase tracking-wider text-gray-600 group-hover:text-blue-600 dark:text-gray-400 dark:group-hover:text-blue-400">
-                                Key Milestones Horizon
+                        <div class="flex items-center justify-between gap-1">
+                            <span :class="['text-xs font-black', selectedWeekIndex === w.index ? 'text-blue-700 dark:text-blue-400' : 'text-gray-800 dark:text-gray-200']">
+                                {{ w.label }}
                             </span>
-                            <span class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-500 dark:bg-gray-700 dark:text-gray-300">
-                                {{ milestoneCards.filter(m => m.date).length }} Milestones
+                            <span
+                                v-if="w.isCurrentWeek"
+                                class="h-1.5 w-1.5 rounded-full bg-emerald-500"
+                                title="Current Active Week"
+                            ></span>
+                        </div>
+                        <span class="mt-0.5 text-[9px] text-gray-500 dark:text-gray-400">
+                            {{ formatShortDate(w.start) }}
+                        </span>
+                        <div class="mt-1.5 flex items-center justify-between text-[9px]">
+                            <span class="font-bold text-gray-600 dark:text-gray-300">
+                                {{ weeklyCurveData.planned[w.index - 1] }}%
                             </span>
-                            <ChevronDownIcon
-                                :class="[
-                                    'h-4 w-4 text-gray-400 transition-transform duration-200 group-hover:text-blue-600 dark:group-hover:text-blue-400',
-                                    showMilestonesHorizon ? 'rotate-180' : ''
-                                ]"
+                            <span
+                                v-if="weeklyCurveData.actual[w.index - 1] !== null"
+                                class="font-black text-emerald-600 dark:text-emerald-400"
+                            >
+                                {{ weeklyCurveData.actual[w.index - 1] }}%
+                            </span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Milestone Horizon Bar -->
+            <div class="mt-3 border-t border-gray-100 pt-2 dark:border-gray-700">
+                <button
+                    type="button"
+                    @click="showMilestonesHorizon = !showMilestonesHorizon"
+                    class="flex w-full items-center justify-between py-0.5 text-left transition hover:opacity-80 group"
+                    title="Click to toggle key milestones horizon cards"
+                >
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[11px] font-black uppercase tracking-wider text-gray-600 group-hover:text-blue-600 dark:text-gray-400 dark:group-hover:text-blue-400">
+                            Key Milestones Horizon
+                        </span>
+                        <span class="rounded-full bg-gray-100 px-1.5 py-0.2 text-[9px] font-bold text-gray-500 dark:bg-gray-700 dark:text-gray-300">
+                            {{ milestoneCards.filter(m => m.date).length }}
+                        </span>
+                        <ChevronDownIcon
+                            :class="[
+                                'h-3.5 w-3.5 text-gray-400 transition-transform duration-200 group-hover:text-blue-600 dark:group-hover:text-blue-400',
+                                showMilestonesHorizon ? 'rotate-180' : ''
+                            ]"
+                        />
+                    </div>
+                    <span class="text-[10px] text-gray-400">
+                        {{ projectWeeks.length }} Total Scheduled Weeks · {{ showMilestonesHorizon ? 'Collapse' : 'Show' }}
+                    </span>
+                </button>
+
+                <div v-show="showMilestonesHorizon" class="mt-2.5 grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-7 transition-all">
+                    <div
+                        v-for="ms in milestoneCards"
+                        :key="ms.key"
+                        class="group relative rounded-lg border border-gray-100 bg-gray-50/70 p-2 transition hover:border-blue-200 hover:bg-blue-50/30 dark:border-gray-700 dark:bg-gray-900/50 dark:hover:border-blue-800"
+                    >
+                        <div class="flex items-center justify-between">
+                            <span class="truncate text-[9px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                {{ ms.label }}
+                            </span>
+                            <component
+                                :is="ms.icon"
+                                class="h-3 w-3 text-gray-400 group-hover:text-blue-500"
                             />
                         </div>
-                        <span class="text-[11px] text-gray-400">
-                            {{ projectWeeks.length }} Total Scheduled Weeks · {{ showMilestonesHorizon ? 'Click to collapse' : 'Click to show' }}
-                        </span>
-                    </button>
-
-                    <div v-show="showMilestonesHorizon" class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7 transition-all">
-                        <div
-                            v-for="ms in milestoneCards"
-                            :key="ms.key"
-                            class="group relative rounded-xl border border-gray-100 bg-gray-50/70 p-2.5 transition hover:border-blue-200 hover:bg-blue-50/30 dark:border-gray-700 dark:bg-gray-900/50 dark:hover:border-blue-800"
-                        >
-                            <div class="flex items-center justify-between">
-                                <span class="truncate text-[10px] font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                    {{ ms.label }}
-                                </span>
-                                <component
-                                    :is="ms.icon"
-                                    class="h-3.5 w-3.5 text-gray-400 group-hover:text-blue-500"
-                                />
-                            </div>
-                            <p class="mt-1 text-xs font-bold text-gray-900 dark:text-gray-100">
-                                {{ ms.formattedDate }}
-                            </p>
-                            <div class="mt-1 flex items-center gap-1.5">
-                                <span
-                                    v-if="ms.daysAway !== null"
-                                    :class="[
-                                        'inline-block rounded px-1 py-0.2 text-[9px] font-black tabular-nums',
-                                        ms.isPast
-                                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                                            : ms.isToday
-                                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
-                                                : 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                                    ]"
-                                >
-                                    {{ ms.isPast ? 'Passed' : ms.isToday ? 'Today!' : `${ms.daysAway}d away` }}
-                                </span>
-                            </div>
+                        <p class="mt-0.5 text-xs font-bold text-gray-900 dark:text-gray-100">
+                            {{ ms.formattedDate }}
+                        </p>
+                        <div class="mt-0.5 flex items-center gap-1">
+                            <span
+                                v-if="ms.daysAway !== null"
+                                :class="[
+                                    'inline-block rounded px-1 text-[8px] font-black tabular-nums',
+                                    ms.isPast
+                                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                        : ms.isToday
+                                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                            : 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                                ]"
+                            >
+                                {{ ms.isPast ? 'Passed' : ms.isToday ? 'Today!' : `${ms.daysAway}d away` }}
+                            </span>
                         </div>
                     </div>
                 </div>
             </div>
+        </div>
 
         <!-- Weekly Summary Stat Cards -->
-        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Week Target Progress</span>
-                <div class="mt-1 flex items-baseline justify-between">
-                    <p class="text-2xl font-black text-blue-600 dark:text-blue-400">
+        <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-xs dark:border-gray-700 dark:bg-gray-800">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-400">Week Target Progress</span>
+                <div class="mt-0.5 flex items-baseline justify-between">
+                    <p class="text-xl font-black text-blue-600 dark:text-blue-400">
                         {{ selectedWeekStats.plannedProg }}%
                     </p>
                     <span class="text-[10px] font-bold text-gray-400">Planned S-Curve</span>
                 </div>
             </div>
 
-            <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Actual Completion</span>
-                <div class="mt-1 flex items-baseline justify-between">
-                    <p class="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+            <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-xs dark:border-gray-700 dark:bg-gray-800">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-400">Actual Completion</span>
+                <div class="mt-0.5 flex items-baseline justify-between">
+                    <p class="text-xl font-black text-emerald-600 dark:text-emerald-400">
                         {{ selectedWeekStats.actualProg }}%
                     </p>
                     <span
@@ -1362,27 +1468,27 @@ const jumpToGantt = (department = null) => {
                 </div>
             </div>
 
-            <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Week Deliverables</span>
-                <div class="mt-1 flex items-baseline justify-between">
-                    <p class="text-2xl font-black text-gray-900 dark:text-gray-100">
+            <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-xs dark:border-gray-700 dark:bg-gray-800">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-400">Week Deliverables</span>
+                <div class="mt-0.5 flex items-baseline justify-between">
+                    <p class="text-xl font-black text-gray-900 dark:text-gray-100">
                         {{ selectedWeekStats.total }}
                     </p>
-                    <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                    <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
                         {{ selectedWeekStats.completed }} Done
                     </span>
                 </div>
             </div>
 
-            <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-                <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Ongoing / Overdue</span>
-                <div class="mt-1 flex items-baseline justify-between">
-                    <p :class="['text-2xl font-black', selectedWeekStats.overdue > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-gray-100']">
+            <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-xs dark:border-gray-700 dark:bg-gray-800">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-400">Ongoing / Overdue</span>
+                <div class="mt-0.5 flex items-baseline justify-between">
+                    <p :class="['text-xl font-black', selectedWeekStats.overdue > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-gray-900 dark:text-gray-100']">
                         {{ selectedWeekStats.ongoing }}
                     </p>
                     <span
                         v-if="selectedWeekStats.overdue > 0"
-                        class="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-black text-rose-700 ring-1 ring-rose-200 dark:bg-rose-900/30 dark:text-rose-300"
+                        class="rounded-full bg-rose-50 px-1.5 py-0.2 text-[9px] font-black text-rose-700 ring-1 ring-rose-200 dark:bg-rose-900/30 dark:text-rose-300"
                     >
                         {{ selectedWeekStats.overdue }} Overdue
                     </span>
@@ -1394,37 +1500,37 @@ const jumpToGantt = (department = null) => {
         <!-- VIEW 1: S-Curve Trend & Velocity Plot -->
         <div
             v-if="activeViewMode === 's-curve'"
-            class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+            class="rounded-xl border border-gray-200 bg-white p-4 sm:p-5 shadow-xs dark:border-gray-700 dark:bg-gray-800"
         >
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h4 class="text-base font-black text-gray-900 dark:text-gray-100">
+                    <h4 class="text-sm font-bold text-gray-900 dark:text-gray-100">
                         Cumulative Progress S-Curve Plot
                     </h4>
-                    <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
                         Planned trajectory vs actual pace across all project weeks with critical milestones.
                     </p>
                 </div>
 
                 <!-- Legend -->
-                <div class="flex items-center gap-4 text-xs">
+                <div class="flex items-center gap-3 text-xs">
                     <div class="flex items-center gap-1.5">
-                        <span class="h-2.5 w-6 rounded bg-blue-500" style="border-bottom: 2px dashed #1d4ed8;"></span>
-                        <span class="font-bold text-gray-600 dark:text-gray-300">Planned (Target)</span>
+                        <span class="h-2 w-5 rounded bg-blue-500" style="border-bottom: 2px dashed #1d4ed8;"></span>
+                        <span class="font-bold text-gray-600 dark:text-gray-300 text-[11px]">Planned</span>
                     </div>
                     <div class="flex items-center gap-1.5">
-                        <span class="h-2.5 w-6 rounded bg-emerald-500"></span>
-                        <span class="font-bold text-gray-600 dark:text-gray-300">Actual Progress</span>
+                        <span class="h-2 w-5 rounded bg-emerald-500"></span>
+                        <span class="font-bold text-gray-600 dark:text-gray-300 text-[11px]">Actual</span>
                     </div>
                     <div class="flex items-center gap-1.5">
-                        <span class="h-2.5 w-2.5 rounded-full bg-amber-400"></span>
-                        <span class="font-bold text-gray-600 dark:text-gray-300">Milestone</span>
+                        <span class="h-2 w-2 rounded-full bg-amber-400"></span>
+                        <span class="font-bold text-gray-600 dark:text-gray-300 text-[11px]">Milestone</span>
                     </div>
                 </div>
             </div>
 
             <!-- SVG Chart Area -->
-            <div class="relative mt-6 overflow-hidden rounded-xl bg-gray-50/50 p-2 dark:bg-gray-900/40">
+            <div class="relative mt-4 overflow-hidden rounded-lg bg-gray-50/50 p-2 dark:bg-gray-900/40">
                 <svg
                     ref="svgPlotRef"
                     viewBox="0 0 1000 340"
@@ -1585,10 +1691,10 @@ const jumpToGantt = (department = null) => {
                 <!-- Tooltip Overlay Card -->
                 <div
                     v-if="activeInspectWeek"
-                    class="mt-3 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+                    class="mt-2.5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white p-2.5 shadow-xs dark:border-gray-700 dark:bg-gray-800"
                 >
                     <div class="flex items-center gap-2">
-                        <span class="rounded-lg bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                        <span class="rounded bg-blue-50 px-2 py-0.5 text-xs font-black text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
                             {{ activeInspectWeek.label }}
                         </span>
                         <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">
@@ -1596,15 +1702,15 @@ const jumpToGantt = (department = null) => {
                         </span>
                     </div>
 
-                    <div class="flex items-center gap-6 text-xs">
+                    <div class="flex items-center gap-4 text-xs">
                         <div>
-                            <span class="text-gray-400">Planned Target:</span>
+                            <span class="text-gray-400">Target:</span>
                             <span class="ml-1 font-black text-blue-600 dark:text-blue-400">
                                 {{ weeklyCurveData.planned[activeInspectWeek.index - 1] }}%
                             </span>
                         </div>
                         <div v-if="weeklyCurveData.actual[activeInspectWeek.index - 1] !== null">
-                            <span class="text-gray-400">Actual Progress:</span>
+                            <span class="text-gray-400">Actual:</span>
                             <span class="ml-1 font-black text-emerald-600 dark:text-emerald-400">
                                 {{ weeklyCurveData.actual[activeInspectWeek.index - 1] }}%
                             </span>
@@ -1614,7 +1720,7 @@ const jumpToGantt = (department = null) => {
                             @click="selectedWeekIndex = activeInspectWeek.index"
                             class="rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300"
                         >
-                            Focus This Week
+                            Focus Week
                         </button>
                     </div>
                 </div>
@@ -1622,14 +1728,14 @@ const jumpToGantt = (department = null) => {
         </div>
 
         <!-- VIEW 2: Week Execution Matrix (Mon-Sun Gantt Strip + Deliverable Cards) -->
-        <div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div class="rounded-xl border border-gray-200 bg-white p-4 sm:p-5 shadow-xs dark:border-gray-700 dark:bg-gray-800">
             <!-- Filter Bar -->
-            <div class="flex flex-col gap-4 border-b border-gray-100 pb-5 lg:flex-row lg:items-center lg:justify-between dark:border-gray-700">
+            <div class="flex flex-col gap-3 border-b border-gray-100 pb-3.5 lg:flex-row lg:items-center lg:justify-between dark:border-gray-700">
                 <div>
-                    <h4 class="text-base font-black text-gray-900 dark:text-gray-100">
+                    <h4 class="text-sm font-bold text-gray-900 dark:text-gray-100">
                         Weekly Scheduled Activities &amp; Execution Board
                     </h4>
-                    <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
                         Tasks active during <span class="font-bold text-blue-600 dark:text-blue-400">{{ selectedWeek?.label }}</span> ({{ selectedWeek?.formattedRange }}) with daily spans.
                     </p>
                 </div>
@@ -1642,15 +1748,15 @@ const jumpToGantt = (department = null) => {
                             v-model="searchQuery"
                             type="text"
                             placeholder="Filter activities…"
-                            class="rounded-xl border border-gray-300 py-1.5 pl-8 pr-3 text-xs focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                            class="rounded-lg border border-gray-300 py-1 pl-7 pr-2.5 text-xs focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                         />
-                        <MagnifyingGlassIcon class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                        <MagnifyingGlassIcon class="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
                     </div>
 
                     <!-- Milestone Filter -->
                     <select
                         v-model="selectedMilestoneFilter"
-                        class="rounded-xl border border-gray-300 py-1.5 pl-2 pr-7 text-xs focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                        class="rounded-lg border border-gray-300 py-1 pl-2 pr-6 text-xs focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                     >
                         <option value="">All Milestones</option>
                         <option v-for="ms in availableMilestones" :key="ms" :value="ms">{{ ms }}</option>
@@ -1659,7 +1765,7 @@ const jumpToGantt = (department = null) => {
                     <!-- Department Filter -->
                     <select
                         v-model="selectedDepartmentFilter"
-                        class="rounded-xl border border-gray-300 py-1.5 pl-2 pr-7 text-xs focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                        class="rounded-lg border border-gray-300 py-1 pl-2 pr-6 text-xs focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                     >
                         <option value="">All Departments</option>
                         <option v-for="dept in availableDepartments" :key="dept" :value="dept">{{ dept }}</option>
@@ -1668,7 +1774,7 @@ const jumpToGantt = (department = null) => {
                     <!-- Status Filter -->
                     <select
                         v-model="selectedStatusFilter"
-                        class="rounded-xl border border-gray-300 py-1.5 pl-2 pr-7 text-xs focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                        class="rounded-lg border border-gray-300 py-1 pl-2 pr-6 text-xs focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                     >
                         <option value="">All Statuses</option>
                         <option value="done">Completed</option>
@@ -1678,15 +1784,11 @@ const jumpToGantt = (department = null) => {
                         <option value="blocked">Blocked</option>
                     </select>
 
-                    <!-- Add Activity — structural change, manager-only, same rule
-                         as Gantt's per-milestone "+ Add Activity" button. Set the
-                         Milestone filter above first to pre-fill which milestone
-                         the new row lands under. -->
                     <button
                         v-if="canManage"
                         type="button"
                         @click="openAddTaskForm()"
-                        class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-black text-white shadow-sm transition hover:bg-indigo-700"
+                        class="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1 text-xs font-bold text-white shadow-xs transition hover:bg-indigo-700"
                     >
                         <PlusIcon class="h-3.5 w-3.5" />
                         Add Activity
@@ -1694,60 +1796,53 @@ const jumpToGantt = (department = null) => {
                 </div>
             </div>
 
-            <!-- Full Task Add/Edit Panel — same fields the Gantt chart edits/creates
-                 (category, responsible, lead time, dependency, parallel flag,
-                 progress, status flag, timeline), laid out here for weekly
-                 plotting. Saves through the identical projects-tasks.store /
-                 projects-tasks.update endpoints the Gantt uses. -->
-            <div v-if="isEditingTask" class="mt-5 rounded-2xl border border-indigo-100 bg-indigo-50/30 p-5 dark:border-indigo-400/20 dark:bg-indigo-500/10">
-                <div class="mb-4 flex items-center justify-between">
+            <!-- Full Task Add/Edit Panel -->
+            <div v-if="isEditingTask" class="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/30 p-4 dark:border-indigo-400/20 dark:bg-indigo-500/10">
+                <div class="mb-3 flex items-center justify-between">
                     <div>
-                        <h5 class="text-sm font-black uppercase tracking-widest text-indigo-950 dark:text-indigo-100">
+                        <h5 class="text-xs font-black uppercase tracking-widest text-indigo-950 dark:text-indigo-100">
                             {{ taskFormMode === 'edit' ? 'Edit Activity' : taskFormMode === 'add-subtask' ? 'Add Sub-task' : 'Add Activity' }}
                         </h5>
-                        <p v-if="taskFormMode === 'add-subtask'" class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-300">
+                        <p v-if="taskFormMode === 'add-subtask'" class="mt-0.5 text-xs font-semibold text-slate-500 dark:text-slate-300">
                             Under {{ addParentTask?.name }} in {{ editForm.category }}
                         </p>
                     </div>
                     <button type="button" @click="closeEditForm" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                        <XMarkIcon class="h-5 w-5" />
+                        <XMarkIcon class="h-4 w-4" />
                     </button>
                 </div>
 
-                <div class="grid grid-cols-1 items-end gap-x-6 gap-y-4 md:grid-cols-12">
+                <div class="grid grid-cols-1 items-end gap-x-4 gap-y-3 md:grid-cols-12">
                     <div class="md:col-span-2">
-                        <label class="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Milestone</label>
-                        <input v-model="editForm.category" type="text" placeholder="Milestone name" :readonly="taskFormMode === 'add-subtask'" class="w-full rounded-xl border-slate-200 text-sm shadow-sm transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 read-only:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:read-only:bg-slate-800">
+                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Milestone</label>
+                        <input v-model="editForm.category" type="text" placeholder="Milestone name" :readonly="taskFormMode === 'add-subtask'" class="w-full rounded-lg border-slate-200 text-xs shadow-xs transition-all focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 read-only:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:read-only:bg-slate-800">
                         <div v-if="editForm.errors.category" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.category }}</div>
                     </div>
                     <div class="md:col-span-2">
-                        <label class="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Activity</label>
-                        <input v-model="editForm.name" type="text" placeholder="What needs to be done?" class="w-full rounded-xl border-slate-200 text-sm shadow-sm transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Activity</label>
+                        <input v-model="editForm.name" type="text" placeholder="What needs to be done?" class="w-full rounded-lg border-slate-200 text-xs shadow-xs transition-all focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                         <div v-if="editForm.errors.name" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.name }}</div>
                     </div>
                     <div class="md:col-span-2">
-                        <label class="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Responsible</label>
-                        <select v-model="editForm.assigned_to" class="w-full rounded-xl border-slate-200 text-sm shadow-sm transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Responsible</label>
+                        <select v-model="editForm.assigned_to" class="w-full rounded-lg border-slate-200 text-xs shadow-xs transition-all focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                             <option value="">Unassigned</option>
                             <option v-for="member in projectTeamMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
                         </select>
                         <div v-if="editForm.errors.assigned_to" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.assigned_to }}</div>
                     </div>
                     <div class="md:col-span-1">
-                        <label class="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Lead Time (Days)</label>
+                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Lead Time</label>
                         <input
                             :value="isRolledUpActivity ? rolledUpLeadTime : editForm.lead_time_days"
                             @input="editForm.lead_time_days = Number($event.target.value)"
                             type="number" min="1" :disabled="isRolledUpActivity"
-                            class="w-full rounded-xl border-slate-200 text-sm shadow-sm transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400"
+                            class="w-full rounded-lg border-slate-200 text-xs shadow-xs transition-all focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400"
                         >
                         <div v-if="editForm.errors.lead_time_days" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.lead_time_days }}</div>
-                        <p v-if="isRolledUpActivity" class="ml-1 mt-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">
-                            Summed from {{ subTasksOfEditingTask.length }} sub-task{{ subTasksOfEditingTask.length === 1 ? '' : 's' }} — edit those instead.
-                        </p>
                     </div>
                     <div class="md:col-span-2">
-                        <label class="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Dependency (Requisite)</label>
+                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Dependency</label>
                         <Autocomplete
                             :model-value="editForm.depends_on_task_id"
                             @update:model-value="value => editForm.depends_on_task_id = value"
@@ -1758,238 +1853,232 @@ const jumpToGantt = (department = null) => {
                         <div v-if="editForm.errors.depends_on_task_id" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.depends_on_task_id }}</div>
                     </div>
                     <div class="md:col-span-1">
-                        <label class="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Parallel?</label>
+                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Parallel?</label>
                         <button type="button" @click="editForm.can_run_parallel = !editForm.can_run_parallel"
-                                :title="editForm.can_run_parallel ? 'Starts off its requisite only — may overlap the row above' : 'Waits for its requisite AND the row above it'"
-                                class="h-[38px] w-full rounded-xl border text-xs font-black uppercase tracking-wider transition-colors"
+                                :title="editForm.can_run_parallel ? 'Starts off its requisite only' : 'Waits for requisite AND row above'"
+                                class="h-[34px] w-full rounded-lg border text-xs font-bold uppercase tracking-wider transition-colors"
                                 :class="editForm.can_run_parallel
-                                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
                                     : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'">
                             {{ editForm.can_run_parallel ? 'Yes' : 'No' }}
                         </button>
                     </div>
                     <div class="md:col-span-2">
-                        <div class="mb-1.5 ml-1 flex items-center justify-between">
+                        <div class="mb-1 ml-1 flex items-center justify-between">
                             <label class="block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Progress</label>
                             <button v-if="!isRolledUpActivity" type="button" @click="progressMode = progressMode === 'done' ? 'manual' : 'done'" class="text-[9px] font-bold text-indigo-500 underline hover:text-indigo-700 dark:text-indigo-300">
                                 {{ progressMode === 'done' ? 'Use %' : 'Use Yes/No' }}
                             </button>
                         </div>
-                        <div v-if="isRolledUpActivity" class="flex h-[38px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
+                        <div v-if="isRolledUpActivity" class="flex h-[34px] items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
                             <span class="text-xs font-bold text-slate-500 dark:text-slate-400">{{ editForm.task_progress }}% from sub-tasks</span>
                         </div>
-                        <label v-else-if="progressMode === 'done'" class="flex h-[38px] cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-900">
+                        <label v-else-if="progressMode === 'done'" class="flex h-[34px] cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900">
                             <input type="checkbox" v-model="isTaskDone" class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
                             <span class="text-xs font-bold text-slate-700 dark:text-slate-200">{{ isTaskDone ? 'Done (100%)' : 'Not done' }}</span>
                         </label>
-                        <input v-else v-model="editForm.task_progress" type="number" min="0" max="100" class="w-full rounded-xl border-slate-200 text-sm shadow-sm transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                        <input v-else v-model="editForm.task_progress" type="number" min="0" max="100" class="w-full rounded-lg border-slate-200 text-xs shadow-xs transition-all focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                         <div v-if="editForm.errors.progress" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.progress }}</div>
                     </div>
                     <div v-if="manualStatuses.length" class="md:col-span-2">
-                        <label class="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Flag</label>
+                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Flag</label>
                         <Autocomplete v-model="editForm.manual_status" :options="manualStatusOptions" placeholder="None" />
                         <div v-if="editForm.errors.manual_status" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.manual_status }}</div>
                     </div>
                     <div class="md:col-span-3">
-                        <label class="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Timeline</label>
-                        <div class="flex items-center space-x-2">
-                            <input v-model="editForm.start_date" type="date" :disabled="isRolledUpActivity" class="w-full rounded-xl border-slate-200 text-xs shadow-sm focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
-                            <span class="text-slate-400 dark:text-slate-300">to</span>
-                            <input v-model="editForm.end_date" type="date" :disabled="isRolledUpActivity" class="w-full rounded-xl border-slate-200 text-xs shadow-sm focus:ring-2 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
+                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Timeline</label>
+                        <div class="flex items-center space-x-1.5">
+                            <input v-model="editForm.start_date" type="date" :disabled="isRolledUpActivity" class="w-full rounded-lg border-slate-200 text-xs shadow-xs focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
+                            <span class="text-slate-400 text-xs dark:text-slate-300">to</span>
+                            <input v-model="editForm.end_date" type="date" :disabled="isRolledUpActivity" class="w-full rounded-lg border-slate-200 text-xs shadow-xs focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
                         </div>
-                        <p v-if="isRolledUpActivity" class="ml-1 mt-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">Spans its sub-tasks — set the dates on those.</p>
-                        <p v-else-if="isStartPinned" class="ml-1 mt-1 text-[9px] font-semibold text-indigo-600 dark:text-indigo-300">
-                            Start Date is pinned — later rows chain from it.
-                            <button type="button" @click="unpinStart" class="underline hover:text-indigo-800 dark:hover:text-indigo-200">Unpin</button>
-                        </p>
-                        <p v-else class="ml-1 mt-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">Setting a Start Date pins this row and shifts every row after it.</p>
                         <div v-if="editForm.errors.start_date || editForm.errors.end_date" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.start_date || editForm.errors.end_date }}</div>
                     </div>
                 </div>
 
-                <!-- Save/Cancel live on their own row, clear of the field grid
-                     above — cramming them into the last grid column put them
-                     right against the Timeline date inputs. -->
-                <div class="mt-6 flex items-center justify-end gap-3 border-t border-indigo-100 pt-4 dark:border-indigo-400/20">
-                    <button @click="closeEditForm" class="whitespace-nowrap rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-500 transition-all hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
+                <div class="mt-4 flex items-center justify-end gap-2 border-t border-indigo-100 pt-3 dark:border-indigo-400/20">
+                    <button @click="closeEditForm" class="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
                         Cancel
                     </button>
-                    <button @click="saveEditedTask" :disabled="editForm.processing" class="whitespace-nowrap rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-indigo-700 active:scale-95 disabled:opacity-50">
+                    <button @click="saveEditedTask" :disabled="editForm.processing" class="rounded-lg bg-indigo-600 px-4 py-1.5 text-xs font-bold text-white shadow-xs transition hover:bg-indigo-700 disabled:opacity-50">
                         {{ taskFormMode === 'edit' ? 'Update' : taskFormMode === 'add-subtask' ? 'Add Sub-task' : 'Add Activity' }}
                     </button>
                 </div>
             </div>
 
             <!-- Mon-Sun Header Grid -->
-            <div class="mt-6">
+            <div class="mt-4">
                 <!-- Day Column Headers -->
-                <div class="grid grid-cols-12 gap-2 rounded-xl bg-gray-50 p-2 text-xs font-black text-gray-500 dark:bg-gray-900/60 dark:text-gray-400">
-                    <div class="col-span-12 lg:col-span-5 px-2">Activity &amp; Assignment</div>
+                <div class="grid grid-cols-12 gap-2 rounded-lg bg-gray-50 py-1.5 px-3 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:bg-gray-900/60 dark:text-gray-400">
+                    <div class="col-span-12 lg:col-span-5">Activity &amp; Assignment</div>
                     <div class="hidden lg:col-span-7 lg:grid lg:grid-cols-7 lg:gap-1 text-center">
                         <div
                             v-for="day in weekDays"
                             :key="day.index"
                             :class="[
-                                'rounded py-1',
-                                day.isToday ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' : ''
+                                'rounded py-0.5',
+                                day.isToday ? 'bg-blue-100 text-blue-800 font-black dark:bg-blue-900/40 dark:text-blue-300' : ''
                             ]"
                         >
                             <span>{{ day.name }}</span>
-                            <span class="block text-[10px] font-normal text-gray-400">{{ day.dayNumber }}</span>
+                            <span class="block text-[9px] font-normal text-gray-400">{{ day.dayNumber }}</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- Activities List — grouped by milestone, each with its own
-                     "+ Add Activity" button, same organisation as the Gantt
-                     chart's per-milestone headers. -->
-                <div v-if="tasksForSelectedWeek.length" class="mt-3 space-y-5">
-                <div v-for="group in groupedTasksForSelectedWeek" :key="group.category">
-                    <div class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/60">
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs font-black uppercase tracking-wider text-gray-600 dark:text-gray-300">
-                                {{ group.category }}
-                            </span>
-                            <span class="rounded-full bg-gray-200 px-1.5 py-0.5 text-[10px] font-bold text-gray-500 dark:bg-gray-700 dark:text-gray-300">
-                                {{ group.tasks.length }}
-                            </span>
-                        </div>
-                        <button
-                            v-if="canManage"
-                            type="button"
-                            @click="openAddTaskForm(group.category)"
-                            class="inline-flex items-center gap-1 rounded-md border border-indigo-100 bg-white px-2 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-700 transition hover:bg-indigo-50 dark:border-indigo-400/30 dark:bg-gray-800 dark:text-indigo-200 dark:hover:bg-indigo-500/15"
-                        >
-                            <PlusIcon class="h-3 w-3" />
-                            Add Activity
-                        </button>
-                    </div>
-
-                    <div class="divide-y divide-gray-100 dark:divide-gray-700/60">
-                    <div
-                        v-for="task in group.tasks"
-                        :key="task.id"
-                        class="group grid grid-cols-12 gap-2 py-3.5 transition hover:bg-gray-50/70 dark:hover:bg-gray-700/30"
-                    >
-                        <!-- Activity Detail -->
-                        <div class="col-span-12 lg:col-span-5 pr-2">
-                            <div class="flex items-start justify-between gap-2">
-                                <div class="min-w-0">
-                                    <div class="flex items-center gap-2">
-                                        <span class="font-mono text-xs font-black text-gray-400">
-                                            {{ task.wbs || `#${task.id}` }}
-                                        </span>
-                                        <h5 class="truncate text-sm font-bold text-gray-900 dark:text-gray-100">
-                                            {{ task.name }}
-                                        </h5>
-                                    </div>
-
-                                    <div class="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
-                                        <span v-if="taskDepartment(task)" class="font-bold text-blue-600 dark:text-blue-400">
-                                            {{ taskDepartment(task) }}
-                                        </span>
-                                        <span>•</span>
-                                        <span>{{ getAssigneeName(task) }}</span>
-                                        <span>•</span>
-                                        <span>{{ formatShortDate(parseLocalDate(task.start_date)) }} – {{ formatShortDate(parseLocalDate(task.end_date)) }}</span>
-                                        <span v-if="task.lead_time_days">({{ task.lead_time_days }}d)</span>
-                                    </div>
-                                </div>
-
-                                <div class="flex shrink-0 items-center gap-1.5">
-                                    <ProjectTaskStatusPill :status="task.manual_status || task.status" />
-                                    <button
-                                        v-if="canManage && !task.parent_task_id"
-                                        type="button"
-                                        @click="openAddSubtaskForm(task)"
-                                        class="rounded-lg p-1 text-gray-400 transition hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-300"
-                                        title="Add Sub-task"
-                                    >
-                                        <PlusIcon class="h-4 w-4" />
-                                    </button>
-                                    <button
-                                        v-if="canEditTask(task)"
-                                        type="button"
-                                        @click="editTask(task)"
-                                        class="rounded-lg p-1 text-gray-400 transition hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-300"
-                                        title="Edit full activity details"
-                                    >
-                                        <PencilSquareIcon class="h-4 w-4" />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- Progress Slider — writes back through the same
-                                 endpoint the Gantt chart uses, so both views
-                                 stay mirrored off the one saved value. -->
-                            <div class="mt-2.5 flex items-center gap-3">
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="100"
-                                    step="5"
-                                    :disabled="!canEditTask(task)"
-                                    :value="task.progress || 0"
-                                    @input="previewTaskProgress(task, $event.target.value)"
-                                    @change="commitTaskProgress(task, $event.target.value)"
-                                    class="h-1.5 w-32 cursor-pointer appearance-none rounded-lg bg-gray-200 accent-blue-600 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-700"
-                                    :title="canEditTask(task) ? 'Drag to update this task\'s progress' : 'You can only edit rows assigned to you'"
-                                />
-                                <span class="text-xs font-black tabular-nums text-gray-700 dark:text-gray-300">
-                                    {{ task.progress || 0 }}%
-                                    <span v-if="savingTaskIds.has(task.id)" class="ml-1 text-[10px] font-semibold text-gray-400">saving…</span>
+                <!-- Activities List -->
+                <div v-if="tasksForSelectedWeek.length" class="mt-2.5 space-y-3.5">
+                    <div v-for="group in groupedTasksForSelectedWeek" :key="group.category">
+                        <div class="flex items-center justify-between rounded-lg bg-slate-100/90 px-3 py-1.5 dark:bg-slate-800/80">
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                                    {{ group.category }}
                                 </span>
-                                <button
-                                    type="button"
-                                    @click="jumpToGantt(taskDepartment(task))"
-                                    class="ml-auto text-[11px] font-bold text-indigo-600 hover:underline dark:text-indigo-400"
-                                >
-                                    Open in Gantt →
-                                </button>
+                                <span class="rounded-full bg-slate-200 px-1.5 py-0.2 text-[9px] font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                                    {{ group.tasks.length }}
+                                </span>
                             </div>
+                            <button
+                                v-if="canManage"
+                                type="button"
+                                @click="openAddTaskForm(group.category)"
+                                class="inline-flex items-center gap-1 rounded border border-indigo-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700 transition hover:bg-indigo-50 dark:border-indigo-400/30 dark:bg-gray-800 dark:text-indigo-200 dark:hover:bg-indigo-500/15"
+                            >
+                                <PlusIcon class="h-3 w-3" />
+                                Activity
+                            </button>
                         </div>
 
-                        <!-- Mon-Sun Gantt Visual Span -->
-                        <div class="hidden lg:col-span-7 lg:grid lg:grid-cols-7 lg:items-center lg:gap-1">
+                        <div class="divide-y divide-gray-100 dark:divide-gray-700/60">
                             <div
-                                class="relative col-span-7 grid grid-cols-7 gap-1 h-8 rounded-lg bg-gray-50/60 p-1 dark:bg-gray-900/30"
+                                v-for="task in group.tasks"
+                                :key="task.id"
+                                :data-task-row="task.id"
+                                class="group grid grid-cols-12 gap-2 py-2 px-1 transition hover:bg-indigo-50/15 dark:hover:bg-indigo-500/5"
                             >
-                                <!-- Span Bar -->
-                                <div
-                                    :style="{
-                                        gridColumnStart: getTaskDaySpan(task, selectedWeek).startCol,
-                                        gridColumnEnd: `span ${getTaskDaySpan(task, selectedWeek).span}`
-                                    }"
-                                    :class="[
-                                        'relative flex items-center justify-between rounded-md px-2 text-[10px] font-black text-white shadow-sm transition-all',
-                                        Number(task.progress) >= 100
-                                            ? 'bg-emerald-500'
-                                            : getTaskWeekStatus(task, selectedWeek) === 'overdue'
-                                                ? 'bg-rose-500'
-                                                : task.manual_status?.toLowerCase() === 'blocked'
-                                                    ? 'bg-rose-600'
-                                                    : 'bg-indigo-500'
-                                    ]"
-                                >
-                                    <span class="truncate">{{ task.name }}</span>
-                                    <span class="ml-1 shrink-0">{{ task.progress || 0 }}%</span>
+                                <!-- Activity Detail -->
+                                <div :class="['col-span-12 lg:col-span-5 pr-2', task.parent_task_id ? 'pl-5' : '']">
+                                    <div class="flex items-start justify-between gap-1.5">
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-center gap-1.5">
+                                                <span v-if="task.parent_task_id" class="text-indigo-600 dark:text-indigo-400 font-bold text-xs shrink-0 select-none">↳</span>
+                                                <span class="font-mono text-[10px] font-bold text-gray-400 shrink-0">
+                                                    {{ task.wbs || `#${task.id}` }}
+                                                </span>
+                                                <h5 class="truncate text-xs font-bold text-gray-900 dark:text-gray-100" :title="task.name">
+                                                    {{ task.name }}
+                                                </h5>
+                                            </div>
+
+                                            <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
+                                                <span v-if="taskDepartment(task)" class="font-bold text-blue-600 dark:text-blue-400">
+                                                    {{ taskDepartment(task) }}
+                                                </span>
+                                                <span v-if="taskDepartment(task)">•</span>
+                                                <span>{{ getAssigneeName(task) }}</span>
+                                                <span>•</span>
+                                                <span>{{ formatShortDate(parseLocalDate(task.start_date)) }} – {{ formatShortDate(parseLocalDate(task.end_date)) }}</span>
+                                                <span v-if="task.lead_time_days">({{ task.lead_time_days }}d)</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex shrink-0 items-center gap-1">
+                                            <ProjectTaskStatusPill :status="task.manual_status || task.status" />
+                                            <button
+                                                v-if="canManage && !task.parent_task_id"
+                                                type="button"
+                                                @click="openAddSubtaskForm(task)"
+                                                class="rounded p-1 text-gray-400 transition hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-300"
+                                                title="Add Sub-task"
+                                            >
+                                                <PlusIcon class="h-3.5 w-3.5" />
+                                            </button>
+                                            <button
+                                                v-if="canEditTask(task)"
+                                                type="button"
+                                                @click="editTask(task)"
+                                                class="rounded p-1 text-gray-400 transition hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-300"
+                                                title="Edit full activity details"
+                                            >
+                                                <PencilSquareIcon class="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Progress Slider -->
+                                    <div class="mt-1.5 flex items-center gap-2">
+                                        <input
+                                            type="range"
+                                            min="0"
+                                            max="100"
+                                            step="5"
+                                            :disabled="!canEditTaskProgress(task)"
+                                            :value="task.progress || 0"
+                                            @input="previewTaskProgress(task, $event.target.value)"
+                                            @change="commitTaskProgress(task, $event.target.value)"
+                                            class="h-1 w-24 cursor-pointer appearance-none rounded-lg bg-gray-200 accent-blue-600 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-gray-700"
+                                            :title="isRolledUpProgress(task)
+                                                ? 'Calculated from sub-task progress; update the sub-tasks instead'
+                                                : (canEditTask(task) ? 'Drag to update this task\'s progress' : 'You can only edit rows assigned to you')"
+                                        />
+                                        <span class="text-[11px] font-bold tabular-nums text-gray-700 dark:text-gray-300">
+                                            {{ task.progress || 0 }}%
+                                            <span v-if="savingTaskIds.has(task.id)" class="ml-1 text-[9px] font-semibold text-gray-400">saving…</span>
+                                        </span>
+                                        <span v-if="isRolledUpProgress(task)" class="text-[9px] font-semibold text-violet-600 dark:text-violet-300">
+                                            from {{ subTaskCount(task) }} sub-task{{ subTaskCount(task) === 1 ? '' : 's' }}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            @click="jumpToGantt(taskDepartment(task))"
+                                            class="ml-auto text-[10px] font-bold text-indigo-600 hover:underline dark:text-indigo-400"
+                                        >
+                                            Open in Gantt →
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Mon-Sun Gantt Visual Span -->
+                                <div class="hidden lg:col-span-7 lg:grid lg:grid-cols-7 lg:items-center lg:gap-1">
+                                    <div
+                                        class="relative col-span-7 grid grid-cols-7 gap-1 h-6 rounded-md bg-gray-50/70 p-0.5 dark:bg-gray-900/40 items-center"
+                                    >
+                                        <!-- Span Bar -->
+                                        <div
+                                            :style="{
+                                                gridColumnStart: getTaskDaySpan(task, selectedWeek).startCol,
+                                                gridColumnEnd: `span ${getTaskDaySpan(task, selectedWeek).span}`
+                                            }"
+                                            :class="[
+                                                'relative flex h-5 items-center justify-between rounded px-1.5 text-[9px] font-bold text-white shadow-2xs transition-all',
+                                                Number(task.progress) >= 100
+                                                    ? 'bg-emerald-500'
+                                                    : getTaskWeekStatus(task, selectedWeek) === 'overdue'
+                                                        ? 'bg-rose-500'
+                                                        : task.manual_status?.toLowerCase() === 'blocked'
+                                                            ? 'bg-rose-600'
+                                                            : 'bg-indigo-500'
+                                            ]"
+                                        >
+                                            <span class="truncate">{{ task.name }}</span>
+                                            <span class="ml-1 shrink-0">{{ task.progress || 0 }}%</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    </div>
-                </div>
                 </div>
 
                 <!-- Empty State -->
-                <div v-else class="rounded-xl border border-dashed border-gray-200 p-8 text-center dark:border-gray-700">
-                    <p class="text-sm font-semibold text-gray-400">
+                <div v-else class="rounded-lg border border-dashed border-gray-200 p-6 text-center dark:border-gray-700">
+                    <p class="text-xs font-semibold text-gray-400">
                         No activities scheduled or active for {{ selectedWeek?.label }}.
                     </p>
                     <button
                         type="button"
                         @click="goToNextWeek"
-                        class="mt-2 text-xs font-bold text-blue-600 hover:underline dark:text-blue-400"
+                        class="mt-1 text-xs font-bold text-blue-600 hover:underline dark:text-blue-400"
                     >
                         Check next week →
                     </button>
@@ -2000,39 +2089,39 @@ const jumpToGantt = (department = null) => {
         <!-- VIEW 3: Department Workload & Accountability Grid -->
         <div
             v-if="activeViewMode === 'departments'"
-            class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+            class="rounded-xl border border-gray-200 bg-white p-4 sm:p-5 shadow-xs dark:border-gray-700 dark:bg-gray-800"
         >
-            <h4 class="text-base font-black text-gray-900 dark:text-gray-100">
+            <h4 class="text-sm font-bold text-gray-900 dark:text-gray-100">
                 Departmental Weekly Workload &amp; Accountability
             </h4>
-            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+            <p class="text-xs text-gray-500 dark:text-gray-400">
                 Distribution of activities across teams scheduled for {{ selectedWeek?.label }}.
             </p>
 
-            <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div
                     v-for="dept in departmentBreakdown"
                     :key="dept.name"
-                    class="flex flex-col justify-between rounded-xl border border-gray-200 bg-gray-50/50 p-4 shadow-sm transition hover:border-blue-300 dark:border-gray-700 dark:bg-gray-900/40"
+                    class="flex flex-col justify-between rounded-lg border border-gray-200 bg-gray-50/50 p-3 shadow-2xs transition hover:border-blue-300 dark:border-gray-700 dark:bg-gray-900/40"
                 >
                     <div>
                         <div class="flex items-center justify-between">
-                            <h5 class="text-sm font-bold text-gray-900 dark:text-gray-100">
+                            <h5 class="text-xs font-bold text-gray-900 dark:text-gray-100">
                                 {{ dept.name }}
                             </h5>
-                            <span class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-black text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
+                            <span class="rounded-full bg-blue-100 px-1.5 py-0.2 text-[9px] font-bold text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
                                 {{ dept.activeThisWeek }} Active
                             </span>
                         </div>
 
-                        <div class="mt-3 flex items-center justify-between text-xs">
+                        <div class="mt-2 flex items-center justify-between text-[11px]">
                             <span class="text-gray-500">Completed This Week</span>
                             <span class="font-bold text-emerald-600 dark:text-emerald-400">
                                 {{ dept.completedThisWeek }}
                             </span>
                         </div>
 
-                        <div class="mt-1 flex items-center justify-between text-xs">
+                        <div class="mt-0.5 flex items-center justify-between text-[11px]">
                             <span class="text-gray-500">Overdue / Delayed</span>
                             <span :class="['font-bold', dept.overdueThisWeek > 0 ? 'text-rose-600' : 'text-gray-400']">
                                 {{ dept.overdueThisWeek }}
@@ -2043,7 +2132,7 @@ const jumpToGantt = (department = null) => {
                     <button
                         type="button"
                         @click="jumpToGantt(dept.name)"
-                        class="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white py-2 text-xs font-bold text-gray-700 transition hover:border-blue-300 hover:text-blue-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                        class="mt-3 flex w-full items-center justify-center gap-1 rounded border border-gray-200 bg-white py-1 text-xs font-bold text-gray-700 transition hover:border-blue-300 hover:text-blue-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
                     >
                         <span>Inspect in Gantt Chart</span>
                         <ArrowRightIcon class="h-3 w-3" />

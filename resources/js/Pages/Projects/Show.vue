@@ -1086,6 +1086,7 @@ const getStatusColor = (status) => {
                         :currentUserId="currentUser?.id"
                         :holidays="holidays"
                         :manualStatuses="manualStatuses"
+                        :departments="departments"
                         :focusDepartment="ganttFocusDepartment"
                     />
                 </div>
@@ -1100,6 +1101,7 @@ const getStatusColor = (status) => {
                         :canManage="canManageProject"
                         :currentUserId="currentUser?.id"
                         :manualStatuses="manualStatuses"
+                        :departments="departments"
                         @open-department="openDepartmentOnGantt"
                         @open-gantt="openDepartmentOnGantt"
                     />

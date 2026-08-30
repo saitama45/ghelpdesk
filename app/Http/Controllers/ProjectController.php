@@ -310,19 +310,7 @@ class ProjectController extends Controller
             // Non-working holidays around the plan, so the Gantt shades them and
             // its lead-time preview matches the server's scheduling.
             'holidays'       => $this->ganttHolidays($project),
-            'project_templates' => ProjectTemplate::query()
-                ->where(function ($query) use ($project) {
-                    $query->whereNull('entity_company_id')->orWhere('entity_company_id', $project->company_id);
-                })
-                ->where(function ($query) use ($project) {
-                    $query->whereNull('brand_company_id')->orWhere('brand_company_id', $project->brand_company_id);
-                })
-                ->where(function ($query) use ($project) {
-                    $query->whereNull('project_name')->orWhereRaw('LOWER(project_name) = ?', [mb_strtolower(trim($project->name))]);
-                })
-                ->withCount('activities')
-                ->orderBy('name')
-                ->get(),
+            'project_templates' => ProjectTemplate::applicableTo($project),
         ]);
     }
 

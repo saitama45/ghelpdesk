@@ -575,6 +575,7 @@ Route::middleware('auth')->group(function () {
     // permission on top; per-row edit ownership (creator/assignee) stays in the
     // controllers, which is a rule the permission layer cannot express.
     Route::middleware('permission:projects.view')->group(function () {
+        Route::get('projects/{project}/gantt-pdf', \App\Http\Controllers\ProjectGanttPdfController::class)->name('projects.gantt-pdf');
         Route::post('projects/{project}/task-board', [\App\Http\Controllers\TaskBoardController::class, 'openProjectBoard'])->name('projects.task-board');
         Route::post('projects/{project}/duplicate', [\App\Http\Controllers\ProjectController::class, 'duplicate'])->middleware('permission:projects.create')->name('projects.duplicate');
         // No `edit` route: the project header is edited from a modal on the detail
@@ -587,6 +588,7 @@ Route::middleware('auth')->group(function () {
             ->middlewareFor('update', 'permission:projects.edit')
             ->middlewareFor('destroy', 'permission:projects.delete');
         Route::post('projects/{project}/apply-templates', [\App\Http\Controllers\ProjectTaskController::class, 'applyTemplates'])->middleware('permission:projects.manage_tasks')->name('projects.apply-templates');
+        Route::patch('projects/{project}/tasks/bulk-assign', [\App\Http\Controllers\ProjectTaskController::class, 'bulkAssign'])->middleware('permission:projects.manage_tasks')->name('projects.tasks.bulk-assign');
         Route::delete('projects/{project}/milestone-tasks', [\App\Http\Controllers\ProjectTaskController::class, 'destroyMilestone'])->middleware('permission:projects.manage_tasks')->name('projects.milestones.destroy');
         Route::post('projects/tasks/gantt', [\App\Http\Controllers\ProjectTaskController::class, 'updateGantt'])->middleware('permission:projects.manage_tasks')->name('projects.tasks.gantt-update');
         Route::resource('projects-tasks', \App\Http\Controllers\ProjectTaskController::class)->only(['store', 'update', 'destroy'])->middleware('permission:projects.manage_tasks');

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Company;
+use App\Models\Project;
 use App\Models\ProjectTemplate;
 use App\Models\User;
 use App\Services\HybridSdlcWorkbookService;
@@ -69,5 +70,22 @@ class HybridSdlcWorkbookTest extends TestCase
         } finally {
             if (is_file($path)) unlink($path);
         }
+    }
+
+    public function test_project_progress_rolls_up_activity_and_milestone_weights(): void
+    {
+        $project = Project::create([
+            'name' => 'DAVID',
+            'project_type' => 'General',
+            'status' => 'In Progress',
+        ]);
+
+        $project->tasks()->createMany([
+            ['name' => 'Discovery', 'category' => 'Build', 'progress' => 100, 'milestone_weight' => 60, 'activity_weight' => 50],
+            ['name' => 'Development', 'category' => 'Build', 'progress' => 0, 'milestone_weight' => 60, 'activity_weight' => 50],
+            ['name' => 'Release', 'category' => 'Deploy', 'progress' => 100, 'milestone_weight' => 40, 'activity_weight' => 100],
+        ]);
+
+        $this->assertSame(70, $project->fresh()->progress_percentage);
     }
 }

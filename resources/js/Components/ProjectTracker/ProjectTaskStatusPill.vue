@@ -2,25 +2,45 @@
 import { computed } from 'vue';
 
 /**
- * One pill for a task's display status. Covers both the progress-derived states
- * (Completed / In Progress / Not Started) and the manually-set ones stored in
- * project_tasks.manual_status (Blocked, For Approval, and anything else added to
- * reference_options later — unknown values fall back to neutral styling).
+ * One pill for a task's display status.
+ *
+ * Three vocabularies reach this component for what are only three states, so all
+ * three are mapped rather than left to fall through to the neutral default:
+ *
+ *   - `project_tasks.status` as stored — Done / Ongoing / Pending. These are what
+ *     the weekly timeline and the monitoring tab actually pass, and they were the
+ *     ones missing: every row rendered grey regardless of its real state.
+ *   - the progress-derived labels — Completed / In Progress / Not Started.
+ *   - `project_tasks.manual_status` from reference_options — Blocked, For
+ *     Approval, and anything added later; unknown values stay neutral.
+ *
+ * The colours are the Gantt chart's (emerald / sky / amber), so one task reads the
+ * same on whichever tab it is looked at.
  */
 const props = defineProps({
     status: { type: String, default: '' },
 });
 
+const DONE = 'bg-emerald-100 text-emerald-700 ring-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-800';
+const ONGOING = 'bg-sky-100 text-sky-700 ring-sky-200 dark:bg-sky-900/30 dark:text-sky-300 dark:ring-sky-800';
+const PENDING = 'bg-amber-100 text-amber-700 ring-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:ring-amber-800';
+const NEUTRAL = 'bg-gray-100 text-gray-600 ring-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:ring-gray-600';
+
 const styles = {
-    'completed':    'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-800',
-    'in progress':  'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:ring-blue-800',
-    'not started':  'bg-gray-100 text-gray-600 ring-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:ring-gray-600',
-    'blocked':      'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:ring-rose-800',
-    'for approval': 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:ring-amber-800',
+    'done':         DONE,
+    'ongoing':      ONGOING,
+    'pending':      PENDING,
+
+    'completed':    DONE,
+    'in progress':  ONGOING,
+    'not started':  NEUTRAL,
+
+    'blocked':      'bg-rose-100 text-rose-700 ring-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:ring-rose-800',
+    'for approval': 'bg-violet-100 text-violet-700 ring-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:ring-violet-800',
 };
 
 const pillClass = computed(
-    () => styles[(props.status || '').toLowerCase()] || styles['not started']
+    () => styles[(props.status || '').trim().toLowerCase()] || NEUTRAL
 );
 </script>
 
