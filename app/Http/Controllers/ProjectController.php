@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Department;
+use App\Models\Company;
 use App\Models\Project;
 use App\Models\ProjectAsset;
 use App\Models\ProjectTask;
@@ -15,6 +16,8 @@ use App\Services\ProjectTaskBoardSyncService;
 use App\Services\OrganizationReferenceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use App\Support\CompanyContext;
 use Inertia\Inertia;
 
 class ProjectController extends Controller
@@ -156,6 +159,11 @@ class ProjectController extends Controller
 
     public function create(Request $request)
     {
+        $entityOptions = CompanyContext::accessibleCompanies($request->user())->where('type', 'Entity')->values();
+        $activeEntityId = CompanyContext::resolveActiveId($request->user());
+        if (! $entityOptions->contains('id', $activeEntityId)) {
+            $activeEntityId = $entityOptions->first()?->id;
+        }
         $availableBoards = \App\Models\TaskBoard::whereNull('project_id')
             ->where('board_source', 'manual')
             ->orderBy('title')
@@ -176,14 +184,25 @@ class ProjectController extends Controller
             'defaultType'     => $defaultType,
             'boardYears'      => $this->boardYears(),
             'availableBoards' => $availableBoards,
+            'entities'        => $entityOptions,
+            'brands'          => Company::with('entities:id')->where('type', 'Brand')->where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
+            'activeEntityId'  => $activeEntityId,
         ]);
     }
 
     public function store(Request $request)
     {
         $isStoreOpening = $request->input('project_type') === 'Store Opening';
+        $accessibleEntityIds = CompanyContext::accessibleCompanies($request->user())
+            ->where('type', 'Entity')->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $brandRule = $request->input('project_type') === 'Full Service Group: Customer Brand'
+            ? 'required'
+            : 'nullable';
 
         $validated = $request->validate([
+            'company_id'     => ['required', 'integer', Rule::in($accessibleEntityIds)],
+            'brand_company_id' => [$brandRule, 'integer', 'exists:companies,id'],
+            'target_store_count' => 'nullable|integer|min:1|max:100000',
             'project_type'  => 'required|string|in:' . implode(',', Project::projectTypes()),
             'store_id'      => $isStoreOpening ? 'required|exists:stores,id' : 'nullable|exists:stores,id',
             'subject_type'  => 'nullable|string',
@@ -210,7 +229,21 @@ class ProjectController extends Controller
         $validated['created_by'] = $request->user()->id;
         $validated['updated_by'] = $request->user()->id;
 
+        if (! empty($validated['brand_company_id'])) {
+            $validBrand = DB::table('entity_brand')->where([
+                'entity_company_id' => $validated['company_id'],
+                'brand_company_id' => $validated['brand_company_id'],
+            ])->exists();
+            if (! $validBrand) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'brand_company_id' => 'The selected brand is not assigned to the selected entity.',
+                ]);
+            }
+        }
+
         $project = Project::create($validated);
+        session([CompanyContext::SESSION_KEY => (int) $project->company_id]);
+        CompanyContext::flushMemo();
         $project->recalculateStatus();
 
         // Link existing board to this new project (board cards become project tasks)
@@ -257,6 +290,11 @@ class ProjectController extends Controller
             'projectTypes'   => Project::projectTypes(),
             'users'          => User::active()->orderBy('name')->get(['id', 'name', 'department', 'org_path']),
             'stores'         => Store::orderBy('name')->get(['id', 'name']),
+            'brands'         => Company::query()
+                ->where('type', 'Brand')
+                ->whereHas('entities', fn ($query) => $query->whereKey($project->company_id))
+                ->orderBy('name')
+                ->get(['id', 'name', 'code']),
             'vendors'        => Vendor::active()->orderBy('name')->get(['id', 'name']),
             'departments'    => Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'departmentOptions' => $this->departmentOptions(),
@@ -273,6 +311,15 @@ class ProjectController extends Controller
             // its lead-time preview matches the server's scheduling.
             'holidays'       => $this->ganttHolidays($project),
             'project_templates' => ProjectTemplate::query()
+                ->where(function ($query) use ($project) {
+                    $query->whereNull('entity_company_id')->orWhere('entity_company_id', $project->company_id);
+                })
+                ->where(function ($query) use ($project) {
+                    $query->whereNull('brand_company_id')->orWhere('brand_company_id', $project->brand_company_id);
+                })
+                ->where(function ($query) use ($project) {
+                    $query->whereNull('project_name')->orWhereRaw('LOWER(project_name) = ?', [mb_strtolower(trim($project->name))]);
+                })
                 ->withCount('activities')
                 ->orderBy('name')
                 ->get(),
@@ -289,6 +336,8 @@ class ProjectController extends Controller
         $isStoreOpening = $request->input('project_type', $project->project_type) === 'Store Opening';
 
         $validated = $request->validate([
+            'brand_company_id' => 'nullable|integer|exists:companies,id',
+            'target_store_count' => 'nullable|integer|min:1|max:100000',
             'project_type'  => 'required|string|in:' . implode(',', Project::projectTypes()),
             'store_id'      => $isStoreOpening ? 'required|exists:stores,id' : 'nullable|exists:stores,id',
             'subject_type'  => 'nullable|string',
@@ -309,6 +358,18 @@ class ProjectController extends Controller
         ]);
 
         $validated['updated_by'] = $request->user()->id;
+
+        if (! empty($validated['brand_company_id'])) {
+            $validBrand = DB::table('entity_brand')->where([
+                'entity_company_id' => $project->company_id,
+                'brand_company_id' => $validated['brand_company_id'],
+            ])->exists();
+            if (! $validBrand) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'brand_company_id' => 'The selected brand is not assigned to this project entity.',
+                ]);
+            }
+        }
 
         // Day 1 and the day-counting mode are the two inputs every row's dates
         // are derived from — changing either has to re-chain the whole plan.

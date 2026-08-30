@@ -57,16 +57,16 @@ class ActivityTemplateImportTest extends TestCase
         $spreadsheet = IOFactory::load($path);
 
         $dataSheet = $spreadsheet->getSheetByName('Activity Templates');
-        $this->assertSame($this->headers(), $dataSheet->rangeToArray('A1:P1')[0]);
+        $this->assertSame($this->downloadHeaders(), $dataSheet->rangeToArray('A1:Z1')[0]);
         $this->assertNotNull($spreadsheet->getSheetByName('Instructions'));
         $this->assertSame('hidden', $spreadsheet->getSheetByName('Lists')->getSheetState());
 
-        foreach (['B2', 'C2', 'E2', 'M2', 'N2'] as $cell) {
+        foreach (['B2', 'C2', 'D2', 'F2', 'H2', 'J2', 'U2', 'V2', 'Y2', 'Z2'] as $cell) {
             $this->assertSame('list', $dataSheet->getCell($cell)->getDataValidation()->getType(), "{$cell} should contain a dropdown.");
             $this->assertTrue($dataSheet->getCell($cell)->getDataValidation()->getShowDropDown(), "{$cell} should show its dropdown arrow.");
         }
 
-        $this->assertSame('$D$2:$D$1000', $dataSheet->getCell('E2')->getDataValidation()->getFormula1());
+        $this->assertSame('$G$2:$G$1000', $dataSheet->getCell('H2')->getDataValidation()->getFormula1());
     }
 
     public function test_view_authorized_user_can_export_one_existing_template_with_its_hierarchy(): void
@@ -108,18 +108,18 @@ class ActivityTemplateImportTest extends TestCase
         $spreadsheet = IOFactory::load($path);
         $sheet = $spreadsheet->getActiveSheet();
 
-        $this->assertSame($this->headers(), $sheet->rangeToArray('A1:P1')[0]);
+        $this->assertSame($this->downloadHeaders(), $sheet->rangeToArray('A1:Z1')[0]);
         $this->assertSame('hidden', $spreadsheet->getSheetByName('Lists')->getSheetState());
-        foreach (['B2', 'C2', 'E2', 'M2', 'N2'] as $cell) {
+        foreach (['B2', 'C2', 'D2', 'F2', 'H2', 'J2', 'U2', 'V2', 'Y2', 'Z2'] as $cell) {
             $this->assertSame('list', $sheet->getCell($cell)->getDataValidation()->getType(), "Exported {$cell} should contain a dropdown.");
             $this->assertTrue($sheet->getCell($cell)->getDataValidation()->getShowDropDown(), "Exported {$cell} should show its dropdown arrow.");
         }
-        $this->assertSame('ACT-'.$parent->id, $sheet->getCell('D2')->getValue());
-        $this->assertNull($sheet->getCell('E2')->getValue());
-        $this->assertSame('Prepare site', $sheet->getCell('F2')->getValue());
-        $this->assertSame('ACT-'.$child->id, $sheet->getCell('D3')->getValue());
-        $this->assertSame('ACT-'.$parent->id, $sheet->getCell('E3')->getValue());
-        $this->assertSame(1.2, (float) $sheet->getCell('P3')->getValue());
+        $this->assertSame('ACT-'.$parent->id, $sheet->getCell('G2')->getValue());
+        $this->assertNull($sheet->getCell('H2')->getValue());
+        $this->assertSame('Prepare site', $sheet->getCell('I2')->getValue());
+        $this->assertSame('ACT-'.$child->id, $sheet->getCell('G3')->getValue());
+        $this->assertSame('ACT-'.$parent->id, $sheet->getCell('H3')->getValue());
+        $this->assertSame(1.2, (float) $sheet->getCell('X3')->getValue());
     }
 
     public function test_import_creates_multiple_templates_and_preserves_sub_task_hierarchy(): void
@@ -217,6 +217,18 @@ class ActivityTemplateImportTest extends TestCase
             'Template Name', 'Project Type', 'Store Class', 'Row Key', 'Parent Row Key',
             'Activity', 'Milestone', 'Milestone Order', 'Asset Item', 'Model Specs',
             'Quantity', 'Responsible', 'Department', 'Sub Unit', 'Duration Days', 'Order',
+        ];
+    }
+
+    private function downloadHeaders(): array
+    {
+        return [
+            'Template Name', 'Project Type', 'Entity Code', 'Brand Code', 'Project Name',
+            'Store Class', 'Row Key', 'Parent Row Key', 'Activity', 'Activity Mode',
+            'Milestone', 'Milestone Order', 'Milestone Weight %', 'Activity Weight %',
+            'Sub-Task Weight %', 'Acceptance Criteria', 'Asset Item', 'Model Specs',
+            'Quantity', 'Responsible', 'Department', 'Sub Unit', 'Duration Days', 'Order',
+            'Requisite Row Key', 'Can Run Parallel',
         ];
     }
 

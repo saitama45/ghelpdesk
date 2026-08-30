@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityTemplate;
+use App\Models\Company;
 use App\Models\ProjectTemplate;
 use App\Models\ReferenceOption;
 use App\Models\User;
@@ -38,7 +39,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = ProjectTemplate::with(['activities']);
+        $query = ProjectTemplate::with(['activities', 'entityCompany:id,name,code', 'brandCompany:id,name,code']);
 
         if ($request->filled('search')) {
             $query->where('name', 'like', "%{$request->search}%");
@@ -65,6 +66,8 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'departmentOptions' => $this->departmentOptions(),
             'projectTypes' => ReferenceOption::ofType('project_type'),
             'storeClasses' => ReferenceOption::ofType('store_class'),
+            'entities' => Company::where('type', 'Entity')->where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
+            'brands' => Company::with('entities:id')->where('type', 'Brand')->where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
             'filters' => $request->only(['search', 'store_class']),
         ]);
     }
@@ -80,14 +83,16 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         $instructions->fromArray([
             ['Activity Template Import Instructions'],
             ['1. Keep the column headers unchanged.'],
-            ['2. Repeat Template Name, Project Type, and Store Class on every activity row.'],
+            ['2. Repeat Template Name, Project Type, Entity Code, Brand Code, Project Name, and Store Class on every activity row.'],
             ['3. Row Key must be unique within a template. Use Parent Row Key for a sub-task.'],
             ['4. Only one sub-task level is supported; a sub-task cannot be another row\'s parent.'],
             ['5. Existing templates with the same name, project type, and store class are skipped.'],
             ['6. Duration Days must be greater than 0. On a parent row it is ignored and recomputed as the sum of its sub-tasks.'],
             ['7. Can Run Parallel = No starts the row the day after its dependency finishes; Yes starts it on the same day its dependency starts.'],
             ['8. Start and Finish are calculated, never imported: Finish = Start + Duration Days - 1.'],
-            ['9. Remove the example rows before importing your own data.'],
+            ['9. Weights are percentages: milestones total 100 per template, activities total 100 per milestone, and sub-tasks total 100 per activity.'],
+            ['10. Activity Mode = Per Store creates one activity per selected store when the template is applied.'],
+            ['11. Remove the example rows before importing your own data.'],
         ], null, 'A1');
         $instructions->getColumnDimension('A')->setWidth(110);
         $instructions->getStyle('A1')->getFont()->setBold(true)->setSize(14);
@@ -97,11 +102,11 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         $headers = $this->importHeaders();
         $sheet->fromArray($headers, null, 'A1');
         $sheet->fromArray([
-            ['New Store Opening', $projectTypes->first(), $storeClasses->first(), 'ACT-1', null, 'Prepare site', 'Preparation', 1, null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 2, 1, null, 'No'],
-            ['New Store Opening', $projectTypes->first(), $storeClasses->first(), 'SUB-1', 'ACT-1', 'Confirm site readiness', 'Preparation', 1, null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 1, 1, null, 'No'],
+            ['New Store Opening', $projectTypes->first(), null, null, 'LINK HUB', $storeClasses->first(), 'ACT-1', null, 'Prepare site', 'Standard', 'Preparation', 1, 100, 100, null, 'Site is ready for deployment.', null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 2, 1, null, 'No'],
+            ['New Store Opening', $projectTypes->first(), null, null, 'LINK HUB', $storeClasses->first(), 'SUB-1', 'ACT-1', 'Confirm site readiness', 'Standard', 'Preparation', 1, 100, 100, 100, 'Readiness checklist is approved.', null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 1, 1, null, 'No'],
             // A requisite + Yes: this row starts the same day ACT-1 starts, so
             // the two run side by side.
-            ['New Store Opening', $projectTypes->first(), $storeClasses->first(), 'ACT-2', null, 'Order signage', 'Preparation', 1, null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 3, 2, 'ACT-1', 'Yes'],
+            ['New Store Opening', $projectTypes->first(), null, null, 'LINK HUB', $storeClasses->first(), 'ACT-2', null, 'Order signage', 'Standard', 'Preparation', 1, 100, 100, null, 'Signage order is confirmed.', null, null, 1, 'Project Team', $departments->first(), $subUnits->first(), 3, 2, 'ACT-1', 'Yes'],
         ], null, 'A2');
 
         $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
@@ -193,6 +198,9 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 'Template Name' => 'required|string|max:255',
                 'Project Type' => 'required|string|max:100',
                 'Store Class' => 'required|string|max:100',
+                'Project Name' => 'nullable|string|max:255',
+                'Entity Code' => 'nullable|string|max:50',
+                'Brand Code' => 'nullable|string|max:50',
             ]);
 
             if ($identityValidator->fails()) {
@@ -210,6 +218,9 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             $groups[$identity]['name'] = $data['Template Name'];
             $groups[$identity]['project_type'] = $data['Project Type'];
             $groups[$identity]['store_class'] = $data['Store Class'];
+            $groups[$identity]['entity_code'] = blank($data['Entity Code']) ? null : $data['Entity Code'];
+            $groups[$identity]['brand_code'] = blank($data['Brand Code']) ? null : $data['Brand Code'];
+            $groups[$identity]['project_name'] = blank($data['Project Name']) ? null : $data['Project Name'];
             $groups[$identity]['rows'][] = ['excel_row' => $excelRow, 'data' => $data];
         }
 
@@ -249,12 +260,24 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 continue;
             }
 
+            [$context, $contextErrors] = $this->resolveImportContext($group);
+            if ($contextErrors !== []) {
+                $skippedTemplates++;
+                foreach ($contextErrors as $message) {
+                    $errors[] = "{$label}: {$message}";
+                }
+                continue;
+            }
+
             try {
-                DB::transaction(function () use ($group, $activities) {
+                DB::transaction(function () use ($group, $activities, $context) {
                     $projectTemplate = ProjectTemplate::create([
                         'name' => $group['name'],
                         'project_type' => $group['project_type'],
                         'store_class' => $group['store_class'],
+                        'entity_company_id' => $context['entity_company_id'],
+                        'brand_company_id' => $context['brand_company_id'],
+                        'project_name' => $group['project_name'],
                     ]);
 
                     $this->persistActivities($projectTemplate, $activities);
@@ -278,7 +301,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
 
     public function export(ProjectTemplate $activity_template)
     {
-        $activity_template->load('activities');
+        $activity_template->load(['activities', 'entityCompany:id,code', 'brandCompany:id,code']);
 
         $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
@@ -291,12 +314,20 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             return [
                 $activity_template->name,
                 $activity_template->project_type,
+                $activity_template->entityCompany?->code,
+                $activity_template->brandCompany?->code,
+                $activity_template->project_name,
                 $activity_template->store_class,
                 'ACT-'.$activity->id,
                 $activity->parent_activity_template_id ? 'ACT-'.$activity->parent_activity_template_id : null,
                 $activity->activity,
+                Str::headline($activity->activity_mode ?: 'standard'),
                 $activity->milestone,
                 $activity->milestone_order,
+                $activity->milestone_weight,
+                $activity->activity_weight,
+                $activity->sub_task_weight,
+                $activity->acceptance_criteria,
                 $activity->asset_item,
                 $activity->model_specs,
                 $activity->qty,
@@ -312,7 +343,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
 
         if ($rows !== []) {
             $sheet->fromArray($rows, null, 'A2');
-            $sheet->getStyle('P2:P'.(count($rows) + 1))->getNumberFormat()->setFormatCode('0.0#');
+            $sheet->getStyle('X2:X'.(count($rows) + 1))->getNumberFormat()->setFormatCode('0.0#');
         }
 
         $lastColumn = Coordinate::stringFromColumnIndex(count($headers));
@@ -349,6 +380,9 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'name' => 'required|string|max:255',
             'project_type' => 'required|string|max:100',
             'store_class' => 'required|string|max:100',
+            'entity_company_id' => 'nullable|exists:companies,id',
+            'brand_company_id' => 'nullable|exists:companies,id',
+            'project_name' => 'nullable|string|max:255',
             'activities' => 'required|array|min:1',
             'activities.*.id' => 'nullable|exists:activity_templates,id',
             'activities.*.client_key' => 'nullable|string|max:255',
@@ -366,13 +400,23 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'activities.*.sub_unit' => 'nullable|string|max:255',
             'activities.*.default_duration_days' => 'required|integer|min:1',
             'activities.*.order' => 'required|numeric|min:1',
+            'activities.*.activity_mode' => 'nullable|in:standard,per_store',
+            'activities.*.milestone_weight' => 'nullable|numeric|min:0|max:100',
+            'activities.*.activity_weight' => 'nullable|numeric|min:0|max:100',
+            'activities.*.sub_task_weight' => 'nullable|numeric|min:0|max:100',
+            'activities.*.acceptance_criteria' => 'nullable|string|max:4000',
         ]);
+
+        $this->validateTemplateContext($validated);
 
         DB::transaction(function () use ($validated) {
             $projectTemplate = ProjectTemplate::create([
                 'name' => $validated['name'],
                 'project_type' => $validated['project_type'],
                 'store_class' => $validated['store_class'],
+                'entity_company_id' => $validated['entity_company_id'] ?? null,
+                'brand_company_id' => $validated['brand_company_id'] ?? null,
+                'project_name' => $validated['project_name'] ?? null,
             ]);
 
             $this->persistActivities($projectTemplate, $validated['activities']);
@@ -391,6 +435,9 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'name' => 'required|string|max:255',
             'project_type' => 'required|string|max:100',
             'store_class' => 'required|string|max:100',
+            'entity_company_id' => 'nullable|exists:companies,id',
+            'brand_company_id' => 'nullable|exists:companies,id',
+            'project_name' => 'nullable|string|max:255',
             'activities' => 'required|array|min:1',
             'activities.*.id' => 'nullable|exists:activity_templates,id',
             'activities.*.client_key' => 'nullable|string|max:255',
@@ -408,13 +455,23 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'activities.*.sub_unit' => 'nullable|string|max:255',
             'activities.*.default_duration_days' => 'required|integer|min:1',
             'activities.*.order' => 'required|numeric|min:1',
+            'activities.*.activity_mode' => 'nullable|in:standard,per_store',
+            'activities.*.milestone_weight' => 'nullable|numeric|min:0|max:100',
+            'activities.*.activity_weight' => 'nullable|numeric|min:0|max:100',
+            'activities.*.sub_task_weight' => 'nullable|numeric|min:0|max:100',
+            'activities.*.acceptance_criteria' => 'nullable|string|max:4000',
         ]);
+
+        $this->validateTemplateContext($validated);
 
         DB::transaction(function () use ($validated, $activity_template) {
             $activity_template->update([
                 'name' => $validated['name'],
                 'project_type' => $validated['project_type'],
                 'store_class' => $validated['store_class'],
+                'entity_company_id' => $validated['entity_company_id'] ?? null,
+                'brand_company_id' => $validated['brand_company_id'] ?? null,
+                'project_name' => $validated['project_name'] ?? null,
             ]);
 
             $this->persistActivities($activity_template, $validated['activities']);
@@ -450,6 +507,10 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         $activities = $this->rollUpParentLeadTimes($activities);
 
         $this->validateActivityHierarchy($projectTemplate, $activities);
+        $weightErrors = $this->validateImportWeights($activities);
+        if ($weightErrors !== []) {
+            throw ValidationException::withMessages(['activities' => $weightErrors]);
+        }
 
         $submittedIds = $activities->pluck('id')->filter()->map(fn ($id) => (int) $id)->all();
         $existingIds = $projectTemplate->activities()->pluck('id')->map(fn ($id) => (int) $id)->all();
@@ -631,6 +692,11 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'sub_unit' => blank($activity['sub_unit'] ?? null) ? null : $activity['sub_unit'],
             'default_duration_days' => $activity['default_duration_days'],
             'can_run_parallel' => (bool) ($activity['can_run_parallel'] ?? false),
+            'activity_mode' => $activity['activity_mode'] ?? 'standard',
+            'milestone_weight' => $activity['milestone_weight'] ?? null,
+            'activity_weight' => $activity['activity_weight'] ?? null,
+            'sub_task_weight' => $activity['sub_task_weight'] ?? null,
+            'acceptance_criteria' => blank($activity['acceptance_criteria'] ?? null) ? null : $activity['acceptance_criteria'],
             'order' => $activity['order'],
         ];
 
@@ -649,12 +715,20 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         return [
             'Template Name',
             'Project Type',
+            'Entity Code',
+            'Brand Code',
+            'Project Name',
             'Store Class',
             'Row Key',
             'Parent Row Key',
             'Activity',
+            'Activity Mode',
             'Milestone',
             'Milestone Order',
+            'Milestone Weight %',
+            'Activity Weight %',
+            'Sub-Task Weight %',
+            'Acceptance Criteria',
             'Asset Item',
             'Model Specs',
             'Quantity',
@@ -675,7 +749,11 @@ class ActivityTemplateController extends Controller implements HasMiddleware
      */
     private function optionalImportHeaders(): array
     {
-        return ['Requisite Row Key', 'Can Run Parallel'];
+        return [
+            'Entity Code', 'Brand Code', 'Project Name', 'Activity Mode',
+            'Milestone Weight %', 'Activity Weight %', 'Sub-Task Weight %',
+            'Acceptance Criteria', 'Requisite Row Key', 'Can Run Parallel',
+        ];
     }
 
     /** Excel carries Yes/No; the column is a boolean underneath. */
@@ -711,8 +789,13 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 'client_key' => $data['Row Key'],
                 'parent_client_key' => blank($data['Parent Row Key']) ? null : $data['Parent Row Key'],
                 'activity' => $data['Activity'],
+                'activity_mode' => blank($data['Activity Mode']) ? 'standard' : Str::snake($data['Activity Mode']),
                 'milestone' => blank($data['Milestone']) ? 'General' : $data['Milestone'],
                 'milestone_order' => blank($data['Milestone Order']) ? null : $data['Milestone Order'],
+                'milestone_weight' => blank($data['Milestone Weight %']) ? null : $data['Milestone Weight %'],
+                'activity_weight' => blank($data['Activity Weight %']) ? null : $data['Activity Weight %'],
+                'sub_task_weight' => blank($data['Sub-Task Weight %']) ? null : $data['Sub-Task Weight %'],
+                'acceptance_criteria' => blank($data['Acceptance Criteria']) ? null : $data['Acceptance Criteria'],
                 'asset_item' => blank($data['Asset Item']) ? null : $data['Asset Item'],
                 'model_specs' => blank($data['Model Specs']) ? null : $data['Model Specs'],
                 'qty' => $data['Quantity'],
@@ -729,8 +812,13 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 'client_key' => 'required|string|max:255',
                 'parent_client_key' => 'nullable|string|max:255',
                 'activity' => 'required|string|max:255',
+                'activity_mode' => 'required|in:standard,per_store',
                 'milestone' => 'nullable|string|max:255',
                 'milestone_order' => 'nullable|integer|min:0',
+                'milestone_weight' => 'nullable|numeric|min:0|max:100',
+                'activity_weight' => 'nullable|numeric|min:0|max:100',
+                'sub_task_weight' => 'nullable|numeric|min:0|max:100',
+                'acceptance_criteria' => 'nullable|string|max:4000',
                 'asset_item' => 'nullable|string|max:255',
                 'model_specs' => 'nullable|string|max:255',
                 'qty' => 'nullable|integer|min:1',
@@ -745,8 +833,13 @@ class ActivityTemplateController extends Controller implements HasMiddleware
                 'client_key' => 'Row Key',
                 'parent_client_key' => 'Parent Row Key',
                 'activity' => 'Activity',
+                'activity_mode' => 'Activity Mode',
                 'milestone' => 'Milestone',
                 'milestone_order' => 'Milestone Order',
+                'milestone_weight' => 'Milestone Weight %',
+                'activity_weight' => 'Activity Weight %',
+                'sub_task_weight' => 'Sub-Task Weight %',
+                'acceptance_criteria' => 'Acceptance Criteria',
                 'asset_item' => 'Asset Item',
                 'model_specs' => 'Model Specs',
                 'qty' => 'Quantity',
@@ -811,7 +904,118 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             }
         }
 
+        $errors = array_merge($errors, $this->validateImportWeights(collect($activities)));
+
         return [$activities, $errors];
+    }
+
+    private function validateImportWeights($activities): array
+    {
+        $errors = [];
+        $weightedRows = $activities->filter(fn ($row) => $row['milestone_weight'] !== null
+            || $row['activity_weight'] !== null || $row['sub_task_weight'] !== null);
+
+        if ($weightedRows->isEmpty()) {
+            return [];
+        }
+
+        $parents = $activities->filter(fn ($row) => empty($row['parent_client_key']));
+        $milestones = $parents->groupBy(fn ($row) => $row['milestone'] ?: 'General');
+        $milestoneTotal = 0.0;
+
+        foreach ($milestones as $name => $rows) {
+            $weights = $rows->pluck('milestone_weight')->filter(fn ($value) => $value !== null)->unique()->values();
+            if ($weights->count() !== 1) {
+                $errors[] = "Milestone '{$name}' must repeat one consistent Milestone Weight % on every row.";
+                continue;
+            }
+            $milestoneTotal += (float) $weights->first();
+
+            $activityTotal = (float) $rows->sum(fn ($row) => (float) ($row['activity_weight'] ?? 0));
+            if (abs($activityTotal - 100) > 0.01) {
+                $errors[] = "Activities in milestone '{$name}' total {$activityTotal}%; they must total 100%.";
+            }
+        }
+
+        if (abs($milestoneTotal - 100) > 0.01) {
+            $errors[] = "Milestone weights total {$milestoneTotal}%; they must total 100%.";
+        }
+
+        foreach ($parents as $parent) {
+            $children = $activities->where('parent_client_key', $parent['client_key']);
+            if ($children->isEmpty()) {
+                continue;
+            }
+            $total = (float) $children->sum(fn ($row) => (float) ($row['sub_task_weight'] ?? 0));
+            if (abs($total - 100) > 0.01) {
+                $errors[] = "Sub-tasks under '{$parent['activity']}' total {$total}%; they must total 100%.";
+            }
+        }
+
+        return $errors;
+    }
+
+    private function resolveImportContext(array $group): array
+    {
+        $errors = [];
+        $entity = null;
+        $brand = null;
+
+        if (filled($group['entity_code'] ?? null)) {
+            $entity = Company::where('code', $group['entity_code'])->where('type', 'Entity')->first();
+            if (! $entity) {
+                $errors[] = "Entity Code '{$group['entity_code']}' was not found as an Entity company.";
+            }
+        }
+
+        if (filled($group['brand_code'] ?? null)) {
+            $brand = Company::where('code', $group['brand_code'])->where('type', 'Brand')->first();
+            if (! $brand) {
+                $errors[] = "Brand Code '{$group['brand_code']}' was not found as a Brand company.";
+            }
+        }
+
+        if ($entity && $brand && ! $entity->brands()->whereKey($brand->id)->exists()) {
+            $errors[] = "Brand {$brand->code} is not assigned to Entity {$entity->code}.";
+        }
+
+        return [[
+            'entity_company_id' => $entity?->id,
+            'brand_company_id' => $brand?->id,
+        ], $errors];
+    }
+
+    private function validateTemplateContext(array $validated): void
+    {
+        $entityId = $validated['entity_company_id'] ?? null;
+        $brandId = $validated['brand_company_id'] ?? null;
+
+        if ($entityId && ! Company::whereKey($entityId)->where('type', 'Entity')->exists()) {
+            throw ValidationException::withMessages([
+                'entity_company_id' => 'The selected company must be an Entity.',
+            ]);
+        }
+
+        if (! $brandId) {
+            return;
+        }
+
+        if (! $entityId) {
+            throw ValidationException::withMessages([
+                'brand_company_id' => 'Select an Entity before selecting a Brand.',
+            ]);
+        }
+
+        $brandIsAssigned = DB::table('entity_brand')->where([
+            'entity_company_id' => $entityId,
+            'brand_company_id' => $brandId,
+        ])->exists();
+
+        if (! $brandIsAssigned) {
+            throw ValidationException::withMessages([
+                'brand_company_id' => 'The selected Brand is not assigned to the selected Entity.',
+            ]);
+        }
     }
 
     private function addImportListSheet(
@@ -852,12 +1056,20 @@ class ActivityTemplateController extends Controller implements HasMiddleware
 
         $departments = $departments->filter()->unique()->sort()->values();
         $subUnits = $subUnits->filter()->unique()->sort()->values();
+        $entities = Company::where('type', 'Entity')->where('is_active', true)->orderBy('code')->pluck('code');
+        $brands = Company::where('type', 'Brand')->where('is_active', true)->orderBy('code')->pluck('code');
+        $activityModes = collect(['Standard', 'Per Store']);
+        $yesNo = collect(['No', 'Yes']);
 
         $listColumns = [
             'A' => ['Project Types', $projectTypes],
             'B' => ['Store Classes', $storeClasses],
             'C' => ['Departments', $departments],
             'D' => ['Sub Units', $subUnits],
+            'E' => ['Entity Codes', $entities],
+            'F' => ['Brand Codes', $brands],
+            'G' => ['Activity Modes', $activityModes],
+            'H' => ['Yes / No', $yesNo],
         ];
 
         foreach ($listColumns as $column => [$heading, $values]) {
@@ -867,7 +1079,7 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             }
         }
 
-        return [$projectTypes, $storeClasses, $departments, $subUnits];
+        return [$projectTypes, $storeClasses, $departments, $subUnits, $entities, $brands, $activityModes, $yesNo];
     }
 
     private function applyImportDropdowns(
@@ -878,10 +1090,15 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         $subUnits
     ): void {
         $this->applyImportListValidation($sheet, 'B', 'A', $projectTypes->count());
-        $this->applyImportListValidation($sheet, 'C', 'B', $storeClasses->count());
-        $this->applyImportRangeListValidation($sheet, 'E', 'D');
-        $this->applyImportListValidation($sheet, 'M', 'C', $departments->count(), true);
-        $this->applyImportListValidation($sheet, 'N', 'D', $subUnits->count(), true);
+        $this->applyImportListValidation($sheet, 'C', 'E', Company::where('type', 'Entity')->where('is_active', true)->count(), true);
+        $this->applyImportListValidation($sheet, 'D', 'F', Company::where('type', 'Brand')->where('is_active', true)->count(), true);
+        $this->applyImportListValidation($sheet, 'F', 'B', $storeClasses->count());
+        $this->applyImportRangeListValidation($sheet, 'H', 'G');
+        $this->applyImportListValidation($sheet, 'J', 'G', 2);
+        $this->applyImportListValidation($sheet, 'U', 'C', $departments->count(), true);
+        $this->applyImportListValidation($sheet, 'V', 'D', $subUnits->count(), true);
+        $this->applyImportRangeListValidation($sheet, 'Y', 'G');
+        $this->applyImportListValidation($sheet, 'Z', 'H', 2);
     }
 
     private function applyImportListValidation(

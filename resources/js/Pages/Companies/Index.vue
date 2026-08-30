@@ -178,6 +178,16 @@
                             <textarea v-model="form.description" rows="3"
                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600"></textarea>
                         </div>
+                        <div v-if="form.type === 'Brand'">
+                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Assigned Entities</label>
+                            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <label v-for="entity in entityOptions" :key="entity.id" class="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm dark:border-gray-700">
+                                    <input v-model="form.entity_company_ids" type="checkbox" :value="entity.id" class="rounded border-gray-300 text-blue-600">
+                                    <span>{{ entity.code }} · {{ entity.name }}</span>
+                                </label>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-400">A brand may be assigned to more than one entity.</p>
+                        </div>
                         <div v-if="isEditing" class="flex items-center">
                             <input v-model="form.is_active" type="checkbox" id="is_active" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600">
                             <label for="is_active" class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">Active Company</label>
@@ -214,6 +224,7 @@ import { usePermission } from '@/Composables/usePermission'
 const props = defineProps({
     companies: Object,
     companyTypeOptions: { type: Array, default: () => [] },
+    entityOptions: { type: Array, default: () => [] },
 })
 
 const { showSuccess, showError } = useToast()
@@ -241,7 +252,8 @@ const form = reactive({
     code: '',
     type: 'Entity',
     description: '',
-    is_active: true
+    is_active: true,
+    entity_company_ids: []
 })
 
 onMounted(() => {
@@ -284,6 +296,7 @@ const openCreateModal = () => {
     form.type = 'Entity'
     form.description = ''
     form.is_active = true
+    form.entity_company_ids = []
     resetLogoState()
     showModal.value = true
 }
@@ -296,6 +309,7 @@ const editCompany = (company) => {
     form.type = company.type || 'Entity'
     form.description = company.description || ''
     form.is_active = company.is_active
+    form.entity_company_ids = (company.entities || []).map(entity => entity.id)
     resetLogoState()
     logoPreview.value = company.logo ? `/serve-storage/${company.logo}` : null
     showModal.value = true
@@ -308,6 +322,7 @@ const closeModal = () => {
     form.type = 'Entity'
     form.description = ''
     form.is_active = true
+    form.entity_company_ids = []
     resetLogoState()
 }
 
@@ -320,6 +335,7 @@ const submitForm = () => {
     data.append('code', form.code)
     data.append('type', form.type || 'Entity')
     data.append('description', form.description || '')
+    form.entity_company_ids.forEach(id => data.append('entity_company_ids[]', id))
     if (isEditing.value) {
         data.append('is_active', form.is_active ? '1' : '0')
         data.append('remove_logo', removeLogoFlag.value ? '1' : '0')

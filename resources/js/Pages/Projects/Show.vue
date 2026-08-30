@@ -41,6 +41,7 @@ const props = defineProps({
     projectTypes: { type: Array, default: () => [] },
     users: Array,
     stores: Array,
+    brands: { type: Array, default: () => [] },
     vendors: { type: Array, default: () => [] },
     departments: { type: Array, default: () => [] },
     departmentOptions: Array,
@@ -219,6 +220,8 @@ const confirmAttachBoard = () => {
 const editForm = useForm({
     project_type: props.project.project_type || 'Store Opening',
     name: props.project.name,
+    brand_company_id: props.project.brand_company_id || null,
+    target_store_count: props.project.target_store_count || null,
     store_id: props.project.store_id,
     subject_type: props.project.subject_type || '',
     subject_id: props.project.subject_id || '',
@@ -455,6 +458,7 @@ const openProjectTaskList = () => {
 };
 
 const projectProgress = computed(() => {
+    if (props.project.progress_percentage !== undefined && props.project.progress_percentage !== null) return Number(props.project.progress_percentage) || 0;
     const tasks = props.project.tasks || [];
     if (tasks.length === 0) return 0;
     const totalProgress = tasks.reduce((sum, task) => sum + (task.progress || 0), 0);
@@ -515,6 +519,33 @@ const getStatusColor = (status) => {
                                     required
                                 />
                                 <InputError :message="editForm.errors.name" />
+                            </div>
+
+                            <div v-if="brands.length">
+                                <InputLabel for="edit_brand_company_id" value="Brand" />
+                                <select
+                                    id="edit_brand_company_id"
+                                    v-model="editForm.brand_company_id"
+                                    class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm dark:border-gray-600"
+                                >
+                                    <option :value="null">No brand / entity-wide project</option>
+                                    <option v-for="brand in brands" :key="brand.id" :value="brand.id">
+                                        {{ brand.code ? `${brand.code} - ${brand.name}` : brand.name }}
+                                    </option>
+                                </select>
+                                <InputError :message="editForm.errors.brand_company_id" />
+                            </div>
+
+                            <div>
+                                <InputLabel for="edit_target_store_count" value="Target Store Count (optional)" />
+                                <TextInput
+                                    id="edit_target_store_count"
+                                    type="number"
+                                    min="1"
+                                    v-model="editForm.target_store_count"
+                                    class="w-full"
+                                />
+                                <InputError :message="editForm.errors.target_store_count" />
                             </div>
 
                             <div v-if="editForm.project_type === 'Store Opening'">

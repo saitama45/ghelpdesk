@@ -39,6 +39,15 @@ class ProjectTaskController extends Controller
         ]);
 
         $template = ProjectTemplate::with('activities')->findOrFail($request->project_template_id);
+        if ($template->entity_company_id && (int) $template->entity_company_id !== (int) $project->company_id) {
+            return redirect()->back()->withErrors(['project_template_id' => 'This template belongs to a different entity.']);
+        }
+        if ($template->brand_company_id && (int) $template->brand_company_id !== (int) $project->brand_company_id) {
+            return redirect()->back()->withErrors(['project_template_id' => 'This template belongs to a different brand.']);
+        }
+        if (filled($template->project_name) && mb_strtolower(trim($template->project_name)) !== mb_strtolower(trim($project->name))) {
+            return redirect()->back()->withErrors(['project_template_id' => 'This template is recommended for project name '.$template->project_name.'.']);
+        }
         $activities = $this->withResolvedMilestoneOrders($template->activities);
 
         if ($activities->isEmpty()) {
@@ -85,6 +94,11 @@ class ProjectTaskController extends Controller
                         'end_date' => $dates['end'] ?? null,
                         'lead_time_days' => $activity->default_duration_days,
                         'can_run_parallel' => (bool) $activity->can_run_parallel,
+                        'activity_mode' => $activity->activity_mode,
+                        'milestone_weight' => $activity->milestone_weight,
+                        'activity_weight' => $activity->activity_weight,
+                        'sub_task_weight' => $activity->sub_task_weight,
+                        'acceptance_criteria' => $activity->acceptance_criteria,
                         'created_by' => $actorId,
                         'updated_by' => $actorId,
                     ]);
@@ -102,6 +116,11 @@ class ProjectTaskController extends Controller
                             'end_date' => $dates['end'],
                             'lead_time_days' => $activity->default_duration_days,
                             'can_run_parallel' => (bool) $activity->can_run_parallel,
+                            'activity_mode' => $activity->activity_mode,
+                            'milestone_weight' => $activity->milestone_weight,
+                            'activity_weight' => $activity->activity_weight,
+                            'sub_task_weight' => $activity->sub_task_weight,
+                            'acceptance_criteria' => $activity->acceptance_criteria,
                         ]);
                     } elseif ($changedOrder) {
                         $task->update([
@@ -156,6 +175,11 @@ class ProjectTaskController extends Controller
                         'end_date' => $dates['end'] ?? null,
                         'lead_time_days' => $activity->default_duration_days,
                         'can_run_parallel' => (bool) $activity->can_run_parallel,
+                        'activity_mode' => $activity->activity_mode,
+                        'milestone_weight' => $activity->milestone_weight,
+                        'activity_weight' => $activity->activity_weight,
+                        'sub_task_weight' => $activity->sub_task_weight,
+                        'acceptance_criteria' => $activity->acceptance_criteria,
                         'created_by' => $actorId,
                         'updated_by' => $actorId,
                     ]);
@@ -173,6 +197,11 @@ class ProjectTaskController extends Controller
                             'end_date' => $dates['end'],
                             'lead_time_days' => $activity->default_duration_days,
                             'can_run_parallel' => (bool) $activity->can_run_parallel,
+                            'activity_mode' => $activity->activity_mode,
+                            'milestone_weight' => $activity->milestone_weight,
+                            'activity_weight' => $activity->activity_weight,
+                            'sub_task_weight' => $activity->sub_task_weight,
+                            'acceptance_criteria' => $activity->acceptance_criteria,
                         ]);
                     } elseif ($changedOrder) {
                         $task->update([

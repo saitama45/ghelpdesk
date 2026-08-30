@@ -14,6 +14,8 @@ class Project extends Model
 {
     use HasFactory, SoftDeletes;
 
+    protected $appends = ['progress_percentage'];
+
     /**
      * Fallback project types. The live list is now stored in the shared
      * reference_options table (type = project_type) — use projectTypes().
@@ -64,6 +66,9 @@ class Project extends Model
         'board_month',
         'board_year',
         'remarks',
+        'company_id',
+        'brand_company_id',
+        'target_store_count',
         'created_by',
         'updated_by',
     ];
@@ -73,6 +78,9 @@ class Project extends Model
         'subject_id' => 'integer',
         'created_by' => 'integer',
         'updated_by' => 'integer',
+        'company_id' => 'integer',
+        'brand_company_id' => 'integer',
+        'target_store_count' => 'integer',
         'turn_over_date' => 'date',
         'training_date'  => 'date',
         'testing_date'   => 'date',
@@ -87,6 +95,16 @@ class Project extends Model
     public function store(): BelongsTo
     {
         return $this->belongsTo(Store::class);
+    }
+
+    public function entityCompany(): BelongsTo
+    {
+        return $this->belongsTo(Company::class, 'company_id');
+    }
+
+    public function brandCompany(): BelongsTo
+    {
+        return $this->belongsTo(Company::class, 'brand_company_id');
     }
 
     /** The user who created (owns) this project. */
@@ -184,9 +202,7 @@ class Project extends Model
             return;
         }
 
-        // Calculate average progress across all tasks
-        $totalProgressSum = $tasks->sum('progress');
-        $averageProgress = $totalProgressSum / $totalTasks;
+        $averageProgress = $this->calculateWeightedProgress($tasks);
 
         if ($averageProgress >= 100) {
             $newStatus = 'Completed';
@@ -211,5 +227,33 @@ class Project extends Model
         if ($this->status !== $newStatus) {
             $this->update(['status' => $newStatus]);
         }
+    }
+
+    public function getProgressPercentageAttribute(): int
+    {
+        return $this->calculateWeightedProgress($this->relationLoaded('tasks') ? $this->tasks : $this->tasks()->get());
+    }
+
+    private function calculateWeightedProgress($tasks): int
+    {
+        $roots = $tasks->filter(fn (ProjectTask $task) => ! $task->parent_task_id)
+            ->reject(fn (ProjectTask $task) => in_array(trim((string) $task->status), ['N/A', 'Not Applicable'], true));
+        if ($roots->isEmpty()) return 0;
+
+        $milestones = $roots->groupBy(fn (ProjectTask $task) => $task->category ?: 'General');
+        $milestoneValues = $milestones->map(function ($activities) {
+            $explicit = $activities->every(fn (ProjectTask $task) => $task->activity_weight !== null);
+            $weightTotal = (float) $activities->sum(fn (ProjectTask $task) => $explicit ? (float) $task->activity_weight : 1);
+            return $weightTotal > 0
+                ? $activities->sum(fn (ProjectTask $task) => ($explicit ? (float) $task->activity_weight : 1) * (int) $task->progress) / $weightTotal
+                : 0;
+        });
+
+        $milestoneWeights = $milestones->map(fn ($activities) => (float) ($activities->first()->milestone_weight ?? 0));
+        $explicitMilestones = $milestoneWeights->every(fn ($weight) => $weight > 0);
+        $total = (float) $milestoneWeights->sum();
+        if (! $explicitMilestones || $total <= 0) return (int) round($milestoneValues->avg());
+
+        return (int) round($milestoneValues->sum(fn ($value, $name) => $value * $milestoneWeights[$name]) / $total);
     }
 }

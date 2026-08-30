@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
+use Illuminate\Validation\Rule;
 
 class CompanyController extends Controller implements HasMiddleware
 {
@@ -25,7 +26,7 @@ class CompanyController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Company::query();
+        $query = Company::with('entities:id,name,code');
 
         if ($request->filled('search')) {
             $query->where('name', 'like', "%{$request->search}%")
@@ -37,6 +38,7 @@ class CompanyController extends Controller implements HasMiddleware
         return Inertia::render('Companies/Index', [
             'companies' => $companies,
             'companyTypeOptions' => ReferenceOption::ofType('company_type'),
+            'entityOptions' => Company::where('type', 'Entity')->where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
         ]);
     }
 
@@ -48,6 +50,8 @@ class CompanyController extends Controller implements HasMiddleware
             'type'        => 'nullable|string|max:100',
             'description' => 'nullable|string',
             'logo'        => 'nullable|image|max:2048',
+            'entity_company_ids' => 'nullable|array',
+            'entity_company_ids.*' => ['integer', Rule::exists('companies', 'id')->where('type', 'Entity')],
         ]);
 
         $data = $request->only(['name', 'code', 'description']);
@@ -57,7 +61,10 @@ class CompanyController extends Controller implements HasMiddleware
             $data['logo'] = str_replace('\\', '/', $request->file('logo')->store('company-logos', 'public'));
         }
 
-        Company::create($data);
+        $company = Company::create($data);
+        if ($company->type === 'Brand') {
+            $company->entities()->sync($request->input('entity_company_ids', []));
+        }
 
         return redirect()->back()->with('success', 'Company created successfully');
     }
@@ -72,6 +79,8 @@ class CompanyController extends Controller implements HasMiddleware
             'is_active'   => 'boolean',
             'logo'        => 'nullable|image|max:2048',
             'remove_logo' => 'nullable|boolean',
+            'entity_company_ids' => 'nullable|array',
+            'entity_company_ids.*' => ['integer', Rule::exists('companies', 'id')->where('type', 'Entity')],
         ]);
 
         $company->name        = $request->name;
@@ -93,6 +102,7 @@ class CompanyController extends Controller implements HasMiddleware
         }
 
         $company->save();
+        $company->entities()->sync($company->type === 'Brand' ? $request->input('entity_company_ids', []) : []);
 
         return redirect()->back()->with('success', 'Company updated successfully');
     }
@@ -127,6 +137,8 @@ class CompanyController extends Controller implements HasMiddleware
             Storage::disk('public')->delete($company->logo);
         }
 
+        $company->brands()->detach();
+        $company->entities()->detach();
         $company->delete();
         return redirect()->back()->with('success', 'Company deleted successfully');
     }

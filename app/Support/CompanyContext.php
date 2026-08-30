@@ -140,7 +140,7 @@ class CompanyContext
         return Company::whereIn('id', $ids)
             ->where('is_active', true)
             ->orderBy('name')
-            ->get(['id', 'name', 'code', 'logo']);
+            ->get(['id', 'name', 'code', 'type', 'logo']);
     }
 
     /**

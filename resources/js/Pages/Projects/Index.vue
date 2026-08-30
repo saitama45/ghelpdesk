@@ -265,6 +265,7 @@ const formatDate = (dateString) => {
 };
 
 const projectProgress = (project) => {
+    if (project.progress_percentage !== undefined && project.progress_percentage !== null) return Number(project.progress_percentage) || 0;
     const tasks = project.tasks || [];
     if (!tasks.length) return 0;
     const total = tasks.reduce((sum, t) => sum + (t.progress || 0), 0);

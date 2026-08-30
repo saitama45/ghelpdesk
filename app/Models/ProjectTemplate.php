@@ -13,7 +13,25 @@ class ProjectTemplate extends Model
         'name',
         'project_type',
         'store_class',
+        'entity_company_id',
+        'brand_company_id',
+        'project_name',
     ];
+
+    protected $casts = [
+        'entity_company_id' => 'integer',
+        'brand_company_id' => 'integer',
+    ];
+
+    public function entityCompany()
+    {
+        return $this->belongsTo(Company::class, 'entity_company_id');
+    }
+
+    public function brandCompany()
+    {
+        return $this->belongsTo(Company::class, 'brand_company_id');
+    }
 
     public function activities()
     {

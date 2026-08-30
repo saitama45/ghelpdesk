@@ -43,6 +43,11 @@ class ProjectTask extends Model
         'order',
         'created_by',
         'updated_by',
+        'activity_mode',
+        'milestone_weight',
+        'activity_weight',
+        'sub_task_weight',
+        'acceptance_criteria',
     ];
 
     protected $casts = [
@@ -63,6 +68,9 @@ class ProjectTask extends Model
         'dependencies' => 'array',
         'progress' => 'integer',
         'order' => 'float',
+        'milestone_weight' => 'decimal:2',
+        'activity_weight' => 'decimal:2',
+        'sub_task_weight' => 'decimal:2',
     ];
 
     public function project(): BelongsTo

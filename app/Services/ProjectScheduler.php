@@ -76,8 +76,17 @@ class ProjectScheduler
             }
 
             $leadTime = $children->sum(fn ($child) => max(1, (int) ($child->lead_time_days ?? 1)));
-            $progress = $leadTime > 0
-                ? (int) round($children->sum(fn ($child) => max(1, (int) ($child->lead_time_days ?? 1)) * (int) $child->progress) / $leadTime)
+            $hasExplicitWeights = $children->every(fn ($child) => $child->sub_task_weight !== null);
+            $weightTotal = $hasExplicitWeights
+                ? (float) $children->sum(fn ($child) => (float) $child->sub_task_weight)
+                : (float) $leadTime;
+            $progress = $weightTotal > 0
+                ? (int) round($children->sum(function ($child) use ($hasExplicitWeights) {
+                    $weight = $hasExplicitWeights
+                        ? (float) $child->sub_task_weight
+                        : max(1, (int) ($child->lead_time_days ?? 1));
+                    return $weight * (int) $child->progress;
+                }) / $weightTotal)
                 : 0;
 
             $status = $progress >= 100 ? 'Done' : ($progress > 0 ? 'Ongoing' : 'Pending');

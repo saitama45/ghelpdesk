@@ -13,6 +13,9 @@ const props = defineProps({
     defaultType:      { type: String, default: 'Store Opening' },
     boardYears:       Array,
     availableBoards:  { type: Array, default: () => [] },
+    entities:         { type: Array, default: () => [] },
+    brands:           { type: Array, default: () => [] },
+    activeEntityId:   { type: Number, default: null },
 });
 
 const now = new Date();
@@ -35,7 +38,17 @@ const boardOptions = computed(() =>
     (props.availableBoards ?? []).map(b => ({ label: b.title, value: b.id }))
 );
 
+const availableBrands = computed(() => {
+    if (!form.company_id) return [];
+    return (props.brands || []).filter(brand =>
+        (brand.entities || []).some(entity => Number(entity.id) === Number(form.company_id))
+    );
+});
+
 const form = useForm({
+    company_id:    props.activeEntityId || '',
+    brand_company_id: '',
+    target_store_count: '',
     project_type: props.defaultType,
     board_id:     null,
     store_id:     '',
@@ -164,6 +177,28 @@ const submit = () => {
                                 class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                             />
                             <div v-if="form.errors.name" class="mt-1 text-xs text-red-500">{{ form.errors.name }}</div>
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Entity <span class="text-red-500">*</span></label>
+                            <select v-model="form.company_id" required class="w-full rounded-md border-gray-300 shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" @change="form.brand_company_id = ''">
+                                <option value="" disabled>Select entity</option>
+                                <option v-for="entity in entities" :key="entity.id" :value="entity.id">{{ entity.code }} · {{ entity.name }}</option>
+                            </select>
+                            <div v-if="form.errors.company_id" class="mt-1 text-xs text-red-500">{{ form.errors.company_id }}</div>
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Brand</label>
+                            <select v-model="form.brand_company_id" class="w-full rounded-md border-gray-300 shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                                <option value="">No brand / corporate project</option>
+                                <option v-for="brand in availableBrands" :key="brand.id" :value="brand.id">{{ brand.code }} · {{ brand.name }}</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Target Store Count</label>
+                            <input v-model="form.target_store_count" type="number" min="1" class="w-full rounded-md border-gray-300 shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" placeholder="Optional, e.g. 35">
                         </div>
 
                         <!-- Store Branch (Store Opening only) -->

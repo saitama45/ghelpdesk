@@ -25,6 +25,11 @@ class ActivityTemplate extends Model
         'sub_unit',
         'default_duration_days',
         'order',
+        'activity_mode',
+        'milestone_weight',
+        'activity_weight',
+        'sub_task_weight',
+        'acceptance_criteria',
     ];
 
     protected $casts = [
@@ -36,6 +41,9 @@ class ActivityTemplate extends Model
         'milestone_order' => 'integer',
         'order' => 'float',
         'qty' => 'integer',
+        'milestone_weight' => 'decimal:2',
+        'activity_weight' => 'decimal:2',
+        'sub_task_weight' => 'decimal:2',
     ];
 
     public function projectTemplate()

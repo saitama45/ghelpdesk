@@ -191,6 +191,28 @@
                             />
                             <InputError :message="form.errors.store_class" class="mt-1" />
                         </div>
+
+                        <div>
+                            <InputLabel for="entity_company_id" value="Entity (optional applicability)" />
+                            <select id="entity_company_id" v-model="form.entity_company_id" class="mt-1 w-full rounded-md border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
+                                <option value="">All entities</option>
+                                <option v-for="entity in entities" :key="entity.id" :value="entity.id">{{ entity.code }} · {{ entity.name }}</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <InputLabel for="brand_company_id" value="Brand (optional applicability)" />
+                            <select id="brand_company_id" v-model="form.brand_company_id" class="mt-1 w-full rounded-md border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
+                                <option value="">No brand / all brands</option>
+                                <option v-for="brand in availableBrands" :key="brand.id" :value="brand.id">{{ brand.code }} · {{ brand.name }}</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <InputLabel for="project_name" value="Project Name" />
+                            <TextInput id="project_name" v-model="form.project_name" class="mt-1 w-full" placeholder="e.g. DAVID, LINK HUB" />
+                            <p class="mt-1 text-[10px] text-gray-500">Plain text; this is not a Solution dropdown.</p>
+                        </div>
                     </div>
 
                     <!-- Details Repeater -->
@@ -300,6 +322,15 @@
                                                             required
                                                             @input="syncSubTaskMilestone(act)"
                                                         >
+                                                        <div class="mt-1 grid grid-cols-3 gap-1">
+                                                            <select v-model="act.activity_mode" class="rounded border-gray-200 p-1 text-[10px] dark:border-gray-700 dark:bg-gray-900">
+                                                                <option value="standard">Standard</option>
+                                                                <option value="per_store">Per Store</option>
+                                                            </select>
+                                                            <input v-model="act.milestone_weight" type="number" min="0" max="100" step="0.01" class="rounded border-gray-200 p-1 text-[10px] dark:border-gray-700 dark:bg-gray-900" placeholder="Milestone %">
+                                                            <input v-model="act.activity_weight" type="number" min="0" max="100" step="0.01" class="rounded border-gray-200 p-1 text-[10px] dark:border-gray-700 dark:bg-gray-900" placeholder="Activity %">
+                                                        </div>
+                                                        <textarea v-model="act.acceptance_criteria" rows="1" class="mt-1 w-full rounded border-gray-200 p-1 text-[10px] dark:border-gray-700 dark:bg-gray-900" placeholder="Acceptance criteria"></textarea>
                                                     </td>
                                                     <td class="px-2 py-2">
                                                         <select v-model="act.department" class="w-full text-xs border-gray-200 rounded p-1 text-gray-600 focus:ring-blue-500 focus:border-blue-500 dark:text-gray-300 dark:border-gray-700 dark:bg-gray-900" @change="handleActivityDepartmentChange(act)">
@@ -395,6 +426,10 @@
                                                                 placeholder="Sub-task name..." 
                                                                 required
                                                             >
+                                                        </div>
+                                                        <div class="mt-1 grid grid-cols-[7rem_1fr] gap-1 pl-6">
+                                                            <input v-model="subTask.sub_task_weight" type="number" min="0" max="100" step="0.01" class="rounded border-gray-200 p-1 text-[10px] dark:border-gray-700 dark:bg-gray-900" placeholder="Sub-task %">
+                                                            <textarea v-model="subTask.acceptance_criteria" rows="1" class="rounded border-gray-200 p-1 text-[10px] dark:border-gray-700 dark:bg-gray-900" placeholder="Acceptance criteria"></textarea>
                                                         </div>
                                                     </td>
                                                     <td class="px-2 py-2">
@@ -610,11 +645,18 @@ const props = defineProps({
     departmentOptions: Array,
     projectTypes: Array,
     storeClasses: Array,
+    entities: { type: Array, default: () => [] },
+    brands: { type: Array, default: () => [] },
     filters: Object
 })
 
 const localProjectTypes = ref([...(props.projectTypes || [])])
 const localStoreClasses = ref([...(props.storeClasses || [])])
+const entities = computed(() => props.entities || [])
+const availableBrands = computed(() => {
+    if (!form.entity_company_id) return props.brands || []
+    return (props.brands || []).filter(brand => (brand.entities || []).some(entity => Number(entity.id) === Number(form.entity_company_id)))
+})
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
@@ -749,6 +791,11 @@ const createActivityRow = (overrides = {}) => ({
     default_duration_days: 1,
     depends_on_client_key: null,
     can_run_parallel: false,
+    activity_mode: 'standard',
+    milestone_weight: null,
+    activity_weight: null,
+    sub_task_weight: null,
+    acceptance_criteria: '',
     order: 1,
     ...overrides
 })
@@ -757,6 +804,9 @@ const form = useForm({
     name: '',
     project_type: 'NSO',
     store_class: 'Regular',
+    entity_company_id: '',
+    brand_company_id: '',
+    project_name: '',
     activities: [
         createActivityRow()
     ]
@@ -831,6 +881,9 @@ const editTemplate = (template) => {
     form.name = template.name
     form.project_type = template.project_type || 'NSO'
     form.store_class = template.store_class
+    form.entity_company_id = template.entity_company_id || ''
+    form.brand_company_id = template.brand_company_id || ''
+    form.project_name = template.project_name || ''
     form.activities = normalizeTemplateActivities(template.activities || [])
     if (form.activities.length === 0) {
         form.activities = [createActivityRow()]
@@ -888,6 +941,11 @@ const normalizeTemplateActivities = (activities) => {
                 default_duration_days: activity.default_duration_days,
                 depends_on_client_key: activity.depends_on_template_id ? (keyById.get(activity.depends_on_template_id) || null) : null,
                 can_run_parallel: Boolean(activity.can_run_parallel),
+                activity_mode: activity.activity_mode || 'standard',
+                milestone_weight: activity.milestone_weight,
+                activity_weight: activity.activity_weight,
+                sub_task_weight: activity.sub_task_weight,
+                acceptance_criteria: activity.acceptance_criteria || '',
                 order: activity.order
             })
         })
