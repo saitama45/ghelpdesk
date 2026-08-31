@@ -6,6 +6,7 @@ use App\Models\Project;
 use App\Models\ProjectTask;
 use App\Models\ProjectTeamMember;
 use App\Models\User;
+use App\Services\ProjectWorkspaceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
@@ -102,6 +103,52 @@ class ProjectGanttProductivityTest extends TestCase
         $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
         $this->assertStringContainsString('inline', (string) $response->headers->get('content-disposition'));
         $this->assertStringStartsWith('%PDF', (string) $response->getContent());
+    }
+
+    public function test_department_progress_uses_weighted_leaf_rows_without_double_counting_parent_rollups(): void
+    {
+        $owner = $this->projectUser();
+        $executor = User::factory()->create(['department' => 'Technology and Solutions']);
+        $project = $this->project($owner);
+        $activity = $this->task($project, 'Implement workflow', null, [
+            'department' => 'Business Development',
+            'progress' => 75,
+            'milestone_weight' => 100,
+            'activity_weight' => 100,
+        ]);
+        $this->task($project, 'Build workflow', $activity->id, [
+            'department' => 'Business Development',
+            'assigned_to' => $executor->id,
+            'progress' => 100,
+            'milestone_weight' => 100,
+            'activity_weight' => 100,
+            'sub_task_weight' => 75,
+        ]);
+        $this->task($project, 'Complete UAT', $activity->id, [
+            'department' => 'Business Development',
+            'assigned_to' => $executor->id,
+            'progress' => 0,
+            'milestone_weight' => 100,
+            'activity_weight' => 100,
+            'sub_task_weight' => 25,
+        ]);
+        $this->task($project, 'Unconfigured support task', null, [
+            'department' => null,
+            'assigned_to' => $executor->id,
+            'progress' => 40,
+        ]);
+
+        $reports = app(ProjectWorkspaceService::class)->build($project, $owner)['reports'];
+        $department = collect($reports['departments'])->firstWhere('name', 'Business Development');
+
+        $this->assertSame(2, $department['assignments']);
+        $this->assertSame(1, $department['completed']);
+        $this->assertSame(75, $department['completion']);
+        $this->assertSame(3, $reports['totals']['assignments']);
+
+        $fallbackDepartment = collect($reports['departments'])->firstWhere('name', 'Technology and Solutions');
+        $this->assertSame(1, $fallbackDepartment['assignments']);
+        $this->assertSame(40, $fallbackDepartment['completion']);
     }
 
     private function projectUser(): User

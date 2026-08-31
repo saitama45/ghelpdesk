@@ -170,10 +170,202 @@
             </div>
         @endforeach
 
-        {{-- The summary ends the page. Everything below is the detailed breakdown,
-             which stays dense so a milestone's activities and sub-tasks read as one
-             table instead of being spread thin. --}}
         <div class="page-break"></div>
+    @endif
+
+    {{-- PAGE 2: Weekly Horizon, Progress & Movements Report --}}
+    @if(isset($weeklyReport))
+        <div class="weekly-page">
+            <div class="weekly-header" style="border-bottom:2px solid #4f46e5;padding-bottom:6px;margin-bottom:8px;">
+                <table class="header-table"><tr>
+                    <td>
+                        <div class="eyebrow" style="color:#4f46e5;">Executive Weekly Horizon &amp; Movement Report</div>
+                        <h2 style="margin:2px 0 0;font-size:15px;color:#1e293b;">
+                            {{ $weeklyReport['activeWeek']['label'] }} Executive Review
+                            <span style="font-size:9px;font-weight:normal;color:#64748b;">({{ $weeklyReport['activeWeek']['formattedRange'] }})</span>
+                        </h2>
+                    </td>
+                    <td style="text-align:right;vertical-align:bottom;">
+                        <span style="display:inline-block;padding:3px 7px;background:#e0e7ff;color:#3730a3;font-weight:bold;font-size:8px;border-radius:3px;">
+                            WoW Growth: {{ $weeklyReport['wowActualDelta'] >= 0 ? '+' : '' }}{{ $weeklyReport['wowActualDelta'] }}%
+                        </span>
+                    </td>
+                </tr></table>
+            </div>
+
+            <!-- KPI Cards -->
+            <table style="width:100%;margin-top:6px;border-collapse:collapse;">
+                <tr>
+                    <td style="width:20%;border:1px solid #cbd5e1;background:#f8fafc;padding:6px 8px;">
+                        <div class="metric-label">Prev Week Actual ({{ $weeklyReport['prevWeek']['label'] ?? 'W0' }})</div>
+                        <div class="metric-value" style="font-size:15px;color:#475569;">{{ $weeklyReport['prevActual'] }}%</div>
+                        <div style="font-size:6.5px;color:#94a3b8;margin-top:1px;">Previous week end status</div>
+                    </td>
+                    <td style="width:20%;border:1px solid #93c5fd;background:#eff6ff;padding:6px 8px;">
+                        <div class="metric-label" style="color:#1d4ed8;">Current Week Actual</div>
+                        <div class="metric-value" style="font-size:15px;color:#1d4ed8;">{{ $weeklyReport['currentActual'] }}%</div>
+                        <div style="font-size:6.5px;color:#3b82f6;margin-top:1px;">
+                            WoW Delta: <strong>{{ $weeklyReport['wowActualDelta'] >= 0 ? '+' : '' }}{{ $weeklyReport['wowActualDelta'] }}%</strong>
+                        </div>
+                    </td>
+                    <td style="width:20%;border:1px solid #cbd5e1;background:#f8fafc;padding:6px 8px;">
+                        <div class="metric-label">Current Planned Target</div>
+                        <div class="metric-value" style="font-size:15px;color:#334155;">{{ $weeklyReport['currentPlanned'] }}%</div>
+                        <div style="font-size:6.5px;color:#64748b;margin-top:1px;">Baseline S-Curve target</div>
+                    </td>
+                    <td style="width:20%;border:1px solid #cbd5e1;background:#f8fafc;padding:6px 8px;">
+                        <div class="metric-label">Schedule Variance</div>
+                        <div class="metric-value" style="font-size:15px;color:{{ $weeklyReport['variance'] >= 0 ? '#166534' : '#991b1b' }};">
+                            {{ $weeklyReport['variance'] >= 0 ? '+' : '' }}{{ $weeklyReport['variance'] }}%
+                        </div>
+                        <div style="font-size:6.5px;color:{{ $weeklyReport['variance'] >= 0 ? '#16a34a' : '#dc2626' }};margin-top:1px;font-weight:bold;">
+                            {{ $weeklyReport['variance'] >= 0 ? 'Ahead of schedule' : 'Behind schedule' }}
+                        </div>
+                    </td>
+                    <td style="width:20%;border:1px solid #cbd5e1;background:#f8fafc;padding:6px 8px;">
+                        <div class="metric-label">Week Deliverables</div>
+                        <div class="metric-value" style="font-size:15px;color:#1e293b;">{{ $weeklyReport['activeThisWeek']->count() + $weeklyReport['completedThisWeek']->count() }}</div>
+                        <div style="font-size:6.5px;color:#64748b;margin-top:1px;">
+                            <strong style="color:#166534;">{{ $weeklyReport['completedThisWeek']->count() }} completed</strong>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- Milestone WoW Comparison Table -->
+            <div style="margin-top:10px;">
+                <div style="font-size:9px;font-weight:bold;text-transform:uppercase;color:#334155;margin-bottom:4px;letter-spacing:0.5px;">
+                    Milestone Progress Movements (Previous vs Current Week)
+                </div>
+                <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+                    <thead>
+                        <tr style="background:#eef2ff;">
+                            <th style="width:30%;text-align:left;padding:4px 6px;border:1px solid #c7d2fe;font-size:6.5px;color:#3730a3;text-transform:uppercase;">Milestone Category</th>
+                            <th style="width:12%;text-align:center;padding:4px 6px;border:1px solid #c7d2fe;font-size:6.5px;color:#3730a3;text-transform:uppercase;">Weight</th>
+                            <th style="width:14%;text-align:center;padding:4px 6px;border:1px solid #c7d2fe;font-size:6.5px;color:#3730a3;text-transform:uppercase;">{{ $weeklyReport['prevWeek']['label'] ?? 'Prev Wk' }} Actual</th>
+                            <th style="width:14%;text-align:center;padding:4px 6px;border:1px solid #c7d2fe;font-size:6.5px;color:#3730a3;text-transform:uppercase;">Current Actual</th>
+                            <th style="width:14%;text-align:center;padding:4px 6px;border:1px solid #c7d2fe;font-size:6.5px;color:#3730a3;text-transform:uppercase;">WoW Movement</th>
+                            <th style="width:16%;text-align:center;padding:4px 6px;border:1px solid #c7d2fe;font-size:6.5px;color:#3730a3;text-transform:uppercase;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($weeklyReport['milestoneComparison'] as $mRow)
+                            <tr style="border-bottom:1px solid #e2e8f0;background:{{ $loop->even ? '#fafafa' : '#ffffff' }};">
+                                <td style="padding:4px 6px;border:1px solid #e5e7eb;font-weight:bold;color:#1e293b;">{{ $mRow['name'] }}</td>
+                                <td style="padding:4px 6px;border:1px solid #e5e7eb;text-align:center;color:#64748b;">{{ $mRow['weight'] > 0 ? number_format($mRow['weight'], 0).'%' : '-' }}</td>
+                                <td style="padding:4px 6px;border:1px solid #e5e7eb;text-align:center;color:#64748b;">{{ $mRow['prev_actual'] }}%</td>
+                                <td style="padding:4px 6px;border:1px solid #e5e7eb;text-align:center;font-weight:bold;color:#1e293b;">{{ $mRow['current_actual'] }}%</td>
+                                <td style="padding:4px 6px;border:1px solid #e5e7eb;text-align:center;">
+                                    <span style="font-weight:bold;color:{{ $mRow['delta'] > 0 ? '#16a34a' : ($mRow['delta'] < 0 ? '#dc2626' : '#64748b') }};">
+                                        {{ $mRow['delta'] > 0 ? '+' : '' }}{{ $mRow['delta'] }}%
+                                    </span>
+                                </td>
+                                <td style="padding:4px 6px;border:1px solid #e5e7eb;text-align:center;">
+                                    @if($mRow['current_actual'] >= 100)
+                                        <span class="status done">Completed</span>
+                                    @elseif($mRow['delta'] > 0)
+                                        <span class="status ongoing" style="background:#dcfce7;color:#15803d;">+{{ $mRow['delta'] }}% Moved</span>
+                                    @elseif($mRow['current_actual'] > 0)
+                                        <span class="status ongoing">Ongoing</span>
+                                    @else
+                                        <span class="status pending">Pending</span>
+                                    @endif
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Weekly Highlights & Movements (3-Pillar Table) -->
+            <div style="margin-top:10px;">
+                <div style="font-size:9px;font-weight:bold;text-transform:uppercase;color:#334155;margin-bottom:4px;letter-spacing:0.5px;">
+                    Weekly Activity Highlights &amp; Movement Stream
+                </div>
+                <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+                    <tr>
+                        <!-- Column 1: Completed This Week -->
+                        <td style="width:33.33%;vertical-align:top;border:1px solid #bbf7d0;background:#f0fdf4;padding:6px 8px;">
+                            <div style="font-size:7.5px;font-weight:bold;color:#166534;text-transform:uppercase;border-bottom:1px solid #bbf7d0;padding-bottom:2px;margin-bottom:4px;">
+                                Completed This Week ({{ $weeklyReport['completedThisWeek']->count() }})
+                            </div>
+                            @forelse($weeklyReport['completedThisWeek'] as $doneTask)
+                                <div style="margin-bottom:4px;padding-bottom:3px;border-bottom:1px dashed #dcfce7;font-size:7px;">
+                                    <div style="font-weight:bold;color:#14532d;">✓ {{ $doneTask->name }}</div>
+                                    <div style="color:#64748b;font-size:6px;margin-top:1px;">
+                                        {{ $doneTask->category ?: 'General' }} · {{ $doneTask->assignedUser?->name ?: $doneTask->external_assignment ?: 'Unassigned' }}
+                                    </div>
+                                </div>
+                            @empty
+                                <div style="color:#64748b;font-style:italic;font-size:6.5px;">No tasks finalized during this week window.</div>
+                            @endforelse
+                        </td>
+
+                        <!-- Column 2: In Progress / Active This Week -->
+                        <td style="width:33.33%;vertical-align:top;border:1px solid #bfdbfe;background:#eff6ff;padding:6px 8px;">
+                            <div style="font-size:7.5px;font-weight:bold;color:#1e40af;text-transform:uppercase;border-bottom:1px solid #bfdbfe;padding-bottom:2px;margin-bottom:4px;">
+                                In Progress / Active ({{ $weeklyReport['activeThisWeek']->count() }})
+                            </div>
+                            @forelse($weeklyReport['activeThisWeek'] as $actTask)
+                                <div style="margin-bottom:4px;padding-bottom:3px;border-bottom:1px dashed #dbeafe;font-size:7px;">
+                                    <div style="font-weight:bold;color:#1e3a8a;">
+                                        ⟳ {{ $actTask->name }}
+                                        <span style="float:right;color:#2563eb;">{{ $actTask->progress }}%</span>
+                                    </div>
+                                    <div style="color:#64748b;font-size:6px;margin-top:1px;">
+                                        {{ $actTask->category ?: 'General' }} · {{ $actTask->assignedUser?->name ?: $actTask->external_assignment ?: 'Unassigned' }}
+                                    </div>
+                                </div>
+                            @empty
+                                <div style="color:#64748b;font-style:italic;font-size:6.5px;">No active in-progress activities recorded.</div>
+                            @endforelse
+                        </td>
+
+                        <!-- Column 3: Critical / Overdue / Attention -->
+                        <td style="width:33.33%;vertical-align:top;border:1px solid #fecdd3;background:#fff1f2;padding:6px 8px;">
+                            <div style="font-size:7.5px;font-weight:bold;color:#9f1239;text-transform:uppercase;border-bottom:1px solid #fecdd3;padding-bottom:2px;margin-bottom:4px;">
+                                Critical / Overdue / Flags ({{ $weeklyReport['criticalOrOverdue']->count() }})
+                            </div>
+                            @forelse($weeklyReport['criticalOrOverdue'] as $critTask)
+                                <div style="margin-bottom:4px;padding-bottom:3px;border-bottom:1px dashed #ffe4e6;font-size:7px;">
+                                    <div style="font-weight:bold;color:#881337;">
+                                        ⚠ {{ $critTask->name }}
+                                        @if($critTask->manual_status)
+                                            <span style="float:right;background:#fda4af;color:#881337;padding:1px 3px;border-radius:2px;font-size:5.5px;font-weight:bold;">
+                                                {{ $critTask->manual_status }}
+                                            </span>
+                                        @else
+                                            <span style="float:right;color:#e11d48;font-weight:bold;">{{ $critTask->progress }}%</span>
+                                        @endif
+                                    </div>
+                                    <div style="color:#64748b;font-size:6px;margin-top:1px;">
+                                        {{ $critTask->category ?: 'General' }} · {{ $critTask->end_date ? 'Due '.$critTask->end_date->format('M d') : 'Overdue' }}
+                                    </div>
+                                </div>
+                            @empty
+                                <div style="color:#166534;font-weight:bold;font-size:6.5px;">✓ All tasks on schedule. No overdue items.</div>
+                            @endforelse
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Lookahead Next Week -->
+            @if($weeklyReport['nextWeek'] && $weeklyReport['nextWeekTasks']->isNotEmpty())
+                <div style="margin-top:8px;padding:5px 8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:3px;">
+                    <span style="font-size:7.5px;font-weight:bold;color:#475569;text-transform:uppercase;">
+                        Lookahead Focus for {{ $weeklyReport['nextWeek']['label'] }} ({{ $weeklyReport['nextWeek']['formattedRange'] }}):
+                    </span>
+                    <span style="font-size:7px;color:#334155;margin-left:4px;">
+                        @foreach($weeklyReport['nextWeekTasks'] as $nwTask)
+                            <strong>{{ $nwTask->name }}</strong> ({{ $nwTask->category }}){{ !$loop->last ? ' • ' : '' }}
+                        @endforeach
+                    </span>
+                </div>
+            @endif
+
+            <div class="page-break"></div>
+        </div>
     @endif
 
     @forelse($milestones as $milestone)

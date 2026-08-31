@@ -644,7 +644,10 @@ const taskDepartment = (task) => {
         ? props.users.find(user => String(user.id) === String(task.assigned_to))
         : null;
 
-    const name = (assignee?.department || '').trim() || (task.department || '').trim() || '';
+    // The task's configured department owns the process checkpoint. The
+    // assignee's department identifies the executor and is only a fallback when
+    // no accountable department was set on the row.
+    const name = (task.department || '').trim() || (assignee?.department || '').trim() || '';
 
     // Canonicalised at the single place a department is read from, so the filter
     // dropdown and the row labels agree on one spelling — see the Gantt, which
@@ -1035,7 +1038,7 @@ const activeInspectWeek = computed(() => {
 /* ----------------------------------------------------------- Selected Week KPIs */
 const selectedWeekStats = computed(() => {
     const week = selectedWeek.value;
-    if (!week) return { total: 0, completed: 0, ongoing: 0, overdue: 0, plannedProg: 0, actualProg: 0, variance: 0 };
+    if (!week) return { total: 0, completed: 0, ongoing: 0, overdue: 0, plannedProg: 0, actualProg: 0, variance: 0, prevProg: 0, wowDelta: 0 };
 
     const tasks = allFlatTasks.value.filter(t => isTaskActiveInWeek(t, week));
     const total = tasks.length;
@@ -1048,6 +1051,10 @@ const selectedWeekStats = computed(() => {
     const actualProg = weeklyCurveData.value.actual[weekIdx] ?? plannedProg;
     const variance = actualProg - plannedProg;
 
+    const prevWeekIdx = weekIdx - 1;
+    const prevProg = prevWeekIdx >= 0 ? (weeklyCurveData.value.actual[prevWeekIdx] ?? weeklyCurveData.value.planned[prevWeekIdx] ?? 0) : 0;
+    const wowDelta = actualProg - prevProg;
+
     return {
         total,
         completed,
@@ -1056,6 +1063,43 @@ const selectedWeekStats = computed(() => {
         plannedProg,
         actualProg,
         variance,
+        prevProg,
+        wowDelta,
+    };
+});
+
+/* ----------------------------------------------- Selected Week Movements & Highlights */
+const showWeeklyMovements = ref(true);
+
+const selectedWeekMovements = computed(() => {
+    const week = selectedWeek.value;
+    if (!week) return { completed: [], inProgress: [], critical: [], lookahead: [] };
+
+    const allTasks = allFlatTasks.value;
+    const activeTasks = allTasks.filter(t => isTaskActiveInWeek(t, week));
+
+    const completed = activeTasks.filter(t => (Number(t.progress) || 0) >= 100 || t.status === 'Done');
+    const inProgress = activeTasks.filter(t => (Number(t.progress) || 0) > 0 && (Number(t.progress) || 0) < 100);
+    const critical = allTasks.filter(t => {
+        if ((Number(t.progress) || 0) >= 100 || t.status === 'Done') return false;
+        const manual = (t.manual_status || '').toLowerCase();
+        if (manual === 'blocked' || manual === 'for approval' || manual === 'delayed') return true;
+        return getTaskWeekStatus(t, week) === 'overdue';
+    });
+
+    const nextWeek = projectWeeks.value.find(w => w.index === week.index + 1);
+    const lookahead = nextWeek ? allTasks.filter(t => {
+        const s = parseLocalDate(t.start_date);
+        return s && s >= nextWeek.start && s <= nextWeek.end;
+    }) : [];
+
+    return {
+        completed,
+        inProgress,
+        critical,
+        lookahead,
+        nextWeekLabel: nextWeek?.label || '',
+        nextWeekRange: nextWeek?.formattedRange || '',
     };
 });
 
@@ -1455,16 +1499,21 @@ const jumpToGantt = (department = null) => {
                     <p class="text-xl font-black text-emerald-600 dark:text-emerald-400">
                         {{ selectedWeekStats.actualProg }}%
                     </p>
-                    <span
-                        :class="[
-                            'inline-flex items-center text-xs font-black tabular-nums',
-                            selectedWeekStats.variance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                        ]"
-                    >
-                        <ArrowTrendingUpIcon v-if="selectedWeekStats.variance >= 0" class="mr-0.5 h-3.5 w-3.5" />
-                        <ArrowTrendingDownIcon v-else class="mr-0.5 h-3.5 w-3.5" />
-                        {{ selectedWeekStats.variance >= 0 ? '+' : '' }}{{ selectedWeekStats.variance }}%
-                    </span>
+                    <div class="text-right">
+                        <span
+                            :class="[
+                                'inline-flex items-center text-xs font-black tabular-nums',
+                                selectedWeekStats.variance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                            ]"
+                        >
+                            <ArrowTrendingUpIcon v-if="selectedWeekStats.variance >= 0" class="mr-0.5 h-3.5 w-3.5" />
+                            <ArrowTrendingDownIcon v-else class="mr-0.5 h-3.5 w-3.5" />
+                            {{ selectedWeekStats.variance >= 0 ? '+' : '' }}{{ selectedWeekStats.variance }}%
+                        </span>
+                        <div v-if="selectedWeekStats.wowDelta !== 0" class="text-[9px] font-bold text-indigo-600 dark:text-indigo-400">
+                            {{ selectedWeekStats.wowDelta > 0 ? '+' : '' }}{{ selectedWeekStats.wowDelta }}% WoW
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1494,6 +1543,107 @@ const jumpToGantt = (department = null) => {
                     </span>
                     <span v-else class="text-[10px] font-bold text-gray-400">On Track</span>
                 </div>
+            </div>
+        </div>
+
+        <!-- Weekly Movements & Highlights (WoW Comparison Box) -->
+        <div class="rounded-xl border border-gray-200 bg-white p-3.5 sm:p-4 shadow-xs dark:border-gray-700 dark:bg-gray-800">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="flex h-6 w-6 items-center justify-center rounded-md bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400">
+                        <SparklesIcon class="h-4 w-4" />
+                    </div>
+                    <div>
+                        <h4 class="text-xs font-black uppercase tracking-wider text-gray-900 dark:text-gray-100">
+                            Weekly Highlights &amp; Movement Stream
+                        </h4>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 text-xs">
+                    <span class="rounded bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                        WoW Pace: {{ selectedWeekStats.wowDelta >= 0 ? '+' : '' }}{{ selectedWeekStats.wowDelta }}% vs Prev Week
+                    </span>
+                    <button
+                        type="button"
+                        @click="showWeeklyMovements = !showWeeklyMovements"
+                        class="text-[11px] font-bold text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    >
+                        {{ showWeeklyMovements ? 'Collapse' : 'Expand' }}
+                    </button>
+                </div>
+            </div>
+
+            <div v-show="showWeeklyMovements" class="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                <!-- Column 1: Completed This Week -->
+                <div class="rounded-lg border border-emerald-100 bg-emerald-50/50 p-2.5 dark:border-emerald-800/40 dark:bg-emerald-950/20">
+                    <div class="flex items-center justify-between border-b border-emerald-100 pb-1.5 dark:border-emerald-800/40">
+                        <span class="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                            Completed ({{ selectedWeekMovements.completed.length }})
+                        </span>
+                        <CheckCircleIcon class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div class="mt-2 space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                        <div v-for="t in selectedWeekMovements.completed" :key="t.id" class="rounded bg-white p-1.5 border border-emerald-100 shadow-2xs dark:bg-gray-800 dark:border-emerald-900/30">
+                            <p class="truncate text-[11px] font-bold text-gray-900 dark:text-gray-100">{{ t.name }}</p>
+                            <p class="text-[9px] text-gray-500 dark:text-gray-400">{{ t.category }} · {{ getAssigneeName(t) }}</p>
+                        </div>
+                        <p v-if="!selectedWeekMovements.completed.length" class="text-[10px] text-gray-400 italic py-1">No completed tasks in this window.</p>
+                    </div>
+                </div>
+
+                <!-- Column 2: In Progress / Active -->
+                <div class="rounded-lg border border-blue-100 bg-blue-50/50 p-2.5 dark:border-blue-800/40 dark:bg-blue-950/20">
+                    <div class="flex items-center justify-between border-b border-blue-100 pb-1.5 dark:border-blue-800/40">
+                        <span class="text-[10px] font-black uppercase tracking-wider text-blue-800 dark:text-blue-300">
+                            In Progress ({{ selectedWeekMovements.inProgress.length }})
+                        </span>
+                        <ClockIcon class="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div class="mt-2 space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                        <div v-for="t in selectedWeekMovements.inProgress" :key="t.id" class="rounded bg-white p-1.5 border border-blue-100 shadow-2xs dark:bg-gray-800 dark:border-blue-900/30">
+                            <div class="flex items-center justify-between">
+                                <p class="truncate text-[11px] font-bold text-gray-900 dark:text-gray-100">{{ t.name }}</p>
+                                <span class="text-[9px] font-black text-blue-600 dark:text-blue-400 ml-1">{{ t.progress }}%</span>
+                            </div>
+                            <p class="text-[9px] text-gray-500 dark:text-gray-400">{{ t.category }} · {{ getAssigneeName(t) }}</p>
+                        </div>
+                        <p v-if="!selectedWeekMovements.inProgress.length" class="text-[10px] text-gray-400 italic py-1">No tasks currently in progress.</p>
+                    </div>
+                </div>
+
+                <!-- Column 3: Critical / Overdue -->
+                <div class="rounded-lg border border-rose-100 bg-rose-50/50 p-2.5 dark:border-rose-800/40 dark:bg-rose-950/20">
+                    <div class="flex items-center justify-between border-b border-rose-100 pb-1.5 dark:border-rose-800/40">
+                        <span class="text-[10px] font-black uppercase tracking-wider text-rose-800 dark:text-rose-300">
+                            Critical / Overdue ({{ selectedWeekMovements.critical.length }})
+                        </span>
+                        <ExclamationTriangleIcon class="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+                    </div>
+                    <div class="mt-2 space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                        <div v-for="t in selectedWeekMovements.critical" :key="t.id" class="rounded bg-white p-1.5 border border-rose-100 shadow-2xs dark:bg-gray-800 dark:border-rose-900/30">
+                            <div class="flex items-center justify-between">
+                                <p class="truncate text-[11px] font-bold text-gray-900 dark:text-gray-100">{{ t.name }}</p>
+                                <span v-if="t.manual_status" class="rounded bg-rose-100 px-1 text-[8px] font-black uppercase text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">{{ t.manual_status }}</span>
+                                <span v-else class="text-[9px] font-black text-rose-600 dark:text-rose-400">{{ t.progress }}%</span>
+                            </div>
+                            <p class="text-[9px] text-gray-500 dark:text-gray-400">{{ t.category }} · {{ t.end_date ? formatShortDate(parseLocalDate(t.end_date)) : 'Overdue' }}</p>
+                        </div>
+                        <p v-if="!selectedWeekMovements.critical.length" class="text-[10px] text-emerald-600 font-bold py-1">✓ All clear! No overdue items.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lookahead Next Week -->
+            <div v-if="selectedWeekMovements.lookahead.length" class="mt-2.5 rounded-lg border border-gray-100 bg-gray-50/60 px-3 py-1.5 dark:border-gray-700/60 dark:bg-gray-900/40">
+                <span class="text-[9px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Next Week Focus ({{ selectedWeekMovements.nextWeekLabel }} · {{ selectedWeekMovements.nextWeekRange }}):
+                </span>
+                <span class="ml-2 text-[10px] font-semibold text-gray-700 dark:text-gray-300">
+                    <span v-for="(t, i) in selectedWeekMovements.lookahead.slice(0, 5)" :key="t.id">
+                        {{ t.name }}<span v-if="i < Math.min(4, selectedWeekMovements.lookahead.length - 1)"> • </span>
+                    </span>
+                    <span v-if="selectedWeekMovements.lookahead.length > 5" class="text-gray-400"> +{{ selectedWeekMovements.lookahead.length - 5 }} more</span>
+                </span>
             </div>
         </div>
 

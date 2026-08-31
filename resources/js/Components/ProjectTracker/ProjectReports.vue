@@ -23,7 +23,7 @@ const completionTone = (value) => {
         <div>
             <h3 class="text-lg font-black tracking-tight text-gray-900 dark:text-gray-100">Reports</h3>
             <p class="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
-                Department accountability for this project. Click a department to open its activities on the Gantt chart.
+                Department accountability from executable deliverables. Parent activity roll-ups are excluded to avoid counting the same work twice. Click a department to open it on the Gantt chart.
             </p>
         </div>
 
@@ -70,7 +70,7 @@ const completionTone = (value) => {
                     </tbody>
                     <tfoot>
                         <tr class="border-t-2 border-gray-200 bg-gray-50 dark:border-gray-600 dark:bg-gray-900/40">
-                            <td class="px-5 py-3 text-xs font-black uppercase tracking-wider text-gray-500">All activities</td>
+                            <td class="px-5 py-3 text-xs font-black uppercase tracking-wider text-gray-500">All deliverables</td>
                             <td class="px-5 py-3 text-right font-bold tabular-nums text-gray-700 dark:text-gray-300">{{ reports.totals.assignments }}</td>
                             <td class="px-5 py-3 text-right font-bold tabular-nums text-gray-700 dark:text-gray-300">{{ reports.totals.completed }}</td>
                             <td class="px-5 py-3 text-right font-bold tabular-nums text-gray-700 dark:text-gray-300">{{ reports.totals.overdue }}</td>
@@ -90,7 +90,7 @@ const completionTone = (value) => {
             <span class="font-bold">{{ reports.unattributed }}</span>
             {{ reports.unattributed === 1 ? 'activity has' : 'activities have' }}
             no department and no assignee, so they are not counted above. Set a department on the activity
-            template, or assign the rows to a user.
+                    template, or assign the rows to a user.
         </p>
     </div>
 </template>

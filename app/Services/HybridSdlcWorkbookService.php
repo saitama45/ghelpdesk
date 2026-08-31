@@ -11,8 +11,24 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class HybridSdlcWorkbookService
 {
+    private const VALIDATION_LAST_ROW = 5000;
+
     public const FULL_SERVICE = 'Full Service Group: Customer Brand';
     public const CORPORATE = 'Corporate Group: Servicing Brand';
+
+    private const COLLABORATION_DEPARTMENTS = [
+        'BD' => 'Business Development',
+        'PD' => 'Project Development',
+        'FM' => 'Facilities Management',
+        'Marketing' => 'Marketing',
+        'P&O' => 'People and Organization',
+        'OWD' => 'Organizational Wellness & Development',
+        'LD' => 'Leadership Development',
+        'SCM' => 'Supply Chain Management',
+        'F&A' => 'Finance and Accounting',
+        'CBI / DBS' => 'CBI / DBS',
+        'TAS' => 'Technology and Solutions',
+    ];
 
     public const HEADERS = [
         'Template Name', 'Project Type', 'Entity Code', 'Brand Code', 'Project Name',
@@ -25,7 +41,26 @@ class HybridSdlcWorkbookService
 
     public function write(string $path): array
     {
-        $templates = $this->templates();
+        return $this->writeTemplates($path, $this->templates());
+    }
+
+    public function writeSeparate(string $directory): array
+    {
+        if (! is_dir($directory)) {
+            mkdir($directory, 0777, true);
+        }
+
+        $results = [];
+        foreach ($this->templates() as $template) {
+            $filename = preg_replace('/[<>:"\/\\\\|?*]+/', '-', $template['name']).'.xlsx';
+            $results[] = $this->writeTemplates($directory.DIRECTORY_SEPARATOR.$filename, [$template]);
+        }
+
+        return $results;
+    }
+
+    private function writeTemplates(string $path, array $templates): array
+    {
         $rows = [];
         $indexRows = [];
 
@@ -55,6 +90,13 @@ class HybridSdlcWorkbookService
         $index->mergeCells('A1:G1');
         $this->styleGuideSheet($index, 'G');
 
+        if ($this->includesAllDepartmentsImplementation($templates)) {
+            $matrix = $spreadsheet->createSheet();
+            $matrix->setTitle('Collaboration Matrix');
+            $matrix->fromArray($this->collaborationMatrixRows(), null, 'A1');
+            $this->styleCollaborationMatrix($matrix, count($this->collaborationProcesses()));
+        }
+
         $instructions = $spreadsheet->createSheet();
         $instructions->setTitle('Instructions');
         $instructions->fromArray([
@@ -63,6 +105,8 @@ class HybridSdlcWorkbookService
             ['Import', 'Open Activity Templates, choose Import, and upload this XLSX. The application groups rows by Template Name, Project Type, and Store Class.'],
             ['Project Name', 'DAVID, LINK HUB, DIWA, and LINK PORTAL remain plain-text Project Name values; there is no Solution dropdown.'],
             ['Hierarchy', 'Milestone = business capability or release; Activity = SDLC phase, sprint, or store rollout; Sub-Task = assignable accepted deliverable.'],
+            ['All Departments', "All Departments' Process Implementation in LINK HUB contains one Activity per business process. Its Sub-Tasks cover department readiness plus the hybrid SDLC / Agile work needed to implement, test, release, and adopt that process in LINK HUB."],
+            ['Collaboration Matrix', 'Use the matrix as the cross-department reporting view. Milestone marks the primary owning department and Waiting is the recommended initial state; replace these with current status or target week as planning progresses. Imported Sub-Tasks remain the source of progress percentages.'],
             ['Task Board', 'Keep detailed user stories, bugs, and developer tasks on the Task Board. The Gantt should track accepted sprint/release outcomes.'],
             ['Weights', 'Milestones total 100% per template, activities total 100% per milestone, and sub-tasks total 100% per activity.'],
             ['Per Store', 'A Per Store activity is cloned after target stores are selected. Do not manually create 35 placeholder store rows.'],
@@ -110,11 +154,24 @@ class HybridSdlcWorkbookService
         return ['templates' => count($templates), 'rows' => count($rows), 'path' => $path];
     }
 
+    private function includesAllDepartmentsImplementation(array $templates): bool
+    {
+        foreach ($templates as $template) {
+            foreach ($template['milestones'] as $milestone) {
+                if ($milestone['name'] === "All Departments' Process Implementation in LINK HUB") {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     public function templates(): array
     {
         return [
             $this->template('TGI', 'NONOS', 'LINK HUB', [
-                $this->feature('FM Ticketing'), $this->feature("All Departments' NSO Collaboration"),
+                $this->feature('FM Ticketing'), $this->allDepartmentsLinkHubImplementation(),
             ]),
             $this->template('TGI', 'NONOS', 'DAVID', [
                 $this->feature('EO Process Enablement'), $this->feature('AO Process Enablement'),
@@ -131,7 +188,7 @@ class HybridSdlcWorkbookService
                 $this->processReviewRollout('Three-Store Process Review'),
             ]),
             $this->template('TGI', 'CBTL', 'LINK HUB', [
-                $this->feature('FM Ticketing'), $this->feature("All Departments' NSO Collaboration"),
+                $this->feature('FM Ticketing'), $this->allDepartmentsLinkHubImplementation(),
                 $this->feature('Campaign Programs'), $this->feature('Stamping Loyalty Campaign Programs (Mobile App)'),
             ], 'Both'),
             $this->template('TGI', 'CBTL', 'DAVID', [$this->davidTransactionRollout()], 'Both'),
@@ -142,7 +199,7 @@ class HybridSdlcWorkbookService
                 $this->feature('Process Review'), $this->inventoryScanning('NCF Inventory Scanning'),
             ], 'Both'),
             $this->template('TGI', null, 'LINK HUB', [
-                $this->feature("All Departments' NSO Collaboration"), $this->poForms(),
+                $this->allDepartmentsLinkHubImplementation(), $this->poForms(),
             ], 'Both', self::CORPORATE),
             $this->template('TGI', null, 'LINK PORTAL', [$this->ocr()], 'Both', self::CORPORATE),
             $this->template('DBS', null, 'LINK HUB', [$this->feature('DBS Ticketing')], 'Both', self::CORPORATE),
@@ -208,6 +265,123 @@ class HybridSdlcWorkbookService
                 ['Complete hypercare and release closure', 'Priority production issues are resolved and the owner accepts operational handover.'],
             ], 'Release Manager'),
         ];
+    }
+
+    private function allDepartmentsLinkHubImplementation(): array
+    {
+        $processes = $this->collaborationProcesses();
+        $activityWeights = $this->equalWeights(count($processes));
+        $activities = [];
+
+        foreach ($processes as $index => $process) {
+            $tasks = [
+                [
+                    'Confirm lead, partner, scope, KPIs, and implementation outcome',
+                    "{$process['lead']} and {$process['partner']} confirm the accountable roles, scope, measurable KPIs, exclusions, and intended LINK HUB outcome for {$process['name']}.",
+                    "Lead: {$process['lead']} | Partner: {$process['partner']}",
+                    $process['department'],
+                ],
+                [
+                    'Document current process and approve target LINK HUB workflow',
+                    "The as-is process, controls, exceptions, hand-offs, target workflow, and approval rules for {$process['name']} are documented and accepted.",
+                    'Business Analyst / Process Owner',
+                    $process['department'],
+                ],
+            ];
+
+            foreach (self::COLLABORATION_DEPARTMENTS as $code => $department) {
+                $tasks[] = [
+                    "{$code} readiness and process checkpoint",
+                    "{$department} records its owner, status or target week, requirements, dependencies, evidence, and approval decision for the {$process['name']} workflow in LINK HUB.",
+                    "{$code} Process Representative",
+                    $department,
+                ];
+            }
+
+            array_push($tasks,
+                [
+                    'Refine backlog and approve sprint and release plan',
+                    "Acceptance-ready stories for {$process['name']} are prioritized, estimated, assigned to sprints, and linked to an approved LINK HUB release plan.",
+                    'Product Owner / Scrum Team',
+                    'Technology and Solutions',
+                ],
+                [
+                    'Configure and build the LINK HUB process workflow',
+                    "Forms, routing, approvals, SLA rules, notifications, permissions, audit trail, reports, and required integrations for {$process['name']} meet the approved stories.",
+                    'LINK HUB Development Team',
+                    'Technology and Solutions',
+                ],
+                [
+                    'Complete QA, security, integration, and regression testing',
+                    "The {$process['name']} release scope passes functional, permission, audit, integration, security, exception-path, and regression tests without a release blocker.",
+                    'QA Team / TAS',
+                    'Technology and Solutions',
+                ],
+                [
+                    'Conduct cross-department UAT and close findings',
+                    "Applicable departments complete representative {$process['name']} scenarios, blocking findings are resolved, and the lead and partner approve UAT exit.",
+                    "Lead: {$process['lead']} | Partner: {$process['partner']} / Key Users",
+                    $process['department'],
+                ],
+                [
+                    'Release, train users, monitor adoption, and close hypercare',
+                    "The {$process['name']} workflow is deployed to LINK HUB, users receive SOP and training, adoption and KPI results are monitored, and the process owner accepts operational handover.",
+                    'Release Manager / Process Owner',
+                    $process['department'],
+                ],
+            );
+
+            $activities[] = $this->activity(
+                $process['name'],
+                $activityWeights[$index],
+                'Standard',
+                $tasks,
+                "Lead: {$process['lead']} | Partner: {$process['partner']}",
+                $process['department'],
+            );
+        }
+
+        return [
+            'name' => "All Departments' Process Implementation in LINK HUB",
+            'activities' => $activities,
+        ];
+    }
+
+    private function collaborationProcesses(): array
+    {
+        return [
+            ['group' => 1, 'name' => 'New Store Opening', 'lead' => 'Pam', 'partner' => 'Daphne', 'department' => 'Business Development', 'owner_code' => 'BD'],
+            ['group' => 1, 'name' => 'Store Closure', 'lead' => 'Pam', 'partner' => 'Daphne', 'department' => 'Business Development', 'owner_code' => 'BD'],
+            ['group' => 1, 'name' => 'Store Renovation', 'lead' => 'Pam', 'partner' => 'Daphne', 'department' => 'Project Development', 'owner_code' => 'PD'],
+            ['group' => 2, 'name' => 'Requisition Process', 'lead' => 'Cel', 'partner' => 'Brendan', 'department' => 'Supply Chain Management', 'owner_code' => 'SCM'],
+            ['group' => 2, 'name' => 'Purchasing Process', 'lead' => 'Cel', 'partner' => 'Brendan', 'department' => 'Supply Chain Management', 'owner_code' => 'SCM'],
+            ['group' => 2, 'name' => 'Procure to Pay', 'lead' => 'Anna, Rach', 'partner' => 'Becky', 'department' => 'Finance and Accounting', 'owner_code' => 'F&A'],
+            ['group' => 3, 'name' => 'Campaign Launch', 'lead' => 'Kim, Josie', 'partner' => 'Rach', 'department' => 'Marketing', 'owner_code' => 'Marketing'],
+            ['group' => 3, 'name' => 'Product Launch', 'lead' => 'Kim, Josie', 'partner' => 'Cel', 'department' => 'Marketing', 'owner_code' => 'Marketing'],
+            ['group' => 4, 'name' => 'Project Development', 'lead' => 'Becky, Sundae', 'partner' => 'Nef', 'department' => 'Project Development', 'owner_code' => 'PD'],
+            ['group' => 4, 'name' => 'Equipment Planning', 'lead' => 'Becky, Sundae', 'partner' => 'Grace', 'department' => 'Facilities Management', 'owner_code' => 'FM'],
+            ['group' => 4, 'name' => 'DBS Importation', 'lead' => 'Grace', 'partner' => 'Pam', 'department' => 'CBI / DBS', 'owner_code' => 'CBI / DBS'],
+            ['group' => 5, 'name' => 'Manpower Planning and Employee Experience', 'lead' => 'Daphne', 'partner' => 'Sundae', 'department' => 'People and Organization', 'owner_code' => 'P&O'],
+            ['group' => 5, 'name' => 'OWD and Foundational Training Initiatives', 'lead' => 'Mich C', 'partner' => 'Kim', 'department' => 'Organizational Wellness & Development', 'owner_code' => 'OWD'],
+            ['group' => 5, 'name' => 'Leadership Development Initiatives', 'lead' => 'Mich V', 'partner' => 'Anna', 'department' => 'Leadership Development', 'owner_code' => 'LD'],
+        ];
+    }
+
+    private function collaborationMatrixRows(): array
+    {
+        $rows = [[
+            'Group', 'Process', 'Lead', 'Partner', ...array_keys(self::COLLABORATION_DEPARTMENTS),
+        ]];
+
+        foreach ($this->collaborationProcesses() as $process) {
+            $statuses = [];
+            foreach (array_keys(self::COLLABORATION_DEPARTMENTS) as $code) {
+                $statuses[] = $code === $process['owner_code'] ? 'Milestone' : 'Waiting';
+            }
+            $rows[] = [$process['group'], $process['name'], $process['lead'], $process['partner'], ...$statuses];
+        }
+
+        return $rows;
     }
 
     private function inventoryScanning(string $name = 'Inventory Scanning with Barcode Scanner'): array
@@ -316,9 +490,9 @@ class HybridSdlcWorkbookService
         return ['name' => 'P&O Employee Services Agreed Forms', 'activities' => $activities];
     }
 
-    private function activity(string $name, float $weight, string $mode, array $tasks, string $responsible): array
+    private function activity(string $name, float $weight, string $mode, array $tasks, string $responsible, ?string $department = null): array
     {
-        return compact('name', 'weight', 'mode', 'tasks', 'responsible');
+        return compact('name', 'weight', 'mode', 'tasks', 'responsible', 'department');
     }
 
     private function templateRows(array $template): array
@@ -336,15 +510,18 @@ class HybridSdlcWorkbookService
                 $rows[] = $this->row($template, $activityKey, null, $activity['name'], $activity['mode'],
                     $milestone['name'], $milestoneIndex + 1, $milestoneWeights[$milestoneIndex],
                     $activity['weight'], null, $activity['name'].' is completed and accepted.',
-                    $activity['responsible'], $duration, $globalOrder++, $previousActivity);
+                    $activity['responsible'], $duration, $globalOrder++, $previousActivity, $activity['department'] ?? null);
 
                 $previousTask = $previousActivity;
-                foreach ($activity['tasks'] as $taskIndex => [$taskName, $acceptance]) {
+                foreach ($activity['tasks'] as $taskIndex => $task) {
+                    [$taskName, $acceptance] = $task;
+                    $taskResponsible = $task[2] ?? $activity['responsible'];
+                    $taskDepartment = $task[3] ?? ($activity['department'] ?? null);
                     $taskKey = $activityKey.'-S'.sprintf('%02d', $taskIndex + 1);
                     $rows[] = $this->row($template, $taskKey, $activityKey, $taskName, $activity['mode'],
                         $milestone['name'], $milestoneIndex + 1, $milestoneWeights[$milestoneIndex],
                         $activity['weight'], $taskWeights[$taskIndex], $acceptance,
-                        $activity['responsible'], 1, $globalOrder++, $previousTask);
+                        $taskResponsible, 1, $globalOrder++, $previousTask, $taskDepartment);
                     $previousTask = $taskKey;
                 }
                 $previousActivity = $activityKey;
@@ -356,13 +533,13 @@ class HybridSdlcWorkbookService
     private function row(array $template, string $key, ?string $parent, string $activity, string $mode,
         string $milestone, int $milestoneOrder, float $milestoneWeight, float $activityWeight,
         ?float $subTaskWeight, string $acceptance, string $responsible, int $days, int $order,
-        ?string $requisite): array
+        ?string $requisite, ?string $department = null): array
     {
         return [
             $template['name'], $template['project_type'], $template['entity'], $template['brand'],
             $template['project_name'], $template['store_class'], $key, $parent, $activity, $mode,
             $milestone, $milestoneOrder, $milestoneWeight, $activityWeight, $subTaskWeight,
-            $acceptance, null, null, 1, $responsible, null, null, $days, $order, $requisite, 'No',
+            $acceptance, null, null, 1, $responsible, $department, null, $days, $order, $requisite, 'No',
         ];
     }
 
@@ -401,6 +578,29 @@ class HybridSdlcWorkbookService
         $sheet->getStyle("A1:{$lastColumn}200")->getAlignment()->setVertical(Alignment::VERTICAL_TOP)->setWrapText(true);
     }
 
+    private function styleCollaborationMatrix(Worksheet $sheet, int $processCount): void
+    {
+        $lastRow = $processCount + 1;
+        $sheet->freezePane('E2');
+        $sheet->setAutoFilter("A1:O{$lastRow}");
+        $sheet->getStyle('A1:O1')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '7C3AED']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+        ]);
+        $sheet->getColumnDimension('A')->setWidth(9);
+        $sheet->getColumnDimension('B')->setWidth(46);
+        $sheet->getColumnDimension('C')->setWidth(18);
+        $sheet->getColumnDimension('D')->setWidth(18);
+        foreach (range('E', 'O') as $column) {
+            $sheet->getColumnDimension($column)->setWidth(16);
+        }
+        $sheet->getStyle("A1:O{$lastRow}")->getAlignment()
+            ->setVertical(Alignment::VERTICAL_CENTER)
+            ->setWrapText(true);
+        $sheet->getStyle("E2:O{$lastRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    }
+
     private function applyValidations(Worksheet $sheet): void
     {
         $this->listValidation($sheet, 'B', 'A', 2);
@@ -418,15 +618,15 @@ class HybridSdlcWorkbookService
         $v = new DataValidation;
         $v->setType(DataValidation::TYPE_LIST)->setAllowBlank($blank)->setShowDropDown(true)
             ->setShowErrorMessage(true)->setError('Select a value from the workbook list.')
-            ->setFormula1("Lists!\${$source}\$2:\${$source}\$".($count + 1))->setSqref("{$target}2:{$target}1000");
-        $sheet->setDataValidation("{$target}2:{$target}1000", $v);
+            ->setFormula1("Lists!\${$source}\$2:\${$source}\$".($count + 1))->setSqref("{$target}2:{$target}".self::VALIDATION_LAST_ROW);
+        $sheet->setDataValidation("{$target}2:{$target}".self::VALIDATION_LAST_ROW, $v);
     }
 
     private function rangeValidation(Worksheet $sheet, string $target, string $source): void
     {
         $v = new DataValidation;
         $v->setType(DataValidation::TYPE_LIST)->setAllowBlank(true)->setShowDropDown(true)
-            ->setFormula1("\${$source}\$2:\${$source}\$1000")->setSqref("{$target}2:{$target}1000");
-        $sheet->setDataValidation("{$target}2:{$target}1000", $v);
+            ->setFormula1("\${$source}\$2:\${$source}\$".self::VALIDATION_LAST_ROW)->setSqref("{$target}2:{$target}".self::VALIDATION_LAST_ROW);
+        $sheet->setDataValidation("{$target}2:{$target}".self::VALIDATION_LAST_ROW, $v);
     }
 }

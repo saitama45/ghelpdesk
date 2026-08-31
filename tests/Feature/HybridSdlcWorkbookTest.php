@@ -24,14 +24,16 @@ class HybridSdlcWorkbookTest extends TestCase
 
         try {
             $this->assertSame(13, $result['templates']);
-            $this->assertSame(771, $result['rows']);
+            $this->assertSame(1473, $result['rows']);
 
             $book = IOFactory::load($path);
             $this->assertSame(
-                ['Activity Templates', 'Template Index', 'Instructions', 'WBS Guide', 'Lists'],
+                ['Activity Templates', 'Template Index', 'Collaboration Matrix', 'Instructions', 'WBS Guide', 'Lists'],
                 $book->getSheetNames()
             );
             $this->assertSame(HybridSdlcWorkbookService::HEADERS, $book->getActiveSheet()->rangeToArray('A1:Z1')[0]);
+            $this->assertSame('Group', $book->getSheetByName('Collaboration Matrix')->getCell('A1')->getValue());
+            $this->assertSame('New Store Opening', $book->getSheetByName('Collaboration Matrix')->getCell('B2')->getValue());
             $this->assertSame('hidden', $book->getSheetByName('Lists')->getSheetState());
 
             $companies = collect([
@@ -67,8 +69,53 @@ class HybridSdlcWorkbookTest extends TestCase
             $this->assertDatabaseHas('activity_templates', [
                 'activity' => 'Store Deployment', 'activity_mode' => 'per_store',
             ]);
+            $this->assertDatabaseHas('activity_templates', [
+                'milestone' => "All Departments' Process Implementation in LINK HUB",
+                'activity' => 'New Store Opening',
+                'department' => 'Business Development',
+            ]);
+            $this->assertDatabaseHas('activity_templates', [
+                'milestone' => "All Departments' Process Implementation in LINK HUB",
+                'activity' => 'TAS readiness and process checkpoint',
+                'department' => 'Technology and Solutions',
+            ]);
         } finally {
             if (is_file($path)) unlink($path);
+        }
+    }
+
+    public function test_each_recommended_template_can_be_generated_as_a_standalone_workbook(): void
+    {
+        $directory = storage_path('framework/testing/hybrid-sdlc-separate-'.uniqid());
+
+        try {
+            $results = app(HybridSdlcWorkbookService::class)->writeSeparate($directory);
+
+            $this->assertCount(13, $results);
+            foreach ($results as $result) {
+                $this->assertSame(1, $result['templates']);
+                $this->assertFileExists($result['path']);
+
+                $book = IOFactory::load($result['path']);
+                $index = $book->getSheetByName('Template Index');
+                $this->assertNotNull($index->getCell('A3')->getValue());
+                $this->assertNull($index->getCell('A4')->getValue());
+            }
+
+            $linkHubPath = $directory.DIRECTORY_SEPARATOR.'TGI - NONOS - LINK HUB - Hybrid SDLC Agile.xlsx';
+            $this->assertFileExists($linkHubPath);
+            $this->assertContains('Collaboration Matrix', IOFactory::load($linkHubPath)->getSheetNames());
+
+            $diwaPath = $directory.DIRECTORY_SEPARATOR.'TGI - NONOS - DIWA - Hybrid SDLC Agile.xlsx';
+            $this->assertFileExists($diwaPath);
+            $this->assertNotContains('Collaboration Matrix', IOFactory::load($diwaPath)->getSheetNames());
+        } finally {
+            if (is_dir($directory)) {
+                foreach (glob($directory.DIRECTORY_SEPARATOR.'*.xlsx') ?: [] as $file) {
+                    unlink($file);
+                }
+                rmdir($directory);
+            }
         }
     }
 

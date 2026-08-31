@@ -23,7 +23,7 @@ test('imports and inspects the narrated Hybrid SDLC Agile workbook', async ({ pa
     await qa.say('The real Activity Templates import dialog accepts one workbook containing multiple entity, brand, and application-project templates.');
     const dialog = page.locator('dialog[open]');
     await dialog.locator('input[type=file]').setInputFiles(WORKBOOK);
-    await qa.say('The selected workbook contains 13 recommended templates and 771 milestone, activity, and sub-task rows.');
+    await qa.say('The selected workbook contains 13 recommended templates and 1,473 activity and sub-task rows, including the cross-department LINK HUB process implementation structure.');
     await dialog.getByRole('button', { name: /Start Import/i }).click();
 
     await expect(dialog.getByText(/Imported 13 template\(s\); skipped 0 template\(s\)/i)).toBeVisible({ timeout: 180_000 });

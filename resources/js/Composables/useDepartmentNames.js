@@ -1,8 +1,8 @@
 /**
  * One department, one name.
  *
- * A task's department is resolved from free-text columns — `users.department` for
- * the assignee, `project_tasks.department` for the row itself — so the same
+ * A task's department is resolved from free-text columns — `project_tasks.department`
+ * for process accountability, with `users.department` as a fallback — so the same
  * department reaches the UI under more than one spelling. On the live data
  * "Technology and Solutions" and "Technology And Solutions" both exist on user
  * records, which made the project filter dropdowns offer the same department

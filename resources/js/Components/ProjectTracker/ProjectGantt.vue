@@ -84,6 +84,7 @@ const formMode = ref('activity');
 const activeParentTask = ref(null);
 const activeMilestone = ref('');
 const showFilters = ref(false);
+const showDepartmentSummary = ref(false);
 const isApplyingTemplates = ref(false);
 const showTemplateModal = ref(false);
 const selectedTemplateId = ref('');
@@ -1105,21 +1106,92 @@ const getAssigneeInitial = (task) => {
 
 /**
  * The department accountable for a row — mirrors ProjectTask::resolvedDepartment()
- * on the server. The assignee's department wins because it reflects who is doing
- * the work; the department copied from the activity template is the fallback that
- * covers the many rows with no assignee at all.
+ * on the server. The row's department is the accountable process department and
+ * wins for monitoring. Assignee department is only a fallback for rows whose
+ * department was left blank.
  */
 const taskDepartment = (task) => {
     const assignee = task.assigned_to
         ? props.users.find(user => user.id == task.assigned_to)
         : null;
 
-    const name = (assignee?.department || '').trim() || (task.department || '').trim() || '';
+    const name = (task.department || '').trim() || (assignee?.department || '').trim() || '';
 
     // Canonicalised here, at the one place every label, filter option and
     // milestone tally reads a department from — otherwise the same department
     // renders under two spellings depending on who is assigned to the row.
     return canonicalDepartment(name, props.departments);
+};
+
+// Department progress uses executable leaf rows. Activities with sub-tasks are
+// roll-up rows, so including both would count the same work twice. Imported WBS
+// weights preserve the intended contribution of every process checkpoint.
+const departmentProgressSummary = computed(() => {
+    const parentIds = new Set(
+        localTasks.value
+            .map(task => task.parent_task_id ? Number(task.parent_task_id) : null)
+            .filter(Boolean)
+    );
+    const groups = new Map();
+
+    localTasks.value
+        .filter(task => !parentIds.has(Number(task.id)))
+        .forEach((task) => {
+            const department = taskDepartment(task);
+            if (!department) return;
+
+            const key = department.toLocaleLowerCase();
+            if (!groups.has(key)) {
+                groups.set(key, {
+                    name: department,
+                    assignments: 0,
+                    completed: 0,
+                    weightedProgress: 0,
+                    weight: 0,
+                });
+            }
+
+            const milestoneWeight = Number(task.milestone_weight) > 0 ? Number(task.milestone_weight) / 100 : 1;
+            const activityWeight = Number(task.activity_weight) > 0 ? Number(task.activity_weight) / 100 : 1;
+            const subTaskWeight = task.parent_task_id && Number(task.sub_task_weight) > 0
+                ? Number(task.sub_task_weight) / 100
+                : 1;
+            const weight = milestoneWeight * activityWeight * subTaskWeight;
+            const progress = Math.min(100, Math.max(0, Number(task.progress) || 0));
+            const group = groups.get(key);
+
+            group.assignments += 1;
+            group.completed += progress >= 100 || task.status === 'Done' ? 1 : 0;
+            group.weightedProgress += progress * weight;
+            group.weight += weight;
+        });
+
+    return [...groups.values()]
+        .map(group => ({
+            ...group,
+            progress: group.weight > 0 ? Math.round(group.weightedProgress / group.weight) : 0,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+});
+
+const departmentProgressTone = (progress) => {
+    if (progress >= 75) return 'text-emerald-600 dark:text-emerald-400';
+    if (progress >= 40) return 'text-amber-600 dark:text-amber-400';
+    return 'text-rose-600 dark:text-rose-400';
+};
+
+const focusDepartmentOnGantt = (department) => {
+    showDepartmentSummary.value = false;
+    filterUsers.value = [];
+    filterDepartments.value = [department];
+    showFilters.value = true;
+
+    nextTick(() => {
+        mainWorkspaceRef.value?.querySelector('[data-task-row]')?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+        });
+    });
 };
 
 const taskOrganizationLabel = (task) => {
@@ -1319,6 +1391,14 @@ const isWeekend = (date) => {
                     <DocumentChartBarIcon class="mr-1.5 h-3.5 w-3.5" />
                     Export PDF
                 </a>
+                <button v-if="departmentProgressSummary.length"
+                        type="button"
+                        @click="showDepartmentSummary = true"
+                        class="inline-flex items-center rounded-lg border border-sky-200 bg-white px-3 py-1.5 text-xs font-bold text-sky-700 shadow-xs transition-all hover:bg-sky-50 active:scale-95 dark:border-sky-400/30 dark:bg-slate-900 dark:text-sky-200 dark:hover:bg-sky-500/15"
+                        title="View weighted progress by department">
+                    <DocumentChartBarIcon class="mr-1.5 h-3.5 w-3.5" />
+                    Department Progress
+                </button>
                 <button v-if="canManage" @click="applyActivityTemplates"
                         class="inline-flex items-center px-3 py-1.5 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg shadow-xs transition-all active:scale-95 disabled:opacity-50 dark:border-indigo-400/30 dark:bg-slate-900 dark:text-indigo-200 dark:hover:bg-indigo-500/15"
                         :disabled="isApplyingTemplates"
@@ -1576,13 +1656,13 @@ const isWeekend = (date) => {
 
         <!-- Main Workspace: Unified Scroll -->
         <div class="flex-1 overflow-auto relative bg-[#fafbfc] dark:bg-slate-950" ref="mainWorkspaceRef">
-            <div :style="{ width: (560 + timelineDays.length * 40) + 'px' }" class="relative min-h-full">
+            <div :style="{ width: (760 + timelineDays.length * 40) + 'px' }" class="relative min-h-full">
                 
                 <!-- STICKY HEADER ROW -->
                 <div class="sticky top-0 z-50 flex h-12 bg-white border-b border-slate-200 dark:border-slate-700 dark:bg-slate-900">
                     <!-- Left Header -->
-                    <div class="sticky left-0 z-50 w-[560px] h-full flex items-center bg-slate-50 border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:shadow-black/20 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                        <div class="w-[280px] px-3">Activity / Sub-task</div>
+                    <div class="sticky left-0 z-50 w-[760px] h-full flex items-center bg-slate-50 border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:shadow-black/20 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                        <div class="w-[480px] px-3">Activity / Sub-task</div>
                         <div class="w-[130px] px-2 text-left">Responsible</div>
                         <div class="w-[150px] px-3 text-right">Status</div>
                     </div>
@@ -1617,20 +1697,20 @@ const isWeekend = (date) => {
                 <div class="relative">
                     <!-- Vertical Grid Lines (Background) -->
                     <div class="absolute inset-0 flex pointer-events-none z-0">
-                         <div class="w-[560px] flex-shrink-0"></div>
+                         <div class="w-[760px] flex-shrink-0"></div>
                          <div v-for="(day, idx) in timelineDays" :key="'grid'+idx" 
                              class="flex-shrink-0 w-10 border-r border-slate-100 h-full dark:border-slate-800"
                              :class="[
-                                isWeekend(day) ? 'bg-slate-50/20 dark:bg-slate-800/30' : '',
-                                isHoliday(day) ? 'bg-rose-50/40 dark:bg-rose-500/10' : '',
-                                isToday(day) ? 'bg-indigo-50/20 dark:bg-indigo-500/10' : ''
+                                 isWeekend(day) ? 'bg-slate-50/20 dark:bg-slate-800/30' : '',
+                                 isHoliday(day) ? 'bg-rose-50/40 dark:bg-rose-500/10' : '',
+                                 isToday(day) ? 'bg-indigo-50/20 dark:bg-indigo-500/10' : ''
                              ]">
                         </div>
                     </div>
 
                     <!-- Today Indicator Line -->
                     <div v-for="(day, idx) in timelineDays" :key="'line'+idx">
-                         <div v-if="isToday(day)" class="absolute h-full w-px bg-indigo-500/40 z-0 pointer-events-none" :style="{ left: (560 + idx * 40 + 20) + 'px' }">
+                         <div v-if="isToday(day)" class="absolute h-full w-px bg-indigo-500/40 z-0 pointer-events-none" :style="{ left: (760 + idx * 40 + 20) + 'px' }">
                             <div class="bg-indigo-600 text-[8px] text-white px-1 py-0.5 rounded-b shadow-sm absolute top-0 transform -translate-x-1/2 font-black uppercase tracking-tighter whitespace-nowrap">Today</div>
                          </div>
                     </div>
@@ -1639,10 +1719,10 @@ const isWeekend = (date) => {
                     <template v-for="(tasks, category) in visibleGroupedTasks" :key="category">
                         <!-- Category Row -->
                         <div class="flex sticky top-12 z-30">
-                            <div class="sticky left-0 z-40 w-[560px] h-9 bg-slate-100/95 flex items-center justify-between px-3 border-b border-slate-200 border-r shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/20">
+                            <div class="sticky left-0 z-40 w-[760px] h-9 bg-slate-100/95 flex items-center justify-between px-3 border-b border-slate-200 border-r shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/20">
                                 <div class="flex items-center space-x-2 min-w-0 mr-2">
                                     <ChevronRightIcon class="w-3 h-3 text-slate-400 transform rotate-90 shrink-0 dark:text-slate-300" />
-                                    <span class="text-xs font-black text-slate-700 uppercase tracking-wider truncate max-w-[220px] dark:text-slate-100" :title="category">{{ category }}</span>
+                                    <span class="text-xs font-black text-slate-700 uppercase tracking-wider truncate max-w-[380px] dark:text-slate-100" :title="category">{{ category }}</span>
                                     <span class="px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded text-[9px] font-bold shrink-0 dark:bg-slate-700 dark:text-slate-200">{{ visibleTaskCount(tasks) }}</span>
                                     <span class="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[9px] font-black uppercase whitespace-nowrap shrink-0 dark:bg-indigo-500/20 dark:text-indigo-200"
                                           :title="`How long this milestone runs — its first start to its last finish. Its rows total ${milestoneLeadTime(tasks)} lead-time days, but rows running in parallel share the same days.`">
@@ -1694,11 +1774,11 @@ const isWeekend = (date) => {
                                   class="flex border-b border-slate-100 hover:bg-indigo-50/15 group transition-colors relative z-10 dark:border-slate-800 dark:hover:bg-indigo-500/5">
                                 
                                 <!-- Left Task Info (Sticky) -->
-                                <div class="sticky left-0 z-30 w-[560px] flex items-center border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-800 dark:shadow-black/20"
+                                <div class="sticky left-0 z-30 w-[760px] flex items-center border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-800 dark:shadow-black/20"
                                      :class="row.isSubTask ? 'bg-slate-50/90 group-hover:bg-slate-100/70 dark:bg-slate-900/80 dark:group-hover:bg-slate-800' : 'bg-white group-hover:bg-slate-50 dark:bg-slate-950 dark:group-hover:bg-slate-900'">
                                     
                                     <!-- Activity / Sub-task Column -->
-                                    <div class="w-[280px] flex items-center gap-2 py-1.5" :class="row.isSubTask ? 'pl-6 pr-3' : 'px-3'">
+                                    <div class="w-[480px] flex items-center gap-2 py-1.5" :class="row.isSubTask ? 'pl-6 pr-3' : 'px-3'">
                                         <div class="relative flex-shrink-0" @click.stop>
                                             <input v-if="!hasSubTasks(row.task)"
                                                    type="checkbox"
@@ -1726,20 +1806,20 @@ const isWeekend = (date) => {
                                         </div>
                                         <span v-if="row.isSubTask" class="text-indigo-600 dark:text-indigo-400 font-bold text-xs shrink-0 select-none mr-0.5">↳</span>
                                         <div class="flex-1 min-w-0">
-                                            <div class="flex items-center justify-between gap-1 mb-0.5">
-                                                <div class="font-semibold text-slate-800 dark:text-slate-100 truncate"
+                                            <div class="flex items-center justify-between gap-2 mb-0.5">
+                                                <div class="font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap"
                                                      :class="row.isSubTask ? 'text-[11px]' : 'text-xs'"
                                                      :title="row.task.name">
                                                     {{ row.task.name }}
                                                 </div>
                                                 <span class="text-[10px] font-bold text-slate-400 tabular-nums shrink-0 dark:text-slate-400">{{ row.task.progress }}%</span>
                                             </div>
-                                            <div class="flex items-center gap-1.5 text-[9px] text-slate-400 dark:text-slate-400 truncate leading-tight">
+                                            <div class="flex items-center gap-1.5 text-[9px] text-slate-400 dark:text-slate-400 whitespace-nowrap leading-tight">
                                                 <span v-if="formatDateRange(row.task.start_date, row.task.end_date)" class="font-medium text-slate-500 dark:text-slate-400">
                                                     {{ formatDateRange(row.task.start_date, row.task.end_date) }}
                                                 </span>
                                                 <span v-if="formatDateRange(row.task.start_date, row.task.end_date) && (taskOrganizationLabel(row.task) || row.task.lead_time_days)">·</span>
-                                                <span v-if="taskOrganizationLabel(row.task)" class="font-bold text-indigo-500 truncate">
+                                                <span v-if="taskOrganizationLabel(row.task)" class="font-bold text-indigo-500 whitespace-nowrap">
                                                     {{ taskOrganizationLabel(row.task) }}
                                                 </span>
                                             </div>
@@ -1850,6 +1930,53 @@ const isWeekend = (date) => {
         </div>
 
         <!-- Template Selection Modal -->
+        <Modal :show="showDepartmentSummary" @close="showDepartmentSummary = false" maxWidth="5xl">
+            <div class="p-6 dark:bg-slate-900">
+                <div class="mb-5 flex items-start justify-between gap-4">
+                    <div>
+                        <h3 class="text-xl font-black text-slate-900 dark:text-slate-100">Department Progress Summary</h3>
+                        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                            Weighted from executable Activities/Sub-Tasks. Parent roll-ups are excluded to prevent double counting.
+                        </p>
+                    </div>
+                    <button type="button" @click="showDepartmentSummary = false"
+                            class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200">
+                        <XMarkIcon class="h-5 w-5" />
+                    </button>
+                </div>
+
+                <div class="grid max-h-[65vh] grid-cols-1 gap-3 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
+                    <button
+                        v-for="department in departmentProgressSummary"
+                        :key="department.name"
+                        type="button"
+                        @click="focusDepartmentOnGantt(department.name)"
+                        class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-indigo-300 hover:bg-indigo-50/60 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800/60 dark:hover:border-indigo-400/50 dark:hover:bg-indigo-500/10"
+                        :title="`Show ${department.name} work on the Gantt`"
+                    >
+                        <div class="flex items-start justify-between gap-3">
+                            <span class="text-sm font-black text-slate-800 dark:text-slate-100">{{ department.name }}</span>
+                            <span :class="['shrink-0 text-base font-black tabular-nums', departmentProgressTone(department.progress)]">
+                                {{ department.progress }}%
+                            </span>
+                        </div>
+                        <div class="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                            <div class="h-full rounded-full bg-indigo-500 transition-all duration-500"
+                                 :style="{ width: `${department.progress}%` }"></div>
+                        </div>
+                        <div class="mt-3 flex justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                            <span>{{ department.assignments }} deliverables</span>
+                            <span>{{ department.completed }} completed</span>
+                        </div>
+                    </button>
+                </div>
+
+                <p class="mt-4 text-xs font-semibold text-indigo-600 dark:text-indigo-300">
+                    Select a department to close this summary and filter the existing dense Gantt view to its rows.
+                </p>
+            </div>
+        </Modal>
+
         <Modal :show="showTemplateModal" @close="showTemplateModal = false" maxWidth="lg">
             <div class="p-6 dark:bg-slate-900">
                 <div class="flex justify-between items-center mb-6">

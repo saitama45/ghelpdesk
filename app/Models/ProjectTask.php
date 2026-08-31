@@ -154,26 +154,25 @@ class ProjectTask extends Model
     /**
      * The department accountable for this row.
      *
-     * The assigned user's department wins, because that reflects who is actually
-     * doing the work; the department copied from the activity template is the
-     * fallback. That order matters: only a handful of rows carry an assignee,
-     * while the template fills `department` on most of them, so relying on
-     * either one alone would leave most rows unattributed.
+     * The department stored on the activity/sub-task is the accountable process
+     * department and therefore wins for monitoring. The assigned user's
+     * department describes who is executing the work and is only a fallback for
+     * manually-created rows that have no accountable department of their own.
      *
      * Callers that resolve this in bulk should eager-load `assignedUser` — see
      * ProjectOverviewService — or this lazy-loads one query per row.
      */
     public function resolvedDepartment(): ?string
     {
-        $fromAssignee = $this->assigned_to ? trim((string) $this->assignedUser?->department) : '';
-
-        if ($fromAssignee !== '') {
-            return $fromAssignee;
-        }
-
         $fromRow = trim((string) $this->department);
 
-        return $fromRow !== '' ? $fromRow : null;
+        if ($fromRow !== '') {
+            return $fromRow;
+        }
+
+        $fromAssignee = $this->assigned_to ? trim((string) $this->assignedUser?->department) : '';
+
+        return $fromAssignee !== '' ? $fromAssignee : null;
     }
 
     /**

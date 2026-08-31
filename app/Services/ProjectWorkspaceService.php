@@ -18,8 +18,9 @@ use Illuminate\Support\Collection;
  * the project you opened, not the portfolio. (The per-type portfolio roll-up is
  * a different screen: ProjectOverviewService, on the /projects list.)
  *
- * Departments are attributed with ProjectTask::resolvedDepartment() — assignee's
- * department first, the activity template's department as fallback.
+ * Departments are attributed with ProjectTask::resolvedDepartment() — the
+ * activity/sub-task's accountable department first, assignee department only as
+ * a fallback when the row has no department.
  */
 class ProjectWorkspaceService
 {
@@ -44,6 +45,7 @@ class ProjectWorkspaceService
                 'id', 'project_id', 'parent_task_id', 'depends_on_task_id', 'name',
                 'category', 'milestone_order', 'department', 'sub_unit', 'assigned_to',
                 'external_assignment', 'status', 'manual_status', 'progress',
+                'milestone_weight', 'activity_weight', 'sub_task_weight',
                 'start_date', 'end_date', 'lead_time_days', 'order',
             ]);
 
@@ -241,11 +243,15 @@ class ProjectWorkspaceService
     /** Department accountability for this project: assignments, completed, overdue, completion. */
     private function buildReports(Collection $tasks, CarbonImmutable $today): array
     {
+        // Parent activities already roll up their sub-tasks. Reporting both would
+        // count the same work twice, so departments are scored from executable
+        // leaf rows only (or a root activity when it has no sub-tasks).
+        $reportRows = $this->progressRows($tasks);
         $canonical = Department::query()
             ->pluck('name')
             ->mapWithKeys(fn (string $name) => [mb_strtolower(trim($name)) => $name]);
 
-        $departments = $tasks
+        $departments = $reportRows
             ->filter(fn (ProjectTask $task) => $task->resolvedDepartment() !== null)
             ->groupBy(fn (ProjectTask $task) => mb_strtolower($task->resolvedDepartment()))
             ->map(fn (Collection $group, string $key) => [
@@ -253,24 +259,66 @@ class ProjectWorkspaceService
                 'assignments' => $group->count(),
                 'completed'   => $group->filter(fn (ProjectTask $task) => $this->isDone($task))->count(),
                 'overdue'     => $group->filter(fn (ProjectTask $task) => $this->isOverdue($task, $today))->count(),
-                'completion'  => $this->meanProgress($group),
+                'completion'  => $this->weightedProgress($group),
             ])
             ->sortByDesc('assignments')
             ->values()
             ->all();
 
-        $unattributed = $tasks->filter(fn (ProjectTask $task) => $task->resolvedDepartment() === null)->count();
+        $unattributed = $reportRows->filter(fn (ProjectTask $task) => $task->resolvedDepartment() === null)->count();
 
         return [
             'departments'  => $departments,
             'unattributed' => $unattributed,
             'totals' => [
-                'assignments' => $tasks->count(),
-                'completed'   => $tasks->filter(fn (ProjectTask $task) => $this->isDone($task))->count(),
-                'overdue'     => $tasks->filter(fn (ProjectTask $task) => $this->isOverdue($task, $today))->count(),
-                'completion'  => $this->meanProgress($tasks),
+                'assignments' => $reportRows->count(),
+                'completed'   => $reportRows->filter(fn (ProjectTask $task) => $this->isDone($task))->count(),
+                'overdue'     => $reportRows->filter(fn (ProjectTask $task) => $this->isOverdue($task, $today))->count(),
+                'completion'  => $this->weightedProgress($reportRows),
             ],
         ];
+    }
+
+    private function progressRows(Collection $tasks): Collection
+    {
+        $parentIds = $tasks->pluck('parent_task_id')->filter()->map(fn ($id) => (int) $id)->unique();
+
+        return $tasks->reject(fn (ProjectTask $task) => $parentIds->contains((int) $task->id))->values();
+    }
+
+    /** Weighted mean using the imported milestone/activity/sub-task shares. */
+    private function weightedProgress(Collection $tasks): int
+    {
+        if ($tasks->isEmpty()) {
+            return 0;
+        }
+
+        $weightTotal = 0.0;
+        $progressTotal = 0.0;
+
+        foreach ($tasks as $task) {
+            $weight = $this->progressWeight($task);
+            $weightTotal += $weight;
+            $progressTotal += $weight * min(100, max(0, (int) $task->progress));
+        }
+
+        return $weightTotal > 0 ? (int) round($progressTotal / $weightTotal) : 0;
+    }
+
+    private function progressWeight(ProjectTask $task): float
+    {
+        $milestone = (float) ($task->milestone_weight ?? 0);
+        $activity = (float) ($task->activity_weight ?? 0);
+        $subTask = (float) ($task->sub_task_weight ?? 0);
+
+        $weight = $milestone > 0 ? $milestone / 100 : 1;
+        $weight *= $activity > 0 ? $activity / 100 : 1;
+
+        if ($task->parent_task_id) {
+            $weight *= $subTask > 0 ? $subTask / 100 : 1;
+        }
+
+        return $weight;
     }
 
     /* --------------------------------------------------------------- shared */

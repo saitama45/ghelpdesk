@@ -23,8 +23,9 @@ use Illuminate\Support\Collection;
  * the percentages describe the whole portfolio's history. The one exception is
  * the "Active Projects" KPI, which by definition counts only the live ones.
  *
- * Department attribution goes through ProjectTask::resolvedDepartment() —
- * assignee's department first, the template's department as fallback.
+ * Department attribution goes through ProjectTask::resolvedDepartment() — the
+ * activity/sub-task's accountable department first, assignee department only as
+ * a fallback when the row has no department.
  */
 class ProjectOverviewService
 {
@@ -494,8 +495,11 @@ class ProjectOverviewService
             ->groupBy(fn (ProjectTask $task) => mb_strtolower($task->resolvedDepartment()))
             ->map(function (Collection $group, string $key) use ($canonical, $projectNames) {
                 $name = $canonical[$key] ?? $group->first()->resolvedDepartment();
-                $fromAssignee = $group->filter(
-                    fn (ProjectTask $task) => $task->assigned_to && filled($task->assignedUser?->department)
+                $fromTemplate = $group->filter(fn (ProjectTask $task) => filled($task->department));
+                $fromAssigneeFallback = $group->filter(
+                    fn (ProjectTask $task) => blank($task->department)
+                        && $task->assigned_to
+                        && filled($task->assignedUser?->department)
                 );
 
                 return [
@@ -503,12 +507,12 @@ class ProjectOverviewService
                     'progress' => (int) round($group->avg(fn (ProjectTask $task) => min(100, max(0, (int) $task->progress)))),
                     'tasks'    => $group->count(),
                     'breakdown' => $this->makeBreakdown(
-                        'Mean progress of every activity and sub-task attributed to this department. A row is attributed by its assignee\'s department first, falling back to the department the activity template put on the row. Departments are matched case-insensitively, so alternate spellings collapse into one bar.',
+                        'Mean progress of every activity and sub-task attributed to this department. The department stored on the row is the accountable process department and wins for monitoring; the assignee\'s department is used only when the row has no department. Departments are matched case-insensitively, so alternate spellings collapse into one bar.',
                         [
                             $this->summaryRow('Department', $name),
                             $this->summaryRow('Activities attributed', $group->count()),
-                            $this->summaryRow('Via assignee', $fromAssignee->count()),
-                            $this->summaryRow('Via template department', $group->count() - $fromAssignee->count()),
+                            $this->summaryRow('Via accountable row department', $fromTemplate->count()),
+                            $this->summaryRow('Via assignee fallback', $fromAssigneeFallback->count()),
                             $this->summaryRow('Mean progress', (int) round($group->avg('progress')) . '%'),
                         ],
                         ['Project', 'Activity', 'Attributed by', 'Progress'],
@@ -516,7 +520,7 @@ class ProjectOverviewService
                         fn (ProjectTask $task) => [
                             $projectNames[$task->project_id] ?? 'Unknown project',
                             ($task->parent_task_id ? '↳ ' : '') . $task->name,
-                            $task->assigned_to && filled($task->assignedUser?->department) ? 'Assignee' : 'Template',
+                            filled($task->department) ? 'Accountable row department' : 'Assignee fallback',
                             $task->progress . '%',
                         ]
                     ),
