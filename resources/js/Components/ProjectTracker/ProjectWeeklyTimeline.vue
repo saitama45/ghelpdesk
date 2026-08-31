@@ -410,13 +410,26 @@ const getDayOfWeekIndex = (date) => {
 };
 
 /* -------------------------------------------------------------- project weeks */
-// Determine the earliest anchor date and latest end date
-const timelineBounds = computed(() => {
-    let minDate = parseLocalDate(props.project.day1_date);
-    let maxDate = parseLocalDate(props.project.target_go_live);
+const timelineScope = ref('project'); // project | full
+const hasValidProjectWindow = computed(() => {
+    const start = parseLocalDate(props.project.day1_date);
+    const end = parseLocalDate(props.project.target_go_live);
+    return Boolean(start && end && end >= start);
+});
 
-    const checkTasks = (tasks) => {
-        tasks.forEach(t => {
+// A complete, valid Day 1 -> Target Go-Live pair is the authoritative reporting
+// window. Imported task schedules may overrun that window, but they must not make
+// otherwise identical projects show different numbers of weekly boxes.
+const timelineBounds = computed(() => {
+    const projectStart = parseLocalDate(props.project.day1_date);
+    const projectEnd = parseLocalDate(props.project.target_go_live);
+    const hasProjectWindow = projectStart && projectEnd && projectEnd >= projectStart;
+    const useProjectWindow = timelineScope.value === 'project' && hasProjectWindow;
+    let minDate = projectStart;
+    let maxDate = projectEnd;
+
+    if (!useProjectWindow) {
+        localTasks.value.forEach(t => {
             if (t.start_date) {
                 const s = parseLocalDate(t.start_date);
                 if (s && (!minDate || s < minDate)) minDate = s;
@@ -426,15 +439,13 @@ const timelineBounds = computed(() => {
                 if (e && (!maxDate || e > maxDate)) maxDate = e;
             }
         });
-    };
-
-    checkTasks(localTasks.value);
+    }
 
     // Fallbacks if project has no dates yet
     if (!minDate) {
         minDate = new Date();
     }
-    if (!maxDate || maxDate <= minDate) {
+    if (!maxDate || maxDate < minDate) {
         maxDate = new Date(minDate);
         maxDate.setDate(maxDate.getDate() + 42); // 6 weeks default
     }
@@ -452,6 +463,35 @@ const timelineBounds = computed(() => {
     endSunday.setHours(23, 59, 59, 999);
 
     return { start: startMonday, end: endSunday };
+});
+
+const scheduleOutsideProjectWindow = computed(() => {
+    const start = parseLocalDate(props.project.day1_date);
+    const end = parseLocalDate(props.project.target_go_live);
+
+    if (!start || !end || end < start) {
+        return { before: 0, after: 0, total: 0 };
+    }
+
+    let before = 0;
+    let after = 0;
+    const outsideIds = new Set();
+
+    localTasks.value.forEach((task) => {
+        const taskStart = parseLocalDate(task.start_date);
+        const taskEnd = parseLocalDate(task.end_date);
+
+        if (taskStart && taskStart < start) {
+            before++;
+            outsideIds.add(Number(task.id));
+        }
+        if (taskEnd && taskEnd > end) {
+            after++;
+            outsideIds.add(Number(task.id));
+        }
+    });
+
+    return { before, after, total: outsideIds.size };
 });
 
 // Generate week buckets
@@ -616,6 +656,61 @@ const orderedTaskGroups = computed(() => {
 });
 
 const allFlatTasks = computed(() => orderedTaskGroups.value.flatMap(group => group.tasks));
+
+// Curves and forecasts use executable leaf rows. Parent Activities already roll
+// up their Sub-Tasks, so counting both would inflate the same work twice.
+const executableProgressTasks = computed(() => {
+    const parentIds = new Set(
+        allFlatTasks.value
+            .map(task => task.parent_task_id ? Number(task.parent_task_id) : null)
+            .filter(Boolean)
+    );
+
+    return allFlatTasks.value.filter(task => !parentIds.has(Number(task.id)));
+});
+
+const taskProgressWeight = (task) => {
+    const milestone = Number(task.milestone_weight) > 0 ? Number(task.milestone_weight) / 100 : 1;
+    const activity = Number(task.activity_weight) > 0 ? Number(task.activity_weight) / 100 : 1;
+    const subTask = task.parent_task_id && Number(task.sub_task_weight) > 0
+        ? Number(task.sub_task_weight) / 100
+        : 1;
+
+    return milestone * activity * subTask;
+};
+
+const forecastAtGoLive = computed(() => {
+    const target = parseLocalDate(props.project.target_go_live);
+    const tasks = executableProgressTasks.value;
+
+    if (!target || tasks.length === 0) {
+        return { progress: 0, overrunWeeks: 0 };
+    }
+
+    let weightedForecast = 0;
+    let weightTotal = 0;
+    let latestEnd = null;
+
+    tasks.forEach((task) => {
+        const weight = taskProgressWeight(task);
+        const progress = Math.min(100, Math.max(0, Number(task.progress) || 0));
+        const end = parseLocalDate(task.end_date);
+        const expectedAtGoLive = progress >= 100 || (end && end <= target) ? 100 : progress;
+
+        weightedForecast += expectedAtGoLive * weight;
+        weightTotal += weight;
+        if (end && (!latestEnd || end > latestEnd)) latestEnd = end;
+    });
+
+    const overrunDays = latestEnd && latestEnd > target
+        ? Math.ceil((latestEnd - target) / (1000 * 60 * 60 * 24))
+        : 0;
+
+    return {
+        progress: weightTotal > 0 ? Math.round(weightedForecast / weightTotal) : 0,
+        overrunWeeks: Math.ceil(overrunDays / 7),
+    };
+});
 
 // A sub-task is filtered by the milestone it is DISPLAYED under (its parent's),
 // so the milestone dropdown selects the same rows the Gantt would show.
@@ -820,8 +915,8 @@ const getTaskDaySpan = (task, week) => {
 // For each week, calculate Planned Progress % and Actual Progress %
 const weeklyCurveData = computed(() => {
     const weeks = projectWeeks.value;
-    const totalTasks = allFlatTasks.value.length || 1;
-    const tasks = allFlatTasks.value;
+    const tasks = executableProgressTasks.value;
+    const totalWeight = tasks.reduce((sum, task) => sum + taskProgressWeight(task), 0) || 1;
 
     const plannedValues = [];
     const actualValues = [];
@@ -836,31 +931,32 @@ const weeklyCurveData = computed(() => {
             const s = parseLocalDate(t.start_date);
             const e = parseLocalDate(t.end_date);
             const prog = Number(t.progress) || 0;
+            const weight = taskProgressWeight(t);
 
             if (s && e) {
                 // Planned calculation
                 if (week.end >= e) {
-                    plannedCompletionSum += 100;
+                    plannedCompletionSum += 100 * weight;
                 } else if (week.end >= s) {
                     const totalDuration = Math.max(1, e - s);
                     const elapsed = Math.max(0, week.end - s);
                     const ratio = Math.min(1, elapsed / totalDuration);
-                    plannedCompletionSum += (ratio * 100);
+                    plannedCompletionSum += ratio * 100 * weight;
                 }
 
                 // Actual calculation (only up to current week, or simulated)
                 if (week.start <= now || week.isCurrentWeek) {
-                    actualCompletionSum += prog;
+                    actualCompletionSum += prog * weight;
                 }
             } else {
-                actualCompletionSum += prog;
-                plannedCompletionSum += (t.status === 'Done' ? 100 : 0);
+                actualCompletionSum += prog * weight;
+                plannedCompletionSum += (t.status === 'Done' ? 100 : 0) * weight;
             }
         });
 
-        const plannedPercent = Math.round(plannedCompletionSum / totalTasks);
+        const plannedPercent = Math.round(plannedCompletionSum / totalWeight);
         const actualPercent = week.start <= now || week.isCurrentWeek
-            ? Math.min(100, Math.round(actualCompletionSum / totalTasks))
+            ? Math.min(100, Math.round(actualCompletionSum / totalWeight))
             : null;
 
         plannedValues.push(plannedPercent);
@@ -1038,7 +1134,7 @@ const activeInspectWeek = computed(() => {
 /* ----------------------------------------------------------- Selected Week KPIs */
 const selectedWeekStats = computed(() => {
     const week = selectedWeek.value;
-    if (!week) return { total: 0, completed: 0, ongoing: 0, overdue: 0, plannedProg: 0, actualProg: 0, variance: 0, prevProg: 0, wowDelta: 0 };
+    if (!week) return { total: 0, completed: 0, ongoing: 0, overdue: 0, plannedProg: 0, actualProg: 0, forecastProg: 0, forecastOverrunWeeks: 0, variance: 0, prevProg: 0, wowDelta: 0 };
 
     const tasks = allFlatTasks.value.filter(t => isTaskActiveInWeek(t, week));
     const total = tasks.length;
@@ -1048,11 +1144,13 @@ const selectedWeekStats = computed(() => {
 
     const weekIdx = week.index - 1;
     const plannedProg = weeklyCurveData.value.planned[weekIdx] ?? 0;
-    const actualProg = weeklyCurveData.value.actual[weekIdx] ?? plannedProg;
+    // A week with no recorded actual yet must stay at 0. Falling back to the
+    // planned S-curve made newly imported 0%-progress templates appear complete.
+    const actualProg = weeklyCurveData.value.actual[weekIdx] ?? 0;
     const variance = actualProg - plannedProg;
 
     const prevWeekIdx = weekIdx - 1;
-    const prevProg = prevWeekIdx >= 0 ? (weeklyCurveData.value.actual[prevWeekIdx] ?? weeklyCurveData.value.planned[prevWeekIdx] ?? 0) : 0;
+    const prevProg = prevWeekIdx >= 0 ? (weeklyCurveData.value.actual[prevWeekIdx] ?? 0) : 0;
     const wowDelta = actualProg - prevProg;
 
     return {
@@ -1062,6 +1160,8 @@ const selectedWeekStats = computed(() => {
         overdue,
         plannedProg,
         actualProg,
+        forecastProg: forecastAtGoLive.value.progress,
+        forecastOverrunWeeks: forecastAtGoLive.value.overrunWeeks,
         variance,
         prevProg,
         wowDelta,
@@ -1360,7 +1460,29 @@ const jumpToGantt = (department = null) => {
                     </div>
 
                     <!-- Jump Buttons -->
-                    <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2">
+                        <div v-if="hasValidProjectWindow" class="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-gray-700 dark:bg-gray-900">
+                            <button type="button"
+                                    @click="timelineScope = 'project'"
+                                    :class="[
+                                        'rounded-md px-2.5 py-1 text-[10px] font-black transition',
+                                        timelineScope === 'project'
+                                            ? 'bg-white text-blue-700 shadow-sm dark:bg-gray-700 dark:text-blue-300'
+                                            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                                    ]">
+                                Project Window
+                            </button>
+                            <button type="button"
+                                    @click="timelineScope = 'full'"
+                                    :class="[
+                                        'rounded-md px-2.5 py-1 text-[10px] font-black transition',
+                                        timelineScope === 'full'
+                                            ? 'bg-white text-blue-700 shadow-sm dark:bg-gray-700 dark:text-blue-300'
+                                            : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                                    ]">
+                                Full Schedule
+                            </button>
+                        </div>
                         <button
                             type="button"
                             @click="goToCurrentWeek"
@@ -1414,6 +1536,23 @@ const jumpToGantt = (department = null) => {
                         </div>
                     </button>
                 </div>
+
+                <div v-if="timelineScope === 'project' && scheduleOutsideProjectWindow.total > 0"
+                     class="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+                    <span>
+                        {{ scheduleOutsideProjectWindow.total }} scheduled {{ scheduleOutsideProjectWindow.total === 1 ? 'row falls' : 'rows fall' }} outside the Day 1–Target Go-Live reporting window
+                        <template v-if="scheduleOutsideProjectWindow.after"> · {{ scheduleOutsideProjectWindow.after }} finish after Go-Live</template>
+                        <template v-if="scheduleOutsideProjectWindow.before"> · {{ scheduleOutsideProjectWindow.before }} start before Day 1</template>.
+                    </span>
+                    <div class="flex items-center gap-3">
+                        <button type="button" @click="timelineScope = 'full'" class="font-black text-amber-900 underline underline-offset-2 dark:text-amber-200">
+                            View Full Schedule
+                        </button>
+                        <button type="button" @click="jumpToGantt()" class="font-black text-amber-900 underline underline-offset-2 dark:text-amber-200">
+                            Review in Gantt
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- Milestone Horizon Bar -->
@@ -1439,7 +1578,7 @@ const jumpToGantt = (department = null) => {
                         />
                     </div>
                     <span class="text-[10px] text-gray-400">
-                        {{ projectWeeks.length }} Total Scheduled Weeks · {{ showMilestonesHorizon ? 'Collapse' : 'Show' }}
+                        {{ projectWeeks.length }} {{ timelineScope === 'project' ? 'Project Reporting' : 'Full Schedule' }} Weeks · {{ showMilestonesHorizon ? 'Collapse' : 'Show' }}
                     </span>
                 </button>
 
@@ -1482,14 +1621,14 @@ const jumpToGantt = (department = null) => {
         </div>
 
         <!-- Weekly Summary Stat Cards -->
-        <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-5">
             <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-xs dark:border-gray-700 dark:bg-gray-800">
                 <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-400">Week Target Progress</span>
                 <div class="mt-0.5 flex items-baseline justify-between">
                     <p class="text-xl font-black text-blue-600 dark:text-blue-400">
                         {{ selectedWeekStats.plannedProg }}%
                     </p>
-                    <span class="text-[10px] font-bold text-gray-400">Planned S-Curve</span>
+                    <span class="text-[10px] font-bold text-gray-400">Baseline</span>
                 </div>
             </div>
 
@@ -1514,6 +1653,19 @@ const jumpToGantt = (department = null) => {
                             {{ selectedWeekStats.wowDelta > 0 ? '+' : '' }}{{ selectedWeekStats.wowDelta }}% WoW
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-gray-200 bg-white p-3 shadow-xs dark:border-gray-700 dark:bg-gray-800">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-400">Forecast at Go-Live</span>
+                <div class="mt-0.5 flex items-baseline justify-between gap-2">
+                    <p :class="['text-xl font-black', selectedWeekStats.forecastProg >= 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400']">
+                        {{ selectedWeekStats.forecastProg }}%
+                    </p>
+                    <span v-if="selectedWeekStats.forecastOverrunWeeks > 0" class="text-right text-[9px] font-black text-rose-600 dark:text-rose-400">
+                        +{{ selectedWeekStats.forecastOverrunWeeks }}w overrun
+                    </span>
+                    <span v-else class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">On schedule</span>
                 </div>
             </div>
 

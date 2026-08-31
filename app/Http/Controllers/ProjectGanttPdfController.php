@@ -17,6 +17,7 @@ class ProjectGanttPdfController extends Controller
             'store:id,name,code',
             'creator:id,name',
             'tasks.assignedUser:id,name,department,org_path',
+            'tasks.store:id,code,name',
         ]);
 
         $tasks = $project->tasks
@@ -236,7 +237,57 @@ class ProjectGanttPdfController extends Controller
         $weekStart = $activeWeek['start'];
         $weekEnd = $activeWeek['end'];
 
-        $completedThisWeek = $tasks->filter(function ($t) use ($weekStart, $weekEnd) {
+        // Per Store rows have their own executive summary below. Keeping them in
+        // the generic activity stream produced eight indistinguishable "Store
+        // Deployment" entries and hid the store-level result the review needs.
+        $standardTasks = $tasks
+            ->reject(fn ($task) => $task->activity_mode === 'per_store')
+            ->values();
+
+        $storeRows = $tasks
+            ->filter(fn ($task) => $task->activity_mode === 'per_store'
+                && ! $task->parent_task_id
+                && $task->store_id)
+            ->groupBy('store_id')
+            ->map(function ($storeTasks) {
+                $explicitWeights = $storeTasks->every(fn ($task) => $task->activity_weight !== null);
+                $weightTotal = (float) $storeTasks->sum(
+                    fn ($task) => $explicitWeights ? (float) $task->activity_weight : 1
+                );
+                $progress = $weightTotal > 0
+                    ? (int) round($storeTasks->sum(
+                        fn ($task) => ($explicitWeights ? (float) $task->activity_weight : 1) * (int) $task->progress
+                    ) / $weightTotal)
+                    : 0;
+                $store = $storeTasks->first()->store;
+
+                return [
+                    'id' => (int) $storeTasks->first()->store_id,
+                    'code' => $store?->code,
+                    'name' => $store?->name ?: 'Store #'.$storeTasks->first()->store_id,
+                    'progress' => $progress,
+                    'status' => $progress >= 100 ? 'Completed' : ($progress > 0 ? 'In Progress' : 'Pending'),
+                ];
+            })
+            ->sortBy(fn (array $store) => strtolower(($store['code'] ?: '').' '.$store['name']))
+            ->values();
+        $selectedStoreCount = $storeRows->count();
+        $targetStoreCount = max((int) ($project->target_store_count ?? 0), $selectedStoreCount);
+        $storeTargetProgress = $targetStoreCount > 0
+            ? (int) round($storeRows->sum('progress') / $targetStoreCount)
+            : 0;
+        $storeRollout = [
+            'stores' => $storeRows,
+            'selected' => $selectedStoreCount,
+            'target' => $targetStoreCount,
+            'completed' => $storeRows->where('progress', '>=', 100)->count(),
+            'in_progress' => $storeRows->whereBetween('progress', [1, 99])->count(),
+            'pending' => $storeRows->where('progress', 0)->count(),
+            'unselected' => max(0, $targetStoreCount - $selectedStoreCount),
+            'progress' => $storeTargetProgress,
+        ];
+
+        $completedThisWeek = $standardTasks->filter(function ($t) use ($weekStart, $weekEnd) {
             $isDone = (int) $t->progress >= 100 || strcasecmp((string)$t->status, 'Done') === 0;
             if (!$isDone) return false;
             $e = $t->end_date ? Carbon::parse($t->end_date) : null;
@@ -244,10 +295,10 @@ class ProjectGanttPdfController extends Controller
         })->values();
 
         if ($completedThisWeek->isEmpty()) {
-            $completedThisWeek = $tasks->filter(fn ($t) => (int) $t->progress >= 100 || strcasecmp((string)$t->status, 'Done') === 0)->take(6)->values();
+            $completedThisWeek = $standardTasks->filter(fn ($t) => (int) $t->progress >= 100 || strcasecmp((string)$t->status, 'Done') === 0)->take(6)->values();
         }
 
-        $activeThisWeek = $tasks->filter(function ($t) use ($weekStart, $weekEnd) {
+        $activeThisWeek = $standardTasks->filter(function ($t) use ($weekStart, $weekEnd) {
             $prog = (int) ($t->progress ?? 0);
             if ($prog >= 100) return false;
             $s = $t->start_date ? Carbon::parse($t->start_date) : null;
@@ -258,7 +309,7 @@ class ProjectGanttPdfController extends Controller
             return $prog > 0;
         })->take(8)->values();
 
-        $criticalOrOverdue = $tasks->filter(function ($t) use ($now) {
+        $criticalOrOverdue = $standardTasks->filter(function ($t) use ($now) {
             $prog = (int) ($t->progress ?? 0);
             if ($prog >= 100) return false;
             $manual = strtolower((string) ($t->manual_status ?? ''));
@@ -273,7 +324,7 @@ class ProjectGanttPdfController extends Controller
         if ($nextWeek) {
             $nwStart = $nextWeek['start'];
             $nwEnd = $nextWeek['end'];
-            $nextWeekTasks = $tasks->filter(function ($t) use ($nwStart, $nwEnd) {
+            $nextWeekTasks = $standardTasks->filter(function ($t) use ($nwStart, $nwEnd) {
                 $s = $t->start_date ? Carbon::parse($t->start_date) : null;
                 return $s && $s->betweenIncluded($nwStart, $nwEnd);
             })->take(6)->values();
@@ -290,6 +341,7 @@ class ProjectGanttPdfController extends Controller
             'wowActualDelta' => $wowActualDelta,
             'variance' => $variance,
             'milestoneComparison' => $milestoneComparison,
+            'storeRollout' => $storeRollout,
             'completedThisWeek' => $completedThisWeek,
             'activeThisWeek' => $activeThisWeek,
             'criticalOrOverdue' => $criticalOrOverdue,

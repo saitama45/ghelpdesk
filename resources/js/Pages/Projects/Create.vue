@@ -199,6 +199,7 @@ const submit = () => {
                         <div>
                             <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Target Store Count</label>
                             <input v-model="form.target_store_count" type="number" min="1" class="w-full rounded-md border-gray-300 shadow-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" placeholder="Optional, e.g. 35">
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Rollout KPI denominator. Per Store template rows are created later for the actual stores you select.</p>
                         </div>
 
                         <!-- Store Branch (Store Opening only) -->

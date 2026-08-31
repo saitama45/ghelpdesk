@@ -32,6 +32,9 @@ class HybridSdlcWorkbookTest extends TestCase
                 $book->getSheetNames()
             );
             $this->assertSame(HybridSdlcWorkbookService::HEADERS, $book->getActiveSheet()->rangeToArray('A1:Z1')[0]);
+            $parallelCheckpoint = collect($book->getActiveSheet()->toArray())
+                ->first(fn (array $row) => ($row[8] ?? null) === 'PD readiness and process checkpoint');
+            $this->assertSame('Yes', $parallelCheckpoint[25] ?? null);
             $this->assertSame('Group', $book->getSheetByName('Collaboration Matrix')->getCell('A1')->getValue());
             $this->assertSame('New Store Opening', $book->getSheetByName('Collaboration Matrix')->getCell('B2')->getValue());
             $this->assertSame('hidden', $book->getSheetByName('Lists')->getSheetState());
@@ -78,6 +81,11 @@ class HybridSdlcWorkbookTest extends TestCase
                 'milestone' => "All Departments' Process Implementation in LINK HUB",
                 'activity' => 'TAS readiness and process checkpoint',
                 'department' => 'Technology and Solutions',
+            ]);
+            $this->assertDatabaseHas('activity_templates', [
+                'milestone' => "All Departments' Process Implementation in LINK HUB",
+                'activity' => 'PD readiness and process checkpoint',
+                'can_run_parallel' => true,
             ]);
         } finally {
             if (is_file($path)) unlink($path);

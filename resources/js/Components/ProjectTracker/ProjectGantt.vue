@@ -31,6 +31,7 @@ import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
 const props = defineProps({
     project: Object,
     users: Array,
+    stores: { type: Array, default: () => [] },
     projectTemplates: Array,
     taskListTargets: Object,
     // Project managers (creator/admin) may edit every row and all structure.
@@ -88,6 +89,7 @@ const showDepartmentSummary = ref(false);
 const isApplyingTemplates = ref(false);
 const showTemplateModal = ref(false);
 const selectedTemplateId = ref('');
+const selectedStoreIds = ref([]);
 const localTasks = ref([]);
 const draggedTaskId = ref(null);
 const dragOverTaskId = ref(null);
@@ -226,6 +228,42 @@ const stats = computed(() => {
     return { total, completed, ongoing, pending, progress };
 });
 
+// Store rollout is measured against the approved target, not merely against the
+// stores selected so far. A store's percentage is the average of its Per Store
+// root activities; their sub-tasks already roll up into those roots.
+const storeRollout = computed(() => {
+    const rootsByStore = new Map();
+
+    localTasks.value
+        .filter(task => !task.parent_task_id && task.activity_mode === 'per_store' && task.store_id)
+        .forEach(task => {
+            const key = Number(task.store_id);
+            if (!rootsByStore.has(key)) rootsByStore.set(key, []);
+            rootsByStore.get(key).push(task);
+        });
+
+    const stores = [...rootsByStore.entries()].map(([storeId, tasks]) => ({
+        storeId,
+        progress: Math.round(tasks.reduce((sum, task) => sum + (Number(task.progress) || 0), 0) / tasks.length),
+    }));
+    const selected = stores.length;
+    const target = Math.max(Number(props.project.target_store_count || 0), selected);
+    const completed = stores.filter(store => store.progress >= 100).length;
+    const progress = target > 0
+        ? Math.round(stores.reduce((sum, store) => sum + store.progress, 0) / target)
+        : 0;
+
+    return { selected, target, completed, progress };
+});
+
+const hasStoreRollout = computed(() => storeRollout.value.target > 0 || storeRollout.value.selected > 0);
+
+const taskStoreLabel = (task) => {
+    if (!task?.store_id) return '';
+    const store = task.store || (props.stores || []).find(candidate => Number(candidate.id) === Number(task.store_id));
+    return store?.code || store?.name || `Store #${task.store_id}`;
+};
+
 const projectTeamMembers = computed(() => {
     // Relationship is named teamMembers in the Model
     const team = props.project.teamMembers || props.project.team_members || [];
@@ -340,6 +378,25 @@ const applyActivityTemplates = () => {
     showTemplateModal.value = true;
 };
 
+const selectedTemplate = computed(() =>
+    (props.projectTemplates || []).find(template => Number(template.id) === Number(selectedTemplateId.value)) || null
+);
+
+const templateNeedsStores = computed(() => Number(selectedTemplate.value?.per_store_activities_count || 0) > 0);
+
+const storeOptions = computed(() => (props.stores || []).map(store => ({
+    label: store.code ? `${store.code} — ${store.name}` : store.name,
+    value: store.id,
+})));
+
+const existingRolloutStoreIds = computed(() => [...new Set(
+    localTasks.value.filter(task => task.store_id).map(task => Number(task.store_id))
+)]);
+
+watch(selectedTemplateId, () => {
+    selectedStoreIds.value = templateNeedsStores.value ? [...existingRolloutStoreIds.value] : [];
+});
+
 const resetTaskForm = () => {
     form.reset();
     form.project_id = props.project.id;
@@ -368,13 +425,26 @@ const confirmApplyTemplate = async () => {
     }
 
     const template = props.projectTemplates.find(t => t.id === selectedTemplateId.value);
+
+    if (templateNeedsStores.value && selectedStoreIds.value.length === 0) {
+        error('Select at least one rollout store for the Per Store activities.');
+        return;
+    }
+
+    const targetCount = Number(props.project.target_store_count || 0);
+    if (targetCount > 0 && selectedStoreIds.value.length > targetCount) {
+        error(`Select no more than the ${targetCount}-store project target.`);
+        return;
+    }
     
     // Close selection modal first to allow confirmation dialog to take focus
     showTemplateModal.value = false;
 
     const ok = await confirmAction({
         title: 'Apply Template',
-        message: `Are you sure you want to apply "${template.name}"? This will add ${template.activities_count} activity rows to the project. Existing activities and sub-tasks with the same name will not be duplicated.`,
+        message: templateNeedsStores.value
+            ? `Apply "${template.name}" to ${selectedStoreIds.value.length} selected store${selectedStoreIds.value.length === 1 ? '' : 's'}? Standard rows are added once; Per Store activities and sub-tasks are added once for each store without duplicating existing rollout rows.`
+            : `Are you sure you want to apply "${template.name}"? This will add ${template.activities_count} activity rows to the project. Existing activities and sub-tasks with the same name will not be duplicated.`,
         confirmLabel: 'Apply now',
         variant: 'primary'
     });
@@ -387,6 +457,7 @@ const confirmApplyTemplate = async () => {
         
         router.post(route('projects.apply-templates', props.project.id), {
             project_template_id: selectedTemplateId.value,
+            store_ids: templateNeedsStores.value ? selectedStoreIds.value : [],
             auto_create_monthly_boards: true,
         }, {
             preserveScroll: true,
@@ -394,11 +465,12 @@ const confirmApplyTemplate = async () => {
             // nothing on this page renders — the modal is already closed by then, so
             // the button looked like it simply did nothing. Say what went wrong.
             onError: (errors) => {
-                error(errors.project_template_id || 'The template could not be applied.');
+                error(errors.store_ids || errors.project_template_id || 'The template could not be applied.');
             },
             onFinish: () => {
                 isApplyingTemplates.value = false;
                 selectedTemplateId.value = '';
+                selectedStoreIds.value = [];
             }
         });
     } else {
@@ -1428,6 +1500,24 @@ const isWeekend = (date) => {
             </div>
         </div>
 
+        <!-- Compact KPI strip; the established dense Gantt dimensions stay intact. -->
+        <div v-if="hasStoreRollout"
+             class="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-cyan-200 bg-cyan-50/80 px-5 py-2 text-[11px] dark:border-cyan-400/25 dark:bg-cyan-500/10">
+            <span class="font-black uppercase tracking-wider text-cyan-800 dark:text-cyan-200">Store Rollout</span>
+            <span class="font-bold text-slate-700 dark:text-slate-200">
+                <strong class="text-cyan-700 dark:text-cyan-300">{{ storeRollout.progress }}%</strong> of target
+            </span>
+            <span class="font-semibold text-slate-600 dark:text-slate-300">
+                {{ storeRollout.completed }} / {{ storeRollout.target }} stores completed
+            </span>
+            <span class="font-semibold text-slate-500 dark:text-slate-400">
+                {{ storeRollout.selected }} / {{ storeRollout.target }} stores selected
+            </span>
+            <div class="h-1.5 min-w-[120px] flex-1 overflow-hidden rounded-full bg-cyan-100 dark:bg-slate-800">
+                <div class="h-full rounded-full bg-cyan-600 transition-all" :style="{ width: `${storeRollout.progress}%` }"></div>
+            </div>
+        </div>
+
         <!-- Choose once, then assign project/milestone/activity/sub-task with one click. -->
         <div v-if="quickAssignEnabled && canManage"
              class="border-b border-violet-200 bg-violet-50/80 px-5 py-3 dark:border-violet-400/30 dark:bg-violet-500/10">
@@ -1807,10 +1897,17 @@ const isWeekend = (date) => {
                                         <span v-if="row.isSubTask" class="text-indigo-600 dark:text-indigo-400 font-bold text-xs shrink-0 select-none mr-0.5">↳</span>
                                         <div class="flex-1 min-w-0">
                                             <div class="flex items-center justify-between gap-2 mb-0.5">
-                                                <div class="font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap"
-                                                     :class="row.isSubTask ? 'text-[11px]' : 'text-xs'"
-                                                     :title="row.task.name">
-                                                    {{ row.task.name }}
+                                                <div class="flex items-center gap-1.5 whitespace-nowrap">
+                                                    <div class="font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap"
+                                                         :class="row.isSubTask ? 'text-[11px]' : 'text-xs'"
+                                                         :title="row.task.name">
+                                                        {{ row.task.name }}
+                                                    </div>
+                                                    <span v-if="taskStoreLabel(row.task)"
+                                                          class="shrink-0 rounded border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide text-cyan-700 dark:border-cyan-400/30 dark:bg-cyan-500/10 dark:text-cyan-200"
+                                                          :title="row.task.store?.name || taskStoreLabel(row.task)">
+                                                        {{ taskStoreLabel(row.task) }}
+                                                    </span>
                                                 </div>
                                                 <span class="text-[10px] font-bold text-slate-400 tabular-nums shrink-0 dark:text-slate-400">{{ row.task.progress }}%</span>
                                             </div>
@@ -2021,13 +2118,33 @@ const isWeekend = (date) => {
                             </div>
                         </label>
                     </div>
+
+                    <div v-if="templateNeedsStores" class="rounded-xl border border-cyan-200 bg-cyan-50/70 p-4 dark:border-cyan-400/30 dark:bg-cyan-500/10">
+                        <div class="mb-2 flex items-center justify-between gap-3">
+                            <label class="text-xs font-black uppercase tracking-wider text-cyan-800 dark:text-cyan-200">Rollout Stores</label>
+                            <span class="text-[11px] font-bold text-cyan-700 dark:text-cyan-300">
+                                {{ selectedStoreIds.length }} / {{ project.target_store_count || 'no target' }} selected
+                            </span>
+                        </div>
+                        <MultiAutocomplete
+                            v-model="selectedStoreIds"
+                            :options="storeOptions"
+                            placeholder="Search and select NONOS stores"
+                        />
+                        <p class="mt-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                            Standard rows are created once. Each selected store receives its own Per Store activity and sub-tasks. Reapply later to add another rollout wave.
+                        </p>
+                        <p v-if="project.target_store_count" class="mt-1 text-[10px] font-bold text-cyan-700 dark:text-cyan-300">
+                            Overall progress always uses {{ project.target_store_count }} as the denominator, including stores not selected yet.
+                        </p>
+                    </div>
                 </div>
 
                 <div class="flex justify-end space-x-3 pt-6 border-t mt-6 dark:border-slate-700">
                     <SecondaryButton @click="showTemplateModal = false">
                         Cancel
                     </SecondaryButton>
-                    <PrimaryButton @click="confirmApplyTemplate" :disabled="!selectedTemplateId || isApplyingTemplates" class="bg-indigo-600 hover:bg-indigo-700">
+                    <PrimaryButton @click="confirmApplyTemplate" :disabled="!selectedTemplateId || isApplyingTemplates || (templateNeedsStores && selectedStoreIds.length === 0)" class="bg-indigo-600 hover:bg-indigo-700">
                         {{ isApplyingTemplates ? 'Applying...' : 'Apply Template' }}
                     </PrimaryButton>
                 </div>

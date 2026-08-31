@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ProjectTask;
 use App\Models\Project;
 use App\Models\ProjectTemplate;
+use App\Models\Store;
 use App\Services\ProjectTaskBoardSyncService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -36,6 +37,8 @@ class ProjectTaskController extends Controller
 
         $request->validate([
             'project_template_id' => 'required|exists:project_templates,id',
+            'store_ids' => 'nullable|array',
+            'store_ids.*' => 'integer|distinct|exists:stores,id',
         ]);
 
         $template = ProjectTemplate::with('activities')->findOrFail($request->project_template_id);
@@ -50,6 +53,10 @@ class ProjectTaskController extends Controller
 
         if ($activities->isEmpty()) {
             return redirect()->back()->with('info', 'The selected template has no activities.');
+        }
+
+        if ($activities->contains(fn ($activity) => $activity->activity_mode === 'per_store')) {
+            return $this->applyPerStoreTemplate($request, $project, $template, $activities);
         }
 
         $actorId = $request->user()->id;
@@ -268,6 +275,265 @@ class ProjectTaskController extends Controller
         }
 
         return redirect()->back()->with('info', 'All activities from this template have already been added.' . $scheduleNote);
+    }
+
+    /**
+     * Apply a mixed Standard / Per Store template.
+     *
+     * Standard rows are created once. A Per Store root and all of its children
+     * are cloned for each selected real store, with store_id as the durable row
+     * identity. Reapplying the template is therefore safe and supports rollout
+     * waves without manufacturing placeholder stores.
+     */
+    private function applyPerStoreTemplate(Request $request, Project $project, ProjectTemplate $template, $activities)
+    {
+        $storeIds = collect($request->input('store_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($storeIds->isEmpty()) {
+            throw ValidationException::withMessages([
+                'store_ids' => 'Select at least one rollout store for the Per Store activities.',
+            ]);
+        }
+
+        $eligibleStores = Store::query()
+            ->whereIn('id', $storeIds)
+            ->where('is_active', true)
+            ->when($project->brand_company_id, fn ($query, $brandId) => $query->where('company_id', $brandId))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id);
+
+        if ($eligibleStores->count() !== $storeIds->count()) {
+            throw ValidationException::withMessages([
+                'store_ids' => 'Every rollout store must be active and belong to this project brand.',
+            ]);
+        }
+
+        $existingStoreIds = ProjectTask::query()
+            ->where('project_id', $project->id)
+            ->where('activity_mode', 'per_store')
+            ->whereNotNull('store_id')
+            ->distinct()
+            ->pluck('store_id')
+            ->map(fn ($id) => (int) $id);
+        $rolloutStoreCount = $existingStoreIds->merge($storeIds)->unique()->count();
+
+        if ($project->target_store_count && $rolloutStoreCount > $project->target_store_count) {
+            throw ValidationException::withMessages([
+                'store_ids' => "The selected rollout scope exceeds this project's {$project->target_store_count}-store target.",
+            ]);
+        }
+
+        $actorId = $request->user()->id;
+        $schedule = $this->buildTemplateSchedule($activities, $project);
+
+        [$addedCount, $reorderedCount] = DB::transaction(function () use (
+            $project, $activities, $storeIds, $actorId, $schedule
+        ) {
+            $addedCount = 0;
+            $reorderedCount = 0;
+            $tasksByTemplate = [];
+            $roots = $activities->filter(fn ($activity) => empty($activity->parent_activity_template_id))->sortBy([
+                ['milestone_order', 'asc'], ['order', 'asc'], ['id', 'asc'],
+            ]);
+
+            foreach ($roots as $activity) {
+                $contexts = $activity->activity_mode === 'per_store' ? $storeIds : collect([null]);
+
+                foreach ($contexts as $contextIndex => $storeId) {
+                    [$task, $created, $reordered] = $this->upsertExpandedTemplateTask(
+                        $project, $activity, null, $storeId, $actorId,
+                        $schedule[$activity->id] ?? null,
+                        $contextIndex === 0
+                    );
+                    $tasksByTemplate[$activity->id][$storeId ?: 'standard'] = $task;
+                    $addedCount += $created ? 1 : 0;
+                    $reorderedCount += $reordered ? 1 : 0;
+                }
+            }
+
+            $children = $activities->filter(fn ($activity) => ! empty($activity->parent_activity_template_id))->sortBy([
+                ['milestone_order', 'asc'], ['order', 'asc'], ['id', 'asc'],
+            ]);
+
+            foreach ($children as $activity) {
+                $parentContexts = $tasksByTemplate[$activity->parent_activity_template_id] ?? [];
+
+                foreach ($parentContexts as $context => $parentTask) {
+                    $storeId = $context === 'standard' ? null : (int) $context;
+                    [$task, $created, $reordered] = $this->upsertExpandedTemplateTask(
+                        $project, $activity, $parentTask, $storeId, $actorId,
+                        $schedule[$activity->id] ?? null,
+                        true
+                    );
+                    $tasksByTemplate[$activity->id][$context] = $task;
+                    $addedCount += $created ? 1 : 0;
+                    $reorderedCount += $reordered ? 1 : 0;
+                }
+            }
+
+            // Resolve each requisite in the same store context. A Standard row
+            // after a Per Store activity waits for the last clone; all clones
+            // share the same planned span, so this represents wave completion.
+            foreach ($activities as $activity) {
+                foreach ($tasksByTemplate[$activity->id] ?? [] as $context => $task) {
+                    $requisites = $activity->depends_on_template_id
+                        ? ($tasksByTemplate[$activity->depends_on_template_id] ?? [])
+                        : [];
+                    $requisite = $requisites[$context]
+                        ?? ($requisites['standard'] ?? (empty($requisites) ? null : end($requisites)));
+                    $parallel = (bool) $activity->can_run_parallel;
+
+                    // If a Per Store root has no explicit requisite, anchor later
+                    // stores to the first clone in parallel instead of stretching
+                    // a 35-store rollout into 35 sequential copies.
+                    if (! $requisite && empty($activity->parent_activity_template_id) && count($tasksByTemplate[$activity->id] ?? []) > 1) {
+                        $first = reset($tasksByTemplate[$activity->id]);
+                        if ($first && $first->id !== $task->id) {
+                            $requisite = $first;
+                            $parallel = true;
+                        }
+                    }
+
+                    $updates = [];
+                    if ((int) $task->depends_on_task_id !== (int) $requisite?->id) {
+                        $updates['depends_on_task_id'] = $requisite?->id;
+                    }
+                    if ((bool) $task->can_run_parallel !== $parallel) {
+                        $updates['can_run_parallel'] = $parallel;
+                    }
+                    if ($updates !== []) {
+                        $task->update($updates);
+                    }
+                }
+            }
+
+            return [$addedCount, $reorderedCount];
+        });
+
+        $this->rescheduleProjectTasks($project->fresh());
+        $this->projectTaskBoards->syncProject(
+            $project->fresh(['teamMembers.user', 'tasks']),
+            $request->user(),
+            null,
+            $request->boolean('auto_create_monthly_boards')
+        );
+        $this->projectTaskBoards->syncLinkedBoardItemsFromProject($project->fresh());
+
+        $target = $project->target_store_count ?: $rolloutStoreCount;
+        $scope = "{$rolloutStoreCount}/{$target} rollout stores selected";
+        $scheduleNote = $project->day1_date
+            ? ''
+            : ' Set a Day 1 Date on the project to auto-schedule Start/End dates next time.';
+
+        if ($addedCount > 0) {
+            return redirect()->back()->with('success', "Applied {$template->name}: {$addedCount} rows added; {$scope}.{$scheduleNote}");
+        }
+
+        if ($reorderedCount > 0 || $project->day1_date) {
+            return redirect()->back()->with('success', "Reapplied {$template->name}; {$scope}.{$scheduleNote}");
+        }
+
+        return redirect()->back()->with('info', "All selected store rows already exist; {$scope}.{$scheduleNote}");
+    }
+
+    /** @return array{0: ProjectTask, 1: bool, 2: bool} */
+    private function upsertExpandedTemplateTask(
+        Project $project,
+        $activity,
+        ?ProjectTask $parentTask,
+        ?int $storeId,
+        int $actorId,
+        ?array $dates,
+        bool $mayAdoptLegacyRow
+    ): array {
+        $query = ProjectTask::query()
+            ->where('project_id', $project->id)
+            ->where('parent_task_id', $parentTask?->id)
+            ->where('name', $activity->activity);
+
+        if (! $parentTask) {
+            $query->where('category', $activity->milestone);
+        }
+
+        $task = (clone $query)->where('store_id', $storeId)->first();
+
+        // A Per Store template applied before store-aware rollout created one
+        // generic row. Adopt it as the first selected store instead of leaving a
+        // duplicate legacy row beside the new clones.
+        if (! $task && $storeId && $mayAdoptLegacyRow) {
+            $task = (clone $query)
+                ->whereNull('store_id')
+                ->where('activity_mode', 'per_store')
+                ->first();
+            if ($task) {
+                $task->update(['store_id' => $storeId]);
+            }
+        }
+
+        $department = blank($activity->department) ? $parentTask?->department : $activity->department;
+        $subUnit = blank($activity->sub_unit) ? $parentTask?->sub_unit : $activity->sub_unit;
+
+        if (! $task) {
+            $task = ProjectTask::create([
+                'project_id' => $project->id,
+                'store_id' => $storeId,
+                'parent_task_id' => $parentTask?->id,
+                'name' => $activity->activity,
+                'category' => $activity->milestone,
+                'milestone_order' => $activity->milestone_order,
+                'asset_item' => $activity->asset_item,
+                'model_specs' => $activity->model_specs,
+                'qty' => $activity->qty,
+                'responsible' => $activity->responsible,
+                'department' => $department,
+                'sub_unit' => $subUnit,
+                'status' => 'Pending',
+                'progress' => 0,
+                'order' => $activity->order,
+                'start_date' => $dates['start'] ?? null,
+                'end_date' => $dates['end'] ?? null,
+                'lead_time_days' => $activity->default_duration_days,
+                'can_run_parallel' => (bool) $activity->can_run_parallel,
+                'activity_mode' => $activity->activity_mode,
+                'milestone_weight' => $activity->milestone_weight,
+                'activity_weight' => $activity->activity_weight,
+                'sub_task_weight' => $activity->sub_task_weight,
+                'acceptance_criteria' => $activity->acceptance_criteria,
+                'created_by' => $actorId,
+                'updated_by' => $actorId,
+            ]);
+
+            return [$task, true, false];
+        }
+
+        $reordered = (float) $task->order !== (float) $activity->order
+            || (int) $task->milestone_order !== (int) $activity->milestone_order;
+        $updates = [
+            'milestone_order' => $activity->milestone_order,
+            'order' => $activity->order,
+            'lead_time_days' => $activity->default_duration_days,
+            'activity_mode' => $activity->activity_mode,
+            'milestone_weight' => $activity->milestone_weight,
+            'activity_weight' => $activity->activity_weight,
+            'sub_task_weight' => $activity->sub_task_weight,
+            'acceptance_criteria' => $activity->acceptance_criteria,
+            'updated_by' => $actorId,
+        ];
+        if ($dates) {
+            $updates['start_date'] = $dates['start'];
+            $updates['end_date'] = $dates['end'];
+        }
+        if (blank($task->department)) {
+            $updates['department'] = $department;
+            $updates['sub_unit'] = $subUnit;
+        }
+        $task->update($updates);
+
+        return [$task->fresh(), false, $reordered];
     }
 
     /**

@@ -41,6 +41,7 @@ const props = defineProps({
     projectTypes: { type: Array, default: () => [] },
     users: Array,
     stores: Array,
+    rolloutStores: { type: Array, default: () => [] },
     brands: { type: Array, default: () => [] },
     vendors: { type: Array, default: () => [] },
     departments: { type: Array, default: () => [] },
@@ -545,6 +546,7 @@ const getStatusColor = (status) => {
                                     v-model="editForm.target_store_count"
                                     class="w-full"
                                 />
+                                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Used as the rollout progress denominator; actual stores are selected when applying a Per Store template.</p>
                                 <InputError :message="editForm.errors.target_store_count" />
                             </div>
 
@@ -1080,6 +1082,7 @@ const getStatusColor = (status) => {
                     <ProjectGantt
                         :project="project"
                         :users="users"
+                        :stores="rolloutStores"
                         :projectTemplates="project_templates"
                         :taskListTargets="taskListTargets"
                         :canManage="canManageProject"

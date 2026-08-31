@@ -103,6 +103,9 @@ class ProjectGanttProductivityTest extends TestCase
         $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
         $this->assertStringContainsString('inline', (string) $response->headers->get('content-disposition'));
         $this->assertStringStartsWith('%PDF', (string) $response->getContent());
+        // Summary, weekly report and detailed Gantt: no empty page inserted
+        // between the latter two by a trailing page-break element.
+        $this->assertSame(3, preg_match_all('/\/Type\s*\/Page\b/', (string) $response->getContent()));
     }
 
     public function test_department_progress_uses_weighted_leaf_rows_without_double_counting_parent_rollups(): void

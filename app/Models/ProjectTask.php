@@ -15,6 +15,7 @@ class ProjectTask extends Model
 
     protected $fillable = [
         'project_id',
+        'store_id',
         'parent_task_id',
         'depends_on_task_id',
         'can_run_parallel',
@@ -52,6 +53,7 @@ class ProjectTask extends Model
 
     protected $casts = [
         'project_id' => 'integer',
+        'store_id' => 'integer',
         'parent_task_id' => 'integer',
         'depends_on_task_id' => 'integer',
         'can_run_parallel' => 'boolean',
@@ -76,6 +78,12 @@ class ProjectTask extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    /** The rollout store represented by a Per Store activity/sub-task. */
+    public function store(): BelongsTo
+    {
+        return $this->belongsTo(Store::class);
     }
 
     public function parentTask(): BelongsTo

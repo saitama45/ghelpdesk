@@ -45,8 +45,14 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             $query->where('name', 'like', "%{$request->search}%");
         }
 
-        if ($request->filled('store_class')) {
-            $query->whereIn('store_class', [$request->store_class, 'Both']);
+        // The page always paints one store-class tab as active and defaults it to
+        // "Regular", so an unfiltered request must return that same set — otherwise
+        // page 1 and every infinite-scroll page after it come from different lists.
+        $storeClass = $request->filled('store_class') ? $request->store_class : 'Regular';
+        $query->whereIn('store_class', [$storeClass, 'Both']);
+
+        if ($request->filled('project_type')) {
+            $query->where('project_type', $request->project_type);
         }
 
         $templates = $query->orderBy('name')
@@ -68,7 +74,10 @@ class ActivityTemplateController extends Controller implements HasMiddleware
             'storeClasses' => ReferenceOption::ofType('store_class'),
             'entities' => Company::where('type', 'Entity')->where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
             'brands' => Company::with('entities:id')->where('type', 'Brand')->where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
-            'filters' => $request->only(['search', 'store_class']),
+            'filters' => array_merge(
+                $request->only(['search', 'project_type']),
+                ['store_class' => $storeClass],
+            ),
         ]);
     }
 

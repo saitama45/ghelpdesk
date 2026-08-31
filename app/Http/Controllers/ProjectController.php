@@ -268,6 +268,7 @@ class ProjectController extends Controller
             'teamMembers.user:id,name,profile_photo,department,org_path',
             'taskBoard:id,project_id,title,closed_at',
             'tasks',
+            'tasks.store:id,code,name',
             'tasks.assignedUser:id,name,profile_photo,org_path',
             'tasks.supportUser:id,name,profile_photo,org_path',
             'assets'
@@ -290,6 +291,14 @@ class ProjectController extends Controller
             'projectTypes'   => Project::projectTypes(),
             'users'          => User::active()->orderBy('name')->get(['id', 'name', 'department', 'org_path']),
             'stores'         => Store::orderBy('name')->get(['id', 'name']),
+            // A rollout project can cover many stores. Offer only active stores
+            // owned by the project's brand; project_tasks.store_id records the
+            // exact store represented by each Per Store row.
+            'rolloutStores'  => Store::query()
+                ->where('is_active', true)
+                ->when($project->brand_company_id, fn ($query, $brandId) => $query->where('company_id', $brandId))
+                ->orderBy('name')
+                ->get(['id', 'code', 'name']),
             'brands'         => Company::query()
                 ->where('type', 'Brand')
                 ->whereHas('entities', fn ($query) => $query->whereKey($project->company_id))

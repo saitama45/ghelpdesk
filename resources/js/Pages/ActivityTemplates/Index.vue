@@ -7,18 +7,29 @@
                     search-placeholder="Search templates by name..."
                     empty-message="No templates found. Create your first project blueprint to get started."
                     :search="pagination.search.value"
-                    :data="pagination.data.value"
+                    :data="displayedTemplates"
                     :current-page="pagination.currentPage.value"
                     :last-page="pagination.lastPage.value"
                     :per-page="pagination.perPage.value"
-                    :showing-text="pagination.showingText.value"
+                    :showing-text="templatesShowingText"
                     :is-loading="pagination.isLoading.value"
+                    infinite-scroll
+                    :has-more="hasMoreTemplates"
+                    :loading-more="loadingMoreTemplates"
                     @update:search="pagination.search.value = $event"
-                    @go-to-page="pagination.goToPage"
-                    @change-per-page="pagination.changePerPage"
+                    @load-more="loadMoreTemplates"
                 >
                     <template #actions>
-                        <div class="flex items-center space-x-4">
+                        <div class="flex flex-wrap items-center justify-end gap-3">
+                            <div class="w-48" data-testid="project-type-filter">
+                                <Autocomplete
+                                    :model-value="selectedProjectType"
+                                    :options="projectTypeFilterOptions"
+                                    size="sm"
+                                    placeholder="All project types"
+                                    @update:model-value="filterByProjectType"
+                                />
+                            </div>
                             <nav class="flex flex-wrap p-1 bg-gray-100 rounded-lg gap-0.5 dark:bg-gray-800">
                                 <button
                                     v-for="cls in localStoreClasses"
@@ -660,10 +671,96 @@ const availableBrands = computed(() => {
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
-const pagination = usePagination(props.templates, 'activity-templates.index')
 const { hasPermission } = usePermission()
 
 const selectedClass = ref(props.filters.store_class || 'Regular')
+const selectedProjectType = ref(props.filters.project_type || '')
+
+// Every list request (search, filter change, "load more") must carry the same
+// filter set, otherwise a search would silently drop the active tab/type.
+const templateFilterParams = () => {
+    const params = { store_class: selectedClass.value }
+    if (selectedProjectType.value) params.project_type = selectedProjectType.value
+    return params
+}
+
+const pagination = usePagination(props.templates, 'activity-templates.index', templateFilterParams)
+// usePagination defaults to 10; the server paginates 15. Keep them in step so
+// the "load more" page numbers line up with the rows already on screen.
+pagination.perPage.value = props.templates?.per_page || 15
+
+const projectTypeFilterOptions = computed(() => [
+    { value: '', label: 'All project types' },
+    ...localProjectTypes.value.map(type => ({ value: type.value, label: type.label })),
+])
+
+// --- Infinite scroll accumulation ---
+// Rows accumulate client-side across pages: the watcher on props.templates
+// replaces the buffer whenever a first page arrives (filter/search change) and
+// appends, deduped, for any subsequent "load more" page.
+const accumulatedTemplates = ref([...(props.templates?.data || [])])
+const templatesMeta = ref({
+    current_page: props.templates?.current_page || 1,
+    last_page: props.templates?.last_page || 1,
+    total: props.templates?.total || 0,
+})
+const loadingMoreTemplates = ref(false)
+
+const mergeTemplatePage = (payload) => {
+    if (!payload) return
+    const incoming = payload.data || []
+    if ((payload.current_page || 1) <= 1) {
+        accumulatedTemplates.value = [...incoming]
+    } else {
+        const incomingById = new Map(incoming.map(t => [t.id, t]))
+        const seen = new Set(accumulatedTemplates.value.map(t => t.id))
+        accumulatedTemplates.value = [
+            ...accumulatedTemplates.value.map(t => incomingById.get(t.id) || t),
+            ...incoming.filter(t => !seen.has(t.id)),
+        ]
+    }
+    templatesMeta.value = {
+        current_page: payload.current_page || 1,
+        last_page: payload.last_page || 1,
+        total: payload.total || 0,
+    }
+}
+
+const displayedTemplates = computed(() => accumulatedTemplates.value)
+
+const hasMoreTemplates = computed(
+    () => templatesMeta.value.current_page < templatesMeta.value.last_page
+)
+
+const templatesShowingText = computed(() => {
+    const total = templatesMeta.value.total || 0
+    if (total === 0) return 'No records found'
+    return `Showing ${accumulatedTemplates.value.length} of ${total} records`
+})
+
+const loadMoreTemplates = () => {
+    if (loadingMoreTemplates.value || !hasMoreTemplates.value) return
+    loadingMoreTemplates.value = true
+    router.reload({
+        only: ['templates'],
+        data: {
+            ...templateFilterParams(),
+            search: pagination.search.value,
+            per_page: pagination.perPage.value,
+            page: templatesMeta.value.current_page + 1,
+        },
+        preserveScroll: true,
+        preserveState: true,
+        onFinish: () => {
+            loadingMoreTemplates.value = false
+        },
+    })
+}
+
+watch(() => props.templates, (newTemplates) => {
+    pagination.updateData(newTemplates)
+    mergeTemplatePage(newTemplates)
+}, { deep: true })
 
 /* ---- Drag-to-sort ---- */
 const drag = reactive({ type: null, key: null, overKey: null })
@@ -749,16 +846,27 @@ const scrollModalTop = () => {
     if (el) el.scrollTop = 0
 }
 
-const filterByClass = (className) => {
-    selectedClass.value = className
+const applyFilters = () => {
+    pagination.currentPage.value = 1
     router.get(route('activity-templates.index'), {
-        store_class: className,
+        ...templateFilterParams(),
         search: pagination.search.value,
-        per_page: pagination.perPage.value
+        per_page: pagination.perPage.value,
+        page: 1
     }, {
         preserveState: true,
         replace: true
     })
+}
+
+const filterByClass = (className) => {
+    selectedClass.value = className
+    applyFilters()
+}
+
+const filterByProjectType = (projectType) => {
+    selectedProjectType.value = projectType || ''
+    applyFilters()
 }
 
 const showModal = ref(false)
@@ -865,7 +973,7 @@ const submitImport = async () => {
 
         if (data.imported_templates > 0) {
             showSuccess(`Imported ${data.imported_templates} activity template(s) successfully`)
-            router.reload({ only: ['templates'], preserveScroll: true })
+            applyFilters()
         }
     } catch (error) {
         const validationMessage = error.response?.data?.errors?.file?.[0]
@@ -1367,12 +1475,14 @@ const submitForm = () => {
         form.transform(transformPayload).put(route('activity-templates.update', currentTemplate.value.id), {
             onSuccess: () => {
                 closeModal()
+                applyFilters()
             }
         })
     } else {
         form.transform(transformPayload).post(route('activity-templates.store'), {
             onSuccess: () => {
                 closeModal()
+                applyFilters()
             }
         })
     }
@@ -1388,7 +1498,9 @@ const deleteTemplate = async (template) => {
     })
     
     if (confirmed) {
-        router.delete(route('activity-templates.destroy', template.id))
+        router.delete(route('activity-templates.destroy', template.id), {
+            onSuccess: () => applyFilters()
+        })
     }
 }
 </script>

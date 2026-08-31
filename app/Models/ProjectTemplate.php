@@ -59,7 +59,10 @@ class ProjectTemplate extends Model
     public static function applicableTo(Project $project): Collection
     {
         return static::query()
-            ->withCount('activities')
+            ->withCount([
+                'activities',
+                'activities as per_store_activities_count' => fn ($query) => $query->where('activity_mode', 'per_store'),
+            ])
             ->orderBy('name')
             ->get()
             ->filter(fn (self $template) => $template->applicabilityErrorFor($project) === null)

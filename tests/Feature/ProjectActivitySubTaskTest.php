@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityTemplate;
+use App\Models\Company;
 use App\Models\Project;
 use App\Models\ProjectTask;
 use App\Models\ProjectTemplate;
@@ -10,6 +11,7 @@ use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 class ProjectActivitySubTaskTest extends TestCase
@@ -758,6 +760,114 @@ class ProjectActivitySubTaskTest extends TestCase
 
         $this->assertSoftDeleted('project_tasks', ['id' => $parentTask->id]);
         $this->assertSoftDeleted('project_tasks', ['id' => $subTask->id]);
+    }
+
+    public function test_per_store_template_uses_target_as_denominator_and_expands_in_idempotent_waves(): void
+    {
+        $user = User::factory()->create();
+        Permission::findOrCreate('projects.view', 'web');
+        Permission::findOrCreate('projects.manage_tasks', 'web');
+        $user->givePermissionTo(['projects.view', 'projects.manage_tasks']);
+        $brand = Company::create([
+            'name' => 'NONOS',
+            'code' => 'NONOS',
+            'type' => 'Brand',
+            'is_active' => true,
+        ]);
+        $project = Project::create([
+            'name' => 'NN DIWA',
+            'status' => 'Planning',
+            'brand_company_id' => $brand->id,
+            'target_store_count' => 3,
+            'day1_date' => '2026-09-01',
+            'created_by' => $user->id,
+        ]);
+        $stores = collect(['NN Alabang', 'NN Makati', 'NN BGC', 'NN Cebu'])
+            ->map(fn ($name, $index) => Store::create([
+                'code' => 'NN'.($index + 1),
+                'name' => $name,
+                'company_id' => $brand->id,
+                'sector' => 1,
+                'area' => 'Test Area',
+                'brand' => 'NONOS',
+                'cluster' => 'Test Cluster',
+                'class' => 'Regular',
+                'is_active' => true,
+            ]));
+        $template = ProjectTemplate::create([
+            'name' => 'NONOS DIWA',
+            'project_type' => 'Store Opening',
+            'project_name' => 'DIWA',
+            'brand_company_id' => $brand->id,
+            'store_class' => 'Both',
+        ]);
+        $template->activities()->create([
+            'activity' => 'Rollout Preparation',
+            'milestone' => 'Deployment',
+            'activity_mode' => 'standard',
+            'default_duration_days' => 1,
+            'milestone_order' => 1,
+            'order' => 1,
+        ]);
+        $deployment = $template->activities()->create([
+            'activity' => 'Store Deployment',
+            'milestone' => 'Deployment',
+            'activity_mode' => 'per_store',
+            'default_duration_days' => 1,
+            'milestone_order' => 1,
+            'order' => 2,
+        ]);
+        $template->activities()->create([
+            'parent_activity_template_id' => $deployment->id,
+            'activity' => 'Validate POS Agent',
+            'milestone' => 'Deployment',
+            'activity_mode' => 'per_store',
+            'default_duration_days' => 1,
+            'milestone_order' => 1,
+            'order' => 3,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('projects.apply-templates', $project), [
+                'project_template_id' => $template->id,
+                'store_ids' => [$stores[0]->id, $stores[1]->id],
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, ProjectTask::where('project_id', $project->id)->where('activity_mode', 'standard')->count());
+        $this->assertSame(2, ProjectTask::where('project_id', $project->id)->where('name', 'Store Deployment')->count());
+        $this->assertSame(2, ProjectTask::where('project_id', $project->id)->where('name', 'Validate POS Agent')->count());
+        $this->assertSame(
+            [$stores[0]->id, $stores[1]->id],
+            ProjectTask::where('project_id', $project->id)
+                ->where('name', 'Store Deployment')
+                ->orderBy('store_id')
+                ->pluck('store_id')
+                ->all()
+        );
+        $this->assertCount(1, ProjectTask::where('project_id', $project->id)
+            ->where('name', 'Store Deployment')->pluck('start_date')->unique());
+
+        // A later wave adds only the newly selected store; existing store rows
+        // and the one-time Standard preparation row are not duplicated.
+        $this->actingAs($user)
+            ->post(route('projects.apply-templates', $project), [
+                'project_template_id' => $template->id,
+                'store_ids' => [$stores[0]->id, $stores[1]->id, $stores[2]->id],
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(7, ProjectTask::where('project_id', $project->id)->count());
+        $this->assertSame(3, ProjectTask::where('project_id', $project->id)->where('name', 'Store Deployment')->count());
+
+        $this->actingAs($user)
+            ->post(route('projects.apply-templates', $project), [
+                'project_template_id' => $template->id,
+                'store_ids' => $stores->pluck('id')->all(),
+            ])
+            ->assertSessionHasErrors('store_ids');
     }
 
     private function createProject(string $storeName = 'Test Store', ?User $owner = null): Project

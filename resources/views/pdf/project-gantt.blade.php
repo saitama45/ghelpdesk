@@ -53,7 +53,10 @@
         .milestone-line-percent { width: 130px; text-align: right; font-size: 30px; font-weight: bold; color: #4f46e5; }
         .progress-track-lead { height: 13px; background: #e2e8f0; margin-top: 14px; }
         .progress-fill-lead { height: 13px; background: #4f46e5; }
-        .page-break { page-break-after: always; }
+        /* Break the real next section, not an empty trailing element. DomPDF can
+           push an empty page-break-after div onto its own page when the current
+           section is already full, producing a blank page before the details. */
+        .weekly-page, .detail-pages { page-break-before: always; }
         .milestone { margin-top: 12px; page-break-inside: avoid; }
         .milestone-header { background: #312e81; color: white; padding: 7px 9px; font-weight: bold; font-size: 9px; }
         .milestone-header .right { float: right; }
@@ -64,6 +67,7 @@
         .activity { font-weight: bold; }
         .subtask { padding-left: 14px; color: #475569; }
         .sub-prefix { color: #8b5cf6; font-weight: bold; }
+        .row-store { margin-left: 4px; color: #0e7490; font-size: 6px; font-weight: bold; text-transform: uppercase; }
         .center { text-align: center; }
         .status { border-radius: 8px; padding: 2px 5px; font-size: 6px; font-weight: bold; text-transform: uppercase; }
         .done { background: #dcfce7; color: #166534; }
@@ -170,7 +174,6 @@
             </div>
         @endforeach
 
-        <div class="page-break"></div>
     @endif
 
     {{-- PAGE 2: Weekly Horizon, Progress & Movements Report --}}
@@ -231,6 +234,69 @@
                     </td>
                 </tr>
             </table>
+
+            @if(($weeklyReport['storeRollout']['target'] ?? 0) > 0)
+                <div style="margin-top:9px;page-break-inside:avoid;">
+                    <table style="width:100%;border-collapse:collapse;background:#ecfeff;border:1px solid #a5f3fc;">
+                        <tr>
+                            <td style="padding:5px 8px;width:24%;">
+                                <div style="font-size:8px;font-weight:bold;text-transform:uppercase;color:#155e75;letter-spacing:.5px;">Store Rollout Progress</div>
+                                <div style="font-size:15px;font-weight:bold;color:#0e7490;">{{ $weeklyReport['storeRollout']['progress'] }}% of target</div>
+                            </td>
+                            <td style="padding:5px 8px;text-align:center;">
+                                <strong style="font-size:12px;color:#166534;">{{ $weeklyReport['storeRollout']['completed'] }}</strong>
+                                <div style="font-size:6px;text-transform:uppercase;color:#64748b;">Completed</div>
+                            </td>
+                            <td style="padding:5px 8px;text-align:center;">
+                                <strong style="font-size:12px;color:#1d4ed8;">{{ $weeklyReport['storeRollout']['in_progress'] }}</strong>
+                                <div style="font-size:6px;text-transform:uppercase;color:#64748b;">In progress</div>
+                            </td>
+                            <td style="padding:5px 8px;text-align:center;">
+                                <strong style="font-size:12px;color:#475569;">{{ $weeklyReport['storeRollout']['pending'] }}</strong>
+                                <div style="font-size:6px;text-transform:uppercase;color:#64748b;">Pending</div>
+                            </td>
+                            <td style="padding:5px 8px;text-align:center;">
+                                <strong style="font-size:12px;color:#9a3412;">{{ $weeklyReport['storeRollout']['unselected'] }}</strong>
+                                <div style="font-size:6px;text-transform:uppercase;color:#64748b;">Not selected</div>
+                            </td>
+                            <td style="padding:5px 8px;text-align:right;width:20%;">
+                                <strong style="font-size:13px;color:#155e75;">{{ $weeklyReport['storeRollout']['selected'] }} / {{ $weeklyReport['storeRollout']['target'] }}</strong>
+                                <div style="font-size:6px;text-transform:uppercase;color:#64748b;">Stores selected</div>
+                            </td>
+                        </tr>
+                    </table>
+
+                    @if($weeklyReport['storeRollout']['stores']->isNotEmpty())
+                        <table style="width:100%;border-collapse:separate;border-spacing:2px;table-layout:fixed;margin-top:2px;">
+                            @foreach($weeklyReport['storeRollout']['stores']->chunk(7) as $storeRow)
+                                <tr>
+                                    @foreach($storeRow as $store)
+                                        <td style="width:14.285%;padding:3px 4px;border:1px solid {{ $store['progress'] >= 100 ? '#bbf7d0' : ($store['progress'] > 0 ? '#bfdbfe' : '#e2e8f0') }};background:{{ $store['progress'] >= 100 ? '#f0fdf4' : ($store['progress'] > 0 ? '#eff6ff' : '#f8fafc') }};vertical-align:top;">
+                                            <div style="font-size:6.5px;font-weight:bold;color:#1e293b;white-space:nowrap;overflow:hidden;">
+                                                {{ $store['code'] ?: $store['name'] }}
+                                                <span style="float:right;color:{{ $store['progress'] >= 100 ? '#15803d' : ($store['progress'] > 0 ? '#1d4ed8' : '#64748b') }};">{{ $store['progress'] }}%</span>
+                                            </div>
+                                            @if($store['code'] && strcasecmp($store['code'], $store['name']) !== 0)
+                                                <div style="font-size:5.5px;color:#64748b;white-space:nowrap;overflow:hidden;">{{ $store['name'] }}</div>
+                                            @endif
+                                            <div style="height:2px;background:#e2e8f0;margin-top:2px;">
+                                                <div style="height:2px;width:{{ $store['progress'] }}%;background:{{ $store['progress'] >= 100 ? '#16a34a' : '#2563eb' }};"></div>
+                                            </div>
+                                        </td>
+                                    @endforeach
+                                    @for($i = $storeRow->count(); $i < 7; $i++)
+                                        <td style="width:14.285%;border:0;"></td>
+                                    @endfor
+                                </tr>
+                            @endforeach
+                        </table>
+                    @else
+                        <div style="padding:5px 8px;border:1px solid #fde68a;background:#fffbeb;color:#92400e;font-size:7px;font-weight:bold;">
+                            No stores are linked to Per Store rows yet. Reapply the DIWA template and select the rollout stores.
+                        </div>
+                    @endif
+                </div>
+            @endif
 
             <!-- Milestone WoW Comparison Table -->
             <div style="margin-top:10px;">
@@ -364,10 +430,10 @@
                 </div>
             @endif
 
-            <div class="page-break"></div>
         </div>
     @endif
 
+    <div class="detail-pages">
     @forelse($milestones as $milestone)
         <div class="milestone">
             <div class="milestone-header">
@@ -401,6 +467,7 @@
                         <tr>
                             <td class="{{ $row['depth'] ? 'subtask' : 'activity' }}">
                                 @if($row['depth'])<span class="sub-prefix">↳ </span>@endif{{ $task->name }}
+                                @if($task->store)<span class="row-store">[{{ $task->store->code ?: $task->store->name }}]</span>@endif
                             </td>
                             <td>{{ $task->assignedUser?->name ?: $task->external_assignment ?: 'Unassigned' }}</td>
                             <td class="center"><span class="status {{ $statusKey }}">{{ $task->manual_status ?: $task->status }}</span></td>
@@ -429,5 +496,6 @@
     @empty
         <div style="padding:30px;text-align:center;color:#64748b">No project tasks are available for this presentation.</div>
     @endforelse
+    </div>
 </body>
 </html>

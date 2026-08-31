@@ -107,6 +107,7 @@ class HybridSdlcWorkbookService
             ['Hierarchy', 'Milestone = business capability or release; Activity = SDLC phase, sprint, or store rollout; Sub-Task = assignable accepted deliverable.'],
             ['All Departments', "All Departments' Process Implementation in LINK HUB contains one Activity per business process. Its Sub-Tasks cover department readiness plus the hybrid SDLC / Agile work needed to implement, test, release, and adopt that process in LINK HUB."],
             ['Collaboration Matrix', 'Use the matrix as the cross-department reporting view. Milestone marks the primary owning department and Waiting is the recommended initial state; replace these with current status or target week as planning progresses. Imported Sub-Tasks remain the source of progress percentages.'],
+            ['Parallel planning', 'Independent departmental readiness checkpoints run in parallel after the target workflow is approved. LINK HUB business processes also run as parallel workstreams; design/build/QA/UAT/release gates inside each process remain sequential.'],
             ['Task Board', 'Keep detailed user stories, bugs, and developer tasks on the Task Board. The Gantt should track accepted sprint/release outcomes.'],
             ['Weights', 'Milestones total 100% per template, activities total 100% per milestone, and sub-tasks total 100% per activity.'],
             ['Per Store', 'A Per Store activity is cloned after target stores are selected. Do not manually create 35 placeholder store rows.'],
@@ -289,13 +290,16 @@ class HybridSdlcWorkbookService
                 ],
             ];
 
+            $departmentIndex = 0;
             foreach (self::COLLABORATION_DEPARTMENTS as $code => $department) {
                 $tasks[] = [
                     "{$code} readiness and process checkpoint",
                     "{$department} records its owner, status or target week, requirements, dependencies, evidence, and approval decision for the {$process['name']} workflow in LINK HUB.",
                     "{$code} Process Representative",
                     $department,
+                    $departmentIndex > 0,
                 ];
+                $departmentIndex++;
             }
 
             array_push($tasks,
@@ -338,6 +342,7 @@ class HybridSdlcWorkbookService
                 $tasks,
                 "Lead: {$process['lead']} | Partner: {$process['partner']}",
                 $process['department'],
+                true,
             );
         }
 
@@ -490,9 +495,9 @@ class HybridSdlcWorkbookService
         return ['name' => 'P&O Employee Services Agreed Forms', 'activities' => $activities];
     }
 
-    private function activity(string $name, float $weight, string $mode, array $tasks, string $responsible, ?string $department = null): array
+    private function activity(string $name, float $weight, string $mode, array $tasks, string $responsible, ?string $department = null, bool $parallel = false): array
     {
-        return compact('name', 'weight', 'mode', 'tasks', 'responsible', 'department');
+        return compact('name', 'weight', 'mode', 'tasks', 'responsible', 'department', 'parallel');
     }
 
     private function templateRows(array $template): array
@@ -510,18 +515,20 @@ class HybridSdlcWorkbookService
                 $rows[] = $this->row($template, $activityKey, null, $activity['name'], $activity['mode'],
                     $milestone['name'], $milestoneIndex + 1, $milestoneWeights[$milestoneIndex],
                     $activity['weight'], null, $activity['name'].' is completed and accepted.',
-                    $activity['responsible'], $duration, $globalOrder++, $previousActivity, $activity['department'] ?? null);
+                    $activity['responsible'], $duration, $globalOrder++, $previousActivity,
+                    $activity['department'] ?? null, (bool) ($activity['parallel'] ?? false));
 
                 $previousTask = $previousActivity;
                 foreach ($activity['tasks'] as $taskIndex => $task) {
                     [$taskName, $acceptance] = $task;
                     $taskResponsible = $task[2] ?? $activity['responsible'];
                     $taskDepartment = $task[3] ?? ($activity['department'] ?? null);
+                    $taskParallel = (bool) ($task[4] ?? false);
                     $taskKey = $activityKey.'-S'.sprintf('%02d', $taskIndex + 1);
                     $rows[] = $this->row($template, $taskKey, $activityKey, $taskName, $activity['mode'],
                         $milestone['name'], $milestoneIndex + 1, $milestoneWeights[$milestoneIndex],
                         $activity['weight'], $taskWeights[$taskIndex], $acceptance,
-                        $taskResponsible, 1, $globalOrder++, $previousTask, $taskDepartment);
+                        $taskResponsible, 1, $globalOrder++, $previousTask, $taskDepartment, $taskParallel);
                     $previousTask = $taskKey;
                 }
                 $previousActivity = $activityKey;
@@ -533,13 +540,13 @@ class HybridSdlcWorkbookService
     private function row(array $template, string $key, ?string $parent, string $activity, string $mode,
         string $milestone, int $milestoneOrder, float $milestoneWeight, float $activityWeight,
         ?float $subTaskWeight, string $acceptance, string $responsible, int $days, int $order,
-        ?string $requisite, ?string $department = null): array
+        ?string $requisite, ?string $department = null, bool $parallel = false): array
     {
         return [
             $template['name'], $template['project_type'], $template['entity'], $template['brand'],
             $template['project_name'], $template['store_class'], $key, $parent, $activity, $mode,
             $milestone, $milestoneOrder, $milestoneWeight, $activityWeight, $subTaskWeight,
-            $acceptance, null, null, 1, $responsible, $department, null, $days, $order, $requisite, 'No',
+            $acceptance, null, null, 1, $responsible, $department, null, $days, $order, $requisite, $parallel ? 'Yes' : 'No',
         ];
     }
 
