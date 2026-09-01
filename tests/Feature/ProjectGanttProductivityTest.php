@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\Project;
 use App\Models\ProjectTask;
 use App\Models\ProjectTeamMember;
+use App\Models\TaskBoard;
+use App\Models\TaskChecklistItem;
 use App\Models\User;
 use App\Services\ProjectWorkspaceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -67,6 +69,45 @@ class ProjectGanttProductivityTest extends TestCase
             'task_ids' => [$this->task($otherProject, 'Foreign task')->id],
             'assigned_to' => $assignee->id,
         ])->assertUnprocessable()->assertJsonValidationErrors('task_ids');
+    }
+
+    public function test_bulk_assignment_updates_existing_linked_board_items(): void
+    {
+        $owner = $this->projectUser();
+        $assignee = User::factory()->create();
+        $project = $this->project($owner);
+        ProjectTeamMember::create([
+            'project_id' => $project->id,
+            'user_id' => $assignee->id,
+            'role_type' => 'Project Member',
+            'team_category' => 'Project Team',
+        ]);
+        $task = $this->task($project, 'Build API');
+
+        $board = TaskBoard::create([
+            'project_id' => $project->id,
+            'board_source' => 'manual',
+            'title' => 'Delivery Board',
+            'created_by' => $owner->id,
+        ]);
+        $card = $board->cards()->create([
+            'project_id' => $project->id,
+            'title' => $project->name,
+            'created_by' => $owner->id,
+        ]);
+        $checklist = $card->checklists()->create(['title' => 'Build']);
+        $item = $checklist->allItems()->create([
+            'project_task_id' => $task->id,
+            'title' => $task->name,
+        ]);
+
+        $this->actingAs($owner)->patchJson(route('projects.tasks.bulk-assign', $project), [
+            'task_ids' => [$task->id],
+            'assigned_to' => $assignee->id,
+        ])->assertOk()->assertJsonPath('updated', 1);
+
+        $this->assertSame($assignee->id, (int) $task->fresh()->assigned_to);
+        $this->assertSame($assignee->id, (int) $item->fresh()->assigned_to);
     }
 
     public function test_direct_progress_change_is_rejected_for_activity_rolled_up_from_sub_tasks(): void

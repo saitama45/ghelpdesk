@@ -1107,13 +1107,9 @@ class ProjectTaskController extends Controller
                 'updated_at' => now(),
             ]);
 
-            $this->projectTaskBoards->syncProject(
-                $project->fresh(['teamMembers.user', 'tasks']),
-                $request->user(),
-                null,
-                false
-            );
-            $this->projectTaskBoards->syncLinkedBoardItemsFromProject($project->fresh());
+            // Assignment-only changes do not need a complete rebuild of every
+            // monthly/manual board. Update the already-linked items in one query.
+            $this->projectTaskBoards->syncTaskAssignments($changedIds, $assigneeId);
 
             if ($assigneeId) {
                 $this->notifications->dispatch([$assigneeId], $request->user()->id, [

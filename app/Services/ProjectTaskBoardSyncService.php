@@ -252,6 +252,30 @@ class ProjectTaskBoardSyncService
             ->each(fn (Project $project) => $this->syncProject($project, $actor, null, $autoCreateMonthlyBoards));
     }
 
+    /**
+     * Mirror assignment-only changes onto existing monthly and manually linked
+     * board items without rebuilding the project's complete board structure.
+     */
+    public function syncTaskAssignments(iterable $taskIds, ?int $assigneeId): void
+    {
+        $ids = collect($taskIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        TaskChecklistItem::query()
+            ->whereIn('project_task_id', $ids)
+            ->update([
+                'assigned_to' => $assigneeId,
+                'updated_at' => now(),
+            ]);
+    }
+
     public function archiveProjectTaskCards(iterable $taskIds, ?User $actor = null): void
     {
         $ids = collect($taskIds)->filter()->unique()->values();
