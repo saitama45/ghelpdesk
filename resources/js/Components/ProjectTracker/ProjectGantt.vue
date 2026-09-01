@@ -856,6 +856,8 @@ const saveMilestoneOwner = () => {
 };
 
 const closeForm = () => {
+    if (isSavingTask.value) return;
+
     isAddingTask.value = false;
     isEditing.value = false;
     editingTaskId.value = null;
@@ -1905,16 +1907,9 @@ const isWeekend = (date) => {
             </p>
         </div>
 
-        <transition
-            enter-active-class="transition duration-300 ease-out"
-            enter-from-class="transform -translate-y-4 opacity-0"
-            enter-to-class="transform translate-y-0 opacity-100"
-            leave-active-class="transition duration-200 ease-in"
-            leave-from-class="transform translate-y-0 opacity-100"
-            leave-to-class="transform -translate-y-4 opacity-0"
-        >
-            <div v-if="isAddingTask" class="p-6 bg-indigo-50/30 border-b border-indigo-100 z-30 dark:border-indigo-400/20 dark:bg-indigo-500/10">
-                <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <Modal :show="isAddingTask" max-width="7xl" :closeable="!isSavingTask" @close="closeForm">
+            <div class="flex max-h-[90vh] flex-col bg-white dark:bg-slate-900">
+                <div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-4 dark:border-slate-700">
                     <div>
                         <h4 class="text-sm font-black text-indigo-950 uppercase tracking-widest dark:text-indigo-100">{{ formTitle }}</h4>
                         <p v-if="activeParentTask" class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-300">
@@ -1924,19 +1919,32 @@ const isWeekend = (date) => {
                             Milestone: {{ activeMilestone }}
                         </p>
                     </div>
+                    <button type="button"
+                            @click="closeForm"
+                            :disabled="isSavingTask"
+                            class="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-wait disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                            aria-label="Close task form"
+                            title="Close">
+                        <XMarkIcon class="h-5 w-5" />
+                    </button>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-12 gap-x-8 gap-y-4 items-end">
-                    <div class="md:col-span-2">
+                <div class="overflow-y-auto bg-slate-50/80 p-6 dark:bg-slate-950/60">
+                    <div class="grid grid-cols-1 items-start gap-x-6 gap-y-4 md:grid-cols-12">
+                    <div class="md:col-span-12 rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+                        <h5 class="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">Task details</h5>
+                        <p class="mt-1 text-[11px] font-medium text-slate-400">Use clear names so the complete Milestone and Activity/Sub-task remain easy to identify.</p>
+                    </div>
+                    <div class="min-w-0 md:col-span-4">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Milestone</label>
                         <input v-model="form.category" type="text" placeholder="Milestone name" :readonly="formMode === 'subtask' || (formMode !== 'milestone' && !isEditing) || (isEditing && !canRenameActiveMilestone)" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all read-only:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:read-only:bg-slate-800">
                         <div v-if="form.errors.category" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.category }}</div>
                     </div>
-                    <div class="md:col-span-2">
+                    <div class="min-w-0 md:col-span-5">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">{{ activityFieldLabel }}</label>
                         <input v-model="form.name" type="text" placeholder="What needs to be done?" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                         <div v-if="form.errors.name" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.name }}</div>
                     </div>
-                    <div class="md:col-span-2">
+                    <div class="min-w-0 md:col-span-3">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Responsible</label>
                         <select v-model="form.assigned_to" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
                             <option value="">Unassigned</option>
@@ -1944,7 +1952,11 @@ const isWeekend = (date) => {
                         </select>
                         <div v-if="form.errors.assigned_to" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.assigned_to }}</div>
                     </div>
-                    <div class="md:col-span-1">
+                    <div class="md:col-span-12 mt-1 rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
+                        <h5 class="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">Planning and progress</h5>
+                        <p class="mt-1 text-[11px] font-medium text-slate-400">Keep duration, dependencies, status, and timeline aligned in one section.</p>
+                    </div>
+                    <div :class="formMode === 'milestone' ? 'md:col-span-4' : 'md:col-span-2'">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Lead Time (Days)</label>
                         <input :value="isRolledUpActivity ? rolledUpLeadTime : form.lead_time_days"
                                @input="syncEndDateFromLeadTime($event.target.value)"
@@ -1958,7 +1970,7 @@ const isWeekend = (date) => {
                         <p v-else-if="isEditing && project.day1_date" class="mt-1 ml-1 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">Saving will re-chain every row's dates from Day 1.</p>
                         <p v-else-if="isEditing" class="mt-1 ml-1 text-[9px] font-semibold text-amber-600 dark:text-amber-400">No Day 1 Date set on this project — dates won't auto-schedule.</p>
                     </div>
-                    <div class="md:col-span-2" v-if="formMode !== 'milestone'">
+                    <div class="min-w-0 md:col-span-4" v-if="formMode !== 'milestone'">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Dependency (Requisite)</label>
                         <Autocomplete
                             :model-value="form.depends_on_task_id"
@@ -1970,7 +1982,7 @@ const isWeekend = (date) => {
                         <p class="mt-1 ml-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">Leave empty to follow the row above.</p>
                         <div v-if="form.errors.depends_on_task_id" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.depends_on_task_id }}</div>
                     </div>
-                    <div class="md:col-span-1" v-if="formMode !== 'milestone'">
+                    <div class="md:col-span-2" v-if="formMode !== 'milestone'">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Can Run Parallel?</label>
                         <button type="button" @click="form.can_run_parallel = !form.can_run_parallel"
                                 :title="form.can_run_parallel ? 'Starts off its requisite only — may overlap rows that are still running' : 'Waits for its requisite AND the row above it'"
@@ -1981,7 +1993,9 @@ const isWeekend = (date) => {
                             {{ form.can_run_parallel ? 'Yes' : 'No' }}
                         </button>
                     </div>
-                    <div class="md:col-span-2">
+                    <div :class="formMode === 'milestone'
+                        ? (manualStatuses.length ? 'md:col-span-4' : 'md:col-span-8')
+                        : (manualStatuses.length ? 'md:col-span-2' : 'md:col-span-4')">
                         <div class="flex items-center justify-between mb-1.5 ml-1">
                             <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest dark:text-indigo-200">Progress</label>
                             <button v-if="!isRolledUpActivity" type="button" @click="progressMode = progressMode === 'done' ? 'manual' : 'done'"
@@ -2006,7 +2020,7 @@ const isWeekend = (date) => {
                         derived Pending/Ongoing/Done still comes from progress; this
                         says "and it is stuck", and clears itself at 100%.
                     -->
-                    <div class="md:col-span-2" v-if="manualStatuses.length">
+                    <div :class="formMode === 'milestone' ? 'md:col-span-4' : 'md:col-span-2'" v-if="manualStatuses.length">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Flag</label>
                         <Autocomplete
                             v-model="form.manual_status"
@@ -2018,7 +2032,7 @@ const isWeekend = (date) => {
                         </p>
                         <div v-if="form.errors.manual_status" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.manual_status }}</div>
                     </div>
-                    <div class="md:col-span-3">
+                    <div class="min-w-0 md:col-span-8">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Timeline</label>
                         <div class="flex items-center space-x-2">
                             <input v-model="form.start_date" @change="syncLeadTimeFromTimeline('start')" type="date" :disabled="isRolledUpActivity" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
@@ -2037,17 +2051,18 @@ const isWeekend = (date) => {
                         </p>
                         <div v-if="form.errors.start_date || form.errors.end_date" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.start_date || form.errors.end_date }}</div>
                     </div>
-                    <div class="md:col-span-2 flex items-center space-x-2 pl-4">
-                        <button @click="saveTask" :disabled="isSavingTask" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-95 disabled:opacity-50 text-sm whitespace-nowrap">
+                    <div class="flex items-center space-x-2 self-end md:col-span-4">
+                        <button type="button" @click="saveTask" :disabled="isSavingTask" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-95 disabled:opacity-50 text-sm whitespace-nowrap">
                             {{ isSavingTask ? 'Saving…' : saveButtonLabel }}
                         </button>
-                        <button @click="closeForm" class="flex-1 px-3 py-2.5 bg-white text-slate-500 font-bold border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-sm whitespace-nowrap dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
+                        <button type="button" @click="closeForm" :disabled="isSavingTask" class="flex-1 px-3 py-2.5 bg-white text-slate-500 font-bold border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-sm whitespace-nowrap disabled:cursor-wait disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
                             Cancel
                         </button>
                     </div>
+                    </div>
                 </div>
             </div>
-        </transition>
+        </Modal>
 
         <!-- Main Workspace: Unified Scroll -->
         <div class="flex-1 overflow-auto relative bg-[#fafbfc] dark:bg-slate-950" ref="mainWorkspaceRef">
