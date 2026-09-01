@@ -593,9 +593,9 @@ class ProjectTaskController extends Controller
         $this->scheduler->syncParentRollups($project);
     }
 
-    private function rescheduleProjectTasks(Project $project): void
+    private function rescheduleProjectTasks(Project $project): array
     {
-        $this->scheduler->reschedule($project);
+        return $this->scheduler->reschedule($project);
     }
 
     private function withResolvedMilestoneOrders($activities)
@@ -776,10 +776,14 @@ class ProjectTaskController extends Controller
         }
 
         // Inserting a row shifts everything chained after it — re-chain the whole plan.
-        $this->rescheduleProjectTasks($project);
+        $changedTaskIds = $this->rescheduleProjectTasks($project);
 
-        $this->projectTaskBoards->syncProject($task->project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
-        $this->projectTaskBoards->syncLinkedBoardItemsFromProject($task->project);
+        $this->projectTaskBoards->syncProjectTaskChanges(
+            $project,
+            collect($changedTaskIds)->push($task->id),
+            $request->user(),
+            $request->boolean('auto_create_monthly_boards')
+        );
 
         // Notify the assignee + project team that a new activity/sub-task was added.
         $kind = $task->parent_task_id ? 'sub-task' : 'activity';

@@ -276,6 +276,107 @@ class ProjectTaskBoardSyncService
             ]);
     }
 
+    /**
+     * Sync only newly created or rescheduled project rows. Existing board
+     * structures are updated in place; the expensive full sync is reserved for
+     * the one-time case where a required monthly project card is still missing.
+     */
+    public function syncProjectTaskChanges(
+        Project $project,
+        iterable $taskIds,
+        ?User $actor = null,
+        bool $autoCreateMonthlyBoards = true
+    ): void {
+        $ids = collect($taskIds)->map(fn ($id) => (int) $id)->filter()->unique()->values();
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        $tasks = ProjectTask::query()
+            ->where('project_id', $project->id)
+            ->whereIn('id', $ids)
+            ->get()
+            ->sortBy(fn (ProjectTask $task) => $task->parent_task_id ? 1 : 0)
+            ->values();
+
+        if ($tasks->isEmpty()) {
+            return;
+        }
+
+        $project->loadMissing(['teamMembers.user']);
+
+        $hasMonthlyPeriod = $project->board_month && $project->board_year;
+        $monthlyCards = $hasMonthlyPeriod
+            ? TaskCard::query()
+                ->where('project_id', $project->id)
+                ->whereHas('board', fn ($query) => $query
+                    ->where('board_source', 'monthly')
+                    ->where('board_month', $project->board_month)
+                    ->where('board_year', $project->board_year))
+                ->with('board')
+                ->get()
+            : collect();
+
+        $targetCount = $hasMonthlyPeriod ? $this->projectTargets($project)->count() : 0;
+
+        if ($targetCount > $monthlyCards->count()) {
+            $this->syncProject($project, $actor, null, $autoCreateMonthlyBoards);
+        } else {
+            $monthlyCards->each(fn (TaskCard $card) => $this->syncTasksOntoCard($card, $tasks));
+        }
+
+        TaskBoard::query()
+            ->where('project_id', $project->id)
+            ->where(function ($query) {
+                $query->where('board_source', 'manual')->orWhereNull('board_source');
+            })
+            ->get()
+            ->each(function (TaskBoard $board) use ($tasks) {
+                $card = $this->resolveStructureCard($board);
+                if ($card) {
+                    $this->syncTasksOntoCard($card, $tasks);
+                }
+            });
+    }
+
+    private function syncTasksOntoCard(TaskCard $card, Collection $tasks): void
+    {
+        $synced = [];
+
+        foreach ($tasks as $task) {
+            $this->syncTaskOntoCard($card, $task, $synced);
+        }
+    }
+
+    private function syncTaskOntoCard(TaskCard $card, ProjectTask $task, array &$synced): TaskChecklistItem
+    {
+        if (isset($synced[$task->id])) {
+            return $synced[$task->id];
+        }
+
+        $parentItem = null;
+        if ($task->parent_task_id) {
+            $parentItem = TaskChecklistItem::query()
+                ->where('project_task_id', $task->parent_task_id)
+                ->whereHas('checklist', fn ($query) => $query->where('task_card_id', $card->id))
+                ->first();
+
+            if (! $parentItem) {
+                $parentTask = ProjectTask::find($task->parent_task_id);
+                if ($parentTask) {
+                    $parentItem = $this->syncTaskOntoCard($card, $parentTask, $synced);
+                }
+            }
+        }
+
+        $milestone = $task->category ?: 'General';
+        $checklist = $this->syncChecklist($card, $milestone, max(1, (int) ($task->milestone_order ?? 1)));
+        $item = $this->syncChecklistItem($card, $checklist, $task, $parentItem);
+        $synced[$task->id] = $item;
+
+        return $item;
+    }
+
     public function archiveProjectTaskCards(iterable $taskIds, ?User $actor = null): void
     {
         $ids = collect($taskIds)->filter()->unique()->values();

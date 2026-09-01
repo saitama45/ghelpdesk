@@ -110,6 +110,50 @@ class ProjectGanttProductivityTest extends TestCase
         $this->assertSame($assignee->id, (int) $item->fresh()->assigned_to);
     }
 
+    public function test_adding_subtask_syncs_only_the_new_linked_board_item(): void
+    {
+        $owner = $this->projectUser();
+        $project = $this->project($owner);
+        $activity = $this->task($project, 'Build API');
+
+        $board = TaskBoard::create([
+            'project_id' => $project->id,
+            'board_source' => 'manual',
+            'title' => 'Delivery Board',
+            'created_by' => $owner->id,
+        ]);
+        $card = $board->cards()->create([
+            'project_id' => $project->id,
+            'title' => $project->name,
+            'created_by' => $owner->id,
+        ]);
+        $checklist = $card->checklists()->create(['title' => 'Build']);
+        $activityItem = $checklist->allItems()->create([
+            'project_task_id' => $activity->id,
+            'title' => $activity->name,
+        ]);
+
+        $this->actingAs($owner)->post(route('projects-tasks.store'), [
+            'project_id' => $project->id,
+            'parent_task_id' => $activity->id,
+            'name' => 'Validate API',
+            'category' => 'Build',
+            'status' => 'Pending',
+            'progress' => 0,
+            'lead_time_days' => 1,
+            'auto_create_monthly_boards' => true,
+        ])->assertRedirect();
+
+        $subTask = ProjectTask::where('project_id', $project->id)
+            ->where('name', 'Validate API')
+            ->firstOrFail();
+        $subTaskItem = TaskChecklistItem::where('project_task_id', $subTask->id)->firstOrFail();
+
+        $this->assertSame($activityItem->id, (int) $subTaskItem->parent_item_id);
+        $this->assertSame('Validate API', $subTaskItem->title);
+        $this->assertSame(2, TaskChecklistItem::where('task_checklist_id', $checklist->id)->count());
+    }
+
     public function test_direct_progress_change_is_rejected_for_activity_rolled_up_from_sub_tasks(): void
     {
         $owner = $this->projectUser();

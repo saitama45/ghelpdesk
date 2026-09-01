@@ -63,10 +63,11 @@ class ProjectScheduler
      * shorten the bar the milestone covers but not the effort it totals, so the
      * sum stands — reschedule() only re-derives its dates.
      */
-    public function syncParentRollups(Project $project): void
+    public function syncParentRollups(Project $project): array
     {
         $tasks = ProjectTask::where('project_id', $project->id)->get();
         $childrenByParent = $tasks->filter(fn ($task) => !empty($task->parent_task_id))->groupBy('parent_task_id');
+        $changedIds = [];
 
         foreach ($tasks->filter(fn ($task) => empty($task->parent_task_id)) as $parent) {
             $children = $childrenByParent[$parent->id] ?? collect();
@@ -97,8 +98,11 @@ class ProjectScheduler
                     'progress' => $progress,
                     'status' => $status,
                 ]);
+                $changedIds[] = (int) $parent->id;
             }
         }
+
+        return $changedIds;
     }
 
     /**
@@ -106,12 +110,12 @@ class ProjectScheduler
      * each row's lead time, requisite and Can Run Parallel flag, counted in the
      * project's day mode. No-op without a Day 1 Date.
      */
-    public function reschedule(Project $project): void
+    public function reschedule(Project $project): array
     {
-        $this->syncParentRollups($project);
+        $changedIds = $this->syncParentRollups($project);
 
         if (!$project->day1_date) {
-            return;
+            return $changedIds;
         }
 
         $tasks = ProjectTask::where('project_id', $project->id)->get();
@@ -148,7 +152,10 @@ class ProjectScheduler
 
             if ($updates !== []) {
                 $task->update($updates);
+                $changedIds[] = (int) $task->id;
             }
         }
+
+        return array_values(array_unique($changedIds));
     }
 }
