@@ -56,6 +56,7 @@ Laravel 12 + Inertia v2 + Vue 3 + Tailwind v4 (Vite) on SQL Server, with Spatie 
 | Entity (company) axis | `app/Support/CompanyContext.php` |
 | Department axis | `app/Support/DepartmentContext.php` |
 | Per-ticket provider/customer access | `app/Support/TicketAccess.php` |
+| Project plan (Gantt) edit rights | `app/Support/ProjectPlanAccess.php` |
 | Attendance visibility (org chart) | `app/Support/AttendanceVisibility.php` |
 | Global entity listing filter | `app/Models/Scopes/ActiveEntityScope.php` |
 | Inertia shared props (auth, permissions, entity, department, flash) | `app/Http/Middleware/HandleInertiaRequests.php` |

@@ -39,6 +39,14 @@ User Management itself was open until 2026-08-20 — `/users` and `/roles` (inde
 - Department-scoped lists must hide other departments' rows via `DepartmentContext::homeDepartmentId()` **and** block direct URL access with route middleware. NULL department = shared; Executive sees all.
 - UAT/QAT cycles are the one department-scoped list with a role-wide override: `App\Support\TestCycleAccess::seesAllDepartments()` (Executive **or** the `Dev` role) is consumed by `UatController::index`, `EnsureUatCycleInDepartment` and `QatCycle::scopeVisibleTo()`/`isVisibleTo()` — all four must agree, or a row lists and then 403s.
 - Ownership overrides exist per module, e.g. `/projects/{id}` structure edits require creator (`created_by`) or the Admin/Solutions Admin **roles** — not `projects.delete`, which is broadly granted.
+- **Project plan (Gantt) access is per branch**, one rule in `app/Support/ProjectPlanAccess.php`:
+  project manager (creator / Admin / Solutions Admin) → everything; **milestone owner**
+  (`project_milestones.assigned_to`, keyed on `project_id` + `category`) → add/edit/delete every
+  activity and sub-task in THAT milestone, rename or delete it, and start a milestone they then own;
+  **activity assignee** → edit/delete that activity and add/edit/delete its sub-tasks, never a
+  sibling; **sub-task assignee** → edit/delete that sub-task. Nothing is ever added under a sub-task.
+  Mirrored (not re-derived) in `ProjectGantt.vue` and `ProjectWeeklyTimeline.vue` from the
+  `milestones` / `canAddMilestone` Inertia props.
 
 ### 4. Reporting line — `app/Support/AttendanceVisibility.php`
 - `/attendance/logs` (and its mobile twin `Api\AttendanceController::logs`) is scoped by the **org chart**, not by role or department: `users.is_manager` opens the manager's own `manager_user` subtree (`User::transitiveSubordinateIds()`), everyone else sees only themselves.

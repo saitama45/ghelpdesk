@@ -27,9 +27,13 @@ class ProjectTaskAuthorizationTest extends TestCase
 
         // We are exercising the controller's own abort_unless checks, not the
         // route middleware, so only CSRF/authorize middleware is stripped.
+        // The route gate (permission:projects.manage_tasks) is a separate concern
+        // and is covered by the module's route-permission checks; stripping it
+        // here means a 403 below can only have come from the plan's own rule.
         $this->withoutMiddleware([
             \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
             \Illuminate\Auth\Middleware\Authorize::class,
+            \Spatie\Permission\Middleware\PermissionMiddleware::class,
         ]);
 
         foreach (['projects.edit', 'projects.delete'] as $name) {
@@ -115,19 +119,16 @@ class ProjectTaskAuthorizationTest extends TestCase
         $this->assertSame(55, (int) $task->fresh()->progress);
     }
 
-    public function test_non_owner_assignee_cannot_delete_or_add_rows(): void
+    public function test_activity_assignee_cannot_add_a_sibling_activity(): void
     {
+        // Access follows the branch you own. Being handed one activity does not
+        // make you the owner of the milestone it sits in, so a sibling activity
+        // is still someone else's to add.
         $owner = User::factory()->create();
         $assignee = User::factory()->create();
         $project = $this->project($owner);
         $task = $this->task($project, $assignee->id);
 
-        // Deleting a row is a management action even for the assignee.
-        $this->actingAs($assignee)
-            ->delete(route('projects-tasks.destroy', $task))
-            ->assertForbidden();
-
-        // Adding a new activity is manager-only.
         $this->actingAs($assignee)
             ->post(route('projects-tasks.store'), [
                 'project_id' => $project->id,
@@ -138,7 +139,39 @@ class ProjectTaskAuthorizationTest extends TestCase
             ])
             ->assertForbidden();
 
+        $this->assertSame(1, ProjectTask::where('project_id', $project->id)->count());
         $this->assertDatabaseHas('project_tasks', ['id' => $task->id, 'deleted_at' => null]);
+    }
+
+    public function test_stranger_cannot_delete_a_row_they_have_no_part_in(): void
+    {
+        $owner = User::factory()->create();
+        $assignee = User::factory()->create();
+        $stranger = User::factory()->create();
+        $project = $this->project($owner);
+        $task = $this->task($project, $assignee->id);
+
+        $this->actingAs($stranger)
+            ->delete(route('projects-tasks.destroy', $task))
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('project_tasks', ['id' => $task->id, 'deleted_at' => null]);
+    }
+
+    public function test_activity_assignee_may_delete_their_own_row(): void
+    {
+        // Deletion follows the same branch rule as editing. Asserted through the
+        // access rule itself: project_tasks is soft-deleting, and the soft-delete
+        // path is never executed from here (see the global database-safety rule).
+        $owner = User::factory()->create();
+        $assignee = User::factory()->create();
+        $stranger = User::factory()->create();
+        $project = $this->project($owner);
+        $task = $this->task($project, $assignee->id);
+
+        $this->assertTrue(\App\Support\ProjectPlanAccess::canDeleteTask($task, $assignee));
+        $this->assertTrue(\App\Support\ProjectPlanAccess::canDeleteTask($task, $owner));
+        $this->assertFalse(\App\Support\ProjectPlanAccess::canDeleteTask($task, $stranger));
     }
 
     public function test_admin_role_can_manage_projects_they_did_not_create(): void

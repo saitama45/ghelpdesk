@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ProjectMilestone;
 use App\Models\ProjectTask;
 use App\Models\Project;
 use App\Models\ProjectTemplate;
 use App\Models\Store;
 use App\Services\ProjectTaskBoardSyncService;
+use App\Support\ProjectPlanAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -654,9 +656,7 @@ class ProjectTaskController extends Controller
             'order' => 'nullable|numeric',
         ]);
 
-        // Adding new milestones / activities / sub-tasks is a management action.
         $project = Project::findOrFail($validated['project_id']);
-        abort_unless($project->isManagedBy($request->user()), 403, 'You do not have permission to add tasks to this project.');
 
         // Convert empty strings to null for database foreign keys
         $validated['parent_task_id'] = ($validated['parent_task_id'] ?? null) ?: null;
@@ -704,6 +704,37 @@ class ProjectTaskController extends Controller
                 ->max('milestone_order')) + 1;
         }
 
+        // What is actually being added decides who may add it — see
+        // App\Support\ProjectPlanAccess. Resolved here, after the category has
+        // been defaulted, because that is what identifies the milestone.
+        $actor = $request->user();
+        $category = ProjectMilestone::normaliseCategory($validated['category'] ?? null);
+        $startsNewMilestone = false;
+
+        if ($validated['parent_task_id']) {
+            abort_unless(
+                ProjectPlanAccess::canAddSubTask($parentTask, $actor),
+                403,
+                'You can only add sub-tasks under a milestone you own or an activity assigned to you.'
+            );
+        } elseif ($this->milestoneExists($project, $category)) {
+            abort_unless(
+                ProjectPlanAccess::canAddActivity($project, $actor, $category),
+                403,
+                'You can only add activities to a milestone you own.'
+            );
+        } else {
+            // A category nothing uses yet is a brand-new milestone. Whoever starts
+            // one owns it, unless a manager did — managers assign an owner instead.
+            abort_unless(
+                ProjectPlanAccess::canAddMilestone($project, $actor),
+                403,
+                'You do not have permission to add milestones to this project.'
+            );
+
+            $startsNewMilestone = true;
+        }
+
         if (!array_key_exists('order', $validated) || $validated['order'] === null) {
             $orderQuery = ProjectTask::where('project_id', $validated['project_id'])
                 ->where('parent_task_id', $validated['parent_task_id']);
@@ -735,6 +766,15 @@ class ProjectTaskController extends Controller
 
         $task = ProjectTask::create($validated);
 
+        if ($startsNewMilestone) {
+            $this->ensureMilestoneRecord(
+                $project,
+                $category,
+                $project->isManagedBy($actor) ? null : $actor->id,
+                $actor
+            );
+        }
+
         // Inserting a row shifts everything chained after it — re-chain the whole plan.
         $this->rescheduleProjectTasks($project);
 
@@ -756,8 +796,9 @@ class ProjectTaskController extends Controller
 
     public function update(Request $request, ProjectTask $projects_task)
     {
-        // A project manager may edit any row; everyone else only the activity /
-        // sub-task assigned to them.
+        // A project manager may edit any row, a milestone owner every row in
+        // their milestone, an activity assignee their activity and its sub-tasks,
+        // a sub-task assignee their own row. See App\Support\ProjectPlanAccess.
         abort_unless($projects_task->isEditableBy($request->user()), 403, 'You can only edit rows assigned to you.');
 
         $this->normaliseManualStatus($request);
@@ -784,6 +825,26 @@ class ProjectTaskController extends Controller
         // state rather than leaving a stale "Blocked" pill on a 100% activity.
         if (($validated['progress'] ?? null) !== null && (int) $validated['progress'] >= 100) {
             $validated['manual_status'] = null;
+        }
+
+        // Retyping the Milestone field either renames the milestone or moves the
+        // row into another one. Either way both ends must belong to the editor —
+        // otherwise a row could be pushed into a milestone they have no part in.
+        $milestoneMove = null;
+
+        if (array_key_exists('category', $validated)) {
+            $fromMilestone = ProjectMilestone::normaliseCategory($projects_task->category);
+            $toMilestone = ProjectMilestone::normaliseCategory($validated['category']);
+
+            if ($fromMilestone !== $toMilestone) {
+                abort_unless(
+                    ProjectPlanAccess::canMoveTaskToMilestone($projects_task, $request->user(), $toMilestone),
+                    403,
+                    'You can only move a row between milestones you own.'
+                );
+
+                $milestoneMove = [$fromMilestone, $toMilestone];
+            }
         }
 
         if (array_key_exists('parent_task_id', $validated)) {
@@ -927,6 +988,10 @@ class ProjectTaskController extends Controller
         $validated['updated_by'] = $request->user()->id;
 
         $projects_task->update($validated);
+
+        if ($milestoneMove) {
+            $this->syncMilestoneRecordsAfterMove($projects_task->project, $milestoneMove[0], $milestoneMove[1], $request->user());
+        }
 
         // Anything that moves a row in the chain — its lead time, its hand-edited
         // dates, or its position — re-derives every row's Start/End Date from
@@ -1078,8 +1143,13 @@ class ProjectTaskController extends Controller
     {
         $project = $projects_task->project;
 
-        // Deleting a row (and its sub-tasks) is a management action.
-        abort_unless($project && $project->isManagedBy($request->user()), 403, 'You do not have permission to delete tasks in this project.');
+        // Deleting a row (and its sub-tasks) follows the same branch rule as
+        // editing it — see App\Support\ProjectPlanAccess.
+        abort_unless(
+            $project && ProjectPlanAccess::canDeleteTask($projects_task, $request->user()),
+            403,
+            'You do not have permission to delete this row.'
+        );
 
         $taskIds = $projects_task->subTasks()->pluck('id')->push($projects_task->id);
         $this->projectTaskBoards->archiveProjectTaskCards($taskIds, $request->user());
@@ -1103,13 +1173,19 @@ class ProjectTaskController extends Controller
 
     public function destroyMilestone(Request $request, Project $project)
     {
-        abort_unless($project->isManagedBy($request->user()), 403, 'You do not have permission to delete milestones in this project.');
-
         $validated = $request->validate([
             'category' => 'required|string|max:255',
         ]);
 
         $category = $validated['category'] ?: 'General';
+
+        // A milestone is deleted by the project manager or by the person who owns
+        // that milestone — never by the owner of a different one.
+        abort_unless(
+            ProjectPlanAccess::canManageMilestone($project, $request->user(), $category),
+            403,
+            'You do not have permission to delete milestones in this project.'
+        );
 
         $deletedCount = DB::transaction(function () use ($request, $project, $category) {
             $topLevelTasks = ProjectTask::query()
@@ -1151,7 +1227,108 @@ class ProjectTaskController extends Controller
             $this->projectTaskBoards->syncProject($project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
         }
 
+        // The milestone no longer exists, so neither should its ownership record.
+        ProjectMilestone::where('project_id', $project->id)
+            ->where('category', ProjectMilestone::normaliseCategory($category))
+            ->delete();
+
         return $this->backToTab($request, $project->id, 'success', 'Milestone deleted successfully.');
+    }
+
+    /**
+     * Set (or clear) who owns a milestone. The owner may add, edit and delete
+     * everything inside it — see App\Support\ProjectPlanAccess. Only the project
+     * manager or the milestone's current owner may hand it over.
+     */
+    public function updateMilestoneOwner(Request $request, Project $project)
+    {
+        $validated = $request->validate([
+            'category' => 'required|string|max:255',
+            'assigned_to' => 'nullable|integer|exists:users,id',
+        ]);
+
+        $category = ProjectMilestone::normaliseCategory($validated['category']);
+
+        abort_unless(
+            ProjectPlanAccess::canManageMilestone($project, $request->user(), $category),
+            403,
+            'You do not have permission to change the owner of this milestone.'
+        );
+
+        $this->ensureMilestoneRecord($project, $category, $validated['assigned_to'] ?? null, $request->user());
+
+        return $this->backToTab($request, $project->id, 'success', 'Milestone owner updated.');
+    }
+
+    /** Whether $category is already a milestone of $project — has rows, or has an owner. */
+    private function milestoneExists(Project $project, string $category): bool
+    {
+        return $this->milestoneHasRows($project, $category)
+            || ProjectMilestone::where('project_id', $project->id)->where('category', $category)->exists();
+    }
+
+    /** Upsert the ownership record for one milestone. */
+    private function ensureMilestoneRecord(Project $project, string $category, ?int $ownerId, ?\App\Models\User $actor): ProjectMilestone
+    {
+        $milestone = ProjectMilestone::firstOrNew([
+            'project_id' => $project->id,
+            'category' => $category,
+        ]);
+
+        if (! $milestone->exists) {
+            $milestone->created_by = $actor?->id;
+        }
+
+        $milestone->assigned_to = $ownerId;
+        $milestone->updated_by = $actor?->id;
+        $milestone->save();
+
+        return $milestone;
+    }
+
+    /**
+     * A row changed milestone. If nothing is left under the old name the move was
+     * really a rename, so the owner travels with it; otherwise the old milestone
+     * stands and only the destination needs to exist.
+     */
+    private function syncMilestoneRecordsAfterMove(?Project $project, string $from, string $to, ?\App\Models\User $actor): void
+    {
+        if (! $project) {
+            return;
+        }
+
+        $source = ProjectMilestone::where('project_id', $project->id)->where('category', $from)->first();
+        $target = ProjectMilestone::where('project_id', $project->id)->where('category', $to)->first();
+
+        $sourceEmptied = ! $this->milestoneHasRows($project, $from);
+        $ownerId = $target?->assigned_to;
+
+        // Rename: carry the owner over rather than leaving an unowned milestone.
+        if ($sourceEmptied && $source && $ownerId === null) {
+            $ownerId = $source->assigned_to;
+        }
+
+        $this->ensureMilestoneRecord($project, $to, $ownerId, $actor);
+
+        if ($sourceEmptied && $source) {
+            $source->delete();
+        }
+    }
+
+    /** Whether any top-level row still sits under $category. */
+    private function milestoneHasRows(Project $project, string $category): bool
+    {
+        return ProjectTask::query()
+            ->where('project_id', $project->id)
+            ->whereNull('parent_task_id')
+            ->where(function ($query) use ($category) {
+                $query->where('category', $category);
+
+                if ($category === 'General') {
+                    $query->orWhereNull('category')->orWhere('category', '');
+                }
+            })
+            ->exists();
     }
 
     public function updateGantt(Request $request)

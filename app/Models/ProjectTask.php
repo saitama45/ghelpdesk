@@ -186,19 +186,13 @@ class ProjectTask extends Model
     /**
      * Whether $user may edit THIS row.
      *
-     * Project managers (see Project::isManagedBy) may edit every row; everyone
-     * else may only edit the activity / sub-task assigned to them.
+     * Delegates to App\Support\ProjectPlanAccess, the single rule for the plan:
+     * project managers edit everything, a milestone owner everything inside their
+     * milestone, an activity assignee their activity and its sub-tasks, and a
+     * sub-task assignee their own sub-task.
      */
     public function isEditableBy(?User $user): bool
     {
-        if (! $user) {
-            return false;
-        }
-
-        if ($this->project && $this->project->isManagedBy($user)) {
-            return true;
-        }
-
-        return $this->assigned_to !== null && (int) $this->assigned_to === (int) $user->id;
+        return \App\Support\ProjectPlanAccess::canEditTask($this, $user);
     }
 }

@@ -267,6 +267,7 @@ class ProjectController extends Controller
             'subject',
             'teamMembers.user:id,name,profile_photo,department,org_path',
             'taskBoard:id,project_id,title,closed_at',
+            'milestones.assignedUser:id,name',
             'tasks',
             'tasks.store:id,code,name',
             'tasks.assignedUser:id,name,profile_photo,org_path',
@@ -288,6 +289,18 @@ class ProjectController extends Controller
             // apply templates, add/delete/reorder). Non-managers may only edit
             // the activity / sub-task rows assigned to them.
             'canManageProject' => $project->isManagedBy(auth()->user()),
+            // Milestone ownership, the level above the per-row assignee: the owner
+            // of a milestone may add/edit/delete everything inside it. Shipped as a
+            // flat list so ProjectGantt.vue can resolve the same rule the server
+            // enforces in App\Support\ProjectPlanAccess.
+            'milestones' => $project->milestones->map(fn ($milestone) => [
+                'category'    => $milestone->category,
+                'assigned_to' => $milestone->assigned_to,
+                'owner_name'  => $milestone->assignedUser?->name,
+            ])->values(),
+            // Whether the viewer may start a milestone of their own: managers, and
+            // anyone who already owns one here.
+            'canAddMilestone' => \App\Support\ProjectPlanAccess::canAddMilestone($project, auth()->user()),
             'projectTypes'   => Project::projectTypes(),
             'users'          => User::active()->orderBy('name')->get(['id', 'name', 'department', 'org_path']),
             'stores'         => Store::orderBy('name')->get(['id', 'name']),

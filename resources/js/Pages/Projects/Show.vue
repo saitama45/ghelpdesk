@@ -54,6 +54,10 @@ const props = defineProps({
     // Whether the viewer may manage the whole project (edit every row, apply
     // templates, add/delete/reorder). Non-managers may only edit their own rows.
     canManageProject: { type: Boolean, default: false },
+    // Milestone ownership — a milestone owner runs everything inside their
+    // milestone even when they do not manage the project. See ProjectPlanAccess.
+    milestones: { type: Array, default: () => [] },
+    canAddMilestone: { type: Boolean, default: false },
     holidays: { type: Array, default: () => [] },
     // Department workspace / Monitoring / Reports payloads, all scoped to this
     // project — see ProjectWorkspaceService.
@@ -1087,6 +1091,8 @@ const getStatusColor = (status) => {
                         :taskListTargets="taskListTargets"
                         :canManage="canManageProject"
                         :currentUserId="currentUser?.id"
+                        :milestones="milestones"
+                        :canAddMilestone="canAddMilestone"
                         :holidays="holidays"
                         :manualStatuses="manualStatuses"
                         :departments="departments"
@@ -1103,6 +1109,7 @@ const getStatusColor = (status) => {
                         :taskListTargets="taskListTargets"
                         :canManage="canManageProject"
                         :currentUserId="currentUser?.id"
+                        :milestones="milestones"
                         :manualStatuses="manualStatuses"
                         :departments="departments"
                         @open-department="openDepartmentOnGantt"

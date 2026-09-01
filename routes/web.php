@@ -590,6 +590,7 @@ Route::middleware('auth')->group(function () {
         Route::post('projects/{project}/apply-templates', [\App\Http\Controllers\ProjectTaskController::class, 'applyTemplates'])->middleware('permission:projects.manage_tasks')->name('projects.apply-templates');
         Route::patch('projects/{project}/tasks/bulk-assign', [\App\Http\Controllers\ProjectTaskController::class, 'bulkAssign'])->middleware('permission:projects.manage_tasks')->name('projects.tasks.bulk-assign');
         Route::delete('projects/{project}/milestone-tasks', [\App\Http\Controllers\ProjectTaskController::class, 'destroyMilestone'])->middleware('permission:projects.manage_tasks')->name('projects.milestones.destroy');
+        Route::put('projects/{project}/milestone-owner', [\App\Http\Controllers\ProjectTaskController::class, 'updateMilestoneOwner'])->middleware('permission:projects.manage_tasks')->name('projects.milestones.owner');
         Route::post('projects/tasks/gantt', [\App\Http\Controllers\ProjectTaskController::class, 'updateGantt'])->middleware('permission:projects.manage_tasks')->name('projects.tasks.gantt-update');
         Route::resource('projects-tasks', \App\Http\Controllers\ProjectTaskController::class)->only(['store', 'update', 'destroy'])->middleware('permission:projects.manage_tasks');
         Route::resource('projects-assets', \App\Http\Controllers\ProjectAssetController::class)->only(['store', 'update', 'destroy'])->middleware('permission:projects.manage_assets');

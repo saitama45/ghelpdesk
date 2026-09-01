@@ -38,6 +38,13 @@ const props = defineProps({
     canManage: { type: Boolean, default: false },
     // The viewer's user id — non-managers may only edit rows assigned to them.
     currentUserId: { type: [Number, String], default: null },
+    // Milestone ownership: [{ category, assigned_to, owner_name }]. A milestone
+    // owner may add/edit/delete everything inside that milestone. Mirrors what
+    // App\Support\ProjectPlanAccess enforces on the server.
+    milestones: { type: Array, default: () => [] },
+    // Whether the viewer may start a milestone of their own (managers, and anyone
+    // who already owns one here).
+    canAddMilestone: { type: Boolean, default: false },
     // Non-working Philippine holidays ({ date, name, type }) — skipped in the
     // lead-time maths exactly like weekends, and shaded on the timeline.
     holidays: { type: Array, default: () => [] },
@@ -67,14 +74,91 @@ const holidayNameFor = (date) => {
 
 const isHoliday = (date) => holidayNameFor(date) !== null;
 
-// A non-manager may only edit the activity / sub-task assigned to them; managers
-// may edit anything. Structural actions (add/delete/reorder/templates) are
-// manager-only and gated on props.canManage directly.
-const canEditTask = (task) => {
-    if (props.canManage) return true;
-    if (!props.currentUserId || !task) return false;
+/* --------------------------------------------------------------- plan access
+ *
+ * The mirror of App\Support\ProjectPlanAccess — the server enforces the same
+ * rule, this only decides what to render. Access follows the branch you own:
+ *
+ *  - manager (creator/admin): everything;
+ *  - milestone owner: every row inside that milestone, plus the milestone itself,
+ *    plus starting a milestone of their own;
+ *  - activity assignee: that activity, and adding/editing/deleting its sub-tasks;
+ *  - sub-task assignee: that sub-task. Nothing is ever added under a sub-task —
+ *    it is the last level of the plan.
+ */
+
+// project_tasks.category is nullable and a blank one renders as "General", so a
+// milestone has to be looked up under the same name the header shows.
+const normaliseCategory = (category) => {
+    const trimmed = String(category ?? '').trim();
+    return trimmed !== '' ? trimmed : 'General';
+};
+
+const milestoneOwners = computed(() => {
+    const map = new Map();
+    (props.milestones || []).forEach(milestone => map.set(normaliseCategory(milestone.category), milestone));
+    return map;
+});
+
+const milestoneOwner = (category) => milestoneOwners.value.get(normaliseCategory(category)) || null;
+
+const milestoneOwnerName = (category) => milestoneOwner(category)?.owner_name || '';
+
+const isAssignedToMe = (task) => {
+    if (!task || !props.currentUserId || task.assigned_to === null || task.assigned_to === undefined) return false;
     return Number(task.assigned_to) === Number(props.currentUserId);
 };
+
+// Managers count as owning every milestone — same shortcut the server takes.
+const ownsMilestone = (category) => {
+    if (props.canManage) return true;
+    const owner = milestoneOwner(category);
+    return Boolean(owner) && props.currentUserId != null && Number(owner.assigned_to) === Number(props.currentUserId);
+};
+
+const canEditTask = (task) => {
+    if (props.canManage) return true;
+    if (!task) return false;
+    if (ownsMilestone(task.category)) return true;
+    if (isAssignedToMe(task)) return true;
+
+    // A sub-task belongs to whoever is running the activity above it.
+    if (task.parent_task_id) {
+        return isAssignedToMe(taskLookup.value.get(Number(task.parent_task_id)));
+    }
+
+    return false;
+};
+
+// Deleting a row follows exactly the same branch rule as editing it.
+const canDeleteTask = (task) => canEditTask(task);
+
+// Adding an activity is the milestone owner's call.
+const canAddActivityIn = (category) => ownsMilestone(category);
+
+// A sub-task is added by the milestone owner or by the activity's assignee.
+// Sub-tasks themselves never take children.
+const canAddSubTaskTo = (task) => {
+    if (!task || task.parent_task_id) return false;
+    return ownsMilestone(task.category) || isAssignedToMe(task);
+};
+
+// Renaming or deleting a milestone, and changing who owns it.
+const canManageMilestone = (category) => ownsMilestone(category);
+
+const canStartMilestone = computed(() => props.canManage || props.canAddMilestone);
+
+// Retyping the Milestone field on an open row renames it / moves the row, so it
+// is only writable for someone who runs that milestone.
+const canRenameActiveMilestone = computed(() => canManageMilestone(activeMilestone.value));
+
+// Which milestones this viewer runs — used for the read-only banner's wording.
+const myMilestones = computed(() => {
+    if (props.canManage || props.currentUserId == null) return [];
+    return (props.milestones || [])
+        .filter(milestone => Number(milestone.assigned_to) === Number(props.currentUserId))
+        .map(milestone => normaliseCategory(milestone.category));
+});
 
 const { success, info, error } = useToast();
 const { confirm: confirmAction } = useConfirm();
@@ -560,7 +644,7 @@ const getNextMilestoneOrder = () => {
 };
 
 const openMilestoneForm = () => {
-    if (!props.canManage) return;
+    if (!canStartMilestone.value) return;
     isEditing.value = false;
     editingTaskId.value = null;
     formMode.value = 'milestone';
@@ -573,7 +657,7 @@ const openMilestoneForm = () => {
 };
 
 const openActivityForm = (category) => {
-    if (!props.canManage) return;
+    if (!canAddActivityIn(category)) return;
     isEditing.value = false;
     editingTaskId.value = null;
     formMode.value = 'activity';
@@ -587,7 +671,7 @@ const openActivityForm = (category) => {
 };
 
 const openSubTaskForm = (task) => {
-    if (!props.canManage) return;
+    if (!canAddSubTaskTo(task)) return;
     isEditing.value = false;
     editingTaskId.value = null;
     formMode.value = 'subtask';
@@ -672,7 +756,7 @@ const toggleTaskDone = async (task) => {
 };
 
 const deleteTask = async (taskId) => {
-    if (!props.canManage) return;
+    if (!canDeleteTask(taskLookup.value.get(Number(taskId)))) return;
     const ok = await confirmAction({
         title: 'Delete Task',
         message: 'Are you sure you want to permanently delete this task? This cannot be undone.',
@@ -691,7 +775,7 @@ const deleteTask = async (taskId) => {
 };
 
 const deleteMilestone = async (category, tasks = []) => {
-    if (!props.canManage) return;
+    if (!canManageMilestone(category)) return;
     const rowCount = visibleTaskCount(tasks);
     const ok = await confirmAction({
         title: 'Delete Milestone',
@@ -712,6 +796,49 @@ const deleteMilestone = async (category, tasks = []) => {
             }
         });
     }
+};
+
+/* ------------------------------------------------------- milestone ownership */
+
+const showOwnerModal = ref(false);
+const ownerModalCategory = ref('');
+const ownerModalUserId = ref('');
+const isSavingOwner = ref(false);
+
+// Anyone on the project team can be handed a milestone; external members have a
+// name for an id and cannot own one, so only internal members are offered.
+const milestoneOwnerOptions = computed(() => [
+    { label: 'Unassigned', value: '' },
+    ...internalProjectTeamMembers.value.map(member => ({ label: member.name, value: member.id })),
+]);
+
+const openOwnerModal = (category) => {
+    if (!canManageMilestone(category)) return;
+    ownerModalCategory.value = normaliseCategory(category);
+    ownerModalUserId.value = milestoneOwner(category)?.assigned_to ?? '';
+    showOwnerModal.value = true;
+};
+
+const saveMilestoneOwner = () => {
+    if (!canManageMilestone(ownerModalCategory.value) || isSavingOwner.value) return;
+    isSavingOwner.value = true;
+
+    useForm({
+        category: ownerModalCategory.value,
+        assigned_to: ownerModalUserId.value === '' ? null : ownerModalUserId.value,
+    }).put(route('projects.milestones.owner', props.project.id), {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => {
+            showOwnerModal.value = false;
+        },
+        onError: (errors) => {
+            error(errors.assigned_to || errors.category || 'The milestone owner could not be saved.');
+        },
+        onFinish: () => {
+            isSavingOwner.value = false;
+        },
+    });
 };
 
 const closeForm = () => {
@@ -1437,9 +1564,15 @@ const isWeekend = (date) => {
             </div>
 
             <div class="flex items-center flex-wrap gap-2">
-                <span v-if="!canManage"
+                <span v-if="!canManage && myMilestones.length"
+                      class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-[11px] font-bold text-emerald-700 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-200"
+                      :title="`You own ${myMilestones.join(', ')} — you can add, edit and delete everything inside. Elsewhere you can edit the rows assigned to you.`">
+                    <PencilSquareIcon class="w-3.5 h-3.5" />
+                    You run {{ myMilestones.length }} milestone{{ myMilestones.length === 1 ? '' : 's' }}
+                </span>
+                <span v-else-if="!canManage"
                       class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-700 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-200"
-                      title="Only the project owner can change the plan. You can edit the rows assigned to you.">
+                      title="Only the project owner can change the plan. You can edit the rows assigned to you, and add sub-tasks under your own activities.">
                     <PencilSquareIcon class="w-3.5 h-3.5" />
                     You can edit only your assigned rows
                 </span>
@@ -1490,7 +1623,7 @@ const isWeekend = (date) => {
                     <span v-if="hasFilters" class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-indigo-600"></span>
                 </button>
                 <button
-                    v-if="canManage"
+                    v-if="canStartMilestone"
                     @click="openMilestoneForm"
                     class="inline-flex items-center px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-xs transition-all active:scale-95"
                 >
@@ -1623,7 +1756,7 @@ const isWeekend = (date) => {
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-x-8 gap-y-4 items-end">
                     <div class="md:col-span-2">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Milestone</label>
-                        <input v-model="form.category" type="text" placeholder="Milestone name" :readonly="formMode === 'subtask' || (formMode !== 'milestone' && !isEditing)" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all read-only:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:read-only:bg-slate-800">
+                        <input v-model="form.category" type="text" placeholder="Milestone name" :readonly="formMode === 'subtask' || (formMode !== 'milestone' && !isEditing) || (isEditing && !canRenameActiveMilestone)" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all read-only:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:read-only:bg-slate-800">
                         <div v-if="form.errors.category" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.category }}</div>
                     </div>
                     <div class="md:col-span-2">
@@ -1823,9 +1956,24 @@ const isWeekend = (date) => {
                                           :title="`Department: ${milestoneDepartmentLabel(tasks)}`">
                                         {{ milestoneDepartmentLabel(tasks) }}
                                     </span>
+                                    <!-- Who runs this milestone. The owner may add, edit and delete
+                                         every activity and sub-task under it. -->
+                                    <button v-if="canManageMilestone(category)"
+                                            type="button"
+                                            @click.stop="openOwnerModal(category)"
+                                            class="inline-flex items-center gap-1 shrink-0 rounded border border-emerald-200 bg-white px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-700 transition-colors hover:bg-emerald-50 dark:border-emerald-400/30 dark:bg-slate-900 dark:text-emerald-200 dark:hover:bg-emerald-500/15"
+                                            :title="milestoneOwnerName(category) ? `Owner: ${milestoneOwnerName(category)} — click to change` : 'No owner yet — click to assign one'">
+                                        <UserPlusIcon class="h-2.5 w-2.5" />
+                                        {{ milestoneOwnerName(category) || 'No owner' }}
+                                    </button>
+                                    <span v-else-if="milestoneOwnerName(category)"
+                                          class="truncate shrink-0 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-300"
+                                          :title="`Milestone owner: ${milestoneOwnerName(category)}`">
+                                        {{ milestoneOwnerName(category) }}
+                                    </span>
                                 </div>
-                                <div v-if="canManage" class="flex items-center gap-1 shrink-0">
-                                    <button v-if="quickAssignEnabled"
+                                <div v-if="canManageMilestone(category)" class="flex items-center gap-1 shrink-0">
+                                    <button v-if="quickAssignEnabled && canManage"
                                             type="button"
                                             @click.stop="quickAssignMilestone(category, tasks)"
                                             :disabled="!quickAssignReady || isBulkAssigning"
@@ -1958,14 +2106,17 @@ const isWeekend = (date) => {
                                                 {{ row.task.status }}
                                             </span>
                                         </div>
-                                        <div v-if="canManage" class="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button v-if="!row.isSubTask"
+                                        <div v-if="canAddSubTaskTo(row.task) || canDeleteTask(row.task)" class="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button v-if="canAddSubTaskTo(row.task)"
                                                     @click.stop="openSubTaskForm(row.task)"
                                                     class="p-1 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded transition-colors dark:hover:bg-indigo-500/20"
                                                     title="Add Sub-task">
                                                 <PlusIcon class="w-3.5 h-3.5" />
                                             </button>
-                                            <button @click.stop="deleteTask(row.task.id)" class="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors dark:hover:bg-red-500/20" title="Delete Task">
+                                            <button v-if="canDeleteTask(row.task)"
+                                                    @click.stop="deleteTask(row.task.id)"
+                                                    class="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors dark:hover:bg-red-500/20"
+                                                    :title="row.isSubTask ? 'Delete Sub-task' : 'Delete Activity'">
                                                 <TrashIcon class="w-3.5 h-3.5" />
                                             </button>
                                         </div>
@@ -2146,6 +2297,41 @@ const isWeekend = (date) => {
                     </SecondaryButton>
                     <PrimaryButton @click="confirmApplyTemplate" :disabled="!selectedTemplateId || isApplyingTemplates || (templateNeedsStores && selectedStoreIds.length === 0)" class="bg-indigo-600 hover:bg-indigo-700">
                         {{ isApplyingTemplates ? 'Applying...' : 'Apply Template' }}
+                    </PrimaryButton>
+                </div>
+            </div>
+        </Modal>
+
+        <!-- Milestone owner: the level above the per-row assignee. -->
+        <Modal :show="showOwnerModal" @close="showOwnerModal = false" maxWidth="md">
+            <div class="p-6 dark:bg-slate-900">
+                <div class="flex items-start justify-between mb-1">
+                    <h3 class="text-base font-black text-slate-900 dark:text-slate-100">Milestone Owner</h3>
+                    <button type="button" @click="showOwnerModal = false" class="text-slate-400 hover:text-slate-600 transition-colors dark:text-slate-400 dark:hover:text-slate-200">
+                        <XMarkIcon class="w-5 h-5" />
+                    </button>
+                </div>
+                <p class="mb-4 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    Who runs <strong class="text-slate-700 dark:text-slate-200">{{ ownerModalCategory }}</strong>. The owner can add, edit and
+                    delete every activity and sub-task inside it, and rename or delete the milestone itself.
+                </p>
+
+                <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Owner</label>
+                <Autocomplete
+                    :model-value="ownerModalUserId"
+                    @update:model-value="value => ownerModalUserId = value ?? ''"
+                    :options="milestoneOwnerOptions"
+                    size="sm"
+                    placeholder="Search a project team member"
+                />
+                <p class="mt-2 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                    Only project team members can own a milestone. Add them under Manage Team first.
+                </p>
+
+                <div class="flex justify-end space-x-3 pt-6 mt-6 border-t dark:border-slate-700">
+                    <SecondaryButton @click="showOwnerModal = false">Cancel</SecondaryButton>
+                    <PrimaryButton @click="saveMilestoneOwner" :disabled="isSavingOwner" class="bg-indigo-600 hover:bg-indigo-700">
+                        {{ isSavingOwner ? 'Saving...' : 'Save Owner' }}
                     </PrimaryButton>
                 </div>
             </div>

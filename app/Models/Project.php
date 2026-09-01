@@ -174,6 +174,15 @@ class Project extends Model
             ->orderBy('id');
     }
 
+    /**
+     * Ownership records for the plan's milestones — one row per distinct
+     * project_tasks.category that has been given an owner. See ProjectPlanAccess.
+     */
+    public function milestones(): HasMany
+    {
+        return $this->hasMany(ProjectMilestone::class)->orderBy('category');
+    }
+
     public function taskBoard(): HasOne
     {
         return $this->hasOne(TaskBoard::class);

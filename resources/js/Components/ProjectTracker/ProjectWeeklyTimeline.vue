@@ -39,6 +39,9 @@ const props = defineProps({
     canManage: { type: Boolean, default: false },
     // The viewer's user id — non-managers may only edit rows assigned to them.
     currentUserId: { type: [Number, String], default: null },
+    // Milestone ownership, same payload the Gantt tab gets — the two tabs edit
+    // the same rows, so they must agree on who may edit what.
+    milestones: { type: Array, default: () => [] },
     // Manual states a row can be flagged with (Blocked, For Approval …).
     manualStatuses: { type: Array, default: () => [] },
     // The /departments table — the single source for how a department is spelled.
@@ -71,11 +74,51 @@ const ensureTaskListBoards = async () => {
 
 // A non-manager may only edit the activity / sub-task assigned to them; managers
 // may edit anything — identical rule to the Gantt chart.
-const canEditTask = (task) => {
+// Mirrors App\Support\ProjectPlanAccess, exactly as ProjectGantt.vue does: a
+// milestone owner runs every row in their milestone, an activity assignee their
+// activity and its sub-tasks, a sub-task assignee their own row.
+const normaliseCategory = (category) => {
+    const trimmed = String(category ?? '').trim();
+    return trimmed !== '' ? trimmed : 'General';
+};
+
+const milestoneOwners = computed(() => {
+    const map = new Map();
+    (props.milestones || []).forEach(milestone => map.set(normaliseCategory(milestone.category), milestone));
+    return map;
+});
+
+const ownsMilestone = (category) => {
     if (props.canManage) return true;
-    if (!props.currentUserId || !task) return false;
+    const owner = milestoneOwners.value.get(normaliseCategory(category));
+    return Boolean(owner) && props.currentUserId != null && Number(owner.assigned_to) === Number(props.currentUserId);
+};
+
+const isAssignedToMe = (task) => {
+    if (!task || !props.currentUserId || task.assigned_to === null || task.assigned_to === undefined) return false;
     return Number(task.assigned_to) === Number(props.currentUserId);
 };
+
+const findTask = (taskId) => (props.project?.tasks || []).find(task => Number(task.id) === Number(taskId)) || null;
+
+const canEditTask = (task) => {
+    if (props.canManage) return true;
+    if (!task) return false;
+    if (ownsMilestone(task.category)) return true;
+    if (isAssignedToMe(task)) return true;
+
+    return Boolean(task.parent_task_id) && isAssignedToMe(findTask(task.parent_task_id));
+};
+
+// A sub-task is added by the milestone owner or the activity's assignee; a
+// sub-task itself never takes children.
+const canAddSubTaskTo = (task) => {
+    if (!task || task.parent_task_id) return false;
+    return ownsMilestone(task.category) || isAssignedToMe(task);
+};
+
+// A new activity belongs to whoever owns that milestone.
+const canAddActivityIn = (category) => ownsMilestone(category);
 
 /* ---------------------------------------------------------------- dark mode */
 const isDark = ref(false);
@@ -313,7 +356,7 @@ const editTask = (task) => {
 const addParentTask = ref(null);
 
 const openAddTaskForm = (category = null) => {
-    if (!props.canManage) return;
+    if (!canAddActivityIn(category || selectedMilestoneFilter.value || '')) return;
     taskFormMode.value = 'add';
     editingTaskId.value = null;
     addParentTask.value = null;
@@ -327,7 +370,7 @@ const openAddTaskForm = (category = null) => {
 // The "+" on a top-level activity row — same rule as Gantt's
 // openSubTaskForm(): inherits the parent's milestone, responsible, and dates.
 const openAddSubtaskForm = (parentTask) => {
-    if (!props.canManage || !parentTask || parentTask.parent_task_id) return;
+    if (!canAddSubTaskTo(parentTask)) return;
     taskFormMode.value = 'add-subtask';
     editingTaskId.value = null;
     addParentTask.value = parentTask;
@@ -2241,7 +2284,7 @@ const jumpToGantt = (department = null) => {
                                 </span>
                             </div>
                             <button
-                                v-if="canManage"
+                                v-if="canAddActivityIn(group.category)"
                                 type="button"
                                 @click="openAddTaskForm(group.category)"
                                 class="inline-flex items-center gap-1 rounded border border-indigo-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700 transition hover:bg-indigo-50 dark:border-indigo-400/30 dark:bg-gray-800 dark:text-indigo-200 dark:hover:bg-indigo-500/15"
@@ -2287,7 +2330,7 @@ const jumpToGantt = (department = null) => {
                                         <div class="flex shrink-0 items-center gap-1">
                                             <ProjectTaskStatusPill :status="task.manual_status || task.status" />
                                             <button
-                                                v-if="canManage && !task.parent_task_id"
+                                                v-if="canAddSubTaskTo(task)"
                                                 type="button"
                                                 @click="openAddSubtaskForm(task)"
                                                 class="rounded p-1 text-gray-400 transition hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-300"
