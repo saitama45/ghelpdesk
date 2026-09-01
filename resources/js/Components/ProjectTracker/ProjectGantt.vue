@@ -182,6 +182,8 @@ const quickAssigneeId = ref('');
 const quickOnlyUnassigned = ref(false);
 const quickIncludeSubtasks = ref(true);
 const isBulkAssigning = ref(false);
+const collapsedMilestones = ref([]);
+const collapsedActivities = ref([]);
 
 const missingTaskListTargets = computed(() => props.taskListTargets?.missing || []);
 
@@ -1029,6 +1031,7 @@ const NO_DEPARTMENT = '__no_department__';
 
 const filterUsers = ref([]);
 const filterDepartments = ref([]);
+const filterMilestones = ref([]);
 
 // "None" clears the flag; Autocomplete needs it as an explicit option.
 const manualStatusOptions = computed(() => [
@@ -1056,7 +1059,15 @@ const departmentFilterOptions = computed(() => {
     ];
 });
 
-const hasFilters = computed(() => filterUsers.value.length > 0 || filterDepartments.value.length > 0);
+const milestoneFilterOptions = computed(() =>
+    Object.keys(groupedTasks.value).map(category => ({ label: category, value: category }))
+);
+
+const hasFilters = computed(() =>
+    filterMilestones.value.length > 0
+    || filterUsers.value.length > 0
+    || filterDepartments.value.length > 0
+);
 
 const matchesFilters = (task) => {
     if (filterUsers.value.length) {
@@ -1094,6 +1105,10 @@ const visibleGroupedTasks = computed(() => {
     const result = {};
 
     Object.entries(groupedTasks.value).forEach(([category, tasks]) => {
+        if (filterMilestones.value.length && !filterMilestones.value.includes(category)) {
+            return;
+        }
+
         const kept = [];
 
         tasks.forEach((task) => {
@@ -1123,6 +1138,7 @@ const visibleRowCount = computed(() =>
 );
 
 const clearFilters = () => {
+    filterMilestones.value = [];
     filterUsers.value = [];
     filterDepartments.value = [];
 };
@@ -1132,6 +1148,7 @@ const clearFilters = () => {
 watch(() => props.focusDepartment, (department) => {
     if (!department) return;
 
+    filterMilestones.value = [];
     filterUsers.value = [];
     filterDepartments.value = [department];
     showFilters.value = true;
@@ -1150,8 +1167,42 @@ watch(() => props.focusDepartment, (department) => {
 const taskRows = (task) => {
     return [
         { task, isSubTask: false, parent: null },
-        ...(task.subTasks || []).map(subTask => ({ task: subTask, isSubTask: true, parent: task })),
+        ...(!collapsedActivities.value.includes(Number(task.id)) ? (task.subTasks || []) : [])
+            .map(subTask => ({ task: subTask, isSubTask: true, parent: task })),
     ];
+};
+
+const isMilestoneCollapsed = (category) => collapsedMilestones.value.includes(category);
+const toggleMilestoneCollapsed = (category) => {
+    collapsedMilestones.value = isMilestoneCollapsed(category)
+        ? collapsedMilestones.value.filter(value => value !== category)
+        : [...collapsedMilestones.value, category];
+};
+
+const isActivityCollapsed = (task) => collapsedActivities.value.includes(Number(task.id));
+const toggleActivityCollapsed = (task) => {
+    const taskId = Number(task.id);
+    collapsedActivities.value = isActivityCollapsed(task)
+        ? collapsedActivities.value.filter(value => value !== taskId)
+        : [...collapsedActivities.value, taskId];
+};
+
+const collapsibleActivityIds = computed(() =>
+    Object.values(groupedTasks.value)
+        .flat()
+        .filter(hasSubTasks)
+        .map(task => Number(task.id))
+);
+
+const hasCollapsedActivities = computed(() => collapsedActivities.value.length > 0);
+
+const toggleAllActivities = () => {
+    if (hasCollapsedActivities.value) {
+        collapsedActivities.value = [];
+        return;
+    }
+
+    collapsedActivities.value = collapsibleActivityIds.value;
 };
 
 const visibleTaskCount = (tasks = []) => {
@@ -1381,6 +1432,7 @@ const departmentProgressTone = (progress) => {
 
 const focusDepartmentOnGantt = (department) => {
     showDepartmentSummary.value = false;
+    filterMilestones.value = [];
     filterUsers.value = [];
     filterDepartments.value = [department];
     showFilters.value = true;
@@ -1618,7 +1670,7 @@ const isWeekend = (date) => {
                                 ? 'text-indigo-600 bg-indigo-50 border-indigo-200 dark:bg-indigo-500/20 dark:border-indigo-400/30 dark:text-indigo-200'
                                 : 'text-slate-400 border-slate-200 hover:text-indigo-600 hover:bg-indigo-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-indigo-500/15 dark:hover:text-indigo-200'
                         ]"
-                        title="Filter the plan by assigned user or department">
+                        title="Filter the plan by milestone, assigned user, or department">
                     <FunnelIcon class="w-4 h-4" />
                     <span v-if="hasFilters" class="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-indigo-600"></span>
                 </button>
@@ -1694,9 +1746,19 @@ const isWeekend = (date) => {
             </p>
         </div>
 
-        <!-- Filter the plan by who owns the work -->
+        <!-- Filter the visible plan without changing scheduling calculations. -->
         <div v-if="showFilters" class="border-b border-slate-200 bg-slate-50/60 p-4 dark:border-slate-700 dark:bg-slate-900/40">
             <div class="flex flex-col gap-3 md:flex-row md:items-end">
+                <div class="flex-1">
+                    <label class="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-300">
+                        Milestone
+                    </label>
+                    <MultiAutocomplete
+                        v-model="filterMilestones"
+                        :options="milestoneFilterOptions"
+                        placeholder="Any milestone"
+                    />
+                </div>
                 <div class="flex-1">
                     <label class="mb-1.5 ml-1 block text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-300">
                         Assigned user
@@ -1885,7 +1947,17 @@ const isWeekend = (date) => {
                 <div class="sticky top-0 z-50 flex h-12 bg-white border-b border-slate-200 dark:border-slate-700 dark:bg-slate-900">
                     <!-- Left Header -->
                     <div class="sticky left-0 z-50 w-[760px] h-full flex items-center bg-slate-50 border-r border-slate-200 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:shadow-black/20 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                        <div class="w-[480px] px-3">Activity / Sub-task</div>
+                        <div class="flex w-[480px] items-center justify-between gap-3 px-3">
+                            <span>Activity / Sub-task</span>
+                            <button type="button"
+                                    @click.stop="toggleAllActivities"
+                                    class="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[9px] font-black tracking-wide text-slate-500 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-indigo-400/30 dark:hover:bg-indigo-500/15 dark:hover:text-indigo-200"
+                                    :disabled="collapsibleActivityIds.length === 0"
+                                    :title="hasCollapsedActivities ? 'Expand all activity sub-tasks' : 'Collapse all activity sub-tasks'">
+                                <ChevronRightIcon class="h-3 w-3 transition-transform" :class="hasCollapsedActivities ? 'rotate-90' : ''" />
+                                {{ hasCollapsedActivities ? 'Expand All' : 'Collapse All' }}
+                            </button>
+                        </div>
                         <div class="w-[130px] px-2 text-left">Responsible</div>
                         <div class="w-[150px] px-3 text-right">Status</div>
                     </div>
@@ -1944,7 +2016,14 @@ const isWeekend = (date) => {
                         <div class="flex sticky top-12 z-30">
                             <div class="sticky left-0 z-40 w-[760px] h-9 bg-slate-100/95 flex items-center justify-between px-3 border-b border-slate-200 border-r shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/20">
                                 <div class="flex items-center space-x-2 min-w-0 mr-2">
-                                    <ChevronRightIcon class="w-3 h-3 text-slate-400 transform rotate-90 shrink-0 dark:text-slate-300" />
+                                    <button type="button"
+                                            @click.stop="toggleMilestoneCollapsed(category)"
+                                            class="shrink-0 rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-indigo-600 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-indigo-300"
+                                            :title="isMilestoneCollapsed(category) ? `Expand ${category}` : `Collapse ${category}`"
+                                            :aria-label="isMilestoneCollapsed(category) ? `Expand ${category}` : `Collapse ${category}`"
+                                            :aria-expanded="!isMilestoneCollapsed(category)">
+                                        <ChevronRightIcon class="h-3.5 w-3.5 transition-transform" :class="isMilestoneCollapsed(category) ? '' : 'rotate-90'" />
+                                    </button>
                                     <span class="text-xs font-black text-slate-700 uppercase tracking-wider truncate max-w-[380px] dark:text-slate-100" :title="category">{{ category }}</span>
                                     <span class="px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded text-[9px] font-bold shrink-0 dark:bg-slate-700 dark:text-slate-200">{{ visibleTaskCount(tasks) }}</span>
                                     <span class="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[9px] font-black uppercase whitespace-nowrap shrink-0 dark:bg-indigo-500/20 dark:text-indigo-200"
@@ -1999,7 +2078,7 @@ const isWeekend = (date) => {
                         </div>
 
                         <!-- Task Rows -->
-                        <template v-for="task in tasks" :key="task.id">
+                        <template v-for="task in (isMilestoneCollapsed(category) ? [] : tasks)" :key="task.id">
                             <div v-for="row in taskRows(task)" :key="row.task.id" @click="editTask(row.task)"
                                  :data-task-row="row.task.id"
                                  @dragover.prevent="handleTaskDragOver(row.task)"
@@ -2016,7 +2095,7 @@ const isWeekend = (date) => {
                                      :class="row.isSubTask ? 'bg-slate-50/90 group-hover:bg-slate-100/70 dark:bg-slate-900/80 dark:group-hover:bg-slate-800' : 'bg-white group-hover:bg-slate-50 dark:bg-slate-950 dark:group-hover:bg-slate-900'">
                                     
                                     <!-- Activity / Sub-task Column -->
-                                    <div class="w-[480px] flex items-center gap-2 py-1.5" :class="row.isSubTask ? 'pl-6 pr-3' : 'px-3'">
+                                    <div class="w-[480px] flex items-center gap-2 py-1.5" :class="row.isSubTask ? 'pl-9 pr-3' : 'pl-5 pr-3'">
                                         <div class="relative flex-shrink-0" @click.stop>
                                             <input v-if="!hasSubTasks(row.task)"
                                                    type="checkbox"
@@ -2025,12 +2104,15 @@ const isWeekend = (date) => {
                                                    @change="toggleTaskDone(row.task)"
                                                    :title="canToggleDone(row.task) ? (isTaskComplete(row.task) ? 'Mark as not done (0%)' : 'Mark as done (100%)') : 'You cannot edit this row'"
                                                    class="w-4 h-4 rounded border border-slate-300 text-emerald-600 cursor-pointer transition-colors focus:ring-1 focus:ring-emerald-500 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900">
-                                            <div v-else
-                                                 title="Rolled up from its sub-tasks — tick those instead"
-                                                 class="w-4 h-4 rounded-full border flex items-center justify-center transition-colors"
-                                                 :class="row.task.status === 'Done' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-500/15' : 'border-slate-300 group-hover:border-indigo-300 dark:border-slate-600 dark:group-hover:border-indigo-400'">
-                                                <CheckCircleIcon v-if="row.task.status === 'Done'" class="w-3 h-3 text-emerald-600" />
-                                            </div>
+                                            <button v-else
+                                                    type="button"
+                                                    @click.stop="toggleActivityCollapsed(row.task)"
+                                                    class="flex h-4 w-4 items-center justify-center rounded text-slate-400 transition-colors hover:bg-indigo-50 hover:text-indigo-600 dark:text-slate-300 dark:hover:bg-indigo-500/15 dark:hover:text-indigo-300"
+                                                    :title="isActivityCollapsed(row.task) ? `Expand ${row.task.name}` : `Collapse ${row.task.name}`"
+                                                    :aria-label="isActivityCollapsed(row.task) ? `Expand ${row.task.name}` : `Collapse ${row.task.name}`"
+                                                    :aria-expanded="!isActivityCollapsed(row.task)">
+                                                <ChevronRightIcon class="h-3.5 w-3.5 transition-transform" :class="isActivityCollapsed(row.task) ? '' : 'rotate-90'" />
+                                            </button>
                                         </div>
                                         <div v-if="canManage" class="flex items-center shrink-0" @click.stop>
                                             <button type="button"
