@@ -556,6 +556,39 @@ class ProjectTaskController extends Controller
         return redirect()->back()->with($type, $message);
     }
 
+    /**
+     * Return only the plan data needed to repaint the open Gantt. This avoids a
+     * full projects.show reload, whose workspace and report props are much more
+     * expensive than saving one activity.
+     */
+    private function ganttSaveResponse(Project $project, string $message, int $status = 200)
+    {
+        $tasks = $project->tasks()
+            ->with([
+                'store:id,code,name',
+                'assignedUser:id,name,profile_photo,org_path',
+                'supportUser:id,name,profile_photo,org_path',
+            ])
+            ->get();
+
+        $milestones = $project->milestones()
+            ->with('assignedUser:id,name')
+            ->get()
+            ->map(fn (ProjectMilestone $milestone) => [
+                'category' => $milestone->category,
+                'assigned_to' => $milestone->assigned_to,
+                'owner_name' => $milestone->assignedUser?->name,
+            ])
+            ->values();
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'tasks' => $tasks,
+            'milestones' => $milestones,
+        ], $status);
+    }
+
     private function calculatorFor(?Project $project): \App\Services\ScheduleCalculator
     {
         return $this->scheduler->calculatorFor($project);
@@ -795,6 +828,10 @@ class ProjectTaskController extends Controller
             $request->user()->id
         );
 
+        if ($request->wantsJson()) {
+            return $this->ganttSaveResponse($project, 'Task added successfully.', 201);
+        }
+
         return $this->backToTab($request, $project->id, 'success', 'Task added successfully.');
     }
 
@@ -1003,14 +1040,20 @@ class ProjectTaskController extends Controller
         // needs the parent rollup refreshed.
         $progressChanged = (int) $projects_task->progress !== $oldProgress;
 
+        $changedTaskIds = [];
+
         if ($leadTimeChanged || $datesChanged || $movedInChain || array_key_exists('start_anchor_date', $validated)) {
-            $this->rescheduleProjectTasks($projects_task->project);
+            $changedTaskIds = $this->rescheduleProjectTasks($projects_task->project);
         } elseif ($progressChanged && $projects_task->parent_task_id) {
-            $this->syncParentRollups($projects_task->project);
+            $changedTaskIds = $this->syncParentRollups($projects_task->project);
         }
 
-        $this->projectTaskBoards->syncProject($projects_task->project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, $request->boolean('auto_create_monthly_boards'));
-        $this->projectTaskBoards->syncLinkedBoardItemsFromProject($projects_task->project);
+        $this->projectTaskBoards->syncProjectTaskChanges(
+            $projects_task->project,
+            collect($changedTaskIds)->push($projects_task->id),
+            $request->user(),
+            $request->boolean('auto_create_monthly_boards')
+        );
 
         // ── In-app (bell) notifications ──
         $actorId = $request->user()->id;
@@ -1048,7 +1091,7 @@ class ProjectTaskController extends Controller
         }
 
         if ($request->wantsJson()) {
-            return response()->json(['success' => true, 'task' => $projects_task]);
+            return $this->ganttSaveResponse($projects_task->project, 'Task updated successfully.');
         }
 
         return $this->backToTab($request, $projects_task->project_id, 'success', 'Task updated successfully.');
@@ -1417,19 +1460,29 @@ class ProjectTaskController extends Controller
 
         // Reordering rows shifts the whole chain — re-derive every date from Day 1.
         // A bare progress drag still needs the parent rollups refreshed.
+        $rescheduledTaskIds = [];
+
         foreach ($projects as $project) {
             if ($reordered) {
-                $this->rescheduleProjectTasks($project);
+                $rescheduledTaskIds[$project->id] = $this->rescheduleProjectTasks($project);
             } elseif (!empty($progressChanges)) {
-                $this->syncParentRollups($project);
+                $rescheduledTaskIds[$project->id] = $this->syncParentRollups($project);
             }
         }
 
-        $this->projectTaskBoards->syncProjectTaskIds(collect($validated['tasks'])->pluck('id'), $request->user(), $request->boolean('auto_create_monthly_boards'));
+        // A sort only changes a small sibling set. Sync those rows plus any rows
+        // whose dates moved during re-chaining instead of rebuilding every board.
+        foreach ($projects as $project) {
+            $submittedIds = $batch
+                ->where('project_id', $project->id)
+                ->pluck('id');
 
-        $firstTask = ProjectTask::find(collect($validated['tasks'])->pluck('id')->first());
-        if ($firstTask?->project) {
-            $this->projectTaskBoards->syncLinkedBoardItemsFromProject($firstTask->project);
+            $this->projectTaskBoards->syncProjectTaskChanges(
+                $project,
+                $submittedIds->concat($rescheduledTaskIds[$project->id] ?? [])->unique(),
+                $request->user(),
+                $request->boolean('auto_create_monthly_boards')
+            );
         }
 
         // Notify assignee + team for each task whose progress % actually changed.

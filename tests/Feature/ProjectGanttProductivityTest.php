@@ -133,7 +133,7 @@ class ProjectGanttProductivityTest extends TestCase
             'title' => $activity->name,
         ]);
 
-        $this->actingAs($owner)->post(route('projects-tasks.store'), [
+        $this->actingAs($owner)->postJson(route('projects-tasks.store'), [
             'project_id' => $project->id,
             'parent_task_id' => $activity->id,
             'name' => 'Validate API',
@@ -142,7 +142,9 @@ class ProjectGanttProductivityTest extends TestCase
             'progress' => 0,
             'lead_time_days' => 1,
             'auto_create_monthly_boards' => true,
-        ])->assertRedirect();
+        ])->assertCreated()
+            ->assertJsonPath('success', true)
+            ->assertJsonCount(2, 'tasks');
 
         $subTask = ProjectTask::where('project_id', $project->id)
             ->where('name', 'Validate API')
@@ -152,6 +154,42 @@ class ProjectGanttProductivityTest extends TestCase
         $this->assertSame($activityItem->id, (int) $subTaskItem->parent_item_id);
         $this->assertSame('Validate API', $subTaskItem->title);
         $this->assertSame(2, TaskChecklistItem::where('task_checklist_id', $checklist->id)->count());
+    }
+
+    public function test_json_edit_returns_fresh_gantt_rows_and_updates_only_linked_task_item(): void
+    {
+        $owner = $this->projectUser();
+        $project = $this->project($owner);
+        $activity = $this->task($project, 'Build API');
+
+        $board = TaskBoard::create([
+            'project_id' => $project->id,
+            'board_source' => 'manual',
+            'title' => 'Delivery Board',
+            'created_by' => $owner->id,
+        ]);
+        $card = $board->cards()->create([
+            'project_id' => $project->id,
+            'title' => $project->name,
+            'created_by' => $owner->id,
+        ]);
+        $checklist = $card->checklists()->create(['title' => 'Build']);
+        $item = $checklist->allItems()->create([
+            'project_task_id' => $activity->id,
+            'title' => $activity->name,
+        ]);
+
+        $this->actingAs($owner)->putJson(route('projects-tasks.update', $activity), [
+            'name' => 'Build production API',
+            'category' => 'Build',
+            'progress' => 0,
+        ])->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('tasks.0.name', 'Build production API')
+            ->assertJsonCount(1, 'tasks');
+
+        $this->assertSame('Build production API', $activity->fresh()->name);
+        $this->assertSame('Build production API', $item->fresh()->title);
     }
 
     public function test_direct_progress_change_is_rejected_for_activity_rolled_up_from_sub_tasks(): void
@@ -167,6 +205,50 @@ class ProjectGanttProductivityTest extends TestCase
         ])->assertUnprocessable()->assertJsonValidationErrors('progress');
 
         $this->assertSame(0, (int) $activity->fresh()->progress);
+    }
+
+    public function test_owner_can_reorder_gantt_siblings_and_sync_linked_board_items(): void
+    {
+        $owner = $this->projectUser();
+        $project = $this->project($owner);
+        $first = $this->task($project, 'Design API', null, ['order' => 1]);
+        $second = $this->task($project, 'Build API', null, ['order' => 2]);
+
+        $board = TaskBoard::create([
+            'project_id' => $project->id,
+            'board_source' => 'manual',
+            'title' => 'Delivery Board',
+            'created_by' => $owner->id,
+        ]);
+        $card = $board->cards()->create([
+            'project_id' => $project->id,
+            'title' => $project->name,
+            'created_by' => $owner->id,
+        ]);
+        $checklist = $card->checklists()->create(['title' => 'Build']);
+        $firstItem = $checklist->allItems()->create([
+            'project_task_id' => $first->id,
+            'title' => $first->name,
+            'sort_order' => 1,
+        ]);
+        $secondItem = $checklist->allItems()->create([
+            'project_task_id' => $second->id,
+            'title' => $second->name,
+            'sort_order' => 2,
+        ]);
+
+        $this->actingAs($owner)->postJson(route('projects.tasks.gantt-update'), [
+            'tasks' => [
+                ['id' => $second->id, 'order' => 1],
+                ['id' => $first->id, 'order' => 2],
+            ],
+            'auto_create_monthly_boards' => true,
+        ])->assertOk()->assertJsonPath('success', true);
+
+        $this->assertSame(1, (int) $second->fresh()->order);
+        $this->assertSame(2, (int) $first->fresh()->order);
+        $this->assertSame(1, (int) $secondItem->fresh()->sort_order);
+        $this->assertSame(2, (int) $firstItem->fresh()->sort_order);
     }
 
     public function test_project_gantt_pdf_opens_as_an_inline_landscape_report(): void

@@ -94,9 +94,11 @@ const normaliseCategory = (category) => {
     return trimmed !== '' ? trimmed : 'General';
 };
 
+const localMilestones = ref([]);
+
 const milestoneOwners = computed(() => {
     const map = new Map();
-    (props.milestones || []).forEach(milestone => map.set(normaliseCategory(milestone.category), milestone));
+    localMilestones.value.forEach(milestone => map.set(normaliseCategory(milestone.category), milestone));
     return map;
 });
 
@@ -155,7 +157,7 @@ const canRenameActiveMilestone = computed(() => canManageMilestone(activeMilesto
 // Which milestones this viewer runs — used for the read-only banner's wording.
 const myMilestones = computed(() => {
     if (props.canManage || props.currentUserId == null) return [];
-    return (props.milestones || [])
+    return localMilestones.value
         .filter(milestone => Number(milestone.assigned_to) === Number(props.currentUserId))
         .map(milestone => normaliseCategory(milestone.category));
 });
@@ -175,8 +177,12 @@ const showTemplateModal = ref(false);
 const selectedTemplateId = ref('');
 const selectedStoreIds = ref([]);
 const localTasks = ref([]);
+const isSavingTask = ref(false);
 const draggedTaskId = ref(null);
 const dragOverTaskId = ref(null);
+const draggedMilestone = ref(null);
+const dragOverMilestone = ref(null);
+const isSavingTaskOrder = ref(false);
 const quickAssignEnabled = ref(false);
 const quickAssigneeId = ref('');
 const quickOnlyUnassigned = ref(false);
@@ -300,8 +306,12 @@ watch(() => props.project.tasks, (tasks) => {
     localTasks.value = sortTasks(tasks || []);
 }, { immediate: true, deep: true });
 
+watch(() => props.milestones, (milestones) => {
+    localMilestones.value = [...(milestones || [])];
+}, { immediate: true, deep: true });
+
 const stats = computed(() => {
-    const tasks = props.project.tasks || [];
+    const tasks = localTasks.value;
     const total = tasks.length;
     const completed = tasks.filter(t => t.status === 'Done').length;
     const ongoing = tasks.filter(t => t.status === 'Ongoing').length;
@@ -566,47 +576,49 @@ const confirmApplyTemplate = async () => {
 };
 
 const saveTask = async () => {
+    if (isSavingTask.value) return;
+
     const syncOk = await ensureTaskListBoards();
     if (!syncOk) return;
 
-    if (isEditing.value) {
-        form.transform((data) => ({
-            ...data,
-            parent_task_id: data.parent_task_id || null,
-            progress: data.task_progress,
-            auto_create_monthly_boards: true,
-        })).put(route('projects-tasks.update', { 'projects_task': editingTaskId.value, tab: 'gantt' }), {
-            preserveScroll: true,
-            onSuccess: () => {
-                isAddingTask.value = false;
-                isEditing.value = false;
-                editingTaskId.value = null;
-                formMode.value = 'activity';
-                activeParentTask.value = null;
-                activeMilestone.value = '';
-                resetTaskForm();
-            }
+    const wasEditing = isEditing.value;
+    const savedKind = formMode.value === 'milestone'
+        ? 'Milestone'
+        : (formMode.value === 'subtask' ? 'Sub-task' : 'Activity');
+    const payload = {
+        ...form.data(),
+        parent_task_id: form.parent_task_id || null,
+        progress: form.task_progress,
+        auto_create_monthly_boards: true,
+    };
 
-        });
-    } else {
-        form.transform((data) => ({
-            ...data,
-            parent_task_id: data.parent_task_id || null,
-            progress: data.task_progress,
-            auto_create_monthly_boards: true,
-        })).post(route('projects-tasks.store', { tab: 'gantt' }), {
-            preserveScroll: true,
-            onSuccess: () => {
-                isAddingTask.value = false;
-                formMode.value = 'activity';
-                activeParentTask.value = null;
-                activeMilestone.value = '';
-                resetTaskForm();
-            },
-            onError: (errors) => {
-                console.error('Task Creation Failed:', errors);
-            }
-        });
+    form.clearErrors();
+    isSavingTask.value = true;
+
+    try {
+        const response = wasEditing
+            ? await window.axios.put(route('projects-tasks.update', editingTaskId.value), payload)
+            : await window.axios.post(route('projects-tasks.store'), payload);
+
+        localTasks.value = sortTasks(response.data.tasks || localTasks.value);
+        localMilestones.value = response.data.milestones || localMilestones.value;
+        isAddingTask.value = false;
+        isEditing.value = false;
+        editingTaskId.value = null;
+        formMode.value = 'activity';
+        activeParentTask.value = null;
+        activeMilestone.value = '';
+        resetTaskForm();
+        success(`${savedKind} ${wasEditing ? 'updated' : 'added'} successfully.`);
+    } catch (exception) {
+        const errors = exception?.response?.data?.errors || {};
+        if (Object.keys(errors).length) form.setError(errors);
+
+        error(Object.values(errors).flat().find(Boolean)
+            || exception?.response?.data?.message
+            || `Unable to save ${savedKind.toLowerCase()}.`);
+    } finally {
+        isSavingTask.value = false;
     }
 };
 
@@ -1311,17 +1323,48 @@ const unpinStart = () => {
     form.end_date = '';
 };
 
-// Typing a lead time re-derives the end date live, so the form shows the same
-// span the server will chain on save.
-watch([() => form.lead_time_days, () => form.start_date], () => {
+// Keep Timeline and Lead Time reactive in both directions while mirroring the
+// server's calendar/working-day rules.
+const syncEndDateFromLeadTime = (value = form.lead_time_days) => {
+    const leadTime = Math.max(1, Number(value) || 1);
+    if (isRolledUpActivity.value) return;
+
+    form.lead_time_days = leadTime;
+    if (!isAddingTask.value || !form.start_date) return;
+
+    const start = toWorkingDay(parseLocalDate(form.start_date));
+
+    form.start_date = toDateInput(start);
+    form.end_date = toDateInput(endOfSpan(start, leadTime));
+};
+
+const syncLeadTimeFromTimeline = (changedField) => {
     if (!isAddingTask.value || isRolledUpActivity.value || !form.start_date) return;
 
     const start = toWorkingDay(parseLocalDate(form.start_date));
-    const startValue = toDateInput(start);
-    if (form.start_date !== startValue) form.start_date = startValue;
+    form.start_date = toDateInput(start);
 
-    form.end_date = toDateInput(endOfSpan(start, Math.max(1, Number(form.lead_time_days) || 1)));
-});
+    if (!form.end_date) {
+        syncEndDateFromLeadTime();
+        return;
+    }
+
+    const end = parseLocalDate(form.end_date);
+    if (end < start) {
+        if (changedField === 'start') {
+            syncEndDateFromLeadTime();
+        } else {
+            form.lead_time_days = 1;
+            form.end_date = toDateInput(start);
+        }
+        return;
+    }
+
+    const leadTime = daysBetween(start, end);
+    form.lead_time_days = leadTime;
+    // Normalize a weekend/holiday finish to the same span the server will save.
+    form.end_date = toDateInput(endOfSpan(start, leadTime));
+};
 
 const formTitle = computed(() => {
     if (isEditing.value) {
@@ -1482,46 +1525,46 @@ const milestoneDepartmentLabel = (tasks = []) => {
     return count * 2 > total ? name : `Mixed · ${ranked.length} departments`;
 };
 
-const persistTaskOrder = async () => {
-    const syncOk = await ensureTaskListBoards();
-    if (!syncOk) return;
+const taskOrderErrorMessage = (exception) => {
+    const errors = exception?.response?.data?.errors;
+    const validationMessage = errors
+        ? Object.values(errors).flat().find(Boolean)
+        : null;
 
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-
-    fetch(route('projects.tasks.gantt-update'), {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-CSRF-TOKEN': csrfToken,
-        },
-        body: JSON.stringify({
-            tasks: localTasks.value.map((task, index) => ({
-                id: task.id,
-                milestone_order: task.milestone_order,
-                order: index,
-            })),
-            auto_create_monthly_boards: true,
-        })
-    })
-        .then(async (response) => {
-            if (!response.ok) {
-                throw new Error('Failed to update task order.');
-            }
-
-            return response.json();
-        })
-        .then(() => {
-            success('Task order updated.');
-        })
-        .catch(() => {
-            info('Unable to save task order.');
-        });
+    return validationMessage
+        || exception?.response?.data?.message
+        || 'Unable to save task order.';
 };
 
-const handleTaskDragStart = (task) => {
-    if (!props.canManage) return; // reordering is a manager-only action
+const persistTaskOrder = async (updates, previousTasks) => {
+    const syncOk = await ensureTaskListBoards();
+    if (!syncOk) {
+        localTasks.value = previousTasks;
+        return;
+    }
+
+    isSavingTaskOrder.value = true;
+
+    try {
+        await window.axios.post(route('projects.tasks.gantt-update'), {
+            tasks: updates,
+            auto_create_monthly_boards: true,
+        });
+
+        success('Task order updated.');
+    } catch (exception) {
+        localTasks.value = previousTasks;
+        error(taskOrderErrorMessage(exception));
+    } finally {
+        isSavingTaskOrder.value = false;
+    }
+};
+
+const handleTaskDragStart = (task, event) => {
+    if (!props.canManage || isSavingTaskOrder.value) return; // reordering is a manager-only action
     draggedTaskId.value = task.id;
+    event?.dataTransfer?.setData('text/plain', String(task.id));
+    if (event?.dataTransfer) event.dataTransfer.effectAllowed = 'move';
 };
 
 const handleTaskDragOver = (task) => {
@@ -1530,39 +1573,106 @@ const handleTaskDragOver = (task) => {
     dragOverTaskId.value = task.id;
 };
 
-const handleTaskDrop = (targetTask) => {
-    if (!props.canManage) return;
-    if (!draggedTaskId.value || draggedTaskId.value === targetTask.id) {
+const handleTaskDrop = async (targetTask) => {
+    if (!props.canManage || isSavingTaskOrder.value) return;
+    if (!draggedTaskId.value || Number(draggedTaskId.value) === Number(targetTask.id)) {
         draggedTaskId.value = null;
         dragOverTaskId.value = null;
         return;
     }
 
-    const reorderedTasks = [...localTasks.value];
-    const fromIndex = reorderedTasks.findIndex(task => task.id === draggedTaskId.value);
-    const toIndex = reorderedTasks.findIndex(task => task.id === targetTask.id);
+    const movedTask = localTasks.value.find(task => Number(task.id) === Number(draggedTaskId.value));
+    const sameParent = Number(movedTask?.parent_task_id || 0) === Number(targetTask.parent_task_id || 0);
+    const sameMilestone = normaliseCategory(movedTask?.category) === normaliseCategory(targetTask.category);
 
-    if (fromIndex === -1 || toIndex === -1) {
+    if (!movedTask || !sameParent || (!movedTask.parent_task_id && !sameMilestone)) {
         draggedTaskId.value = null;
         dragOverTaskId.value = null;
+        info(movedTask?.parent_task_id
+            ? 'Sub-tasks can only be reordered within the same activity.'
+            : 'Activities can only be reordered within the same milestone.');
         return;
     }
 
-    const [movedTask] = reorderedTasks.splice(fromIndex, 1);
-    reorderedTasks.splice(toIndex, 0, movedTask);
-    localTasks.value = reorderedTasks.map((task, index) => ({
-        ...task,
-        order: index,
+    const siblings = sortTasks(localTasks.value.filter(task => {
+        const hasSameParent = Number(task.parent_task_id || 0) === Number(movedTask.parent_task_id || 0);
+        return hasSameParent && (movedTask.parent_task_id || normaliseCategory(task.category) === normaliseCategory(movedTask.category));
     }));
+    const siblingIds = siblings.map(task => Number(task.id));
+    const fromIndex = siblingIds.indexOf(Number(movedTask.id));
+    const toIndex = siblingIds.indexOf(Number(targetTask.id));
+
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const previousTasks = localTasks.value;
+    const [movedId] = siblingIds.splice(fromIndex, 1);
+    siblingIds.splice(toIndex, 0, movedId);
+    const orderById = new Map(siblingIds.map((id, index) => [id, index + 1]));
+
+    localTasks.value = localTasks.value.map(task => orderById.has(Number(task.id))
+        ? { ...task, order: orderById.get(Number(task.id)) }
+        : task);
 
     draggedTaskId.value = null;
     dragOverTaskId.value = null;
-    persistTaskOrder();
+    await persistTaskOrder(
+        siblingIds.map(id => ({ id, order: orderById.get(id) })),
+        previousTasks
+    );
 };
 
 const handleTaskDragEnd = () => {
     draggedTaskId.value = null;
     dragOverTaskId.value = null;
+};
+
+const handleMilestoneDragStart = (category, event) => {
+    if (!props.canManage || isSavingTaskOrder.value) return;
+    draggedMilestone.value = normaliseCategory(category);
+    event?.dataTransfer?.setData('text/plain', draggedMilestone.value);
+    if (event?.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+};
+
+const handleMilestoneDragOver = (category) => {
+    if (!draggedMilestone.value || isSavingTaskOrder.value) return;
+    dragOverMilestone.value = normaliseCategory(category);
+};
+
+const handleMilestoneDrop = async (targetCategory) => {
+    const source = draggedMilestone.value;
+    const target = normaliseCategory(targetCategory);
+    draggedMilestone.value = null;
+    dragOverMilestone.value = null;
+
+    if (!props.canManage || isSavingTaskOrder.value || !source || source === target) return;
+
+    const categories = Object.keys(groupedTasks.value).map(normaliseCategory);
+    const fromIndex = categories.indexOf(source);
+    const toIndex = categories.indexOf(target);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const previousTasks = localTasks.value;
+    const [movedCategory] = categories.splice(fromIndex, 1);
+    categories.splice(toIndex, 0, movedCategory);
+    const orderByCategory = new Map(categories.map((category, index) => [category, index + 1]));
+
+    localTasks.value = localTasks.value.map(task => ({
+        ...task,
+        milestone_order: orderByCategory.get(normaliseCategory(task.category)),
+    }));
+
+    await persistTaskOrder(
+        localTasks.value.map(task => ({
+            id: task.id,
+            milestone_order: task.milestone_order,
+        })),
+        previousTasks
+    );
+};
+
+const handleMilestoneDragEnd = () => {
+    draggedMilestone.value = null;
+    dragOverMilestone.value = null;
 };
 
 const isToday = (date) => {
@@ -1837,7 +1947,7 @@ const isWeekend = (date) => {
                     <div class="md:col-span-1">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Lead Time (Days)</label>
                         <input :value="isRolledUpActivity ? rolledUpLeadTime : form.lead_time_days"
-                               @input="form.lead_time_days = Number($event.target.value)"
+                               @input="syncEndDateFromLeadTime($event.target.value)"
                                type="number" min="1"
                                :disabled="isRolledUpActivity"
                                class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
@@ -1911,9 +2021,9 @@ const isWeekend = (date) => {
                     <div class="md:col-span-3">
                         <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Timeline</label>
                         <div class="flex items-center space-x-2">
-                            <input v-model="form.start_date" type="date" :disabled="isRolledUpActivity" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
+                            <input v-model="form.start_date" @change="syncLeadTimeFromTimeline('start')" type="date" :disabled="isRolledUpActivity" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
                             <span class="text-slate-400 dark:text-slate-300">to</span>
-                            <input v-model="form.end_date" type="date" :disabled="isRolledUpActivity" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
+                            <input v-model="form.end_date" @change="syncLeadTimeFromTimeline('end')" type="date" :disabled="isRolledUpActivity" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
                         </div>
                         <p v-if="isRolledUpActivity" class="mt-1 ml-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">
                             Spans its sub-tasks — set the dates on those.
@@ -1928,8 +2038,8 @@ const isWeekend = (date) => {
                         <div v-if="form.errors.start_date || form.errors.end_date" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.start_date || form.errors.end_date }}</div>
                     </div>
                     <div class="md:col-span-2 flex items-center space-x-2 pl-4">
-                        <button @click="saveTask" :disabled="form.processing" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-95 disabled:opacity-50 text-sm whitespace-nowrap">
-                            {{ saveButtonLabel }}
+                        <button @click="saveTask" :disabled="isSavingTask" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-95 disabled:opacity-50 text-sm whitespace-nowrap">
+                            {{ isSavingTask ? 'Saving…' : saveButtonLabel }}
                         </button>
                         <button @click="closeForm" class="flex-1 px-3 py-2.5 bg-white text-slate-500 font-bold border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-sm whitespace-nowrap dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
                             Cancel
@@ -2013,9 +2123,21 @@ const isWeekend = (date) => {
                     <!-- Rows -->
                     <template v-for="(tasks, category) in visibleGroupedTasks" :key="category">
                         <!-- Category Row -->
-                        <div class="flex sticky top-12 z-30">
+                        <div class="flex sticky top-12 z-30"
+                             @dragover.prevent="handleMilestoneDragOver(category)"
+                             @drop.prevent="handleMilestoneDrop(category)"
+                             :class="dragOverMilestone === normaliseCategory(category) ? 'ring-1 ring-inset ring-indigo-300 dark:ring-indigo-400' : ''">
                             <div class="sticky left-0 z-40 w-[760px] h-9 bg-slate-100/95 flex items-center justify-between px-3 border-b border-slate-200 border-r shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/20">
                                 <div class="flex items-center space-x-2 min-w-0 mr-2">
+                                    <button v-if="canManage"
+                                            type="button"
+                                            :draggable="!isSavingTaskOrder"
+                                            @dragstart.stop="handleMilestoneDragStart(category, $event)"
+                                            @dragend="handleMilestoneDragEnd"
+                                            class="shrink-0 cursor-grab rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-indigo-600 active:cursor-grabbing dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-indigo-300"
+                                            title="Drag to reorder milestone">
+                                        <ArrowsPointingOutIcon class="h-3.5 w-3.5" />
+                                    </button>
                                     <button type="button"
                                             @click.stop="toggleMilestoneCollapsed(category)"
                                             class="shrink-0 rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-200 hover:text-indigo-600 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-indigo-300"
@@ -2116,8 +2238,8 @@ const isWeekend = (date) => {
                                         </div>
                                         <div v-if="canManage" class="flex items-center shrink-0" @click.stop>
                                             <button type="button"
-                                                    draggable="true"
-                                                    @dragstart="handleTaskDragStart(row.task)"
+                                                    :draggable="!isSavingTaskOrder"
+                                                    @dragstart="handleTaskDragStart(row.task, $event)"
                                                     @dragend="handleTaskDragEnd"
                                                     class="p-0.5 text-slate-300 hover:text-indigo-500 cursor-grab active:cursor-grabbing transition-colors dark:text-slate-500 dark:hover:text-indigo-300"
                                                     title="Drag to reorder task">
