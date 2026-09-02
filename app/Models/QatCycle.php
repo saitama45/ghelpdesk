@@ -277,10 +277,9 @@ class QatCycle extends Model
      * test pins to each other — scopeVisibleTo() for the listing, isVisibleTo()
      * for the boundary.
      *
-     * The clause UAT does not need is the approver one. A QAT cycle is signed off
-     * by the submitter's immediate MANAGER, who routinely sits in a different
-     * department to the team that ran the tests. Without this the manager is 403'd
-     * out of the very cycle they were notified to decide, and the feature is dead.
+     * QAT also grants access to active staff participants configured in Setup and
+     * to the snapshotted manager approvers. Both routinely sit outside the owning
+     * department, so membership itself must be a per-cycle visibility grant.
      */
     public function scopeVisibleTo($query, ?User $user)
     {
@@ -305,6 +304,14 @@ class QatCycle extends Model
             if ($homeDepartmentId) {
                 $q->orWhere('department_id', $homeDepartmentId);
             }
+
+            // Anyone actively assigned in the Setup roster (tester, reviewer,
+            // or observer) must be able to see and open the cycle they were
+            // assigned to, even when another department owns it.
+            $q->orWhereHas('participants', function ($participant) use ($userId) {
+                $participant->where('user_id', $userId)
+                    ->where('is_active', true);
+            });
 
             // The snapshotted approver list.
             //
@@ -347,6 +354,13 @@ class QatCycle extends Model
             if ($this->{$column} && (int) $this->{$column} === $userId) {
                 return true;
             }
+        }
+
+        if ($this->participants()
+            ->where('user_id', $userId)
+            ->where('is_active', true)
+            ->exists()) {
+            return true;
         }
 
         if ($this->isAssignedApprover($user)) {
