@@ -406,29 +406,19 @@ const quickAssignRows = async (taskIds, scopeLabel) => {
 
     const clearing = quickAssigneeId.value === '__unassign__';
     const assignedTo = clearing ? null : Number(quickAssigneeId.value);
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
     isBulkAssigning.value = true;
 
     try {
-        const response = await fetch(route('projects.tasks.bulk-assign', props.project.id), {
-            method: 'PATCH',
+        const response = await window.axios.patch(route('projects.tasks.bulk-assign', props.project.id), {
+            task_ids: uniqueIds,
+            assigned_to: assignedTo,
+            only_unassigned: quickOnlyUnassigned.value,
+        }, {
             headers: {
-                'Content-Type': 'application/json',
                 'Accept': 'application/json',
-                'X-CSRF-TOKEN': csrfToken,
             },
-            body: JSON.stringify({
-                task_ids: uniqueIds,
-                assigned_to: assignedTo,
-                only_unassigned: quickOnlyUnassigned.value,
-            }),
         });
-        const payload = await response.json();
-
-        if (!response.ok) {
-            const message = Object.values(payload.errors || {}).flat()[0] || payload.message || 'Unable to assign the selected rows.';
-            throw new Error(message);
-        }
+        const payload = response.data;
 
         const changedIds = new Set((payload.task_ids || []).map(Number));
         localTasks.value = localTasks.value.map(task => changedIds.has(Number(task.id)) ? {
@@ -444,7 +434,12 @@ const quickAssignRows = async (taskIds, scopeLabel) => {
             info(`No assignments changed in ${scopeLabel}.`);
         }
     } catch (exception) {
-        error(exception.message || 'Unable to assign the selected rows.');
+        const payload = exception.response?.data || {};
+        const message = Object.values(payload.errors || {}).flat()[0]
+            || payload.message
+            || exception.message
+            || 'Unable to assign the selected rows.';
+        error(message);
     } finally {
         isBulkAssigning.value = false;
     }
