@@ -414,7 +414,7 @@
                                             <p class="text-xs text-gray-500 truncate dark:text-gray-300">{{ sel.asset.brand }} {{ sel.asset.model }}</p>
                                         </div>
                                         <!-- Non-Fixed: qty input -->
-                                        <template v-if="sel.asset.type !== 'Fixed'">
+                                        <template v-if="sel.asset.type !== 'Fixed' && !readOnlyMode">
                                             <div class="flex items-center gap-1.5">
                                                 <label class="text-[10px] font-bold text-gray-500 uppercase dark:text-gray-300">Qty</label>
                                                 <input
@@ -450,8 +450,8 @@
                                             </svg>
                                         </button>
                                     </div>
-                                    <!-- Fixed asset unit picker — always expanded -->
-                                    <div v-if="sel.asset.type === 'Fixed' && (sel.availableUnits.length > 0 || sel.entries.length > 0)" class="border-t border-blue-50 dark:border-blue-400/30">
+                                    <!-- Read-only details show every persisted coded row, regardless of catalog type. -->
+                                    <div v-if="(readOnlyMode && sel.entries.length > 0) || (sel.asset.type === 'Fixed' && sel.availableUnits.length > 0)" class="border-t border-blue-50 dark:border-blue-400/30">
                                         <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700">
                                             <thead class="bg-gray-50 dark:bg-gray-900/50">
                                                 <tr>
@@ -467,6 +467,7 @@
                                                         </label>
                                                     </th>
                                                     <th class="px-4 py-2 text-left text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">Serial No / Barcode</th>
+                                                    <th class="px-4 py-2 text-left text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">QR Code</th>
                                                     <th class="px-4 py-2 text-right text-[10px] font-black uppercase text-gray-500 dark:text-slate-300">Cost</th>
                                                 </tr>
                                             </thead>
@@ -477,6 +478,13 @@
                                                         <td class="px-4 py-2">
                                                             <p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ entry.serial_no || 'NO SERIAL' }}</p>
                                                             <p class="text-[10px] font-mono text-gray-500 dark:text-gray-300">{{ entry.barcode }}</p>
+                                                        </td>
+                                                        <td class="px-4 py-2 text-[10px] font-mono text-gray-500 dark:text-gray-300">
+                                                            <details v-if="entry.qrcode" class="max-w-md">
+                                                                <summary class="cursor-pointer font-semibold text-blue-600 dark:text-blue-400">View QR data</summary>
+                                                                <pre class="mt-1 whitespace-pre-wrap break-all font-mono">{{ entry.qrcode }}</pre>
+                                                            </details>
+                                                            <span v-else>—</span>
                                                         </td>
                                                         <td class="px-4 py-2 text-right text-sm font-bold text-gray-700 dark:text-gray-300">{{ Number(entry.cost).toLocaleString() }}</td>
                                                     </tr>
@@ -504,6 +512,9 @@
                                                             <p v-if="unit.is_reserved" class="text-[10px] font-semibold text-amber-600 mt-0.5 dark:text-amber-400">
                                                                 Reserved · {{ unit.reserved_in || 'Pending Transfer' }}
                                                             </p>
+                                                        </td>
+                                                        <td class="px-4 py-2 text-[10px] font-mono text-gray-500 dark:text-gray-300">
+                                                            <p class="max-w-xs truncate" :title="unit.qrcode">{{ unit.qrcode || '—' }}</p>
                                                         </td>
                                                         <td class="px-4 py-2 text-right text-sm font-bold text-gray-700 dark:text-gray-300">{{ Number(unit.cost).toLocaleString() }}</td>
                                                     </tr>

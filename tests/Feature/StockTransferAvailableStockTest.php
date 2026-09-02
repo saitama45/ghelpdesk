@@ -308,6 +308,42 @@ class StockTransferAvailableStockTest extends TestCase
             ->assertJsonPath('available_units.0.id', $sourceStock->id);
     }
 
+    public function test_grouped_transfer_details_keep_every_barcode_and_qr_code_for_non_fixed_items(): void
+    {
+        $user = User::factory()->create();
+        $asset = $this->createAsset('SKU-CONSUMABLE');
+        $asset->update(['type' => 'Consumables']);
+
+        $rows = collect(range(1, 3))->map(fn ($number) => StockTransfer::create([
+            'transfer_date' => '2026-09-02',
+            'transfer_no' => 'TRF-CODED-UNITS',
+            'origin_location' => 'CBTL WH',
+            'destination_location' => 'CBTL EWM',
+            'status' => 'Posted',
+            'asset_id' => $asset->id,
+            'quantity' => 1,
+            'barcode' => "TRANSFER-BC-{$number}",
+            'qrcode' => "TRANSFER-QR-{$number}",
+            'asset_type' => 'New',
+            'is_allocation' => false,
+            'warranty_months' => 0,
+            'eol_months' => 0,
+            'cost' => 100,
+            'price' => 150,
+        ]));
+
+        $this->actingAs($user)
+            ->getJson(route('stock-transfers.show', $rows->first()))
+            ->assertOk()
+            ->assertJsonCount(3)
+            ->assertJsonPath('0.barcode', 'TRANSFER-BC-1')
+            ->assertJsonPath('0.qrcode', 'TRANSFER-QR-1')
+            ->assertJsonPath('1.barcode', 'TRANSFER-BC-2')
+            ->assertJsonPath('1.qrcode', 'TRANSFER-QR-2')
+            ->assertJsonPath('2.barcode', 'TRANSFER-BC-3')
+            ->assertJsonPath('2.qrcode', 'TRANSFER-QR-3');
+    }
+
     private function createAsset(string $itemCode, ?Category $category = null): Asset
     {
         $category ??= Category::firstOrCreate([

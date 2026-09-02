@@ -456,6 +456,21 @@
                                         <td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-300">
                                             <div class="flex flex-col">
                                                 <span class="font-bold text-gray-700 leading-tight dark:text-gray-300">{{ tx.transaction_type === 'Stamp Redemption' ? 'Loyalty Redemption' : isTransferTransaction(tx) ? 'Transfer Record' : 'Batch Record' }}</span>
+                                                <a
+                                                    v-if="tx.stamp_redemption_reference_id"
+                                                    :href="stampRedemptionHref(tx.stamp_redemption_reference_id)"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="text-[10px] text-purple-600 font-semibold underline underline-offset-2 hover:text-purple-800 mt-0.5"
+                                                >
+                                                    Redemption #{{ tx.stamp_redemption_reference_id }}
+                                                </a>
+                                                <div v-if="tx.redeemed_units.length" class="mt-1 space-y-1">
+                                                    <div v-for="unit in tx.redeemed_units" :key="unit.stock_in_id" class="text-[10px] text-gray-600 font-mono dark:text-gray-300">
+                                                        <div v-if="unit.barcode"><span class="font-semibold">Barcode:</span> {{ unit.barcode }}</div>
+                                                        <div v-if="unit.qrcode" class="max-w-md truncate" :title="unit.qrcode"><span class="font-semibold">QR:</span> {{ unit.qrcode }}</div>
+                                                    </div>
+                                                </div>
                                                 <span v-if="isTransferTransaction(tx) && tx.transfer_no" class="text-[10px] text-blue-500 font-semibold mt-0.5">
                                                     Transfer No.:
                                                     <a
@@ -785,6 +800,7 @@ const groupedHistory = computed(() => {
             tx.remarks || 'No Remarks',
             tx.stamp_program_name || '',
             tx.stamp_remarks || '',
+            tx.stamp_redemption_reference_id || '',
         ].join('|')
 
         if (!groups.has(date)) {
@@ -815,6 +831,8 @@ const groupedHistory = computed(() => {
                 remarks: tx.remarks || '',
                 stamp_program_name: tx.stamp_program_name || '',
                 stamp_remarks: tx.stamp_remarks || '',
+                stamp_redemption_reference_id: tx.stamp_redemption_reference_id || null,
+                redeemed_units: tx.redeemed_units || [],
             })
         }
 
@@ -1021,6 +1039,8 @@ const isTransferTransaction = (tx) => {
 const stockInTransactionHref = (referenceId) => route('stock-ins.index', { open_stock_in: referenceId })
 
 const transferTransactionHref = (referenceId) => route('stock-transfers.index', { open_transfer: referenceId })
+
+const stampRedemptionHref = (referenceId) => `${route('stamps.index', { tab: 'redemptions' })}#redemption-${referenceId}`
 
 const formatLocationList = (locations = []) => locations.filter(Boolean).join(', ')
 

@@ -7,12 +7,14 @@ use App\Models\Asset;
 use App\Models\Category;
 use App\Models\InventoryTransaction;
 use App\Models\StampRedemption;
+use App\Models\StampRedemptionUnit;
 use App\Models\StockIn;
 use App\Models\StockReceiving;
 use App\Models\StockTransfer;
 use App\Models\Store;
 use App\Models\TicketAsset;
 use App\Models\TicketComment;
+use App\Support\CompanyContext;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +37,7 @@ class InventoryReportController extends Controller implements HasMiddleware
     public function index(Request $request)
     {
         $query = $this->inventoryRowsQuery($request);
+        $activeCompanyId = CompanyContext::activeCompanyId();
 
         $assets = (clone $query)
             ->orderBy('location')
@@ -78,7 +81,10 @@ class InventoryReportController extends Controller implements HasMiddleware
         return Inertia::render('Reports/Inventory', [
             'assets' => $assets,
             'locationSummaries' => $locationSummaries,
-            'categories' => Category::orderBy('name')->get(),
+            'categories' => Category::query()
+                ->when($activeCompanyId, fn ($query) => $query->where('company_id', $activeCompanyId))
+                ->orderBy('name')
+                ->get(),
             'brands' => Asset::whereNotNull('brand')->distinct()->pluck('brand'),
             'locations' => $postedTransactionsBase()
                 ->whereNotNull('inventory_transactions.location')
@@ -132,6 +138,7 @@ class InventoryReportController extends Controller implements HasMiddleware
                 DB::raw('COALESCE(stock_receiving_history.remarks, stock_transfer_history.memo_remarks, receiving_transfer_history.memo_remarks) as remarks'),
                 DB::raw('stamp_program_ref.name as stamp_program_name'),
                 DB::raw('stamp_redemption_history.remarks as stamp_remarks'),
+                DB::raw('stamp_redemption_history.id as stamp_redemption_reference_id'),
                 DB::raw('SUM(inventory_transactions.quantity) as total_quantity'),
                 DB::raw('COUNT(*) as record_count'),
                 DB::raw('MAX(inventory_transactions.created_at) as latest_tx_at')
@@ -147,10 +154,23 @@ class InventoryReportController extends Controller implements HasMiddleware
                 DB::raw('COALESCE(stock_transfer_history.destination_location, stock_receiving_history.destination_location, receiving_transfer_history.destination_location, stock_in_history.destination_location)'),
                 DB::raw('COALESCE(stock_receiving_history.remarks, stock_transfer_history.memo_remarks, receiving_transfer_history.memo_remarks)'),
                 DB::raw('stamp_program_ref.name'),
-                DB::raw('stamp_redemption_history.remarks')
+                DB::raw('stamp_redemption_history.remarks'),
+                DB::raw('stamp_redemption_history.id')
             )
             ->orderBy('latest_tx_at', 'desc')
             ->get();
+
+        $unitsByRedemption = StampRedemptionUnit::query()
+            ->whereIn('stamp_redemption_id', $history->pluck('stamp_redemption_reference_id')->filter())
+            ->orderBy('id')
+            ->get(['stamp_redemption_id', 'stock_in_id', 'serial_no', 'barcode', 'qrcode'])
+            ->groupBy('stamp_redemption_id');
+
+        $history->each(function ($transaction) use ($unitsByRedemption) {
+            $transaction->redeemed_units = $unitsByRedemption
+                ->get($transaction->stamp_redemption_reference_id, collect())
+                ->values();
+        });
 
         return response()->json([
             'asset' => $asset,
@@ -167,8 +187,12 @@ class InventoryReportController extends Controller implements HasMiddleware
     {
         $search = trim((string) $request->input('q', ''));
 
+        $activeCompanyId = CompanyContext::activeCompanyId();
         $storeCode = $request->filled('store_id')
-            ? Store::where('id', $request->store_id)->value('code')
+            ? Store::query()
+                ->when($activeCompanyId, fn ($query) => $query->where('company_id', $activeCompanyId))
+                ->where('id', $request->store_id)
+                ->value('code')
             : null;
 
         if (! $storeCode) {
@@ -273,6 +297,7 @@ class InventoryReportController extends Controller implements HasMiddleware
             ->leftJoin('stores', 'tickets.store_id', '=', 'stores.id')
             ->leftJoin('users', 'tickets.assignee_id', '=', 'users.id')
             ->whereNull('tickets.deleted_at')
+            ->when(CompanyContext::activeCompanyId(), fn ($query, $companyId) => $query->where('tickets.company_id', $companyId))
             ->orderByDesc('ticket_assets.created_at')
             ->select([
                 'ticket_assets.id',
@@ -302,15 +327,19 @@ class InventoryReportController extends Controller implements HasMiddleware
 
     public function movement(Request $request)
     {
-        $warehouseLocations = Store::where('class', 'Office')
+        $activeCompanyId = CompanyContext::activeCompanyId();
+        $stores = fn () => Store::query()
+            ->when($activeCompanyId, fn ($query) => $query->where('company_id', $activeCompanyId));
+
+        $warehouseLocations = $stores()->where('class', 'Office')
             ->whereNotIn('code', self::EXCLUDED_REPORT_LOCATIONS)
             ->pluck('code');
 
-        $stagingLocations = Store::where('class', 'Regular')
+        $stagingLocations = $stores()->where('class', 'Regular')
             ->whereIn('code', ['CFE I', 'CFE II'])
             ->pluck('code');
 
-        $userStoreLocations = Store::whereNotNull('code')
+        $userStoreLocations = $stores()->whereNotNull('code')
             ->whereNotIn('code', self::EXCLUDED_REPORT_LOCATIONS)
             ->where(function ($q) {
                 $q->where('class', '!=', 'Office')
@@ -467,6 +496,10 @@ class InventoryReportController extends Controller implements HasMiddleware
     private function reportLedgerQuery()
     {
         return InventoryTransaction::query()
+            // InventoryTransaction has no company_id of its own. Constrain it
+            // through the scoped Asset relation so joins cannot leak another
+            // entity's ledger rows and then render them as an empty asset.
+            ->whereHas('asset')
             ->validInventoryLedger('inventory_transactions', 'report_valid')
             ->whereNotIn('inventory_transactions.location', self::EXCLUDED_REPORT_LOCATIONS);
     }

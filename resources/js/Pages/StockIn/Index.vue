@@ -2256,12 +2256,22 @@ const printStockInCodes = (type) => {
         return
     }
 
-    const endpoint = type === 'qrcodes' ? 'print-qrcodes' : 'print-barcodes'
-    const popup = window.open(`/stock-ins/${stockInId}/${endpoint}`, '_blank', 'noopener,noreferrer')
+    const routeName = type === 'qrcodes' ? 'stock-ins.print-qrcodes' : 'stock-ins.print-barcodes'
+    const popup = window.open('', '_blank')
 
     if (!popup) {
         showError('Unable to open the PDF. Please allow pop-ups for this site.')
+        return
     }
+
+    // Keep the new page isolated without using the `noopener` window feature.
+    // Browsers may return null for a successfully opened `noopener` tab, which
+    // previously caused the false popup-blocked error.
+    popup.opener = null
+    popup.location.replace(route(routeName, {
+        stock_in: stockInId,
+        _pdf: Date.now(),
+    }))
 }
 
 const postHeaderItem = async (item) => {

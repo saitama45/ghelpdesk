@@ -31,16 +31,23 @@
         }
 
         /* Container clears floats */
-        .labels-container {
-            overflow: hidden;
+        .labels-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            table-layout: fixed;
+        }
+
+        .label-cell {
+            width: 33.333%;
+            padding: 0 2mm 3mm 0;
+            vertical-align: top;
+            page-break-inside: avoid;
         }
 
         /* 3 per row: (190mm usable - 2 gaps × 2.5mm) / 3 ≈ 61mm each */
         .label {
-            float: left;
-            width: 61mm;
             height: 35mm;
-            margin: 0 2mm 3mm 0;
             padding: 3mm;
             border: 1px solid #d1d5db;
             box-sizing: border-box;
@@ -97,33 +104,29 @@
         </div>
     </div>
 
-    <div class="labels-container">
-        @foreach($items as $label)
-            @php($item = $label['item'])
-            <div class="label">
-                <div class="item-code">
-                    {{ $item->asset?->item_code ?: 'No Item Code' }}
-                </div>
-
-                <div class="barcode-wrap">
-                    @if($label['image'])
-                        <img class="barcode" src="data:image/png;base64,{{ $label['image'] }}" alt="{{ $item->barcode }}">
-                    @else
-                        <div class="empty-image">Barcode image unavailable</div>
-                    @endif
-                </div>
-
-                <div class="code">{{ $item->barcode }}</div>
-                <div class="details">
-                    Serial: {{ $item->serial_no ?: '-' }} |
-                    Asset: {{ $item->asset?->description ?: $item->asset?->model ?: '-' }}
-                </div>
-                <div class="details">
-                    Date: {{ $item->receive_date?->format('M d, Y') ?: '-' }} |
-                    Dest: {{ $item->destination_location ?: '-' }}
-                </div>
-            </div>
+    <table class="labels-table">
+        @foreach($items->chunk(3) as $row)
+            <tr>
+                @foreach($row as $label)
+                    @php($item = $label['item'])
+                    <td class="label-cell">
+                        <div class="label">
+                            <div class="item-code">{{ $item->asset?->item_code ?: 'No Item Code' }}</div>
+                            <div class="barcode-wrap">
+                                @if($label['image'])
+                                    <img class="barcode" src="{{ $label['image'] }}" alt="{{ $item->barcode }}">
+                                @else
+                                    <div class="empty-image">Barcode image unavailable</div>
+                                @endif
+                            </div>
+                            <div class="code">{{ $item->barcode }}</div>
+                            <div class="details">Serial: {{ $item->serial_no ?: '-' }} | Asset: {{ $item->asset?->description ?: $item->asset?->model ?: '-' }}</div>
+                            <div class="details">Date: {{ $item->receive_date?->format('M d, Y') ?: '-' }} | Dest: {{ $item->destination_location ?: '-' }}</div>
+                        </div>
+                    </td>
+                @endforeach
+            </tr>
         @endforeach
-    </div>
+    </table>
 </body>
 </html>

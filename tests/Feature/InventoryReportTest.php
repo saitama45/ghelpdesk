@@ -4,11 +4,15 @@ namespace Tests\Feature;
 
 use App\Models\Asset;
 use App\Models\Category;
+use App\Models\Company;
 use App\Models\InventoryTransaction;
+use App\Models\Role;
 use App\Models\StockIn;
 use App\Models\StockReceiving;
 use App\Models\StockTransfer;
+use App\Models\Store;
 use App\Models\User;
+use App\Support\CompanyContext;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
@@ -82,6 +86,88 @@ class InventoryReportTest extends TestCase
 
         $stockIn->refresh();
         $this->assertSame('Posted', $stockIn->status);
+    }
+
+    public function test_inventory_report_only_includes_the_active_entity_ledger_and_locations(): void
+    {
+        Permission::findOrCreate('reports.inventory');
+
+        $cbtl = Company::create([
+            'name' => 'CBTL Entity',
+            'code' => 'CBTL',
+            'type' => 'Entity',
+            'is_active' => true,
+        ]);
+        $otherEntity = Company::create([
+            'name' => 'Other Entity',
+            'code' => 'OTHER',
+            'type' => 'Entity',
+            'is_active' => true,
+        ]);
+
+        $user = User::factory()->create(['company_id' => $cbtl->id]);
+        $role = Role::create(['name' => 'Cross Entity Inventory Viewer', 'guard_name' => 'web']);
+        $role->companies()->attach($otherEntity->id);
+        $user->assignRole($role);
+        $user->givePermissionTo('reports.inventory');
+
+        $cbtlCategory = Category::create(['name' => 'CBTL Equipment', 'is_active' => true]);
+        $cbtlCategory->forceFill(['company_id' => $cbtl->id])->save();
+        $otherCategory = Category::create(['name' => 'Other Equipment', 'is_active' => true]);
+        $otherCategory->forceFill(['company_id' => $otherEntity->id])->save();
+
+        $cbtlAsset = $this->createEntityAsset('CBTL-ASSET', $cbtlCategory, $cbtl, 100);
+        $otherAsset = $this->createEntityAsset('OTHER-ASSET', $otherCategory, $otherEntity, 500);
+        $this->createEntityStock($cbtlAsset, $cbtl, 'CBTL AUR', 2);
+        $this->createEntityStock($otherAsset, $otherEntity, 'OTHER STORE', 3);
+
+        Store::create([
+            'code' => 'CBTL WH',
+            'name' => 'CBTL Warehouse',
+            'class' => 'Office',
+            'sector' => 1,
+            'area' => 'CBTL',
+            'brand' => 'CBTL',
+            'cluster' => 'CBTL',
+            'company_id' => $cbtl->id,
+            'is_active' => true,
+        ]);
+        Store::create([
+            'code' => 'OTHER WH',
+            'name' => 'Other Warehouse',
+            'class' => 'Office',
+            'sector' => 1,
+            'area' => 'OTHER',
+            'brand' => 'OTHER',
+            'cluster' => 'OTHER',
+            'company_id' => $otherEntity->id,
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->withSession([CompanyContext::SESSION_KEY => $cbtl->id])
+            ->get(route('reports.inventory'));
+
+        $response->assertOk();
+        $props = $response->viewData('page')['props'];
+
+        $this->assertCount(1, $props['assets']['data']);
+        $this->assertSame($cbtlAsset->id, (int) data_get($props, 'assets.data.0.asset_id'));
+        $this->assertSame('CBTL-ASSET', data_get($props, 'assets.data.0.asset.item_code'));
+        $this->assertSame(1, $props['summary']['total_items']);
+        $this->assertSame(2, (int) $props['summary']['total_soh']);
+        $this->assertEquals(200, $props['summary']['total_inventory_value']);
+        $this->assertEqualsCanonicalizing(['CBTL AUR'], collect($props['locations'])->all());
+        $this->assertEqualsCanonicalizing([$cbtlCategory->id], collect($props['categories'])->pluck('id')->all());
+        $this->assertLocationSummaryHasSoh($props['locationSummaries'], 'CBTL AUR', 2);
+        $this->assertNull(collect($props['locationSummaries'])->firstWhere('location', 'OTHER STORE'));
+
+        $this->actingAs($user)
+            ->withSession([CompanyContext::SESSION_KEY => $cbtl->id])
+            ->getJson(route('reports.inventory.movement'))
+            ->assertOk()
+            ->assertJsonPath('warehouse_locations.0', 'CBTL WH')
+            ->assertJsonCount(1, 'warehouse_locations');
     }
 
     public function test_inventory_history_includes_transfer_metadata_for_transfer_out(): void
@@ -187,6 +273,50 @@ class InventoryReportTest extends TestCase
         ]);
 
         return $stockIn;
+    }
+
+    protected function createEntityAsset(string $itemCode, Category $category, Company $company, int $cost): Asset
+    {
+        $asset = Asset::create([
+            'item_code' => $itemCode,
+            'category_id' => $category->id,
+            'brand' => $company->code,
+            'model' => 'Test Model',
+            'description' => "{$company->code} asset",
+            'cost' => $cost,
+            'type' => 'Fixed',
+            'eol_years' => 5,
+            'is_active' => true,
+        ]);
+        $asset->forceFill(['company_id' => $company->id])->save();
+
+        return $asset;
+    }
+
+    protected function createEntityStock(Asset $asset, Company $company, string $location, int $quantity): void
+    {
+        $stockIn = StockIn::create([
+            'receive_date' => '2026-05-13',
+            'dr_no' => "DR-{$asset->item_code}",
+            'origin_location' => 'SUPPLIER',
+            'destination_location' => $location,
+            'received_by' => 'Receiver',
+            'status' => 'Posted',
+            'asset_id' => $asset->id,
+            'quantity' => $quantity,
+            'cost' => $asset->cost,
+            'price' => $asset->cost,
+        ]);
+        $stockIn->forceFill(['company_id' => $company->id])->save();
+
+        InventoryTransaction::create([
+            'asset_id' => $asset->id,
+            'location' => $location,
+            'transaction_type' => 'Stock In',
+            'quantity' => $quantity,
+            'reference_type' => StockIn::class,
+            'reference_id' => $stockIn->id,
+        ]);
     }
 
     protected function inventoryReportProps(User $user): array

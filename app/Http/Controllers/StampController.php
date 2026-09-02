@@ -11,6 +11,8 @@ use App\Models\StampCard;
 use App\Models\StampEntry;
 use App\Models\StampProgram;
 use App\Models\StampRedemption;
+use App\Models\StampRedemptionUnit;
+use App\Models\StockIn;
 use App\Models\Store;
 use App\Services\LoyaltyQrService;
 use Illuminate\Http\Request;
@@ -27,7 +29,7 @@ class StampController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('can:stamps.view', only: ['index', 'assetsAtLocation', 'cardEntries']),
+            new Middleware('can:stamps.view', only: ['index', 'assetsAtLocation', 'unitsAtLocation', 'cardEntries']),
             new Middleware('can:stamps.create', only: [
                 'storeCustomer', 'storeProgram', 'storeCard', 'addStamps', 'recordPurchase',
                 'resolveScan', 'scanAddStamp',
@@ -79,6 +81,7 @@ class StampController extends Controller implements HasMiddleware
                 'program:id,name',
                 'asset:id,item_code,brand,model,description',
                 'creator:id,name',
+                'units:id,stamp_redemption_id,stock_in_id,serial_no,barcode,qrcode',
             ])
                 ->select('stamp_redemptions.*')
                 ->addSelect([
@@ -496,55 +499,79 @@ class StampController extends Controller implements HasMiddleware
             'asset_id' => 'required|exists:assets,id',
             'location' => 'required|string|max:255',
             'quantity' => 'required|integer|min:1|max:1000',
+            'stock_in_ids' => 'required|array|min:1|max:1000',
+            'stock_in_ids.*' => 'required|integer|distinct|exists:stock_ins,id',
             'remarks' => 'nullable|string|max:255',
         ]);
 
-        if ($card->status !== 'completed') {
+        $stockInIds = collect($data['stock_in_ids'])->map(fn ($id) => (int) $id)->values();
+        if ($stockInIds->count() !== (int) $data['quantity']) {
             throw ValidationException::withMessages([
-                'asset_id' => 'Only a completed card can be redeemed.',
+                'stock_in_ids' => 'Select one specific barcode/QR code for each quantity being redeemed.',
             ]);
         }
 
         $asset = Asset::findOrFail($data['asset_id']);
-        if ($asset->type !== 'Consumables') {
-            throw ValidationException::withMessages([
-                'asset_id' => 'Only consumable assets can be redeemed.',
-            ]);
-        }
-
         $location = $this->normalizeStoreCode($data['location']);
         $variants = $this->locationVariants($location);
 
-        $soh = (int) InventoryTransaction::query()
-            ->validInventoryLedger('inventory_transactions', 'stamp_redeem_valid')
-            ->where('inventory_transactions.asset_id', $asset->id)
-            ->whereIn('inventory_transactions.location', $variants)
-            ->sum('inventory_transactions.quantity');
+        DB::transaction(function () use ($card, $asset, $location, $variants, $stockInIds, $data, $request) {
+            $lockedCard = StampCard::query()->lockForUpdate()->findOrFail($card->id);
+            if ($lockedCard->status !== 'completed') {
+                throw ValidationException::withMessages([
+                    'asset_id' => 'Only a completed card can be redeemed.',
+                ]);
+            }
 
-        if ($soh < $data['quantity']) {
-            throw ValidationException::withMessages([
-                'quantity' => "Insufficient stock at {$location}. Available: {$soh}.",
-            ]);
-        }
+            StockIn::query()->whereIn('id', $stockInIds)->lockForUpdate()->get();
 
-        DB::transaction(function () use ($card, $asset, $location, $data, $request) {
+            $soh = (int) InventoryTransaction::query()
+                ->validInventoryLedger('inventory_transactions', 'stamp_redeem_valid')
+                ->where('inventory_transactions.asset_id', $asset->id)
+                ->whereIn('inventory_transactions.location', $variants)
+                ->sum('inventory_transactions.quantity');
+
+            if ($soh < $stockInIds->count()) {
+                throw ValidationException::withMessages([
+                    'quantity' => "Insufficient stock at {$location}. Available: {$soh}.",
+                ]);
+            }
+
+            $availableUnits = $this->redeemableUnitsAt($asset, $variants, $soh)->keyBy('id');
+            if ($stockInIds->diff($availableUnits->keys())->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'stock_in_ids' => 'One or more selected barcode/QR codes are no longer available at this location.',
+                ]);
+            }
+
             $redemption = StampRedemption::create([
-                'stamp_card_id' => $card->id,
-                'customer_id' => $card->customer_id,
-                'stamp_program_id' => $card->stamp_program_id,
+                'stamp_card_id' => $lockedCard->id,
+                'customer_id' => $lockedCard->customer_id,
+                'stamp_program_id' => $lockedCard->stamp_program_id,
                 'asset_id' => $asset->id,
                 'location' => $location,
-                'quantity' => $data['quantity'],
+                'quantity' => $stockInIds->count(),
                 'remarks' => $data['remarks'] ?? null,
                 'created_by' => $request->user()->id,
                 'updated_by' => $request->user()->id,
             ]);
 
+            foreach ($stockInIds as $stockInId) {
+                $unit = $availableUnits->get($stockInId);
+                StampRedemptionUnit::create([
+                    'stamp_redemption_id' => $redemption->id,
+                    'stock_in_id' => $unit->id,
+                    'serial_no' => $unit->serial_no,
+                    'barcode' => $unit->barcode,
+                    'qrcode' => $unit->qrcode,
+                ]);
+            }
+
             $tx = InventoryTransaction::create([
                 'asset_id' => $asset->id,
                 'location' => $location,
                 'transaction_type' => 'Stamp Redemption',
-                'quantity' => -1 * (int) $data['quantity'],
+                'quantity' => -1 * $stockInIds->count(),
                 'reference_type' => StampRedemption::class,
                 'reference_id' => $redemption->id,
                 'created_by' => $request->user()->id,
@@ -553,7 +580,7 @@ class StampController extends Controller implements HasMiddleware
 
             $redemption->update(['inventory_transaction_id' => $tx->id]);
 
-            $card->update([
+            $lockedCard->update([
                 'status' => 'redeemed',
                 'redeemed_at' => now(),
                 'updated_by' => $request->user()->id,
@@ -564,9 +591,9 @@ class StampController extends Controller implements HasMiddleware
     }
 
     /**
-     * Consumable assets with positive stock-on-hand at a given location,
-     * for the redemption picker. Mirrors StockTransferController::assetsWithStock
-     * but limited to consumable (redeemable) items.
+     * Active-entity inventory assets with positive stock-on-hand at a given
+     * location for the redemption picker. Mirrors the inventory ledger rules
+     * used by StockTransferController::assetsWithStock.
      */
     public function assetsAtLocation(Request $request)
     {
@@ -590,7 +617,6 @@ class StampController extends Controller implements HasMiddleware
         }
 
         $assets = Asset::whereIn('id', $sohData->keys())
-            ->where('type', 'Consumables')
             ->orderBy('item_code')
             ->get(['id', 'item_code', 'brand', 'model', 'description', 'type', 'cost'])
             ->map(fn ($a) => array_merge($a->toArray(), [
@@ -599,5 +625,52 @@ class StampController extends Controller implements HasMiddleware
             ->values();
 
         return response()->json($assets);
+    }
+
+    /**
+     * Specific, coded stock units that can be selected for a redemption.
+     */
+    public function unitsAtLocation(Asset $asset, Request $request)
+    {
+        $location = $this->normalizeStoreCode($request->input('location'));
+        if (! $location) {
+            return response()->json([]);
+        }
+
+        $variants = $this->locationVariants($location);
+        $soh = (int) InventoryTransaction::query()
+            ->validInventoryLedger('inventory_transactions', 'stamp_unit_valid')
+            ->where('inventory_transactions.asset_id', $asset->id)
+            ->whereIn('inventory_transactions.location', $variants)
+            ->sum('inventory_transactions.quantity');
+
+        if ($soh <= 0) {
+            return response()->json([]);
+        }
+
+        return response()->json(
+            $this->redeemableUnitsAt($asset, $variants, $soh)
+                ->map(fn (StockIn $unit) => [
+                    'stock_in_id' => $unit->id,
+                    'serial_no' => $unit->serial_no,
+                    'barcode' => $unit->barcode,
+                    'qrcode' => $unit->qrcode,
+                ])
+                ->values()
+        );
+    }
+
+    private function redeemableUnitsAt(Asset $asset, array $locationVariants, int $soh)
+    {
+        return $this->fixedUnitsCurrentlyAt($locationVariants, function ($query) use ($asset) {
+            $query->where('stock_ins.asset_id', $asset->id)
+                ->whereNotIn('stock_ins.id', StampRedemptionUnit::query()->select('stock_in_id'));
+        })
+            ->reject(fn (StockIn $unit) => $unit->sourceStockTransfers->contains(
+                fn ($transfer) => in_array($transfer->status, ['For Posting', 'Posted'], true)
+            ))
+            ->filter(fn (StockIn $unit) => filled($unit->barcode) || filled($unit->qrcode))
+            ->take(max(0, $soh))
+            ->values();
     }
 }

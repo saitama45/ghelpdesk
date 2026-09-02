@@ -460,27 +460,37 @@ const submitPurchase = () => {
 }
 
 /* ------------------------------------------------------------------ *
- | Redeem modal (loads consumable assets with stock at the chosen store)
+ | Redeem modal (loads inventory items with stock at the chosen store)
  * ------------------------------------------------------------------ */
 const redeemModal = reactive({ open: false, card: null })
-const redeemForm = useForm({ location: null, asset_id: null, quantity: 1, remarks: '' })
+const redeemForm = useForm({ location: null, asset_id: null, stock_in_ids: [], quantity: 0, remarks: '' })
 const assetOptions = ref([])
 const loadingAssets = ref(false)
+const redeemUnitOptions = ref([])
+const loadingRedeemUnits = ref(false)
+const redeemCodeSearch = ref('')
+const redeemCodeInput = ref(null)
 const openRedeemModal = (card) => {
     redeemForm.clearErrors(); redeemForm.reset()
     assetOptions.value = []
+    redeemUnitOptions.value = []
+    redeemCodeSearch.value = ''
     redeemModal.card = card; redeemModal.open = true
 }
 const loadAssets = async (location) => {
     redeemForm.asset_id = null
+    redeemForm.stock_in_ids = []
+    redeemForm.quantity = 0
     assetOptions.value = []
+    redeemUnitOptions.value = []
+    redeemCodeSearch.value = ''
     if (!location) return
     loadingAssets.value = true
     try {
         const res = await fetch(route('stamps.assets-at-location', { location }), { headers: { Accept: 'application/json' } })
         const json = await res.json()
         assetOptions.value = (json || []).map(a => ({ label: `${assetLabel(a)} — SOH ${a.soh}`, value: a.id }))
-        if (!assetOptions.value.length) addToast('No consumable stock available at this location.', 'error')
+        if (!assetOptions.value.length) addToast('No stock available at this location.', 'error')
     } catch (e) {
         addToast('Failed to load available items.', 'error')
     } finally {
@@ -488,6 +498,85 @@ const loadAssets = async (location) => {
     }
 }
 watch(() => redeemForm.location, (loc) => loadAssets(loc))
+const loadRedeemUnits = async (assetId) => {
+    redeemForm.stock_in_ids = []
+    redeemForm.quantity = 0
+    redeemUnitOptions.value = []
+    redeemCodeSearch.value = ''
+    if (!assetId || !redeemForm.location) return
+    loadingRedeemUnits.value = true
+    try {
+        const res = await fetch(route('stamps.assets.units-at-location', { asset: assetId, location: redeemForm.location }), { headers: { Accept: 'application/json' } })
+        const json = await res.json()
+        redeemUnitOptions.value = json || []
+        if (!redeemUnitOptions.value.length) addToast('No coded stock units are available for this item at this location.', 'error')
+        else nextTick(() => redeemCodeInput.value?.focus())
+    } catch (e) {
+        addToast('Failed to load available barcode/QR codes.', 'error')
+    } finally {
+        loadingRedeemUnits.value = false
+    }
+}
+watch(() => redeemForm.asset_id, (assetId) => loadRedeemUnits(assetId))
+const normalizeRedeemCode = (value) => String(value || '').trim().toLowerCase()
+const selectedRedeemUnits = computed(() => {
+    const selected = new Set(redeemForm.stock_in_ids.map(Number))
+    return redeemUnitOptions.value.filter(unit => selected.has(Number(unit.stock_in_id)))
+})
+const filteredRedeemUnits = computed(() => {
+    const query = normalizeRedeemCode(redeemCodeSearch.value)
+    if (!query) return []
+    const selected = new Set(redeemForm.stock_in_ids.map(Number))
+    return redeemUnitOptions.value.filter(unit => {
+        if (selected.has(Number(unit.stock_in_id))) return false
+        return [unit.serial_no, unit.barcode, unit.qrcode]
+            .some(value => normalizeRedeemCode(value).includes(query))
+    }).slice(0, 20)
+})
+const addRedeemUnit = (unit) => {
+    const stockInId = Number(unit.stock_in_id)
+    if (redeemForm.stock_in_ids.map(Number).includes(stockInId)) {
+        addToast('This barcode/QR code is already selected.', 'error')
+        redeemCodeSearch.value = ''
+        nextTick(() => redeemCodeInput.value?.focus())
+        return
+    }
+    redeemForm.stock_in_ids = [...redeemForm.stock_in_ids, stockInId]
+    redeemForm.quantity = redeemForm.stock_in_ids.length
+    redeemCodeSearch.value = ''
+    redeemForm.clearErrors('stock_in_ids', 'quantity')
+    nextTick(() => redeemCodeInput.value?.focus())
+}
+const removeRedeemUnit = (stockInId) => {
+    redeemForm.stock_in_ids = redeemForm.stock_in_ids.filter(id => Number(id) !== Number(stockInId))
+    redeemForm.quantity = redeemForm.stock_in_ids.length
+    nextTick(() => redeemCodeInput.value?.focus())
+}
+const scanRedeemCode = () => {
+    const rawCode = String(redeemCodeSearch.value || '').trim()
+    if (!rawCode) return
+
+    const normalized = normalizeRedeemCode(rawCode)
+    const embeddedBarcode = rawCode.match(/Barcode:\s*([^\\\r\n]+)/i)?.[1]?.trim()
+    const exactUnit = redeemUnitOptions.value.find(unit =>
+        [unit.serial_no, unit.barcode, unit.qrcode]
+            .some(value => normalizeRedeemCode(value) === normalized)
+        || (embeddedBarcode && normalizeRedeemCode(unit.barcode) === normalizeRedeemCode(embeddedBarcode))
+    )
+
+    if (exactUnit) {
+        addRedeemUnit(exactUnit)
+        return
+    }
+    if (filteredRedeemUnits.value.length === 1) {
+        addRedeemUnit(filteredRedeemUnits.value[0])
+        return
+    }
+
+    addToast(filteredRedeemUnits.value.length > 1
+        ? 'Multiple codes match. Continue scanning or choose the correct result.'
+        : 'Barcode/QR code not found in available stock at this location.', 'error')
+}
 const submitRedeem = () => {
     redeemForm.post(route('stamps.cards.redeem', redeemModal.card.id), { preserveScroll: true, preserveState: true, onSuccess: () => { redeemModal.open = false; redeemForm.reset() } })
 }
@@ -752,18 +841,28 @@ const submitRedeem = () => {
                             <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Reward Item</th>
                             <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Location</th>
                             <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Qty</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Barcode / QR Code</th>
                             <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Total Purchase</th>
                             <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">By</th>
                         </tr>
                     </template>
                     <template #body="{ data }">
-                        <tr v-for="r in data" :key="r.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <tr v-for="r in data" :id="`redemption-${r.id}`" :key="r.id" class="hover:bg-gray-50 target:bg-amber-50 dark:hover:bg-gray-700 dark:target:bg-amber-900/20">
                             <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{{ formatDateTime(r.created_at) }}</td>
                             <td class="px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{{ r.customer?.name || '—' }}</td>
                             <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{{ r.program?.name || '—' }}</td>
                             <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{{ assetLabel(r.asset) }}</td>
                             <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{{ r.location }}</td>
                             <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{{ r.quantity }}</td>
+                            <td class="px-6 py-3 text-xs text-gray-600 dark:text-gray-300">
+                                <div v-if="r.units?.length" class="space-y-1">
+                                    <div v-for="unit in r.units" :key="unit.id" class="font-mono">
+                                        <div v-if="unit.barcode"><span class="font-semibold">Barcode:</span> {{ unit.barcode }}</div>
+                                        <div v-if="unit.qrcode" class="max-w-xs truncate" :title="unit.qrcode"><span class="font-semibold">QR:</span> {{ unit.qrcode }}</div>
+                                    </div>
+                                </div>
+                                <span v-else class="text-gray-400">Legacy quantity-only record</span>
+                            </td>
                             <td class="px-6 py-3 text-sm font-medium text-gray-700 whitespace-nowrap dark:text-gray-300">₱{{ formatAmount(r.total_purchase_amount) }}</td>
                             <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{{ r.creator?.name || '—' }}</td>
                         </tr>
@@ -1086,13 +1185,60 @@ const submitRedeem = () => {
                     <p v-if="redeemForm.errors.location" class="text-xs text-red-600 mt-1">{{ redeemForm.errors.location }}</p>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Reward item (consumable) <span class="text-red-500">*</span></label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Reward item <span class="text-red-500">*</span></label>
                     <Autocomplete v-model="redeemForm.asset_id" :options="assetOptions" :placeholder="loadingAssets ? 'Loading…' : (redeemForm.location ? 'Select item…' : 'Pick a location first')" :disabled="!redeemForm.location || loadingAssets" />
                     <p v-if="redeemForm.errors.asset_id" class="text-xs text-red-600 mt-1">{{ redeemForm.errors.asset_id }}</p>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Quantity <span class="text-red-500">*</span></label>
-                    <input v-model.number="redeemForm.quantity" type="number" min="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:border-gray-600" />
+                    <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Specific barcode / QR code <span class="text-red-500">*</span></label>
+                    <div v-if="loadingRedeemUnits" class="rounded-lg border border-gray-200 px-3 py-4 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-300">Loading available codes…</div>
+                    <template v-else-if="redeemUnitOptions.length">
+                        <div class="flex gap-2">
+                            <input
+                                ref="redeemCodeInput"
+                                v-model="redeemCodeSearch"
+                                type="search"
+                                autocomplete="off"
+                                placeholder="Scan barcode / QR code, then press Enter"
+                                class="min-w-0 flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-amber-500 focus:border-amber-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                                @keydown.enter.prevent="scanRedeemCode"
+                            />
+                            <button type="button" @click="scanRedeemCode" class="px-4 py-2 text-sm font-semibold rounded-lg bg-gray-800 text-white hover:bg-gray-900 dark:bg-gray-600 dark:hover:bg-gray-500">Add</button>
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Keep scanning to select multiple units. Each successful scan is added automatically.</p>
+
+                        <div v-if="redeemCodeSearch" class="mt-2 max-h-44 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100 dark:border-gray-700 dark:divide-gray-700">
+                            <button
+                                v-for="unit in filteredRedeemUnits"
+                                :key="unit.stock_in_id"
+                                type="button"
+                                class="block w-full p-3 text-left hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                @click="addRedeemUnit(unit)"
+                            >
+                                <span v-if="unit.serial_no" class="block text-xs text-gray-600 dark:text-gray-300"><strong>Serial:</strong> {{ unit.serial_no }}</span>
+                                <span v-if="unit.barcode" class="block text-xs font-mono break-all text-gray-800 dark:text-gray-100"><strong>Barcode:</strong> {{ unit.barcode }}</span>
+                                <span v-if="unit.qrcode" class="block text-xs font-mono truncate text-gray-500 dark:text-gray-400" :title="unit.qrcode"><strong>QR:</strong> {{ unit.qrcode }}</span>
+                            </button>
+                            <div v-if="!filteredRedeemUnits.length" class="p-3 text-sm text-gray-400">No available code matches this search.</div>
+                        </div>
+
+                        <div v-if="selectedRedeemUnits.length" class="mt-3 space-y-2">
+                            <p class="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-300">Scanned units</p>
+                            <div v-for="unit in selectedRedeemUnits" :key="unit.stock_in_id" class="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-700 dark:bg-emerald-900/20">
+                                <span class="min-w-0 flex-1 text-xs text-gray-700 dark:text-gray-300">
+                                    <span v-if="unit.serial_no" class="block"><strong>Serial:</strong> {{ unit.serial_no }}</span>
+                                    <span v-if="unit.barcode" class="block font-mono break-all"><strong>Barcode:</strong> {{ unit.barcode }}</span>
+                                    <span v-if="unit.qrcode" class="block font-mono truncate" :title="unit.qrcode"><strong>QR:</strong> {{ unit.qrcode }}</span>
+                                </span>
+                                <button type="button" class="shrink-0 text-xs font-semibold text-red-600 hover:text-red-800" @click="removeRedeemUnit(unit.stock_in_id)">Remove</button>
+                            </div>
+                        </div>
+                    </template>
+                    <div v-else class="rounded-lg border border-dashed border-gray-200 px-3 py-4 text-sm text-gray-400 dark:border-gray-700">
+                        {{ redeemForm.asset_id ? 'No coded stock units available.' : 'Select a reward item first.' }}
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Selected quantity: {{ redeemForm.quantity }}</p>
+                    <p v-if="redeemForm.errors.stock_in_ids" class="text-xs text-red-600 mt-1">{{ redeemForm.errors.stock_in_ids }}</p>
                     <p v-if="redeemForm.errors.quantity" class="text-xs text-red-600 mt-1">{{ redeemForm.errors.quantity }}</p>
                 </div>
                 <div>
@@ -1101,7 +1247,7 @@ const submitRedeem = () => {
                 </div>
                 <div class="flex justify-end gap-2 pt-2">
                     <button @click="redeemModal.open = false" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
-                    <button @click="submitRedeem" :disabled="redeemForm.processing || !redeemForm.asset_id" class="px-4 py-2 text-sm rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50">Redeem</button>
+                    <button @click="submitRedeem" :disabled="redeemForm.processing || !redeemForm.asset_id || !redeemForm.stock_in_ids.length" class="px-4 py-2 text-sm rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50">Redeem</button>
                 </div>
             </div>
         </Modal>

@@ -12,7 +12,9 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Milon\Barcode\DNS1D;
@@ -772,9 +774,14 @@ class StockInController extends Controller
             ->whereNotNull('barcode')
             ->get()
             ->map(function (StockIn $item) use ($barcode) {
+                $png = $barcode->getBarcodePNG($item->barcode, 'C128', 2, 58);
+
                 return [
                     'item' => $item,
-                    'image' => $barcode->getBarcodePNG($item->barcode, 'C128', 2, 58),
+                    'image' => $this->temporaryCodeImage(
+                        $png ? $this->opaquePng($png) : $barcode->getBarcodeSVG($item->barcode, 'C128', 2, 58, 'black', false, true),
+                        $png ? 'png' : 'svg'
+                    ),
                 ];
             });
 
@@ -782,10 +789,11 @@ class StockInController extends Controller
             return 'No barcodes generated for this stock group.';
         }
 
-        $pdf = Pdf::loadView('pdf.stock-in-barcodes', compact('items'))
-            ->setPaper('a4', 'portrait');
-
-        return $pdf->stream('barcodes-'.$stockIn->receive_date->format('Y-m-d').'.pdf');
+        return $this->renderCodePdf(
+            'pdf.stock-in-barcodes',
+            $items,
+            'barcodes-'.$stockIn->receive_date->format('Y-m-d').'.pdf'
+        );
     }
 
     public function printQrcodes(StockIn $stockIn)
@@ -795,9 +803,14 @@ class StockInController extends Controller
             ->whereNotNull('qrcode')
             ->get()
             ->map(function (StockIn $item) use ($qrcode) {
+                $png = $qrcode->getBarcodePNG($item->qrcode, 'QRCODE', 4, 4, [0, 0, 0], [255, 255, 255]);
+
                 return [
                     'item' => $item,
-                    'image' => $qrcode->getBarcodePNG($item->qrcode, 'QRCODE', 4, 4, [0, 0, 0], [255, 255, 255]),
+                    'image' => $this->temporaryCodeImage(
+                        $png ? $this->opaquePng($png) : $qrcode->getBarcodeSVG($item->qrcode, 'QRCODE', 4, 4, 'black'),
+                        $png ? 'png' : 'svg'
+                    ),
                 ];
             });
 
@@ -805,10 +818,67 @@ class StockInController extends Controller
             return 'No QR codes generated for this stock group.';
         }
 
-        $pdf = Pdf::loadView('pdf.stock-in-qrcodes', compact('items'))
-            ->setPaper('a4', 'portrait');
+        return $this->renderCodePdf(
+            'pdf.stock-in-qrcodes',
+            $items,
+            'qrcodes-'.$stockIn->receive_date->format('Y-m-d').'.pdf'
+        );
+    }
 
-        return $pdf->stream('qrcodes-'.$stockIn->receive_date->format('Y-m-d').'.pdf');
+    private function opaquePng(string $base64Png): string|false
+    {
+        $source = imagecreatefromstring(base64_decode($base64Png, true) ?: '');
+        if ($source === false) {
+            return false;
+        }
+
+        $image = imagecreatetruecolor(imagesx($source), imagesy($source));
+        $white = imagecolorallocate($image, 255, 255, 255);
+        imagefill($image, 0, 0, $white);
+        imagecopy($image, $source, 0, 0, 0, 0, imagesx($source), imagesy($source));
+
+        ob_start();
+        imagepng($image);
+        $png = ob_get_clean();
+
+        imagedestroy($source);
+        imagedestroy($image);
+
+        return $png;
+    }
+
+    private function temporaryCodeImage(string|false $contents, string $extension): ?string
+    {
+        if ($contents === false || $contents === '') {
+            return null;
+        }
+
+        $directory = storage_path('app/tmp/stock-in-codes');
+        File::ensureDirectoryExists($directory);
+
+        $path = $directory.DIRECTORY_SEPARATOR.Str::uuid().'.'.$extension;
+        File::put($path, $contents);
+
+        return $path;
+    }
+
+    private function renderCodePdf(string $view, $items, string $filename)
+    {
+        try {
+            $content = Pdf::loadView($view, compact('items'))
+                ->setPaper('a4', 'portrait')
+                ->output();
+        } finally {
+            File::delete($items->pluck('image')->filter()->all());
+        }
+
+        return response($content, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$filename.'"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ]);
     }
 
     protected function validatePostableTransfers($itemsToPost): void

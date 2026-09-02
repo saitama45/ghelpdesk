@@ -58,6 +58,11 @@ class StampRedemption extends Model
         return $this->belongsTo(InventoryTransaction::class);
     }
 
+    public function units()
+    {
+        return $this->hasMany(StampRedemptionUnit::class);
+    }
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');

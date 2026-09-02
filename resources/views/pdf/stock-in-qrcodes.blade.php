@@ -31,16 +31,23 @@
         }
 
         /* Container clears floats */
-        .labels-container {
-            overflow: hidden;
+        .labels-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            table-layout: fixed;
+        }
+
+        .label-cell {
+            width: 33.333%;
+            padding: 0 2mm 3mm 0;
+            vertical-align: top;
+            page-break-inside: avoid;
         }
 
         /* 3 per row: (190mm usable - 2 gaps × 2mm) / 3 ≈ 62mm each */
         .label {
-            float: left;
-            width: 61mm;
             height: 68mm;
-            margin: 0 2mm 3mm 0;
             padding: 2mm;          /* reduced from 4mm → border hugs content */
             border: 1px solid #d1d5db;
             box-sizing: border-box;
@@ -93,33 +100,29 @@
         </div>
     </div>
 
-    <div class="labels-container">
-        @foreach($items as $label)
-            @php($item = $label['item'])
-            <div class="label">
-                <div class="item-code">
-                    {{ $item->asset?->item_code ?: 'No Item Code' }}
-                </div>
-
-                <div class="qr-wrap">
-                    @if($label['image'])
-                        <img class="qr-code" src="data:image/png;base64,{{ $label['image'] }}" alt="QR Code">
-                    @else
-                        <div class="empty-image">QR image unavailable</div>
-                    @endif
-                </div>
-
-                <div class="code">
-                    {{ $item->serial_no ?: $item->barcode ?: 'No serial/barcode' }}
-                </div>
-                <div class="details">
-                    {{ $item->asset?->description ?: $item->asset?->model ?: '-' }}
-                </div>
-                <div class="details">
-                    {{ $item->receive_date?->format('M d, Y') ?: '-' }}
-                </div>
-            </div>
+    <table class="labels-table">
+        @foreach($items->chunk(3) as $row)
+            <tr>
+                @foreach($row as $label)
+                    @php($item = $label['item'])
+                    <td class="label-cell">
+                        <div class="label">
+                            <div class="item-code">{{ $item->asset?->item_code ?: 'No Item Code' }}</div>
+                            <div class="qr-wrap">
+                                @if($label['image'])
+                                    <img class="qr-code" src="{{ $label['image'] }}" alt="QR Code">
+                                @else
+                                    <div class="empty-image">QR image unavailable</div>
+                                @endif
+                            </div>
+                            <div class="code">{{ $item->serial_no ?: $item->barcode ?: 'No serial/barcode' }}</div>
+                            <div class="details">{{ $item->asset?->description ?: $item->asset?->model ?: '-' }}</div>
+                            <div class="details">{{ $item->receive_date?->format('M d, Y') ?: '-' }}</div>
+                        </div>
+                    </td>
+                @endforeach
+            </tr>
         @endforeach
-    </div>
+    </table>
 </body>
 </html>

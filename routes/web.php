@@ -663,6 +663,7 @@ Route::middleware('auth')->group(function () {
     Route::prefix('stamps')->name('stamps.')->group(function () {
         Route::get('/', [\App\Http\Controllers\StampController::class, 'index'])->name('index');
         Route::get('assets-at-location', [\App\Http\Controllers\StampController::class, 'assetsAtLocation'])->name('assets-at-location');
+        Route::get('assets/{asset}/units-at-location', [\App\Http\Controllers\StampController::class, 'unitsAtLocation'])->name('assets.units-at-location');
 
         // Customers
         Route::post('customers', [\App\Http\Controllers\StampController::class, 'storeCustomer'])->name('customers.store');

@@ -4,9 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\Asset;
 use App\Models\Category;
+use App\Models\Company;
 use App\Models\InventoryTransaction;
 use App\Models\StockIn;
 use App\Models\User;
+use App\Support\CompanyContext;
 use Carbon\Carbon;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -108,6 +110,64 @@ class StockInCodeValidationTest extends TestCase
             'barcode' => 'AST-001-1770000000000-1',
             'qrcode' => "Item Code: AST-001\nBarcode: AST-001-1770000000000-1",
         ]);
+    }
+
+    public function test_saved_and_edited_stock_in_prints_barcode_and_qr_graphics(): void
+    {
+        $cbtl = Company::create([
+            'name' => 'CBTL Entity',
+            'code' => 'CBTL',
+            'type' => 'Entity',
+            'is_active' => true,
+        ]);
+        $user = User::factory()->create(['company_id' => $cbtl->id]);
+        $asset = $this->createAsset();
+        $asset->forceFill(['company_id' => $cbtl->id])->save();
+
+        $this->actingAs($user)
+            ->withSession([CompanyContext::SESSION_KEY => $cbtl->id])
+            ->post(route('stock-ins.store'), $this->stockInPayload($asset))
+            ->assertRedirect();
+
+        $stockIn = StockIn::withoutGlobalScopes()->firstOrFail();
+        $this->assertSame($cbtl->id, (int) $stockIn->company_id);
+
+        $this->actingAs($user)
+            ->withSession([CompanyContext::SESSION_KEY => $cbtl->id])
+            ->put(route('stock-ins.update', $stockIn), $this->stockInPayload($asset, [
+                'barcode' => 'EDITED-BARCODE-001',
+                'qrcode' => "Item Code: AST-001\nBarcode: EDITED-BARCODE-001",
+            ], [
+                'header_mode' => true,
+            ]))
+            ->assertRedirect();
+
+        $stockIn->refresh();
+
+        foreach (['stock-ins.print-barcodes', 'stock-ins.print-qrcodes'] as $routeName) {
+            $response = $this->actingAs($user)
+                ->withSession([CompanyContext::SESSION_KEY => $cbtl->id])
+                ->get(route($routeName, $stockIn));
+            $response->assertOk()
+                ->assertHeader('content-type', 'application/pdf')
+                ->assertHeader('cache-control', 'max-age=0, must-revalidate, no-cache, no-store, private');
+
+            $pdf = $response->getContent();
+            $this->assertStringStartsWith('%PDF-', $pdf);
+            $this->assertMatchesRegularExpression('/\/Subtype\s*\/Image/', $pdf);
+            $this->assertStringContainsString('AST-001', $this->decompressedPdfStreams($pdf));
+        }
+    }
+
+    protected function decompressedPdfStreams(string $pdf): string
+    {
+        preg_match_all('/stream\r?\n(.*?)\r?\nendstream/s', $pdf, $matches);
+
+        return collect($matches[1] ?? [])->map(function (string $stream) {
+            $decoded = @gzuncompress($stream);
+
+            return $decoded === false ? '' : $decoded;
+        })->implode("\n");
     }
 
     public function test_posting_stock_in_updates_group_status_and_posting_metadata(): void
