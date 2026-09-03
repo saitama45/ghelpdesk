@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Cache;
 
 class RoleService
 {
-    protected const ACTION_ORDER = ['view', 'operate', 'show', 'create', 'edit', 'execute', 'assign', 'resolve', 'close', 'post', 'delete', 'archive', 'restore', 'submit', 'signoff', 'approve', 'promote', 'export', 'import', 'canned_messages', 'internal_notes'];
+    protected const ACTION_ORDER = ['view', 'operate', 'show', 'create', 'edit', 'execute', 'assign', 'resolve', 'close', 'post', 'delete', 'archive', 'restore', 'submit', 'signoff', 'approve', 'cancel', 'promote', 'export', 'import', 'canned_messages', 'internal_notes'];
 
     /**
      * Get all roles with their permissions

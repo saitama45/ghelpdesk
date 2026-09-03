@@ -675,6 +675,22 @@ Route::middleware('auth')->group(function () {
         Route::put('programs/{program}', [\App\Http\Controllers\StampController::class, 'updateProgram'])->name('programs.update');
         Route::delete('programs/{program}', [\App\Http\Controllers\StampController::class, 'destroyProgram'])->name('programs.destroy');
 
+        // Campaign vouchers (printed codes recognized as an internal payment tender)
+        Route::post('voucher-batches', [\App\Http\Controllers\VoucherController::class, 'storeBatch'])->name('voucher-batches.store');
+        Route::post('voucher-batches/{batch}', [\App\Http\Controllers\VoucherController::class, 'updateBatch'])->name('voucher-batches.update');
+        Route::post('voucher-batches/{batch}/claim-period', [\App\Http\Controllers\VoucherController::class, 'updateClaimPeriod'])->name('voucher-batches.claim-period');
+        Route::post('voucher-batches/{batch}/activate', [\App\Http\Controllers\VoucherController::class, 'activate'])->name('voucher-batches.activate');
+        Route::post('voucher-batches/{batch}/suspend', [\App\Http\Controllers\VoucherController::class, 'suspend'])->name('voucher-batches.suspend');
+        Route::post('voucher-batches/{batch}/resume', [\App\Http\Controllers\VoucherController::class, 'resume'])->name('voucher-batches.resume');
+        Route::post('voucher-batches/{batch}/cancel', [\App\Http\Controllers\VoucherController::class, 'cancelBatch'])->name('voucher-batches.cancel');
+        Route::post('voucher-batches/{batch}/pdf', [\App\Http\Controllers\VoucherController::class, 'requestPdf'])->name('voucher-batches.pdf');
+        Route::get('voucher-batches/{batch}/pdf', [\App\Http\Controllers\VoucherController::class, 'downloadPdf'])->name('voucher-batches.pdf.download');
+        Route::post('vouchers/verify', [\App\Http\Controllers\VoucherController::class, 'verify'])->name('vouchers.verify');
+        Route::post('vouchers/redeem', [\App\Http\Controllers\VoucherController::class, 'redeem'])->name('vouchers.redeem');
+        Route::post('vouchers/{voucher}/void', [\App\Http\Controllers\VoucherController::class, 'voidVoucher'])->name('vouchers.void');
+        Route::post('voucher-redemptions/{redemption}/void', [\App\Http\Controllers\VoucherController::class, 'voidRedemption'])->name('voucher-redemptions.void');
+        Route::get('voucher-redemptions/export', [\App\Http\Controllers\VoucherController::class, 'exportRedemptions'])->name('voucher-redemptions.export');
+
         // Scan Customer (member QR → auto-fill; only Program is picked manually)
         Route::post('scan/resolve', [\App\Http\Controllers\StampController::class, 'resolveScan'])->name('scan.resolve');
         Route::post('scan/add-stamp', [\App\Http\Controllers\StampController::class, 'scanAddStamp'])->name('scan.add-stamp');

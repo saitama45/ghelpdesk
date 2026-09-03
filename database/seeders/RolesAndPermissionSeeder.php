@@ -140,6 +140,9 @@ class RolesAndPermissionSeeder extends Seeder
             'stamps.edit' => 'Edit customers & stamp programs',
             'stamps.delete' => 'Delete customers, programs & cards',
             'stamps.redeem' => 'Redeem completed cards (deducts inventory)',
+            'stamps.approve' => 'Activate and suspend campaign voucher batches',
+            'stamps.cancel' => 'Cancel batches and void vouchers or voucher payments',
+            'stamps.export' => 'Generate voucher PDFs and export voucher payments',
 
             // Stock In
             'stock_ins.view' => 'View Stock In',
@@ -403,6 +406,7 @@ class RolesAndPermissionSeeder extends Seeder
             'stamps.create',
             'stamps.edit',
             'stamps.redeem',
+            'stamps.export',
             'alaga.view',
             'alaga.create',
             'alaga.edit',

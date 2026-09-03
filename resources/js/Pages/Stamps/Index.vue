@@ -10,6 +10,7 @@ import { QrCodeIcon } from '@heroicons/vue/24/outline'
 import { useConfirm } from '@/Composables/useConfirm.js'
 import { useToast } from '@/Composables/useToast.js'
 import { usePermission } from '@/Composables/usePermission.js'
+import VoucherWorkspace from './VoucherWorkspace.vue'
 
 const props = defineProps({
     tab: { type: String, default: 'dashboard' },
@@ -20,6 +21,9 @@ const props = defineProps({
     stores: { type: Array, default: () => [] },
     companies: { type: Array, default: () => [] },
     summary: { type: Object, default: () => ({}) },
+    voucherBatches: { type: Array, default: () => [] },
+    voucherRedemptions: { type: Array, default: () => [] },
+    voucherSummary: { type: Object, default: () => ({}) },
 })
 
 const { confirm } = useConfirm()
@@ -32,6 +36,7 @@ const tabList = [
     { id: 'redemptions', label: 'Redemptions' },
     { id: 'customers', label: 'Customers' },
     { id: 'programs', label: 'Programs' },
+    { id: 'vouchers', label: 'Vouchers' },
 ]
 
 /* ------------------------------------------------------------------ *
@@ -683,6 +688,15 @@ const submitRedeem = () => {
                         </tr>
                     </template>
                 </DataTable>
+
+                <VoucherWorkspace
+                    v-if="currentTab === 'vouchers'"
+                    :batches="voucherBatches"
+                    :redemptions="voucherRedemptions"
+                    :customers="customers"
+                    :stores="stores"
+                    :summary="voucherSummary"
+                />
 
                 <!-- PROGRAMS -->
                 <DataTable

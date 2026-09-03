@@ -64,6 +64,7 @@ class CompanyContext
         'activity_templates',
         'customers',
         'stamp_programs',
+        'voucher_batches',
         'stock_ins',
         'stock_transfers',
         'stock_receivings',
@@ -106,6 +107,7 @@ class CompanyContext
         \App\Models\WigsPcf::class,
         \App\Models\Quest::class,
         \App\Models\StampProgram::class,
+        \App\Models\VoucherBatch::class,
         \App\Models\FormRecord::class,
         \App\Models\TaskCard::class,
     ];

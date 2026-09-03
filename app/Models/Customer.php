@@ -40,6 +40,11 @@ class Customer extends Model
         return $this->hasMany(StampRedemption::class);
     }
 
+    public function voucherRedemptions()
+    {
+        return $this->hasMany(VoucherRedemption::class);
+    }
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');

@@ -107,6 +107,7 @@ class StampController extends Controller implements HasMiddleware
                 'redeemed_cards' => StampCard::where('status', 'redeemed')->when($activeCompanyId, $forActiveEntity('store'))->count(),
                 'total_amount' => StampEntry::when($activeCompanyId, $forActiveEntity('store'))->sum('purchase_amount'),
             ],
+            ...VoucherController::indexProps($activeCompanyId),
         ]);
     }
 
