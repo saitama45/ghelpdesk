@@ -139,8 +139,14 @@ class ProjectController extends Controller
                 fn () => $this->progressChart->options($dashTypes)
             ),
             'statusOptions' => $statusOptions,
-            'storeOptions' => Store::orderBy('name')->get(['id', 'name'])
-                ->map(fn (Store $store) => ['label' => $store->name, 'value' => $store->id]),
+            // Labelled "CODE — Name" so the filter can be searched by store code,
+            // which is how stores are referred to day to day. Stores without a
+            // code fall back to the name alone rather than a leading dash.
+            'storeOptions' => Store::orderBy('name')->get(['id', 'code', 'name'])
+                ->map(fn (Store $store) => [
+                    'label' => $store->code ? "{$store->code} — {$store->name}" : $store->name,
+                    'value' => $store->id,
+                ]),
         ]);
     }
 

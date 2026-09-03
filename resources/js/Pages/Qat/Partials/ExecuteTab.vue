@@ -139,7 +139,7 @@ const rowRefs = {}
 const FILTERS = [
     { label: 'All cases', value: 'all' },
     { label: 'Not yet answered', value: 'pending' },
-    { label: 'Failed or blocked', value: 'problem' },
+    { label: 'Failed', value: 'problem' },
     { label: 'Critical only', value: 'critical' },
 ]
 
@@ -158,6 +158,7 @@ const current = (caseId) => {
 
 const visible = computed(() => {
     if (filter.value === 'pending') return props.cases.filter(c => current(c.id) === 'pending')
+    // 'blocked' is retired as a verdict but still catches cycles recorded before that.
     if (filter.value === 'problem') return props.cases.filter(c => ['failed', 'blocked'].includes(current(c.id)))
     if (filter.value === 'critical') return props.cases.filter(c => c.is_critical)
     return props.cases

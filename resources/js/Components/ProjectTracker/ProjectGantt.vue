@@ -28,6 +28,7 @@ import { useConfirm } from '@/Composables/useConfirm.js';
 import { usePermission } from '@/Composables/usePermission.js';
 import { canonicalDepartment, sameDepartment, uniqueDepartmentNames } from '@/Composables/useDepartmentNames.js';
 import Modal from '@/Components/Modal.vue';
+import ProjectTaskFormModal from './ProjectTaskFormModal.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
@@ -157,8 +158,6 @@ const canStartMilestone = computed(() => props.canManage || props.canAddMileston
 
 // Retyping the Milestone field on an open row renames it / moves the row, so it
 // is only writable for someone who runs that milestone.
-const canRenameActiveMilestone = computed(() => canManageMilestone(activeMilestone.value));
-
 // Which milestones this viewer runs — used for the read-only banner's wording.
 const myMilestones = computed(() => {
     if (props.canManage || props.currentUserId == null) return [];
@@ -170,12 +169,6 @@ const myMilestones = computed(() => {
 const { success, info, error } = useToast();
 const { confirm: confirmAction } = useConfirm();
 const { hasPermission } = usePermission();
-const isAddingTask = ref(false);
-const isEditing = ref(false);
-const editingTaskId = ref(null);
-const formMode = ref('activity');
-const activeParentTask = ref(null);
-const activeMilestone = ref('');
 const showFilters = ref(false);
 const showDepartmentSummary = ref(false);
 const isApplyingTemplates = ref(false);
@@ -183,7 +176,6 @@ const showTemplateModal = ref(false);
 const selectedTemplateId = ref('');
 const selectedStoreIds = ref([]);
 const localTasks = ref([]);
-const isSavingTask = ref(false);
 const draggedTaskId = ref(null);
 const dragOverTaskId = ref(null);
 const draggedMilestone = ref(null);
@@ -337,34 +329,6 @@ const ensureTaskListBoards = async () => {
 // Refs for scroll syncing (Simplified to single container)
 const mainWorkspaceRef = ref(null);
 
-const form = useForm({
-    project_id: props.project.id,
-    parent_task_id: null,
-    name: '',
-    category: '',
-    assigned_to: '',
-    status: 'Pending',
-    manual_status: '',
-    task_progress: 0,
-    start_date: '',
-    end_date: '',
-    lead_time_days: 1,
-    depends_on_task_id: null,
-    can_run_parallel: false,
-    milestone_order: null,
-    order: null,
-    unpin_start: false,
-});
-
-// Progress entry defaults to a simple Done/Not-done toggle; user can switch to
-// typing an exact percentage. isTaskDone reads/writes form.task_progress so a
-// value the user never touches (e.g. an existing 45%) is left untouched.
-const progressMode = ref('done');
-const isTaskDone = computed({
-    get: () => Number(form.task_progress) >= 100,
-    set: (done) => { form.task_progress = done ? 100 : 0; },
-});
-
 // Day maths, mirroring App\Services\ScheduleCalculator: a lead time of N days is
 // N days *after* the start date. In 'working' mode no row starts or ends on a
 // weekend or a non-working holiday; in 'calendar' mode every day counts.
@@ -377,18 +341,6 @@ const toWorkingDay = (date) => {
     while (isNonWorkingDay(shifted)) shifted.setDate(shifted.getDate() + 1);
     return shifted;
 };
-
-const addWorkingDays = (date, days) => {
-    const cursor = toWorkingDay(date);
-    for (let i = 0; i < days; i++) {
-        do { cursor.setDate(cursor.getDate() + 1); } while (isNonWorkingDay(cursor));
-    }
-    return cursor;
-};
-
-// End of a span beginning on `date`, with `date` itself counted as day 1:
-// Finish = Start + Lead Time - 1. Mirrors ScheduleCalculator::endOfSpan().
-const endOfSpan = (date, days) => addWorkingDays(date, Math.max(1, days) - 1);
 
 // Days covered by `start`..`end` inclusive, counted in the project's own day
 // mode. Mirrors ScheduleCalculator::daysBetween().
@@ -408,17 +360,6 @@ const toDateInput = (date) => {
     const pad = (n) => String(n).padStart(2, '0');
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 };
-
-// Sync status with progress in the form
-watch(() => form.task_progress, (newProgress) => {
-    if (newProgress >= 100) {
-        form.status = 'Done';
-    } else if (newProgress > 0) {
-        form.status = 'Ongoing';
-    } else {
-        form.status = 'Pending';
-    }
-});
 
 const sortTasks = (tasks = []) => {
     return [...tasks].sort((a, b) => {
@@ -616,27 +557,6 @@ watch(selectedTemplateId, () => {
     selectedStoreIds.value = templateNeedsStores.value ? [...existingRolloutStoreIds.value] : [];
 });
 
-const resetTaskForm = () => {
-    form.reset();
-    form.project_id = props.project.id;
-    form.parent_task_id = null;
-    form.name = '';
-    form.category = '';
-    form.assigned_to = '';
-    form.status = 'Pending';
-    form.manual_status = '';
-    form.task_progress = 0;
-    form.start_date = '';
-    form.end_date = '';
-    form.lead_time_days = 1;
-    form.depends_on_task_id = null;
-    form.can_run_parallel = false;
-    form.milestone_order = null;
-    form.order = null;
-    form.unpin_start = false;
-    progressMode.value = 'done';
-};
-
 const confirmApplyTemplate = async () => {
     if (!selectedTemplateId.value) {
         error('Please select a template first.');
@@ -698,53 +618,6 @@ const confirmApplyTemplate = async () => {
     }
 };
 
-const saveTask = async () => {
-    if (isSavingTask.value) return;
-
-    const syncOk = await ensureTaskListBoards();
-    if (!syncOk) return;
-
-    const wasEditing = isEditing.value;
-    const savedKind = formMode.value === 'milestone'
-        ? 'Milestone'
-        : (formMode.value === 'subtask' ? 'Sub-task' : 'Activity');
-    const payload = {
-        ...form.data(),
-        parent_task_id: form.parent_task_id || null,
-        progress: form.task_progress,
-        auto_create_monthly_boards: true,
-    };
-
-    form.clearErrors();
-    isSavingTask.value = true;
-
-    try {
-        const response = wasEditing
-            ? await window.axios.put(route('projects-tasks.update', editingTaskId.value), payload)
-            : await window.axios.post(route('projects-tasks.store'), payload);
-
-        localTasks.value = sortTasks(response.data.tasks || localTasks.value);
-        localMilestones.value = response.data.milestones || localMilestones.value;
-        isAddingTask.value = false;
-        isEditing.value = false;
-        editingTaskId.value = null;
-        formMode.value = 'activity';
-        activeParentTask.value = null;
-        activeMilestone.value = '';
-        resetTaskForm();
-        success(`${savedKind} ${wasEditing ? 'updated' : 'added'} successfully.`);
-    } catch (exception) {
-        const errors = exception?.response?.data?.errors || {};
-        if (Object.keys(errors).length) form.setError(errors);
-
-        error(Object.values(errors).flat().find(Boolean)
-            || exception?.response?.data?.message
-            || `Unable to save ${savedKind.toLowerCase()}.`);
-    } finally {
-        isSavingTask.value = false;
-    }
-};
-
 const getNextOrder = (category, parentTaskId = null) => {
     const normalizedParentId = parentTaskId ? Number(parentTaskId) : null;
     const siblings = localTasks.value.filter(task => {
@@ -780,79 +653,66 @@ const getNextMilestoneOrder = () => {
     return orders.length ? Math.max(...orders) + 1 : 1;
 };
 
+const taskFormModal = ref(null);
+
+// The four entry points into the shared form. Each one only works out where the
+// new row belongs — the modal owns every field, rule and save from there.
 const openMilestoneForm = () => {
     if (!canStartMilestone.value) return;
-    isEditing.value = false;
-    editingTaskId.value = null;
-    formMode.value = 'milestone';
-    activeParentTask.value = null;
-    activeMilestone.value = '';
-    resetTaskForm();
-    form.milestone_order = getNextMilestoneOrder();
-    form.order = getNextOrder('', null);
-    isAddingTask.value = true;
+
+    taskFormModal.value?.open({
+        mode: 'milestone',
+        defaults: { milestone_order: getNextMilestoneOrder(), order: getNextOrder('', null) },
+    });
 };
 
 const openActivityForm = (category) => {
     if (!canAddActivityIn(category)) return;
-    isEditing.value = false;
-    editingTaskId.value = null;
-    formMode.value = 'activity';
-    activeParentTask.value = null;
-    activeMilestone.value = category || 'General';
-    resetTaskForm();
-    form.category = category || 'General';
-    form.milestone_order = milestoneOrderFor(form.category);
-    form.order = getNextOrder(form.category, null);
-    isAddingTask.value = true;
+
+    const milestone = category || 'General';
+
+    taskFormModal.value?.open({
+        mode: 'activity',
+        milestone,
+        defaults: { milestone_order: milestoneOrderFor(milestone), order: getNextOrder(milestone, null) },
+    });
 };
 
 const openSubTaskForm = (task) => {
     if (!canAddSubTaskTo(task)) return;
-    isEditing.value = false;
-    editingTaskId.value = null;
-    formMode.value = 'subtask';
-    activeParentTask.value = task;
-    activeMilestone.value = task.category || 'General';
-    resetTaskForm();
-    form.parent_task_id = task.id;
-    form.category = task.category || 'General';
-    form.milestone_order = task.milestone_order ?? milestoneOrderFor(form.category);
-    form.assigned_to = task.assigned_to || task.external_assignment || '';
-    form.start_date = task.start_date ? task.start_date.split('T')[0] : '';
-    form.end_date = task.end_date ? task.end_date.split('T')[0] : '';
-    form.order = getNextOrder(form.category, task.id);
-    isAddingTask.value = true;
+
+    const milestone = task.category || 'General';
+
+    taskFormModal.value?.open({
+        mode: 'subtask',
+        parentTask: task,
+        milestone,
+        defaults: {
+            milestone_order: task.milestone_order ?? milestoneOrderFor(milestone),
+            order: getNextOrder(milestone, task.id),
+        },
+    });
 };
 
 const editTask = (task) => {
     if (!canEditTask(task)) return;
-    isEditing.value = true;
-    editingTaskId.value = task.id;
-    formMode.value = task.parent_task_id ? 'subtask' : 'activity';
-    activeParentTask.value = task.parent_task_id
-        ? localTasks.value.find(candidate => Number(candidate.id) === Number(task.parent_task_id)) || null
-        : null;
-    activeMilestone.value = task.category || 'General';
-    isAddingTask.value = true;
-    
-    form.project_id = props.project.id;
-    form.parent_task_id = task.parent_task_id || null;
-    form.name = task.name;
-    form.category = task.category;
-    form.milestone_order = task.milestone_order;
-    form.assigned_to = task.assigned_to || task.external_assignment || '';
-    form.status = task.status;
-    form.manual_status = task.manual_status || '';
-    form.task_progress = task.progress;
-    form.start_date = task.start_date ? task.start_date.split('T')[0] : '';
-    form.end_date = task.end_date ? task.end_date.split('T')[0] : '';
-    form.lead_time_days = task.lead_time_days || 1;
-    form.depends_on_task_id = task.depends_on_task_id || null;
-    form.can_run_parallel = Boolean(task.can_run_parallel);
-    form.order = task.order;
-    form.unpin_start = false;
-    progressMode.value = 'done';
+
+    taskFormModal.value?.open({
+        mode: task.parent_task_id ? 'subtask' : 'activity',
+        task,
+        parentTask: task.parent_task_id
+            ? localTasks.value.find(candidate => Number(candidate.id) === Number(task.parent_task_id)) || null
+            : null,
+        milestone: task.category || 'General',
+        canRenameMilestone: canManageMilestone(task.category || 'General'),
+    });
+};
+
+// The server hands back the whole plan after every save, so the chart re-reads
+// it rather than patching a single row.
+const onTaskSaved = ({ tasks, milestones }) => {
+    localTasks.value = sortTasks(tasks || localTasks.value);
+    localMilestones.value = milestones || localMilestones.value;
 };
 
 const updateTaskField = async (task, field, value) => {
@@ -978,18 +838,6 @@ const saveMilestoneOwner = () => {
     });
 };
 
-const closeForm = () => {
-    if (isSavingTask.value) return;
-
-    isAddingTask.value = false;
-    isEditing.value = false;
-    editingTaskId.value = null;
-    formMode.value = 'activity';
-    activeParentTask.value = null;
-    activeMilestone.value = '';
-    resetTaskForm();
-};
-
 const parseLocalDate = (dateString) => {
     if (!dateString) return null;
     const datePart = dateString.split('T')[0];
@@ -1052,15 +900,24 @@ const timelineBounds = computed(() => {
     let minDate = null;
     let maxDate = null;
 
-    props.project.tasks.forEach(task => {
-        if (task.start_date) {
-            const s = parseLocalDate(task.start_date);
+    // Actual dates are folded in as well: work that started before the plan, or
+    // overran it, would otherwise be drawn outside the timeline and vanish.
+    // localTasks is the live copy, so a freshly stamped date widens the chart
+    // without a page reload.
+    const sourceTasks = localTasks.value.length ? localTasks.value : props.project.tasks;
+
+    sourceTasks.forEach(task => {
+        [task.start_date, task.actual_start_date].forEach(value => {
+            if (!value) return;
+            const s = parseLocalDate(value);
             if (!minDate || s < minDate) minDate = s;
-        }
-        if (task.end_date) {
-            const e = parseLocalDate(task.end_date);
+        });
+
+        [task.end_date, task.actual_end_date].forEach(value => {
+            if (!value) return;
+            const e = parseLocalDate(value);
             if (!maxDate || e > maxDate) maxDate = e;
-        }
+        });
     });
 
     if (minDate) minDate.setDate(minDate.getDate() - 5);
@@ -1097,76 +954,92 @@ const getGanttBarStyles = (task) => {
     if (endIndex === -1) endIndex = startIndex;
 
     return {
+        // Row 1 explicitly: grid auto-placement would drop the actual bar onto
+        // an implicit second row wherever the two spans share a column, which
+        // is exactly where they must overlap.
+        gridRowStart: 1,
         gridColumnStart: startIndex + 1,
         gridColumnEnd: endIndex + 2
     };
 };
 
-// Planned vs actual. The baseline (original_start_date/original_end_date) is
-// captured once, the first time a row is scheduled, and is never rewritten by a
-// reschedule — so when a row moves, the two bars separate and the slip is
-// visible. A row still sitting on its baseline draws one bar, not two.
-const showBaseline = ref(true);
+// Planned vs actual. The plan is the solid bar; the Actual layer below is laid
+// over it, from the dates the work really ran. The toggle in the toolbar hides
+// the actual layer for a clean read of the schedule alone.
+const showActual = ref(true);
 
-const baselineSpan = (task) => {
-    if (!task?.original_start_date || !task?.original_end_date) return null;
+// The Actual layer. Unlike the old progress fill — which was painted inside the
+// planned bar and so always began on the planned start — this is a span of its
+// own, drawn from the dates the work really ran. That is what lets it sit to the
+// LEFT of the plan when a row started early, or overhang it when it ran late.
+//
+// A row that has started but not finished has no end date yet, so the bar runs
+// to today and is drawn open-ended.
+const actualSpan = (task) => {
+    if (!task?.actual_start_date) return null;
 
-    const start = String(task.original_start_date).split('T')[0];
-    const end = String(task.original_end_date).split('T')[0];
-    const current = {
-        start: task.start_date ? String(task.start_date).split('T')[0] : null,
-        end: task.end_date ? String(task.end_date).split('T')[0] : null,
+    const start = String(task.actual_start_date).split('T')[0];
+    const finished = task.actual_end_date ? String(task.actual_end_date).split('T')[0] : null;
+    const end = finished || toDateInput(new Date());
+
+    // A same-day stamp still deserves a visible bar.
+    return {
+        start,
+        end: end < start ? start : end,
+        inProgress: !finished,
     };
-
-    if (start === current.start && end === current.end) return null;
-
-    return { start, end };
 };
 
-const hasBaselineDrift = (task) => showBaseline.value && baselineSpan(task) !== null;
+const hasActualBar = (task) => showActual.value && actualSpan(task) !== null;
 
-const getBaselineBarStyles = (task) => {
-    const span = baselineSpan(task);
+const getActualBarStyles = (task) => {
+    const span = actualSpan(task);
     if (!span) return { display: 'none' };
 
     const start = parseLocalDate(span.start);
     const end = parseLocalDate(span.end);
 
-    const startIndex = timelineDays.value.findIndex(d => d.toDateString() === start.toDateString());
-    let endIndex = timelineDays.value.findIndex(d => d.toDateString() === end.toDateString());
+    // Clamp to the rendered timeline rather than dropping the bar: a span that
+    // runs off either edge should still show the part that fits.
+    const days = timelineDays.value;
+    if (!days.length) return { display: 'none' };
+
+    const firstDay = days[0];
+    const lastDay = days[days.length - 1];
+    if (end < firstDay || start > lastDay) return { display: 'none' };
+
+    const indexOf = (date) => days.findIndex(day => day.toDateString() === date.toDateString());
+    const startIndex = start < firstDay ? 0 : indexOf(start);
+    const rawEndIndex = end > lastDay ? days.length - 1 : indexOf(end);
 
     if (startIndex === -1) return { display: 'none' };
-    if (endIndex === -1) endIndex = startIndex;
 
     return {
+        gridRowStart: 1,
         gridColumnStart: startIndex + 1,
-        gridColumnEnd: endIndex + 2,
+        gridColumnEnd: (rawEndIndex === -1 ? startIndex : rawEndIndex) + 2,
     };
 };
 
-// How far the row moved off its baseline, in calendar days, for the tooltip.
-const baselineDriftDays = (task) => {
-    const span = baselineSpan(task);
-    if (!span || !task.end_date) return 0;
-
-    const planned = parseLocalDate(span.end);
-    const actual = parseLocalDate(String(task.end_date).split('T')[0]);
-
-    return Math.round((actual - planned) / 86400000);
-};
-
-const baselineTooltip = (task) => {
-    const span = baselineSpan(task);
+// How the actual start compares with the planned start, for the tooltip — the
+// number the chart exists to show.
+const actualTooltip = (task) => {
+    const span = actualSpan(task);
     if (!span) return '';
 
-    const drift = baselineDriftDays(task);
-    const slip = drift > 0
-        ? `${drift} day${drift === 1 ? '' : 's'} later than planned`
-        : drift < 0
-            ? `${Math.abs(drift)} day${Math.abs(drift) === 1 ? '' : 's'} earlier than planned`
-            : 'same finish as planned';
+    const finish = span.inProgress ? 'in progress' : span.end;
+    const plannedStart = task.start_date ? String(task.start_date).split('T')[0] : null;
 
-    return `Planned: ${span.start} to ${span.end} — ${slip}`;
+    if (!plannedStart) return `Actual: ${span.start} to ${finish}`;
+
+    const drift = Math.round((parseLocalDate(span.start) - parseLocalDate(plannedStart)) / 86400000);
+    const timing = drift > 0
+        ? `started ${drift} day${drift === 1 ? '' : 's'} late`
+        : drift < 0
+            ? `started ${Math.abs(drift)} day${Math.abs(drift) === 1 ? '' : 's'} early`
+            : 'started on plan';
+
+    return `Actual: ${span.start} to ${finish} — ${timing}`;
 };
 
 const taskLookup = computed(() => {
@@ -1391,6 +1264,8 @@ const toggleActivityCollapsed = (task) => {
         : [...collapsedActivities.value, taskId];
 };
 
+const allMilestoneCategories = computed(() => Object.keys(groupedTasks.value));
+
 const collapsibleActivityIds = computed(() =>
     Object.values(groupedTasks.value)
         .flat()
@@ -1398,15 +1273,19 @@ const collapsibleActivityIds = computed(() =>
         .map(task => Number(task.id))
 );
 
-const hasCollapsedActivities = computed(() => collapsedActivities.value.length > 0);
+const hasCollapsed = computed(() =>
+    collapsedMilestones.value.length > 0 || collapsedActivities.value.length > 0
+);
 
-const toggleAllActivities = () => {
-    if (hasCollapsedActivities.value) {
+const toggleAllCollapse = () => {
+    if (hasCollapsed.value) {
+        collapsedMilestones.value = [];
         collapsedActivities.value = [];
         return;
     }
 
-    collapsedActivities.value = collapsibleActivityIds.value;
+    collapsedMilestones.value = [...allMilestoneCategories.value];
+    collapsedActivities.value = [...collapsibleActivityIds.value];
 };
 
 const visibleTaskCount = (tasks = []) => {
@@ -1464,118 +1343,6 @@ const grandTotalLeadTime = computed(() => {
     const ends = dated.map(task => parseLocalDate(task.end_date).getTime());
 
     return daysBetween(new Date(Math.min(...starts)), new Date(Math.max(...ends)));
-});
-
-const subTasksOfEditingTask = computed(() => {
-    if (!isEditing.value || !editingTaskId.value) return [];
-
-    return localTasks.value.filter(task => Number(task.parent_task_id) === Number(editingTaskId.value));
-});
-
-// Editing an activity that owns sub-tasks: its lead time, progress and timeline
-// are rolled up from them, so those inputs are locked.
-const isRolledUpActivity = computed(() => formMode.value === 'activity' && subTasksOfEditingTask.value.length > 0);
-
-const rolledUpLeadTime = computed(() => {
-    return subTasksOfEditingTask.value.reduce((sum, subTask) => sum + (Number(subTask.lead_time_days) || 0), 0);
-});
-
-// A row whose Start Date the user set by hand keeps it across re-chains until
-// they unpin it.
-const editingTask = computed(() => {
-    if (!isEditing.value || !editingTaskId.value) return null;
-
-    return localTasks.value.find(task => Number(task.id) === Number(editingTaskId.value)) || null;
-});
-
-/**
- * Every other row in the plan, so a requisite can point anywhere — including
- * back into an earlier milestone, which is the whole point of a parallel row.
- */
-const requisiteOptions = computed(() => {
-    const editingId = editingTask.value?.id;
-
-    return (localTasks.value || []).flatMap(task => {
-        const rows = [task, ...(task.subTasks || [])];
-
-        return rows
-            .filter(row => row.id !== editingId)
-            .map(row => ({
-                value: row.id,
-                label: `${row.parent_task_id ? '↳ ' : ''}${row.name} · ${row.category || 'General'}`,
-            }));
-    });
-});
-
-const isStartPinned = computed(() => Boolean(editingTask.value?.start_anchor_date) && !form.unpin_start);
-
-const unpinStart = () => {
-    form.unpin_start = true;
-    form.start_date = '';
-    form.end_date = '';
-};
-
-// Keep Timeline and Lead Time reactive in both directions while mirroring the
-// server's calendar/working-day rules.
-const syncEndDateFromLeadTime = (value = form.lead_time_days) => {
-    const leadTime = Math.max(1, Number(value) || 1);
-    if (isRolledUpActivity.value) return;
-
-    form.lead_time_days = leadTime;
-    if (!isAddingTask.value || !form.start_date) return;
-
-    const start = toWorkingDay(parseLocalDate(form.start_date));
-
-    form.start_date = toDateInput(start);
-    form.end_date = toDateInput(endOfSpan(start, leadTime));
-};
-
-const syncLeadTimeFromTimeline = (changedField) => {
-    if (!isAddingTask.value || isRolledUpActivity.value || !form.start_date) return;
-
-    const start = toWorkingDay(parseLocalDate(form.start_date));
-    form.start_date = toDateInput(start);
-
-    if (!form.end_date) {
-        syncEndDateFromLeadTime();
-        return;
-    }
-
-    const end = parseLocalDate(form.end_date);
-    if (end < start) {
-        if (changedField === 'start') {
-            syncEndDateFromLeadTime();
-        } else {
-            form.lead_time_days = 1;
-            form.end_date = toDateInput(start);
-        }
-        return;
-    }
-
-    const leadTime = daysBetween(start, end);
-    form.lead_time_days = leadTime;
-    // Normalize a weekend/holiday finish to the same span the server will save.
-    form.end_date = toDateInput(endOfSpan(start, leadTime));
-};
-
-const formTitle = computed(() => {
-    if (isEditing.value) {
-        return formMode.value === 'subtask' ? 'Edit Sub-task' : 'Edit Activity';
-    }
-
-    if (formMode.value === 'milestone') return 'Add Milestone';
-    if (formMode.value === 'subtask') return 'Add Sub-task';
-    return 'Add Activity';
-});
-
-const activityFieldLabel = computed(() => {
-    return formMode.value === 'subtask' ? 'Sub-task' : 'Activity';
-});
-
-const saveButtonLabel = computed(() => {
-    if (isEditing.value) return 'Update';
-    if (formMode.value === 'milestone') return 'Add';
-    return formMode.value === 'subtask' ? 'Add Sub-task' : 'Add Activity';
 });
 
 const getAssigneeName = (task) => {
@@ -1943,14 +1710,14 @@ const isWeekend = (date) => {
                     Quick Assign
                 </button>
                 <button type="button"
-                        @click="showBaseline = !showBaseline"
+                        @click="showActual = !showActual"
                         :class="[
                             'inline-flex items-center px-3 py-1.5 border text-xs font-bold rounded-lg shadow-xs transition-all active:scale-95',
-                            showBaseline
+                            showActual
                                 ? 'border-slate-700 bg-slate-700 text-white hover:bg-slate-800'
                                 : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
                         ]"
-                        title="Show the planned (baseline) schedule under each bar. Rows still on plan draw a single bar.">
+                        title="Overlay the reported actual dates on each planned bar. Rows with nothing reported yet draw the plan alone.">
                     <Squares2X2Icon class="w-3.5 h-3.5 mr-1.5" />
                     Planned vs Actual
                 </button>
@@ -2109,162 +1876,19 @@ const isWeekend = (date) => {
             </p>
         </div>
 
-        <Modal :show="isAddingTask" max-width="7xl" :closeable="!isSavingTask" @close="closeForm">
-            <div class="flex max-h-[90vh] flex-col bg-white dark:bg-slate-900">
-                <div class="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-6 py-4 dark:border-slate-700">
-                    <div>
-                        <h4 class="text-sm font-black text-indigo-950 uppercase tracking-widest dark:text-indigo-100">{{ formTitle }}</h4>
-                        <p v-if="activeParentTask" class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-300">
-                            Under {{ activeParentTask.name }} in {{ activeMilestone }}
-                        </p>
-                        <p v-else-if="activeMilestone" class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-300">
-                            Milestone: {{ activeMilestone }}
-                        </p>
-                    </div>
-                    <button type="button"
-                            @click="closeForm"
-                            :disabled="isSavingTask"
-                            class="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-wait disabled:opacity-40 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-                            aria-label="Close task form"
-                            title="Close">
-                        <XMarkIcon class="h-5 w-5" />
-                    </button>
-                </div>
-                <div class="overflow-y-auto bg-slate-50/80 p-6 dark:bg-slate-950/60">
-                    <div class="grid grid-cols-1 items-start gap-x-6 gap-y-4 md:grid-cols-12">
-                    <div class="md:col-span-12 rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
-                        <h5 class="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">Task details</h5>
-                        <p class="mt-1 text-[11px] font-medium text-slate-400">Use clear names so the complete Milestone and Activity/Sub-task remain easy to identify.</p>
-                    </div>
-                    <div class="min-w-0 md:col-span-4">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Milestone</label>
-                        <input v-model="form.category" type="text" placeholder="Milestone name" :readonly="formMode === 'subtask' || (formMode !== 'milestone' && !isEditing) || (isEditing && !canRenameActiveMilestone)" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all read-only:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:read-only:bg-slate-800">
-                        <div v-if="form.errors.category" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.category }}</div>
-                    </div>
-                    <div class="min-w-0 md:col-span-5">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">{{ activityFieldLabel }}</label>
-                        <input v-model="form.name" type="text" placeholder="What needs to be done?" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                        <div v-if="form.errors.name" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.name }}</div>
-                    </div>
-                    <div class="min-w-0 md:col-span-3">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Responsible</label>
-                        <select v-model="form.assigned_to" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                            <option value="">Unassigned</option>
-                            <option v-for="member in projectTeamMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
-                        </select>
-                        <div v-if="form.errors.assigned_to" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.assigned_to }}</div>
-                    </div>
-                    <div class="md:col-span-12 mt-1 rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-900">
-                        <h5 class="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">Planning and progress</h5>
-                        <p class="mt-1 text-[11px] font-medium text-slate-400">Keep duration, dependencies, status, and timeline aligned in one section.</p>
-                    </div>
-                    <div :class="formMode === 'milestone' ? 'md:col-span-4' : 'md:col-span-2'">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Lead Time (Days)</label>
-                        <input :value="isRolledUpActivity ? rolledUpLeadTime : form.lead_time_days"
-                               @input="syncEndDateFromLeadTime($event.target.value)"
-                               type="number" min="1"
-                               :disabled="isRolledUpActivity"
-                               class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
-                        <div v-if="form.errors.lead_time_days" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.lead_time_days }}</div>
-                        <p v-if="isRolledUpActivity" class="mt-1 ml-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">
-                            Summed from {{ subTasksOfEditingTask.length }} sub-task{{ subTasksOfEditingTask.length === 1 ? '' : 's' }} — edit those instead.
-                        </p>
-                        <p v-else-if="isEditing && project.day1_date" class="mt-1 ml-1 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">Saving will re-chain every row's dates from Day 1.</p>
-                        <p v-else-if="isEditing" class="mt-1 ml-1 text-[9px] font-semibold text-amber-600 dark:text-amber-400">No Day 1 Date set on this project — dates won't auto-schedule.</p>
-                    </div>
-                    <div class="min-w-0 md:col-span-4" v-if="formMode !== 'milestone'">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Dependency (Requisite)</label>
-                        <Autocomplete
-                            :model-value="form.depends_on_task_id"
-                            @update:model-value="value => form.depends_on_task_id = value"
-                            :options="requisiteOptions"
-                            size="sm"
-                            placeholder="Previous row"
-                        />
-                        <p class="mt-1 ml-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">Leave empty to follow the row above.</p>
-                        <div v-if="form.errors.depends_on_task_id" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.depends_on_task_id }}</div>
-                    </div>
-                    <div class="md:col-span-2" v-if="formMode !== 'milestone'">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Can Run Parallel?</label>
-                        <button type="button" @click="form.can_run_parallel = !form.can_run_parallel"
-                                :title="form.can_run_parallel ? 'Starts off its requisite only — may overlap rows that are still running' : 'Waits for its requisite AND the row above it'"
-                                class="h-[38px] w-full rounded-xl border text-xs font-black uppercase tracking-wider transition-colors"
-                                :class="form.can_run_parallel
-                                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
-                                    : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'">
-                            {{ form.can_run_parallel ? 'Yes' : 'No' }}
-                        </button>
-                    </div>
-                    <div :class="formMode === 'milestone'
-                        ? (manualStatuses.length ? 'md:col-span-4' : 'md:col-span-8')
-                        : (manualStatuses.length ? 'md:col-span-2' : 'md:col-span-4')">
-                        <div class="flex items-center justify-between mb-1.5 ml-1">
-                            <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest dark:text-indigo-200">Progress</label>
-                            <button v-if="!isRolledUpActivity" type="button" @click="progressMode = progressMode === 'done' ? 'manual' : 'done'"
-                                    class="text-[9px] font-bold text-indigo-500 hover:text-indigo-700 underline dark:text-indigo-300">
-                                {{ progressMode === 'done' ? 'Use %' : 'Use Yes/No' }}
-                            </button>
-                        </div>
-                        <div v-if="isRolledUpActivity"
-                             class="flex h-[38px] items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
-                            <span class="text-xs font-bold text-slate-500 dark:text-slate-400">{{ form.task_progress }}% from sub-tasks</span>
-                        </div>
-                        <label v-else-if="progressMode === 'done'"
-                               class="flex h-[38px] items-center justify-center gap-2 rounded-xl border border-slate-200 cursor-pointer dark:border-slate-700 dark:bg-slate-900">
-                            <input type="checkbox" v-model="isTaskDone" class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
-                            <span class="text-xs font-bold text-slate-700 dark:text-slate-200">{{ isTaskDone ? 'Done (100%)' : 'Not done' }}</span>
-                        </label>
-                        <input v-else v-model="form.task_progress" type="number" min="0" max="100" class="w-full text-sm border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                        <div v-if="form.errors.progress" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.progress }}</div>
-                    </div>
-                    <!--
-                        A flag beside the percentage, not a replacement for it. The
-                        derived Pending/Ongoing/Done still comes from progress; this
-                        says "and it is stuck", and clears itself at 100%.
-                    -->
-                    <div :class="formMode === 'milestone' ? 'md:col-span-4' : 'md:col-span-2'" v-if="manualStatuses.length">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Flag</label>
-                        <Autocomplete
-                            v-model="form.manual_status"
-                            :options="manualStatusOptions"
-                            placeholder="None"
-                        />
-                        <p class="mt-1 ml-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">
-                            Shown on Overview &amp; Monitoring. Cleared when the row hits 100%.
-                        </p>
-                        <div v-if="form.errors.manual_status" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.manual_status }}</div>
-                    </div>
-                    <div class="min-w-0 md:col-span-8">
-                        <label class="block text-[10px] font-bold text-indigo-900 uppercase tracking-widest mb-1.5 ml-1 dark:text-indigo-200">Timeline</label>
-                        <div class="flex items-center space-x-2">
-                            <input v-model="form.start_date" @change="syncLeadTimeFromTimeline('start')" type="date" :disabled="isRolledUpActivity" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
-                            <span class="text-slate-400 dark:text-slate-300">to</span>
-                            <input v-model="form.end_date" @change="syncLeadTimeFromTimeline('end')" type="date" :disabled="isRolledUpActivity" class="w-full text-xs border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
-                        </div>
-                        <p v-if="isRolledUpActivity" class="mt-1 ml-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">
-                            Spans its sub-tasks — set the dates on those.
-                        </p>
-                        <p v-else-if="isStartPinned" class="mt-1 ml-1 text-[9px] font-semibold text-indigo-600 dark:text-indigo-300">
-                            Start Date is pinned — later rows chain from it.
-                            <button type="button" @click="unpinStart" class="underline hover:text-indigo-800 dark:hover:text-indigo-200">Unpin</button>
-                        </p>
-                        <p v-else-if="isEditing" class="mt-1 ml-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">
-                            Setting a Start Date pins this row and shifts every row after it.
-                        </p>
-                        <div v-if="form.errors.start_date || form.errors.end_date" class="text-red-500 text-[10px] mt-1 ml-1 font-bold italic">{{ form.errors.start_date || form.errors.end_date }}</div>
-                    </div>
-                    <div class="flex items-center space-x-2 self-end md:col-span-4">
-                        <button type="button" @click="saveTask" :disabled="isSavingTask" class="flex-1 bg-indigo-600 text-white font-bold py-2.5 rounded-xl hover:bg-indigo-700 shadow-md transition-all active:scale-95 disabled:opacity-50 text-sm whitespace-nowrap">
-                            {{ isSavingTask ? 'Saving…' : saveButtonLabel }}
-                        </button>
-                        <button type="button" @click="closeForm" :disabled="isSavingTask" class="flex-1 px-3 py-2.5 bg-white text-slate-500 font-bold border border-slate-200 rounded-xl hover:bg-slate-50 transition-all text-sm whitespace-nowrap disabled:cursor-wait disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
-                            Cancel
-                        </button>
-                    </div>
-                    </div>
-                </div>
-            </div>
-        </Modal>
+        <!-- The plan's one task form. Shared with the Weekly Timeline tab, so a
+             field or rule changed there changes here too. -->
+        <ProjectTaskFormModal
+            ref="taskFormModal"
+            :project="project"
+            :tasks="localTasks"
+            :team-members="projectTeamMembers"
+            :manual-statuses="manualStatuses"
+            :holidays="holidays"
+            tab="gantt"
+            :before-save="ensureTaskListBoards"
+            @saved="onTaskSaved"
+        />
 
         <!-- Main Workspace: Unified Scroll -->
         <div class="flex-1 overflow-auto relative bg-[#fafbfc] dark:bg-slate-950" ref="mainWorkspaceRef">
@@ -2277,12 +1901,12 @@ const isWeekend = (date) => {
                         <div class="flex w-[480px] items-center justify-between gap-3 px-3">
                             <span>Activity / Sub-task</span>
                             <button type="button"
-                                    @click.stop="toggleAllActivities"
+                                    @click.stop="toggleAllCollapse"
                                     class="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[9px] font-black tracking-wide text-slate-500 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-indigo-400/30 dark:hover:bg-indigo-500/15 dark:hover:text-indigo-200"
-                                    :disabled="collapsibleActivityIds.length === 0"
-                                    :title="hasCollapsedActivities ? 'Expand all activity sub-tasks' : 'Collapse all activity sub-tasks'">
-                                <ChevronRightIcon class="h-3 w-3 transition-transform" :class="hasCollapsedActivities ? 'rotate-90' : ''" />
-                                {{ hasCollapsedActivities ? 'Expand All' : 'Collapse All' }}
+                                    :disabled="allMilestoneCategories.length === 0 && collapsibleActivityIds.length === 0"
+                                    :title="hasCollapsed ? 'Expand all milestones and activities' : 'Collapse all milestones and activities'">
+                                <ChevronRightIcon class="h-3 w-3 transition-transform" :class="hasCollapsed ? '' : 'rotate-90'" />
+                                {{ hasCollapsed ? 'Expand All' : 'Collapse All' }}
                             </button>
                         </div>
                         <div class="w-[130px] px-2 text-left">Responsible</div>
@@ -2585,32 +2209,20 @@ const isWeekend = (date) => {
                                 <!-- Right Gantt Bar Area -->
                                 <div class="flex-1 relative">
                                     <div class="absolute inset-0 grid h-full py-1.5 px-[1px] items-center" :style="{ gridTemplateColumns: `repeat(${timelineDays.length}, 40px)` }">
-                                        <!-- Planned (baseline) layer: where this row was first scheduled -->
-                                        <div v-if="hasBaselineDrift(row.task)"
-                                             class="gantt-baseline-bar self-end rounded-sm h-1.5 z-10 pointer-events-auto cursor-help"
-                                             :style="getBaselineBarStyles(row.task)"
-                                             :title="baselineTooltip(row.task)"
-                                             @click.stop>
-                                        </div>
                                         <div v-if="row.task.start_date && row.task.end_date"
-                                             class="rounded-md relative overflow-hidden group/bar transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer z-20 flex items-center"
-                                             :class="[
-                                                hasBaselineDrift(row.task)
-                                                    ? (row.isSubTask ? 'h-4 opacity-90 self-start' : 'h-5 self-start')
-                                                    : (row.isSubTask ? 'h-5 opacity-90' : 'h-6'),
-                                             ]"
+                                             class="rounded-md relative overflow-hidden group/bar transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer z-10 flex items-center"
+                                             :class="row.isSubTask ? 'h-5 opacity-90' : 'h-6'"
                                              :style="getGanttBarStyles(row.task)"
-                                             @click="isAddingTask = false"
                                         >
                                             <!-- Planned: the row's full scheduled span -->
                                             <div class="absolute inset-0" :class="getBarColorClass(row.task.status)"></div>
-                                            <!-- Actual: how much of that span is really done, hatched over the plan -->
-                                            <div v-if="row.task.progress > 0"
-                                                 class="gantt-actual-fill absolute top-0 left-0 h-full overflow-hidden"
-                                                 :style="{ width: row.task.progress + '%' }"></div>
-                                            <div class="absolute inset-0 flex items-center px-1.5 justify-between gap-1">
-                                                <span class="text-[10px] font-bold text-white truncate drop-shadow-xs tracking-tight flex-1">{{ row.task.name }}</span>
-                                                <span class="text-[9px] font-semibold text-white/90 whitespace-nowrap">{{ row.task.progress }}%</span>
+                                            <!-- Fallback progress fill for rows with no reported actual dates yet -->
+                                            <div v-if="row.task.progress > 0 && !hasActualBar(row.task)"
+                                                 class="actual-hatch absolute left-0.5 top-1/2 -translate-y-1/2 rounded-[2px] overflow-hidden pointer-events-none z-10"
+                                                 :style="{ width: `calc(${Math.min(100, Math.max(0, row.task.progress))}% - 4px)` }"></div>
+                                            <!-- Retained percentage label text centered vertically on the right -->
+                                            <div class="absolute inset-0 flex items-center justify-end px-1.5 pointer-events-none z-20">
+                                                <span class="text-[9px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] whitespace-nowrap tabular-nums">{{ row.task.progress }}%</span>
                                             </div>
                                             <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1.5 px-2 py-1 bg-slate-800 text-white text-[9px] rounded-md opacity-0 group-hover/bar:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 font-bold shadow-lg">
                                                 {{ row.task.name }}
@@ -2618,12 +2230,18 @@ const isWeekend = (date) => {
                                                     Planned: {{ row.task.start_date.split('T')[0] }} to {{ row.task.end_date.split('T')[0] }}
                                                 </span>
                                                 <span class="block font-semibold text-amber-200">
-                                                    Actual: {{ row.task.progress }}% complete
-                                                </span>
-                                                <span v-if="hasBaselineDrift(row.task)" class="block font-semibold text-slate-300">
-                                                    {{ baselineTooltip(row.task) }}
+                                                    {{ hasActualBar(row.task) ? actualTooltip(row.task) : `Actual: ${row.task.progress}% complete` }}
                                                 </span>
                                             </div>
+                                        </div>
+
+                                        <!-- Actual (Reported) Layer: spans according to actual reported dates, centered vertically in the row -->
+                                        <div v-if="hasActualBar(row.task)"
+                                             class="actual-hatch self-center rounded-[2px] z-30 pointer-events-auto cursor-help"
+                                             :class="actualSpan(row.task).inProgress ? 'actual-hatch--open' : ''"
+                                             :style="getActualBarStyles(row.task)"
+                                             :title="actualTooltip(row.task)"
+                                             @click.stop>
                                         </div>
                                     </div> 
                                 </div>
@@ -2650,16 +2268,12 @@ const isWeekend = (date) => {
                     <span>Weekend</span>
                 </div>
                 <div class="flex items-center space-x-2">
-                    <div class="gantt-legend-actual h-2.5 w-5 rounded-sm"></div>
+                    <div class="actual-hatch w-5 rounded-sm"></div>
                     <span>Actual</span>
                 </div>
                 <div class="flex items-center space-x-2">
                     <div class="h-2.5 w-5 rounded-sm bg-indigo-500"></div>
                     <span>Planned</span>
-                </div>
-                <div class="flex items-center space-x-2">
-                    <div class="gantt-baseline-bar h-1.5 w-5 rounded-sm"></div>
-                    <span>Original plan</span>
                 </div>
             </div>
             <div class="flex items-center space-x-2">
@@ -2946,46 +2560,6 @@ const isWeekend = (date) => {
 </template>
 
 <style scoped>
-/* Actual: diagonal hatching over the solid planned bar, so the completed part
-   of a row reads as a different layer instead of a slightly darker shade. */
-.gantt-actual-fill {
-    background-image: repeating-linear-gradient(
-        45deg,
-        rgb(255 255 255 / 0.6) 0 3px,
-        rgb(0 0 0 / 0.22) 3px 7px
-    );
-    box-shadow: inset -2px 0 0 rgb(255 255 255 / 0.9);
-}
-
-.gantt-legend-actual {
-    background-color: rgb(99 102 241);
-    background-image: repeating-linear-gradient(
-        45deg,
-        rgb(255 255 255 / 0.6) 0 3px,
-        rgb(0 0 0 / 0.22) 3px 7px
-    );
-}
-
-/* Original plan (baseline) bar: hatched grey, never a second real task. */
-.gantt-baseline-bar {
-    background-image: repeating-linear-gradient(
-        45deg,
-        rgb(100 116 139 / 0.85) 0 4px,
-        rgb(203 213 225 / 0.9) 4px 8px
-    );
-    border: 1px solid rgb(100 116 139 / 0.6);
-}
-
-:global(.dark) .gantt-baseline-bar,
-:where(.dark) .gantt-baseline-bar {
-    background-image: repeating-linear-gradient(
-        45deg,
-        rgb(148 163 184 / 0.9) 0 4px,
-        rgb(51 65 85 / 0.95) 4px 8px
-    );
-    border-color: rgb(148 163 184 / 0.5);
-}
-
 .no-scrollbar::-webkit-scrollbar {
     display: none;
 }

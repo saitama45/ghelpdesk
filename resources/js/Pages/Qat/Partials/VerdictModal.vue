@@ -52,7 +52,7 @@
                     </div>
 
                     <textarea v-model="remarks[member.id]" rows="2" :disabled="!editable"
-                              placeholder="Remarks (required for a failure or a block)"
+                              placeholder="Remarks (required for a failure)"
                               @blur="saveRemarks(member.id)"
                               class="mt-2 block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-50 dark:border-gray-600 dark:bg-slate-900 dark:text-gray-100"></textarea>
                 </div>

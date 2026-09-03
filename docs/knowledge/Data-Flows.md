@@ -111,6 +111,8 @@ intake → TicketObserver (key/company/SLA) → assignment → work → resolve 
 ## 4. Projects ↔ Task boards
 - Two-way sync in `app/Services/ProjectTaskBoardSyncService.php`: Checklist ↔ Milestone, Checklist item ↔ Activity, Subtask ↔ Subtask. A card is never an activity.
 - Scheduling: `ProjectScheduler` + `ScheduleChain` + `ScheduleCalculator` re-derive every Gantt date from `day1_date`. Rule: **Finish = Start + LeadTime − 1 (inclusive)**; `Parallel = Yes` starts the same day as its dependency; a milestone's lead time is the SUM of its sub-tasks; `start_anchor_date` pins a row.
+- Planned vs actual: a row carries `start_date`/`end_date` (the plan) and `actual_start_date`/`actual_end_date` (when the work really ran); the Gantt and the Weekly Timeline both overlay the hatched actual on the planned bar, on its own span, so it can begin before the plan. `original_*` is still captured as a baseline but is no longer drawn. `ProjectTask::booted()` stamps the actuals on first progress and at 100% without overwriting hand-entered values; `ProjectScheduler::syncParentRollups()` rolls them up to the activity and sets `skipActualStamping` while doing so.
+- One task form: `Components/ProjectTracker/ProjectTaskFormModal.vue` is the add/edit modal for BOTH the Gantt and Weekly Timeline tabs — fields, lead-time↔timeline maths and the save all live there; the tabs only decide where a new row sorts and what to do with the returned plan.
 - Working days skip weekends **and** `holidays` rows via `app/Services/HolidayCalendar.php` (cached, flushed on write).
 
 ## 5. Approvals (POS / SAP / payments / dynamic forms / accounting)

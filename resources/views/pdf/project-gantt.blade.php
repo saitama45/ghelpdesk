@@ -85,6 +85,14 @@
         .bar-done { background: #10b981; }
         .bar-delayed, .bar-blocked { background: #ef4444; }
         .bar-progress { height: 7px; background: rgba(15, 23, 42, .18); }
+        /* Actual span, drawn over the lower half of the planned bar exactly as the
+           Gantt tab does. dompdf cannot render the screen's 45deg hatch, so the
+           layer is a solid crimson with a dark outline instead — still a second
+           distinct mark rather than colour alone. */
+        .bar-actual { position: absolute; top: 4px; height: 5px; min-width: 2px; background: #dc2626; border: 1px solid #7f1d1d; }
+        /* Height + borders must stay inside .track's 13px: dompdf silently drops a
+           box whose bottom edge lands on the container's own edge. */
+        .bar-actual-open { border-right-style: dotted; }
         .footer { position: fixed; bottom: -18px; left: 0; right: 0; color: #94a3b8; font-size: 6px; border-top: 1px solid #e2e8f0; padding-top: 4px; }
         .footer .right { float: right; }
     </style>
@@ -249,7 +257,7 @@
                     <div style="height:142px;line-height:142px;text-align:center;color:#64748b;font-size:8px;">Weekly progress chart is unavailable.</div>
                 @endif
                 <div style="font-size:6px;color:#64748b;margin-top:-2px;">
-                    Planned uses weighted leaf-task schedules. Actual uses progress recorded for each reporting week; future unreported weeks remain blank.
+                    Planned uses weighted leaf-task schedules. Actual uses progress recorded for each reporting week, counted from the date each task actually started; future unreported weeks remain blank.
                 </div>
             </div>
 
@@ -501,8 +509,15 @@
                                 <div class="track">
                                     @if($row['width'] > 0)
                                         <div class="bar bar-{{ $statusKey }}" style="left:{{ $row['left'] }}%;width:{{ $row['width'] }}%">
-                                            <div class="bar-progress" style="width:{{ $task->progress }}%"></div>
+                                            {{-- Rows with no reported actual dates keep the old in-bar progress fill. --}}
+                                            @if($row['actualWidth'] <= 0)
+                                                <div class="bar-progress" style="width:{{ $task->progress }}%"></div>
+                                            @endif
                                         </div>
+                                    @endif
+                                    @if($row['actualWidth'] > 0)
+                                        <div class="bar-actual {{ $row['actualOpen'] ? 'bar-actual-open' : '' }}"
+                                             style="left:{{ $row['actualLeft'] }}%;width:{{ $row['actualWidth'] }}%"></div>
                                     @endif
                                 </div>
                             </td>

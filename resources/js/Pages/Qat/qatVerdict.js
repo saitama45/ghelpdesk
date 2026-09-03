@@ -23,6 +23,9 @@ export const VERDICTS = {
         dot: 'bg-rose-500',
         text: 'text-rose-600 dark:text-rose-400',
     },
+    // Retired from the picker — "Blocked" and "N/A" were folded into one N/A
+    // button. Kept so cells, chips and roll-ups still render results recorded
+    // before that, and so the server's vocabulary stays intact.
     blocked: {
         label: 'Blocked', short: 'Blocked', glyph: '⊘',
         chip: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
@@ -59,8 +62,12 @@ export const VERDICTS = {
 
 export const verdict = (key) => VERDICTS[key] || VERDICTS.pending
 
-/** Order the quick-verdict buttons appear in, most-used first. */
-export const VERDICT_ORDER = ['passed', 'failed', 'blocked', 'ongoing', 'not_applicable', 'pending']
+/**
+ * The verdict buttons, in the order they are shown. No 'blocked': it is folded
+ * into N/A, so nothing new can be recorded as blocked (existing rows still
+ * render — see VERDICTS.blocked above).
+ */
+export const VERDICT_ORDER = ['not_applicable', 'pending', 'ongoing', 'passed', 'failed']
 
 /**
  * Worst-wins, mirroring QatService::rollUp exactly. The grid computes department

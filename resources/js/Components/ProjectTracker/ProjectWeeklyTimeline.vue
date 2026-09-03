@@ -21,14 +21,13 @@ import {
     CheckIcon,
     PencilSquareIcon,
     PlusIcon,
-    XMarkIcon,
 } from '@heroicons/vue/24/outline';
-import { router, useForm } from '@inertiajs/vue3';
+import { router } from '@inertiajs/vue3';
 import { useToast } from '@/Composables/useToast.js';
 import { useConfirm } from '@/Composables/useConfirm.js';
 import { canonicalDepartment, sameDepartment, uniqueDepartmentNames } from '@/Composables/useDepartmentNames.js';
-import Autocomplete from '@/Components/Autocomplete.vue';
 import ProjectTaskStatusPill from './ProjectTaskStatusPill.vue';
+import ProjectTaskFormModal from './ProjectTaskFormModal.vue';
 
 const props = defineProps({
     project: { type: Object, required: true },
@@ -177,50 +176,17 @@ watch(() => props.project.tasks, (tasks) => {
 // out here on a per-week basis and saved through the identical
 // projects-tasks.update endpoint — so anything changed here shows up on the
 // Gantt chart too, and vice versa.
-const isEditingTask = ref(false);
-const editingTaskId = ref(null);
-const progressMode = ref('done');
+const taskFormModal = ref(null);
 
-const editForm = useForm({
-    category: '',
-    name: '',
-    assigned_to: '',
-    status: 'Pending',
-    manual_status: '',
-    task_progress: 0,
-    start_date: '',
-    end_date: '',
-    lead_time_days: 1,
-    depends_on_task_id: null,
-    can_run_parallel: false,
-    unpin_start: false,
-    milestone_order: null,
-    order: null,
-});
-
-const isTaskDone = computed({
-    get: () => Number(editForm.task_progress) >= 100,
-    set: (done) => { editForm.task_progress = done ? 100 : 0; },
-});
-
-watch(() => editForm.task_progress, (newProgress) => {
-    if (newProgress >= 100) editForm.status = 'Done';
-    else if (newProgress > 0) editForm.status = 'Ongoing';
-    else editForm.status = 'Pending';
-});
-
-const projectTeamMembers = computed(() => {
+// The project's team, in the modal's { id, name } shape. Members may be a linked
+// user or a free-text external name, exactly as on the Gantt tab.
+const formTeamMembers = computed(() => {
     const team = props.project.teamMembers || props.project.team_members || [];
-    return team.map(m => m.user
-        ? { id: m.user.id, name: m.user.name }
-        : { id: m.external_name, name: m.external_name });
-});
 
-// "None" clears the flag; Autocomplete needs it as an explicit option.
-const manualStatusOptions = computed(() => [
-    { label: 'None', value: '' },
-    ...(props.manualStatuses || []).map(status => ({ label: status, value: status })),
-]);
+    return team.map(member => (member.user
+        ? { id: member.user.id, name: member.user.name, is_external: false }
+        : { id: member.id, name: member.external_name || member.name || 'External member', is_external: true }));
+});
 
 const allFlatTasksForEdit = computed(() => {
     const list = [];
@@ -231,68 +197,6 @@ const allFlatTasksForEdit = computed(() => {
     return list;
 });
 
-const editingTask = computed(() => {
-    if (!isEditingTask.value || !editingTaskId.value) return null;
-    return allFlatTasksForEdit.value.find(task => Number(task.id) === Number(editingTaskId.value)) || null;
-});
-
-const subTasksOfEditingTask = computed(() => {
-    if (!isEditingTask.value || !editingTaskId.value) return [];
-    return localTasks.value.filter(task => Number(task.parent_task_id) === Number(editingTaskId.value));
-});
-
-// Editing an activity that owns sub-tasks: its lead time, progress and
-// timeline are rolled up from them — same rule as the Gantt chart.
-const isRolledUpActivity = computed(() => !editingTask.value?.parent_task_id && subTasksOfEditingTask.value.length > 0);
-
-const rolledUpLeadTime = computed(() => {
-    return subTasksOfEditingTask.value.reduce((sum, st) => sum + (Number(st.lead_time_days) || 0), 0);
-});
-
-// Every other row in the plan, so a requisite can point anywhere.
-const requisiteOptions = computed(() => {
-    const editingId = editingTaskId.value;
-    return allFlatTasksForEdit.value
-        .filter(row => row.id !== editingId)
-        .map(row => ({
-            value: row.id,
-            label: `${row.parent_task_id ? '↳ ' : ''}${row.name} · ${row.category || 'General'}`,
-        }));
-});
-
-const isStartPinned = computed(() => Boolean(editingTask.value?.start_anchor_date) && !editForm.unpin_start);
-
-const unpinStart = () => {
-    editForm.unpin_start = true;
-    editForm.start_date = '';
-    editForm.end_date = '';
-};
-
-// 'edit' patches an existing row (PUT); 'add' creates a new one (POST) — same
-// panel, same field set, just a different verb. Mirrors Gantt's single form
-// serving both openActivityForm() and editTask().
-const taskFormMode = ref('edit');
-
-const resetEditForm = () => {
-    editForm.clearErrors();
-    editForm.category = '';
-    editForm.name = '';
-    editForm.assigned_to = '';
-    editForm.status = 'Pending';
-    editForm.manual_status = '';
-    editForm.task_progress = 0;
-    editForm.start_date = '';
-    editForm.end_date = '';
-    editForm.lead_time_days = 1;
-    editForm.depends_on_task_id = null;
-    editForm.can_run_parallel = false;
-    editForm.unpin_start = false;
-    editForm.milestone_order = null;
-    editForm.order = null;
-    progressMode.value = 'done';
-};
-
-// Next sort position for a new activity under `category`, or for a new
 // sub-task under `parentTaskId` — same maths as Gantt's getNextOrder(), so a
 // row added here lands at the end of its milestone/parent instead of null.
 const getNextOrder = (category, parentTaskId = null) => {
@@ -324,110 +228,54 @@ const milestoneOrderFor = (category) => {
 
 const editTask = (task) => {
     if (!canEditTask(task)) return;
-    taskFormMode.value = 'edit';
-    isEditingTask.value = true;
-    editingTaskId.value = task.id;
-    editForm.clearErrors();
-    editForm.category = task.category || '';
-    editForm.name = task.name || '';
-    editForm.assigned_to = task.assigned_to || task.external_assignment || '';
-    editForm.status = task.status || 'Pending';
-    editForm.manual_status = task.manual_status || '';
-    editForm.task_progress = Number(task.progress) || 0;
-    editForm.start_date = task.start_date ? String(task.start_date).split('T')[0] : '';
-    editForm.end_date = task.end_date ? String(task.end_date).split('T')[0] : '';
-    editForm.lead_time_days = task.lead_time_days || 1;
-    editForm.depends_on_task_id = task.depends_on_task_id || null;
-    editForm.can_run_parallel = Boolean(task.can_run_parallel);
-    editForm.unpin_start = false;
-    // Carry the row's existing sort position through unchanged — leaving
-    // these null (as resetEditForm() does) submits `order: null` on every
-    // save, which fails the backend's `numeric` rule and silently blocks
-    // the update.
-    editForm.milestone_order = task.milestone_order ?? null;
-    editForm.order = task.order ?? null;
-    progressMode.value = 'done';
+
+    taskFormModal.value?.open({
+        mode: task.parent_task_id ? 'subtask' : 'activity',
+        task,
+        parentTask: task.parent_task_id
+            ? allFlatTasksForEdit.value.find(row => Number(row.id) === Number(task.parent_task_id)) || null
+            : null,
+        milestone: task.category || 'General',
+        canRenameMilestone: ownsMilestone(task.category || 'General'),
+    });
 };
 
 // Adding a brand-new activity is a management action — same rule as Gantt's
 // "+ Add Activity" per milestone. Pre-fills the Milestone field with the
 // currently selected week's milestone filter (if any) so a manager working a
 // specific milestone doesn't have to retype it.
-// Set when adding a SUB-task (the "+" on a top-level row) — null for a plain
-// top-level "+ Add Activity". Mirrors Gantt's activeParentTask.
-const addParentTask = ref(null);
-
 const openAddTaskForm = (category = null) => {
-    if (!canAddActivityIn(category || selectedMilestoneFilter.value || '')) return;
-    taskFormMode.value = 'add';
-    editingTaskId.value = null;
-    addParentTask.value = null;
-    resetEditForm();
-    editForm.category = category || selectedMilestoneFilter.value || '';
-    editForm.milestone_order = milestoneOrderFor(editForm.category);
-    editForm.order = getNextOrder(editForm.category);
-    isEditingTask.value = true;
+    const milestone = category || selectedMilestoneFilter.value || '';
+    if (!canAddActivityIn(milestone)) return;
+
+    taskFormModal.value?.open({
+        mode: 'activity',
+        milestone,
+        defaults: { milestone_order: milestoneOrderFor(milestone), order: getNextOrder(milestone) },
+    });
 };
 
-// The "+" on a top-level activity row — same rule as Gantt's
-// openSubTaskForm(): inherits the parent's milestone, responsible, and dates.
+// The "+" on a top-level activity row — inherits the parent's milestone,
+// responsible and dates, exactly as the Gantt's sub-task button does.
 const openAddSubtaskForm = (parentTask) => {
     if (!canAddSubTaskTo(parentTask)) return;
-    taskFormMode.value = 'add-subtask';
-    editingTaskId.value = null;
-    addParentTask.value = parentTask;
-    resetEditForm();
-    editForm.category = parentTask.category || 'General';
-    editForm.assigned_to = parentTask.assigned_to || parentTask.external_assignment || '';
-    editForm.start_date = parentTask.start_date ? String(parentTask.start_date).split('T')[0] : '';
-    editForm.end_date = parentTask.end_date ? String(parentTask.end_date).split('T')[0] : '';
-    editForm.milestone_order = parentTask.milestone_order ?? milestoneOrderFor(editForm.category);
-    editForm.order = getNextOrder(editForm.category, parentTask.id);
-    isEditingTask.value = true;
-};
 
-const closeEditForm = () => {
-    isEditingTask.value = false;
-    editingTaskId.value = null;
-    taskFormMode.value = 'edit';
-    addParentTask.value = null;
-    editForm.clearErrors();
-};
+    const milestone = parentTask.category || 'General';
 
-const saveEditedTask = async () => {
-    const syncOk = await ensureTaskListBoards();
-    if (!syncOk) return;
-
-    if (taskFormMode.value === 'add' || taskFormMode.value === 'add-subtask') {
-        editForm.transform((data) => ({
-            ...data,
-            project_id: props.project.id,
-            parent_task_id: addParentTask.value?.id || null,
-            progress: data.task_progress,
-            auto_create_monthly_boards: true,
-        })).post(route('projects-tasks.store', { tab: 'weekly-timeline' }), {
-            preserveScroll: true,
-            onSuccess: () => closeEditForm(),
-        });
-        return;
-    }
-
-    editForm.transform((data) => {
-        // Sort position isn't editable from this panel — only Add mode
-        // computes it. Sending a null order/milestone_order (this panel's
-        // reset default) fails the backend's `numeric` rule and silently
-        // blocks every edit, so drop them here entirely.
-        const { order, milestone_order, ...rest } = data;
-        return {
-            ...rest,
-            progress: rest.task_progress,
-            progress_recorded_at: formatLocalDate(selectedWeek.value?.end),
-            auto_create_monthly_boards: true,
-        };
-    }).put(route('projects-tasks.update', { projects_task: editingTaskId.value, tab: 'weekly-timeline' }), {
-        preserveScroll: true,
-        onSuccess: () => closeEditForm(),
+    taskFormModal.value?.open({
+        mode: 'subtask',
+        parentTask,
+        milestone,
+        defaults: {
+            milestone_order: parentTask.milestone_order ?? milestoneOrderFor(milestone),
+            order: getNextOrder(milestone, parentTask.id),
+        },
     });
+};
+
+// The server returns the whole plan after a save, so the week re-reads it.
+const onTaskSaved = ({ tasks }) => {
+    if (tasks) localTasks.value = tasks;
 };
 
 /* ----------------------------------------------------------------- date helpers */
@@ -824,13 +672,34 @@ const availableDepartments = computed(() =>
 const availableMilestones = computed(() => orderedTaskGroups.value.map(group => group.category));
 
 /* --------------------------------------------------------- task-in-week logic */
+/**
+ * The span the work really occupied: actual_start_date to actual_end_date, or
+ * running to today while it is unfinished. Null until an actual start has been
+ * reported. Same rule as the Gantt's actualSpan().
+ */
+const actualSpan = (task) => {
+    const start = parseLocalDate(task?.actual_start_date);
+    if (!start) return null;
+
+    const finished = parseLocalDate(task?.actual_end_date);
+    const end = finished || new Date();
+
+    return { start, end: end < start ? start : end, inProgress: !finished };
+};
+
+// A row belongs to a week if its plan OR its actual work touches that week —
+// otherwise a task that started a week early would be invisible in the week it
+// actually began.
 const isTaskActiveInWeek = (task, week) => {
     if (!week) return false;
+
     const s = parseLocalDate(task.start_date);
     const e = parseLocalDate(task.end_date);
-    if (!s || !e) return false;
+    if (s && e && s <= week.end && e >= week.start) return true;
 
-    return s <= week.end && e >= week.start;
+    const actual = actualSpan(task);
+
+    return !!actual && actual.start <= week.end && actual.end >= week.start;
 };
 
 const getTaskWeekStatus = (task, week) => {
@@ -936,6 +805,47 @@ const weekDays = computed(() => {
     return days;
 });
 
+/** The actual span, clipped to the selected week's Mon-Sun columns. */
+const getActualDaySpan = (task, week) => {
+    const actual = week ? actualSpan(task) : null;
+    if (!actual) return { active: false };
+    if (actual.start > week.end || actual.end < week.start) return { active: false };
+
+    const dayIndex = (date) => Math.max(0, Math.min(6,
+        Math.floor((date - week.start) / (1000 * 60 * 60 * 24))));
+
+    const startDayIdx = actual.start > week.start ? dayIndex(actual.start) : 0;
+    const endDayIdx = actual.end < week.end ? dayIndex(actual.end) : 6;
+
+    return {
+        active: true,
+        startCol: startDayIdx + 1,
+        span: Math.max(1, endDayIdx - startDayIdx + 1),
+        inProgress: actual.inProgress,
+    };
+};
+
+/** Reads the same way as the Gantt's actual-bar tooltip. */
+const actualBarTitle = (task) => {
+    const actual = actualSpan(task);
+    if (!actual) return '';
+
+    const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const planned = parseLocalDate(task.start_date);
+    const finish = actual.inProgress ? 'in progress' : fmt(actual.end);
+
+    if (!planned) return `Actual: ${fmt(actual.start)} to ${finish}`;
+
+    const drift = Math.round((actual.start - planned) / 86400000);
+    const timing = drift > 0
+        ? `started ${drift} day${drift === 1 ? '' : 's'} late`
+        : drift < 0
+            ? `started ${Math.abs(drift)} day${Math.abs(drift) === 1 ? '' : 's'} early`
+            : 'started on plan';
+
+    return `Actual: ${fmt(actual.start)} to ${finish} — ${timing}`;
+};
+
 const getTaskDaySpan = (task, week) => {
     if (!week) return { startCol: 1, span: 1, active: false };
     const s = parseLocalDate(task.start_date);
@@ -963,6 +873,14 @@ const getTaskDaySpan = (task, week) => {
 };
 
 /* ----------------------------------------------------- S-Curve & Velocity Math */
+/**
+ * When a row's work actually began. The reported actual start wins over the
+ * planned one, so a task that started early lifts the curve in the week it
+ * really started — the same date the Gantt draws its actual bar from. Mirrors
+ * App\Services\ProjectWeeklyProgressService::workStart().
+ */
+const workStart = (task) => parseLocalDate(task?.actual_start_date || task?.start_date);
+
 // Planned is the cumulative weighted amount that should be complete by each
 // week end, based on each leaf task's scheduled start/end dates. Actual replays
 // the append-only task progress log at that same cutoff so every point is a real
@@ -977,9 +895,11 @@ const progressHistoryByTask = computed(() => {
         if (!taskId || Number.isNaN(recordedAt.getTime())) return;
 
         // Old entries only stored the save time. If work for a future task was
-        // entered early, keep it in that task's scheduled reporting period
-        // instead of pulling the red line backwards into the current week.
-        const scheduledStart = parseLocalDate(taskById.get(taskId)?.start_date);
+        // entered early, keep it in that task's reporting period instead of
+        // pulling the red line backwards into the current week. The anchor is
+        // the date work really began — the same date the Gantt's actual bar
+        // starts from — so a genuinely early start is NOT pushed forward.
+        const scheduledStart = workStart(taskById.get(taskId));
         const effectiveAt = scheduledStart && recordedAt < scheduledStart
             ? scheduledStart
             : recordedAt;
@@ -996,7 +916,7 @@ const progressHistoryByTask = computed(() => {
 });
 
 const taskProgressAt = (task, cutoff) => {
-    const scheduledStart = parseLocalDate(task.start_date);
+    const scheduledStart = workStart(task);
     if (scheduledStart && cutoff < scheduledStart) return 0;
 
     const entries = progressHistoryByTask.value.get(Number(task.id)) || [];
@@ -2183,116 +2103,6 @@ const jumpToGantt = (department = null) => {
                 </div>
             </div>
 
-            <!-- Full Task Add/Edit Panel -->
-            <div v-if="isEditingTask" class="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/30 p-4 dark:border-indigo-400/20 dark:bg-indigo-500/10">
-                <div class="mb-3 flex items-center justify-between">
-                    <div>
-                        <h5 class="text-xs font-black uppercase tracking-widest text-indigo-950 dark:text-indigo-100">
-                            {{ taskFormMode === 'edit' ? 'Edit Activity' : taskFormMode === 'add-subtask' ? 'Add Sub-task' : 'Add Activity' }}
-                        </h5>
-                        <p v-if="taskFormMode === 'add-subtask'" class="mt-0.5 text-xs font-semibold text-slate-500 dark:text-slate-300">
-                            Under {{ addParentTask?.name }} in {{ editForm.category }}
-                        </p>
-                    </div>
-                    <button type="button" @click="closeEditForm" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                        <XMarkIcon class="h-4 w-4" />
-                    </button>
-                </div>
-
-                <div class="grid grid-cols-1 items-end gap-x-4 gap-y-3 md:grid-cols-12">
-                    <div class="md:col-span-2">
-                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Milestone</label>
-                        <input v-model="editForm.category" type="text" placeholder="Milestone name" :readonly="taskFormMode === 'add-subtask'" class="w-full rounded-lg border-slate-200 text-xs shadow-xs transition-all focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 read-only:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:read-only:bg-slate-800">
-                        <div v-if="editForm.errors.category" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.category }}</div>
-                    </div>
-                    <div class="md:col-span-2">
-                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Activity</label>
-                        <input v-model="editForm.name" type="text" placeholder="What needs to be done?" class="w-full rounded-lg border-slate-200 text-xs shadow-xs transition-all focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                        <div v-if="editForm.errors.name" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.name }}</div>
-                    </div>
-                    <div class="md:col-span-2">
-                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Responsible</label>
-                        <select v-model="editForm.assigned_to" class="w-full rounded-lg border-slate-200 text-xs shadow-xs transition-all focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                            <option value="">Unassigned</option>
-                            <option v-for="member in projectTeamMembers" :key="member.id" :value="member.id">{{ member.name }}</option>
-                        </select>
-                        <div v-if="editForm.errors.assigned_to" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.assigned_to }}</div>
-                    </div>
-                    <div class="md:col-span-1">
-                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Lead Time</label>
-                        <input
-                            :value="isRolledUpActivity ? rolledUpLeadTime : editForm.lead_time_days"
-                            @input="editForm.lead_time_days = Number($event.target.value)"
-                            type="number" min="1" :disabled="isRolledUpActivity"
-                            class="w-full rounded-lg border-slate-200 text-xs shadow-xs transition-all focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400"
-                        >
-                        <div v-if="editForm.errors.lead_time_days" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.lead_time_days }}</div>
-                    </div>
-                    <div class="md:col-span-2">
-                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Dependency</label>
-                        <Autocomplete
-                            :model-value="editForm.depends_on_task_id"
-                            @update:model-value="value => editForm.depends_on_task_id = value"
-                            :options="requisiteOptions"
-                            size="sm"
-                            placeholder="Previous row"
-                        />
-                        <div v-if="editForm.errors.depends_on_task_id" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.depends_on_task_id }}</div>
-                    </div>
-                    <div class="md:col-span-1">
-                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Parallel?</label>
-                        <button type="button" @click="editForm.can_run_parallel = !editForm.can_run_parallel"
-                                :title="editForm.can_run_parallel ? 'Starts off its requisite only' : 'Waits for requisite AND row above'"
-                                class="h-[34px] w-full rounded-lg border text-xs font-bold uppercase tracking-wider transition-colors"
-                                :class="editForm.can_run_parallel
-                                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
-                                    : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'">
-                            {{ editForm.can_run_parallel ? 'Yes' : 'No' }}
-                        </button>
-                    </div>
-                    <div class="md:col-span-2">
-                        <div class="mb-1 ml-1 flex items-center justify-between">
-                            <label class="block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Progress</label>
-                            <button v-if="!isRolledUpActivity" type="button" @click="progressMode = progressMode === 'done' ? 'manual' : 'done'" class="text-[9px] font-bold text-indigo-500 underline hover:text-indigo-700 dark:text-indigo-300">
-                                {{ progressMode === 'done' ? 'Use %' : 'Use Yes/No' }}
-                            </button>
-                        </div>
-                        <div v-if="isRolledUpActivity" class="flex h-[34px] items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
-                            <span class="text-xs font-bold text-slate-500 dark:text-slate-400">{{ editForm.task_progress }}% from sub-tasks</span>
-                        </div>
-                        <label v-else-if="progressMode === 'done'" class="flex h-[34px] cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 dark:bg-slate-900">
-                            <input type="checkbox" v-model="isTaskDone" class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
-                            <span class="text-xs font-bold text-slate-700 dark:text-slate-200">{{ isTaskDone ? 'Done (100%)' : 'Not done' }}</span>
-                        </label>
-                        <input v-else v-model="editForm.task_progress" type="number" min="0" max="100" class="w-full rounded-lg border-slate-200 text-xs shadow-xs transition-all focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                        <div v-if="editForm.errors.progress" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.progress }}</div>
-                    </div>
-                    <div v-if="manualStatuses.length" class="md:col-span-2">
-                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Flag</label>
-                        <Autocomplete v-model="editForm.manual_status" :options="manualStatusOptions" placeholder="None" />
-                        <div v-if="editForm.errors.manual_status" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.manual_status }}</div>
-                    </div>
-                    <div class="md:col-span-3">
-                        <label class="mb-1 ml-1 block text-[10px] font-bold uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Timeline</label>
-                        <div class="flex items-center space-x-1.5">
-                            <input v-model="editForm.start_date" type="date" :disabled="isRolledUpActivity" class="w-full rounded-lg border-slate-200 text-xs shadow-xs focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
-                            <span class="text-slate-400 text-xs dark:text-slate-300">to</span>
-                            <input v-model="editForm.end_date" type="date" :disabled="isRolledUpActivity" class="w-full rounded-lg border-slate-200 text-xs shadow-xs focus:ring-1 focus:ring-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800 dark:disabled:text-slate-400">
-                        </div>
-                        <div v-if="editForm.errors.start_date || editForm.errors.end_date" class="ml-1 mt-1 text-[10px] font-bold italic text-red-500">{{ editForm.errors.start_date || editForm.errors.end_date }}</div>
-                    </div>
-                </div>
-
-                <div class="mt-4 flex items-center justify-end gap-2 border-t border-indigo-100 pt-3 dark:border-indigo-400/20">
-                    <button @click="closeEditForm" class="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
-                        Cancel
-                    </button>
-                    <button @click="saveEditedTask" :disabled="editForm.processing" class="rounded-lg bg-indigo-600 px-4 py-1.5 text-xs font-bold text-white shadow-xs transition hover:bg-indigo-700 disabled:opacity-50">
-                        {{ taskFormMode === 'edit' ? 'Update' : taskFormMode === 'add-subtask' ? 'Add Sub-task' : 'Add Activity' }}
-                    </button>
-                </div>
-            </div>
-
             <!-- Mon-Sun Header Grid -->
             <div class="mt-4">
                 <!-- Day Column Headers -->
@@ -2430,9 +2240,10 @@ const jumpToGantt = (department = null) => {
                                     <div
                                         class="relative col-span-7 grid grid-cols-7 gap-1 h-6 rounded-md bg-gray-50/70 p-0.5 dark:bg-gray-900/40 items-center"
                                     >
-                                        <!-- Span Bar -->
+                                        <!-- Planned span bar -->
                                         <div
                                             :style="{
+                                                gridRowStart: 1,
                                                 gridColumnStart: getTaskDaySpan(task, selectedWeek).startCol,
                                                 gridColumnEnd: `span ${getTaskDaySpan(task, selectedWeek).span}`
                                             }"
@@ -2447,9 +2258,28 @@ const jumpToGantt = (department = null) => {
                                                             : 'bg-indigo-500'
                                             ]"
                                         >
-                                            <span class="truncate">{{ task.name }}</span>
-                                            <span class="ml-1 shrink-0">{{ task.progress || 0 }}%</span>
+                                            <!-- The hatch runs across the bar, so the text carries its own
+                                                 backdrop rather than relying on the bar colour behind it. -->
+                                            <span class="relative z-30 truncate rounded-sm bg-black/55 px-1 py-px">{{ task.name }}</span>
+                                            <span class="relative z-30 ml-1 shrink-0 rounded-sm bg-black/55 px-1 py-px">{{ task.progress || 0 }}%</span>
                                         </div>
+                                        <!-- Actual span, centred on the same line as the plan and drawn ON
+                                             TOP of it, so the hatch reads across the whole span of the real
+                                             work. The planned bar's label moves up out of its way.
+                                             Row 1 explicitly, since overlapping grid items are otherwise
+                                             auto-placed onto a second implicit row and stack apart. -->
+                                        <div
+                                            v-if="getActualDaySpan(task, selectedWeek).active"
+                                            :style="{
+                                                gridRowStart: 1,
+                                                gridColumnStart: getActualDaySpan(task, selectedWeek).startCol,
+                                                gridColumnEnd: `span ${getActualDaySpan(task, selectedWeek).span}`,
+                                                height: '9px',
+                                            }"
+                                            :class="['actual-hatch z-20 self-center rounded-[2px] pointer-events-auto cursor-help',
+                                                     getActualDaySpan(task, selectedWeek).inProgress ? 'actual-hatch--open' : '']"
+                                            :title="actualBarTitle(task)"
+                                        ></div>
                                     </div>
                                 </div>
                             </div>
@@ -2527,5 +2357,19 @@ const jumpToGantt = (department = null) => {
                 </div>
             </div>
         </div>
+        <!-- The plan's one task form — the same component the Gantt tab opens, so
+             both tabs always offer the same fields and the same rules. -->
+        <ProjectTaskFormModal
+            ref="taskFormModal"
+            :project="project"
+            :tasks="localTasks"
+            :team-members="formTeamMembers"
+            :manual-statuses="manualStatuses"
+            :holidays="holidays"
+            tab="weekly-timeline"
+            :reporting-date="formatLocalDate(selectedWeek?.end)"
+            :before-save="ensureTaskListBoards"
+            @saved="onTaskSaved"
+        />
     </div>
 </template>

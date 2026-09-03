@@ -92,12 +92,34 @@ class ProjectScheduler
 
             $status = $progress >= 100 ? 'Done' : ($progress > 0 ? 'Ongoing' : 'Pending');
 
-            if ((int) $parent->lead_time_days !== $leadTime || (int) $parent->progress !== $progress || $parent->status !== $status) {
+            // The activity actually ran from the first sub-task that started to
+            // the last one that finished. A finish is only real once every
+            // sub-task has one, so an activity still in flight shows an open
+            // actual bar rather than a premature end.
+            $startedDates = $children->pluck('actual_start_date')->filter();
+            $actualStart = $startedDates->isNotEmpty()
+                ? $startedDates->min()->toDateString()
+                : null;
+
+            $endDates = $children->pluck('actual_end_date')->filter();
+            $actualEnd = $endDates->count() === $children->count() && $endDates->isNotEmpty()
+                ? $endDates->max()->toDateString()
+                : null;
+
+            if ((int) $parent->lead_time_days !== $leadTime
+                || (int) $parent->progress !== $progress
+                || $parent->status !== $status
+                || $parent->actual_start_date?->toDateString() !== $actualStart
+                || $parent->actual_end_date?->toDateString() !== $actualEnd) {
+                $parent->skipActualStamping = true;
                 $parent->update([
                     'lead_time_days' => $leadTime,
                     'progress' => $progress,
                     'status' => $status,
+                    'actual_start_date' => $actualStart,
+                    'actual_end_date' => $actualEnd,
                 ]);
+                $parent->skipActualStamping = false;
                 $changedIds[] = (int) $parent->id;
             }
         }

@@ -36,6 +36,22 @@ class ProjectGanttPdfController extends Controller
         $timelineEnd = $datedTasks->max('end_date') ?: $timelineStart->copy()->addDay();
         $timelineStart = Carbon::parse($timelineStart)->startOfDay();
         $timelineEnd = Carbon::parse($timelineEnd)->startOfDay();
+
+        // Reported actual dates widen the track: work that began before the plan
+        // or ran past it would otherwise be clamped to the edge and lose its span.
+        $actualStarts = $tasks->pluck('actual_start_date')->filter();
+        $actualEnds = $tasks->pluck('actual_end_date')->filter();
+
+        if ($actualStarts->isNotEmpty()) {
+            $earliestActual = Carbon::parse($actualStarts->min())->startOfDay();
+            $timelineStart = $earliestActual->lessThan($timelineStart) ? $earliestActual : $timelineStart;
+        }
+
+        if ($actualEnds->isNotEmpty()) {
+            $latestActual = Carbon::parse($actualEnds->max())->startOfDay();
+            $timelineEnd = $latestActual->greaterThan($timelineEnd) ? $latestActual : $timelineEnd;
+        }
+
         $timelineDays = max(1, $timelineStart->diffInDays($timelineEnd) + 1);
 
         $children = $tasks->whereNotNull('parent_task_id')->groupBy('parent_task_id');
@@ -262,11 +278,31 @@ class ProjectGanttPdfController extends Controller
             ? max(0.8, ($start->diffInDays($end) + 1) / $timelineDays * 100)
             : 0;
 
+        // The actual span, positioned on the same track as the plan so the PDF
+        // reads like the on-screen Gantt: an early start sits to the LEFT of the
+        // planned bar. Unfinished work runs to today, as the chart draws it.
+        $actualStart = $task->actual_start_date ? Carbon::parse($task->actual_start_date)->startOfDay() : null;
+        $actualEnd = $task->actual_end_date ? Carbon::parse($task->actual_end_date)->startOfDay() : now()->startOfDay();
+        $actualLeft = 0;
+        $actualWidth = 0;
+
+        if ($actualStart) {
+            if ($actualEnd->lessThan($actualStart)) {
+                $actualEnd = $actualStart;
+            }
+
+            $actualLeft = min(100, max(0, $timelineStart->diffInDays($actualStart, false)) / $timelineDays * 100);
+            $actualWidth = max(0.8, ($actualStart->diffInDays($actualEnd) + 1) / $timelineDays * 100);
+        }
+
         return [
             'task' => $task,
             'depth' => $depth,
             'left' => min(100, $left),
             'width' => min(100 - min(100, $left), $width),
+            'actualLeft' => $actualLeft,
+            'actualWidth' => $actualStart ? min(100 - $actualLeft, $actualWidth) : 0,
+            'actualOpen' => $actualStart && ! $task->actual_end_date,
         ];
     }
 }

@@ -858,11 +858,24 @@ class ProjectTaskController extends Controller
             'progress_recorded_at' => 'sometimes|nullable|date',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
+            // Reported execution dates. Auto-stamped by the model, but an editor
+            // may correct either — that is what lets an Actual bar sit left of
+            // the plan on the Gantt.
+            'actual_start_date' => 'sometimes|nullable|date',
+            'actual_end_date' => 'sometimes|nullable|date',
             'lead_time_days' => 'sometimes|nullable|integer|min:1',
             'assigned_to' => 'nullable',
             'support_by' => 'nullable',
             'order' => 'sometimes|numeric',
         ]);
+
+        // The form posts every field on every save, so an empty date arrives as
+        // '' rather than being absent — normalise before it reaches the column.
+        foreach (['actual_start_date', 'actual_end_date'] as $actualDate) {
+            if (array_key_exists($actualDate, $validated)) {
+                $validated[$actualDate] = $validated[$actualDate] ?: null;
+            }
+        }
 
         $progressRecordedAt = null;
         if (array_key_exists('progress', $validated) && ! empty($validated['progress_recorded_at'])) {
@@ -1007,7 +1020,13 @@ class ProjectTaskController extends Controller
         }
 
         if ($isRolledUpActivity) {
-            unset($validated['lead_time_days'], $validated['progress'], $validated['status'], $validated['start_date'], $validated['end_date']);
+            // Actual dates roll up from the sub-tasks too — see
+            // ProjectScheduler::syncParentRollups().
+            unset(
+                $validated['lead_time_days'], $validated['progress'], $validated['status'],
+                $validated['start_date'], $validated['end_date'],
+                $validated['actual_start_date'], $validated['actual_end_date'],
+            );
         }
 
         // The form posts the whole row every time, so only treat a date as

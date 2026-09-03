@@ -291,7 +291,7 @@ class ProjectGanttProductivityTest extends TestCase
             'start_date' => '2026-09-07',
             'end_date' => '2026-09-08',
         ]);
-        $this->task($project, 'Week 2 delivery', $activity->id, [
+        $delivery = $this->task($project, 'Week 2 delivery', $activity->id, [
             'progress' => 60,
             'start_date' => '2026-09-07',
             'end_date' => '2026-09-08',
@@ -299,6 +299,10 @@ class ProjectGanttProductivityTest extends TestCase
             'activity_weight' => 100,
             'sub_task_weight' => 100,
         ]);
+        // No actual dates reported on this row, so the planned schedule stays the
+        // anchor. A row that HAS reported actuals follows those instead — see
+        // ProjectActualProgressAlignmentTest.
+        ProjectTask::whereKey($delivery->id)->update(['actual_start_date' => null, 'actual_end_date' => null]);
 
         $series = app(ProjectWeeklyProgressService::class)->build($project->fresh('tasks'));
 

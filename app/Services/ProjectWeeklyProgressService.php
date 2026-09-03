@@ -104,9 +104,11 @@ class ProjectWeeklyProgressService
             ->get(['project_task_id', 'progress', 'recorded_at'])
             ->groupBy('project_task_id')
             ->map(function (Collection $logs, $taskId) use ($tasksById, $now) {
-                $taskStart = $tasksById->get((int) $taskId)?->start_date
-                    ? CarbonImmutable::parse($tasksById->get((int) $taskId)->start_date)->startOfDay()
-                    : null;
+                // The Gantt's Actual bar begins at actual_start_date, so the
+                // curve must too: a log entered before the PLANNED start is only
+                // pulled forward when the row had not actually begun. Work that
+                // really started early stays in the week it happened.
+                $taskStart = $this->workStart($tasksById->get((int) $taskId));
 
                 return $logs->map(function (ProjectProgressLog $log) use ($taskStart, $now) {
                     $recorded = CarbonImmutable::parse($log->recorded_at)
@@ -195,7 +197,10 @@ class ProjectWeeklyProgressService
 
     private function progressAt(ProjectTask $task, Collection $entries, CarbonImmutable $cutoff): int
     {
-        $start = $task->start_date ? CarbonImmutable::parse($task->start_date)->startOfDay() : null;
+        // Nothing counts before the work began. Where an actual start has been
+        // reported that is the date the Gantt draws, so it wins over the plan —
+        // which is what lets an early start lift the curve early.
+        $start = $this->workStart($task);
         if ($start && $cutoff->lessThan($start)) {
             return 0;
         }
@@ -213,6 +218,19 @@ class ProjectWeeklyProgressService
         }
 
         return $value;
+    }
+
+    /**
+     * When a row's work actually began, for curve purposes: the reported actual
+     * start if there is one, otherwise the planned start. Mirrors the Gantt's
+     * actual bar (see ProjectGantt.vue's actualSpan) so the chart, the PDF and
+     * the bars all answer "when did this really run?" the same way.
+     */
+    private function workStart(?ProjectTask $task): ?CarbonImmutable
+    {
+        $date = $task?->actual_start_date ?: $task?->start_date;
+
+        return $date ? CarbonImmutable::parse($date)->startOfDay() : null;
     }
 
     private function weight(ProjectTask $task): float

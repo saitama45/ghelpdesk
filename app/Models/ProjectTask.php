@@ -16,6 +16,13 @@ class ProjectTask extends Model
     /** Reporting cutoff selected by Weekly Timeline for the next progress log. */
     public ?\DateTimeInterface $progressRecordedAt = null;
 
+    /**
+     * Set while an activity's actual dates are being rolled up from its
+     * sub-tasks, so the auto-stamp below does not overwrite that roll-up with
+     * today's date. See App\Services\ProjectScheduler::syncParentRollups().
+     */
+    public bool $skipActualStamping = false;
+
     protected $fillable = [
         'project_id',
         'store_id',
@@ -43,6 +50,8 @@ class ProjectTask extends Model
         'lead_time_days',
         'original_start_date',
         'original_end_date',
+        'actual_start_date',
+        'actual_end_date',
         'dependencies',
         'comments',
         'order',
@@ -72,6 +81,8 @@ class ProjectTask extends Model
         'lead_time_days' => 'integer',
         'original_start_date' => 'date:Y-m-d',
         'original_end_date' => 'date:Y-m-d',
+        'actual_start_date' => 'date:Y-m-d',
+        'actual_end_date' => 'date:Y-m-d',
         'dependencies' => 'array',
         'progress' => 'integer',
         'order' => 'float',
@@ -99,8 +110,47 @@ class ProjectTask extends Model
             }
         };
 
+        // Actual execution dates. The plan says when a row *should* run; these
+        // say when it did, which is what lets the Gantt draw an actual bar that
+        // starts earlier or later than the plan instead of a fill pinned to it.
+        // Stamped on the first sign of work and on completion, then left alone
+        // so a hand-corrected date is never overwritten.
+        $stampActuals = function (ProjectTask $task): void {
+            if ($task->skipActualStamping) {
+                return;
+            }
+
+            // Weekly Timeline reports against a past week; stamp the date the
+            // progress was reported for, not the day it was typed in.
+            $reportedOn = ($task->progressRecordedAt ?? now())->format('Y-m-d');
+
+            $started = (int) $task->progress > 0
+                || in_array($task->status, ['Ongoing', 'In Progress', 'Done', 'Completed'], true);
+
+            if ($started && ! $task->actual_start_date) {
+                $task->actual_start_date = $reportedOn;
+            }
+
+            $finished = (int) $task->progress >= 100
+                || in_array($task->status, ['Done', 'Completed'], true);
+
+            if ($finished && ! $task->actual_end_date) {
+                $task->actual_end_date = $reportedOn;
+            }
+
+            // Reopened work: the row is running again, so it has no finish yet.
+            if (! $finished
+                && $task->actual_end_date
+                && ! $task->isDirty('actual_end_date')
+                && $task->isDirty(['progress', 'status'])) {
+                $task->actual_end_date = null;
+            }
+        };
+
         static::creating($captureBaseline);
         static::updating($captureBaseline);
+        static::creating($stampActuals);
+        static::updating($stampActuals);
     }
 
     public function project(): BelongsTo

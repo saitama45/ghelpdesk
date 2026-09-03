@@ -4,7 +4,7 @@
         <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div class="flex flex-wrap items-center gap-3 text-xs">
                 <span class="font-semibold uppercase tracking-wider text-gray-400">Legend</span>
-                <span v-for="key in VERDICT_ORDER" :key="key" class="inline-flex items-center gap-1">
+                <span v-for="key in legendKeys" :key="key" class="inline-flex items-center gap-1">
                     <span class="inline-flex h-4 w-4 items-center justify-center rounded text-[10px] font-bold" :class="verdict(key).cell">
                         {{ verdict(key).glyph }}
                     </span>
@@ -186,6 +186,12 @@ defineEmits(['open-case', 'go'])
 
 const route = window.route
 const can = inject('qatCan', () => false)
+
+// "Blocked" is no longer offered as a button, but a cycle recorded before that
+// change can still hold one — keep it in the legend only while it is on screen.
+const legendKeys = computed(() => props.results.some(r => r.result === 'blocked')
+    ? [...VERDICT_ORDER, 'blocked']
+    : VERDICT_ORDER)
 
 const activeCell = ref(null)
 const bulkOpen = ref(false)

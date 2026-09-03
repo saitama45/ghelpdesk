@@ -195,3 +195,35 @@ html.dark #nprogress .spinner-icon {
     border-top-color: #38bdf8 !important;
     border-left-color: #38bdf8 !important;
 }
+
+/* Actual-progress hatch — one definition shared by the Gantt chart's actual bar,
+   its legend swatch and the Weekly Timeline's week bars, so "actual" looks the
+   same wherever it is drawn. Red/white 45° hatch with a crisp outline; the
+   pattern (not just the colour) is what distinguishes it from the planned bar.
+   Elements using it are positioned by their own layout — only the height, fill
+   and border live here. */
+.actual-hatch {
+    height: 10px;
+    background-color: #ffffff;
+    background-image: repeating-linear-gradient(
+        45deg,
+        #dc2626 0,
+        #dc2626 3.5px,
+        #ffffff 3.5px,
+        #ffffff 7px
+    );
+    border: 1px solid #7f1d1d;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.dark .actual-hatch {
+    border-color: #991b1b;
+}
+
+/* Still running: no reported finish yet, so the bar fades out on the right
+   instead of claiming an end date it does not have. */
+.actual-hatch--open {
+    border-right-style: dashed;
+    -webkit-mask-image: linear-gradient(to right, #000 78%, transparent 100%);
+    mask-image: linear-gradient(to right, #000 78%, transparent 100%);
+}
