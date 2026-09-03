@@ -11,6 +11,7 @@ use App\Models\Store;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\ProjectTemplate;
+use App\Models\ReferenceOption;
 use App\Services\ProjectProgressChartService;
 use App\Services\ProjectTaskBoardSyncService;
 use App\Services\ProjectWeeklyProgressService;
@@ -348,6 +349,15 @@ class ProjectController extends Controller
             // the workspace on first paint.
             'workspaceData'  => $this->workspace->build($project, auth()->user()),
             'manualStatuses' => \App\Models\ProjectTask::manualStatuses(),
+            // Project team roles are a managed reference list (add/edit/delete
+            // from the Manage Team modal), like project types on /activity-templates.
+            'projectRoles'   => ReferenceOption::ofType('project_role')
+                ->map(fn ($option) => [
+                    'id'         => $option->id,
+                    'value'      => $option->value,
+                    'label'      => $option->label,
+                    'sort_order' => $option->sort_order,
+                ])->values(),
             // Non-working holidays around the plan, so the Gantt shades them and
             // its lead-time preview matches the server's scheduling.
             'holidays'       => $this->ganttHolidays($project),

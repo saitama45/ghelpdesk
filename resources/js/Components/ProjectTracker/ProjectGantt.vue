@@ -19,6 +19,7 @@ import {
     UserPlusIcon,
     DocumentChartBarIcon,
     TicketIcon,
+    Squares2X2Icon,
     ArrowTopRightOnSquareIcon
 } from '@heroicons/vue/24/outline';
 
@@ -1101,6 +1102,73 @@ const getGanttBarStyles = (task) => {
     };
 };
 
+// Planned vs actual. The baseline (original_start_date/original_end_date) is
+// captured once, the first time a row is scheduled, and is never rewritten by a
+// reschedule — so when a row moves, the two bars separate and the slip is
+// visible. A row still sitting on its baseline draws one bar, not two.
+const showBaseline = ref(true);
+
+const baselineSpan = (task) => {
+    if (!task?.original_start_date || !task?.original_end_date) return null;
+
+    const start = String(task.original_start_date).split('T')[0];
+    const end = String(task.original_end_date).split('T')[0];
+    const current = {
+        start: task.start_date ? String(task.start_date).split('T')[0] : null,
+        end: task.end_date ? String(task.end_date).split('T')[0] : null,
+    };
+
+    if (start === current.start && end === current.end) return null;
+
+    return { start, end };
+};
+
+const hasBaselineDrift = (task) => showBaseline.value && baselineSpan(task) !== null;
+
+const getBaselineBarStyles = (task) => {
+    const span = baselineSpan(task);
+    if (!span) return { display: 'none' };
+
+    const start = parseLocalDate(span.start);
+    const end = parseLocalDate(span.end);
+
+    const startIndex = timelineDays.value.findIndex(d => d.toDateString() === start.toDateString());
+    let endIndex = timelineDays.value.findIndex(d => d.toDateString() === end.toDateString());
+
+    if (startIndex === -1) return { display: 'none' };
+    if (endIndex === -1) endIndex = startIndex;
+
+    return {
+        gridColumnStart: startIndex + 1,
+        gridColumnEnd: endIndex + 2,
+    };
+};
+
+// How far the row moved off its baseline, in calendar days, for the tooltip.
+const baselineDriftDays = (task) => {
+    const span = baselineSpan(task);
+    if (!span || !task.end_date) return 0;
+
+    const planned = parseLocalDate(span.end);
+    const actual = parseLocalDate(String(task.end_date).split('T')[0]);
+
+    return Math.round((actual - planned) / 86400000);
+};
+
+const baselineTooltip = (task) => {
+    const span = baselineSpan(task);
+    if (!span) return '';
+
+    const drift = baselineDriftDays(task);
+    const slip = drift > 0
+        ? `${drift} day${drift === 1 ? '' : 's'} later than planned`
+        : drift < 0
+            ? `${Math.abs(drift)} day${Math.abs(drift) === 1 ? '' : 's'} earlier than planned`
+            : 'same finish as planned';
+
+    return `Planned: ${span.start} to ${span.end} — ${slip}`;
+};
+
 const taskLookup = computed(() => {
     return new Map(localTasks.value.map(task => [Number(task.id), task]));
 });
@@ -1874,6 +1942,18 @@ const isWeekend = (date) => {
                     <UserPlusIcon class="w-3.5 h-3.5 mr-1.5" />
                     Quick Assign
                 </button>
+                <button type="button"
+                        @click="showBaseline = !showBaseline"
+                        :class="[
+                            'inline-flex items-center px-3 py-1.5 border text-xs font-bold rounded-lg shadow-xs transition-all active:scale-95',
+                            showBaseline
+                                ? 'border-slate-700 bg-slate-700 text-white hover:bg-slate-800'
+                                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+                        ]"
+                        title="Show the planned (baseline) schedule under each bar. Rows still on plan draw a single bar.">
+                    <Squares2X2Icon class="w-3.5 h-3.5 mr-1.5" />
+                    Planned vs Actual
+                </button>
                 <a :href="route('projects.gantt-pdf', project.id)"
                    target="_blank"
                    rel="noopener"
@@ -2505,24 +2585,44 @@ const isWeekend = (date) => {
                                 <!-- Right Gantt Bar Area -->
                                 <div class="flex-1 relative">
                                     <div class="absolute inset-0 grid h-full py-1.5 px-[1px] items-center" :style="{ gridTemplateColumns: `repeat(${timelineDays.length}, 40px)` }">
+                                        <!-- Planned (baseline) layer: where this row was first scheduled -->
+                                        <div v-if="hasBaselineDrift(row.task)"
+                                             class="gantt-baseline-bar self-end rounded-sm h-1.5 z-10 pointer-events-auto cursor-help"
+                                             :style="getBaselineBarStyles(row.task)"
+                                             :title="baselineTooltip(row.task)"
+                                             @click.stop>
+                                        </div>
                                         <div v-if="row.task.start_date && row.task.end_date"
                                              class="rounded-md relative overflow-hidden group/bar transition-all hover:scale-[1.01] hover:shadow-md cursor-pointer z-20 flex items-center"
                                              :class="[
-                                                row.isSubTask ? 'h-5 opacity-90' : 'h-6',
+                                                hasBaselineDrift(row.task)
+                                                    ? (row.isSubTask ? 'h-4 opacity-90 self-start' : 'h-5 self-start')
+                                                    : (row.isSubTask ? 'h-5 opacity-90' : 'h-6'),
                                              ]"
                                              :style="getGanttBarStyles(row.task)"
                                              @click="isAddingTask = false"
                                         >
+                                            <!-- Planned: the row's full scheduled span -->
                                             <div class="absolute inset-0" :class="getBarColorClass(row.task.status)"></div>
-                                            <div class="absolute top-0 left-0 h-full bg-black/15 flex items-center justify-end pr-1.5 overflow-hidden" :style="{ width: row.task.progress + '%' }">
-                                                <div v-if="row.task.progress > 0" class="h-full w-full bg-gradient-to-r from-transparent to-white/10"></div>
-                                            </div>
+                                            <!-- Actual: how much of that span is really done, hatched over the plan -->
+                                            <div v-if="row.task.progress > 0"
+                                                 class="gantt-actual-fill absolute top-0 left-0 h-full overflow-hidden"
+                                                 :style="{ width: row.task.progress + '%' }"></div>
                                             <div class="absolute inset-0 flex items-center px-1.5 justify-between gap-1">
                                                 <span class="text-[10px] font-bold text-white truncate drop-shadow-xs tracking-tight flex-1">{{ row.task.name }}</span>
                                                 <span class="text-[9px] font-semibold text-white/90 whitespace-nowrap">{{ row.task.progress }}%</span>
                                             </div>
                                             <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1.5 px-2 py-1 bg-slate-800 text-white text-[9px] rounded-md opacity-0 group-hover/bar:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50 font-bold shadow-lg">
-                                                {{ row.task.name }}: {{ row.task.start_date.split('T')[0] }} to {{ row.task.end_date.split('T')[0] }}
+                                                {{ row.task.name }}
+                                                <span class="block font-semibold text-slate-300">
+                                                    Planned: {{ row.task.start_date.split('T')[0] }} to {{ row.task.end_date.split('T')[0] }}
+                                                </span>
+                                                <span class="block font-semibold text-amber-200">
+                                                    Actual: {{ row.task.progress }}% complete
+                                                </span>
+                                                <span v-if="hasBaselineDrift(row.task)" class="block font-semibold text-slate-300">
+                                                    {{ baselineTooltip(row.task) }}
+                                                </span>
                                             </div>
                                         </div>
                                     </div> 
@@ -2548,6 +2648,18 @@ const isWeekend = (date) => {
                 <div class="flex items-center space-x-2">
                     <div class="w-2 h-2 rounded-full bg-slate-200 dark:bg-slate-600"></div>
                     <span>Weekend</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <div class="gantt-legend-actual h-2.5 w-5 rounded-sm"></div>
+                    <span>Actual</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <div class="h-2.5 w-5 rounded-sm bg-indigo-500"></div>
+                    <span>Planned</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <div class="gantt-baseline-bar h-1.5 w-5 rounded-sm"></div>
+                    <span>Original plan</span>
                 </div>
             </div>
             <div class="flex items-center space-x-2">
@@ -2834,6 +2946,46 @@ const isWeekend = (date) => {
 </template>
 
 <style scoped>
+/* Actual: diagonal hatching over the solid planned bar, so the completed part
+   of a row reads as a different layer instead of a slightly darker shade. */
+.gantt-actual-fill {
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgb(255 255 255 / 0.6) 0 3px,
+        rgb(0 0 0 / 0.22) 3px 7px
+    );
+    box-shadow: inset -2px 0 0 rgb(255 255 255 / 0.9);
+}
+
+.gantt-legend-actual {
+    background-color: rgb(99 102 241);
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgb(255 255 255 / 0.6) 0 3px,
+        rgb(0 0 0 / 0.22) 3px 7px
+    );
+}
+
+/* Original plan (baseline) bar: hatched grey, never a second real task. */
+.gantt-baseline-bar {
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgb(100 116 139 / 0.85) 0 4px,
+        rgb(203 213 225 / 0.9) 4px 8px
+    );
+    border: 1px solid rgb(100 116 139 / 0.6);
+}
+
+:global(.dark) .gantt-baseline-bar,
+:where(.dark) .gantt-baseline-bar {
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgb(148 163 184 / 0.9) 0 4px,
+        rgb(51 65 85 / 0.95) 4px 8px
+    );
+    border-color: rgb(148 163 184 / 0.5);
+}
+
 .no-scrollbar::-webkit-scrollbar {
     display: none;
 }

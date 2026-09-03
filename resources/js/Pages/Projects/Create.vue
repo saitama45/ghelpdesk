@@ -252,25 +252,6 @@ const submit = () => {
                             <div v-if="form.errors.status" class="mt-1 text-xs text-red-500">{{ form.errors.status }}</div>
                         </div>
 
-                        <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Task Board Month</label>
-                            <select
-                                v-model.number="form.board_month"
-                                class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 pl-2 pr-7"
-                            >
-                                <option v-for="month in monthOptions" :key="month.value" :value="month.value">{{ month.label }}</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Task Board Year</label>
-                            <select
-                                v-model.number="form.board_year"
-                                class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 pl-2 pr-7"
-                            >
-                                <option v-for="year in boardYears" :key="year" :value="year">{{ year }}</option>
-                            </select>
-                        </div>
                     </div>
 
                     <hr class="border-gray-100 dark:border-gray-700">
@@ -308,6 +289,8 @@ const submit = () => {
                                 <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Target Go-Live</label>
                                 <input v-model="form.target_go_live" type="date" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                             </div>
+                            <!-- Hidden for now (kept for later re-enable): Turn-over (to TAS), Training, Testing,
+                                 Mock Service and Turn-over to Franchisee dates.
                             <div>
                                 <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Turn-over (to TAS)</label>
                                 <input v-model="form.turn_over_date" type="date" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
@@ -328,6 +311,7 @@ const submit = () => {
                                 <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Turn-over to Franchisee</label>
                                 <input v-model="form.turn_over_to_franchisee_date" type="date" class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100" />
                             </div>
+                            -->
                         </div>
                     </div>
 
@@ -354,6 +338,28 @@ const submit = () => {
                             @update:modelValue="form.board_id = $event || null"
                         />
                         <div v-if="form.errors.board_id" class="mt-1 text-xs text-red-500">{{ form.errors.board_id }}</div>
+
+                        <div v-if="form.board_id" class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div>
+                                <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Task Board Month</label>
+                                <select
+                                    v-model.number="form.board_month"
+                                    class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 pl-2 pr-7"
+                                >
+                                    <option v-for="month in monthOptions" :key="month.value" :value="month.value">{{ month.label }}</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Task Board Year</label>
+                                <select
+                                    v-model.number="form.board_year"
+                                    class="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 pl-2 pr-7"
+                                >
+                                    <option v-for="year in boardYears" :key="year" :value="year">{{ year }}</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

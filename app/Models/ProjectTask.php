@@ -41,6 +41,7 @@ class ProjectTask extends Model
         'end_date',
         'start_anchor_date',
         'lead_time_days',
+        'original_start_date',
         'original_end_date',
         'dependencies',
         'comments',
@@ -69,6 +70,7 @@ class ProjectTask extends Model
         'end_date' => 'date:Y-m-d',
         'start_anchor_date' => 'date:Y-m-d',
         'lead_time_days' => 'integer',
+        'original_start_date' => 'date:Y-m-d',
         'original_end_date' => 'date:Y-m-d',
         'dependencies' => 'array',
         'progress' => 'integer',
@@ -77,6 +79,29 @@ class ProjectTask extends Model
         'activity_weight' => 'decimal:2',
         'sub_task_weight' => 'decimal:2',
     ];
+
+    /**
+     * Capture the baseline (planned) schedule the first time a row has dates.
+     *
+     * start_date/end_date are re-derived from the project's Day 1 Date on every
+     * reschedule, so they say where the row sits *now*. The originals are written
+     * once and never again, which is what lets the Gantt draw planned vs actual.
+     */
+    protected static function booted(): void
+    {
+        $captureBaseline = function (ProjectTask $task): void {
+            if (! $task->original_start_date && $task->start_date) {
+                $task->original_start_date = $task->start_date;
+            }
+
+            if (! $task->original_end_date && $task->end_date) {
+                $task->original_end_date = $task->end_date;
+            }
+        };
+
+        static::creating($captureBaseline);
+        static::updating($captureBaseline);
+    }
 
     public function project(): BelongsTo
     {

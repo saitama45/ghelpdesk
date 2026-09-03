@@ -10,6 +10,7 @@ import ProjectReports from '@/Components/ProjectTracker/ProjectReports.vue';
 import ProjectWeeklyTimeline from '@/Components/ProjectTracker/ProjectWeeklyTimeline.vue';
 import Modal from '@/Components/Modal.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
+import ManageableAutocomplete from '@/Components/ManageableAutocomplete.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import TextInput from '@/Components/TextInput.vue';
 import InputError from '@/Components/InputError.vue';
@@ -72,6 +73,8 @@ const props = defineProps({
         }),
     },
     manualStatuses: { type: Array, default: () => [] },
+    // Managed reference list for "Role in Project" — add/edit/delete inline.
+    projectRoles: { type: Array, default: () => [] },
 });
 
 const formatDate = (dateString) => {
@@ -183,8 +186,37 @@ const teamForm = useForm({
     department: defaultDepartment,
     sub_unit: defaultSubUnit,
     role_type: '',
-    team_category: 'CASA Team',
 });
+
+// Add New Member is split in two: an internal member is a system user (with a
+// department and a project role); an external member is just a name.
+const teamMemberMode = ref('internal');
+const memberModes = [
+    { key: 'internal', label: 'Internal' },
+    { key: 'external', label: 'External' },
+];
+const localProjectRoles = ref([...(props.projectRoles || [])]);
+
+// The roster reads the same way as the form: a system user is internal, a
+// manually named member is external.
+const memberGroups = computed(() => [
+    { key: 'internal', label: 'Internal', members: teamMembers.value.filter(m => m.user_id) },
+    { key: 'external', label: 'External', members: teamMembers.value.filter(m => !m.user_id) },
+]);
+
+const setTeamMemberMode = (mode) => {
+    teamMemberMode.value = mode;
+    teamForm.clearErrors();
+
+    if (mode === 'internal') {
+        teamForm.external_name = '';
+    } else {
+        teamForm.user_id = '';
+        teamForm.department = '';
+        teamForm.sub_unit = '';
+        teamForm.role_type = '';
+    }
+};
 
 const teamMembers = computed(() => {
     return props.project.team_members || props.project.teamMembers || [];
@@ -383,6 +415,11 @@ const syncTeamTargetFromUser = () => {
 const addTeamMember = async () => {
     teamForm.clearErrors();
     
+    if (teamMemberMode.value === 'external' && !teamForm.external_name) {
+        teamForm.setError({ external_name: 'Enter the external member\'s name.' });
+        return;
+    }
+
     if (!teamForm.user_id && !teamForm.external_name) {
         teamForm.setError({
             user_id: 'Please select a system user or enter an external name.',
@@ -405,7 +442,7 @@ const addTeamMember = async () => {
         return;
     }
 
-    if (!teamForm.department) {
+    if (teamMemberMode.value === 'internal' && !teamForm.department) {
         teamForm.setError({
             department: 'Select a department.',
         });
@@ -424,10 +461,14 @@ const addTeamMember = async () => {
             auto_create_monthly_boards: true,
         }))
         .post(route('projects-team-members.store'), {
+        // Only the roster changed, so refresh those props instead of re-rendering
+        // every tab's payload. The board rebuild now runs on the queue.
+        only: ['project', 'taskListTargets', 'flash', 'errors'],
         onSuccess: () => {
             teamForm.reset('user_id', 'external_name', 'department', 'sub_unit', 'role_type');
         },
-        preserveScroll: true
+        preserveScroll: true,
+        preserveState: true,
     });
 };
 
@@ -439,7 +480,9 @@ const removeTeamMember = async (id) => {
 
     if (ok) {
         useForm({}).delete(route('projects-team-members.destroy', id), {
-            preserveScroll: true
+            only: ['project', 'taskListTargets', 'flash', 'errors'],
+            preserveScroll: true,
+            preserveState: true,
         });
     }
 };
@@ -470,6 +513,18 @@ const projectProgress = computed(() => {
     if (tasks.length === 0) return 0;
     const totalProgress = tasks.reduce((sum, task) => sum + (task.progress || 0), 0);
     return Math.round(totalProgress / tasks.length);
+});
+
+// Last day of the imported plan: the latest end date across every milestone,
+// activity and sub-task. Shown beside Target Go-Live once an activity template
+// (or any task) exists, so the plan's real finish is visible next to the goal.
+const calculatedGoLive = computed(() => {
+    const dates = (props.project.tasks || [])
+        .map(task => task.end_date || task.start_date)
+        .filter(Boolean)
+        .map(date => String(date).slice(0, 10));
+    if (dates.length === 0) return null;
+    return dates.reduce((latest, date) => (date > latest ? date : latest));
 });
 
 const getStatusColor = (status) => {
@@ -641,13 +696,21 @@ const getStatusColor = (status) => {
                                     <TextInput id="edit_target_go_live" type="date" v-model="editForm.target_go_live" class="w-full" />
                                     <InputError :message="editForm.errors.target_go_live" />
                                 </div>
-                                <div>
-                                    <InputLabel for="edit_turn_over_date" value="Store Turn-over" />
-                                    <TextInput id="edit_turn_over_date" type="date" v-model="editForm.turn_over_date" class="w-full" />
-                                    <InputError :message="editForm.errors.turn_over_date" />
+                                <div v-if="calculatedGoLive">
+                                    <InputLabel value="Calculated Go-Live" />
+                                    <p class="mt-1 w-full rounded-md border border-dashed border-indigo-200 bg-indigo-50/60 px-3 py-2 text-sm font-semibold text-indigo-700 dark:border-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-300">
+                                        {{ formatDate(calculatedGoLive) }}
+                                    </p>
+                                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Last end date in the applied plan.</p>
                                 </div>
                             </div>
 
+                            <!-- Hidden for now (kept for later re-enable): Store Turn-over, Training,
+                                 Testing, Mock Service and Franchisee turn-over dates.
+                            <div>
+                                <InputLabel for="edit_turn_over_date" value="Store Turn-over" />
+                                <TextInput id="edit_turn_over_date" type="date" v-model="editForm.turn_over_date" class="w-full" />
+                            </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
                                     <InputLabel for="edit_training_date" value="Training Date" />
@@ -674,7 +737,8 @@ const getStatusColor = (status) => {
                                 </div>
                             </div>
 
-                            <div class="grid grid-cols-2 gap-4">
+                            -->
+                            <div v-if="project.task_board" class="grid grid-cols-2 gap-4">
                                 <div>
                                     <InputLabel for="edit_board_month" value="Task Board Month" />
                                     <select
@@ -739,24 +803,31 @@ const getStatusColor = (status) => {
                     <!-- Current Team List -->
                     <div>
                         <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4 dark:text-gray-300">Current Members</h3>
-                        <div class="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                            <div v-for="member in teamMembers" :key="member.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 group dark:bg-gray-900/50 dark:border-gray-700">
-                                <div class="flex items-center min-w-0">
-                                    <div class="h-10 w-10 rounded-full bg-white shadow-sm border border-gray-200 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
-                                        {{ (member.user?.name || member.external_name || 'U').charAt(0) }}
+                        <div class="space-y-5 max-h-[460px] overflow-y-auto pr-2">
+                            <div v-for="group in memberGroups" :key="group.key">
+                                <p class="mb-2 text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400">
+                                    {{ group.label }} <span class="ml-1 text-gray-300 dark:text-gray-500">({{ group.members.length }})</span>
+                                </p>
+                                <div class="space-y-3">
+                                    <div v-for="member in group.members" :key="member.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 group dark:bg-gray-900/50 dark:border-gray-700">
+                                        <div class="flex items-center min-w-0">
+                                            <div class="h-10 w-10 rounded-full bg-white shadow-sm border border-gray-200 flex items-center justify-center text-sm font-bold text-gray-600 flex-shrink-0 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
+                                                {{ (member.user?.name || member.external_name || 'U').charAt(0) }}
+                                            </div>
+                                            <div class="ml-3 min-w-0">
+                                                <p class="text-sm font-bold text-gray-900 truncate dark:text-gray-100">{{ member.user?.name || member.external_name }}</p>
+                                                <p v-if="member.role_type" class="text-[10px] text-gray-500 uppercase font-black dark:text-gray-300">{{ member.role_type }}</p>
+                                                <p v-if="member.department" class="text-[10px] text-blue-600 font-black">{{ member.department }} / {{ member.sub_unit || '-' }}</p>
+                                            </div>
+                                        </div>
+                                        <button @click="removeTeamMember(member.id)" class="p-1.5 text-gray-400 hover:text-red-600 transition-colors dark:text-gray-400">
+                                            <TrashIcon class="w-5 h-5" />
+                                        </button>
                                     </div>
-                                    <div class="ml-3 min-w-0">
-                                        <p class="text-sm font-bold text-gray-900 truncate dark:text-gray-100">{{ member.user?.name || member.external_name }}</p>
-                                        <p class="text-[10px] text-gray-500 uppercase font-black dark:text-gray-300">{{ member.role_type }}</p>
-                                        <p class="text-[10px] text-blue-600 font-black">{{ member.department || '-' }} / {{ member.sub_unit || '-' }}</p>
-                                    </div>
+                                    <p v-if="!group.members.length" class="px-3 py-3 text-xs italic text-gray-400 dark:text-gray-400">
+                                        No {{ group.label.toLowerCase() }} members yet.
+                                    </p>
                                 </div>
-                                <button @click="removeTeamMember(member.id)" class="p-1.5 text-gray-400 hover:text-red-600 transition-colors dark:text-gray-400">
-                                    <TrashIcon class="w-5 h-5" />
-                                </button>
-                            </div>
-                            <div v-if="!teamMembers.length" class="text-center py-8 text-gray-400 text-sm italic dark:text-gray-400">
-                                No team members assigned yet.
                             </div>
                         </div>
                     </div>
@@ -764,90 +835,83 @@ const getStatusColor = (status) => {
                     <!-- Add New Member Form -->
                     <div class="bg-gray-50/50 p-6 rounded-2xl border border-gray-100 dark:border-gray-700">
                         <h3 class="text-sm font-bold text-gray-700 uppercase tracking-wider mb-4 dark:text-gray-300">Add New Member</h3>
+
+                        <div class="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
+                            <button
+                                v-for="mode in memberModes"
+                                :key="mode.key"
+                                type="button"
+                                @click="setTeamMemberMode(mode.key)"
+                                :class="[
+                                    'rounded-lg px-3 py-2 text-sm font-bold transition-all',
+                                    teamMemberMode === mode.key
+                                        ? 'bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-300'
+                                        : 'text-gray-500 hover:text-gray-700 dark:text-slate-300 dark:hover:text-slate-100',
+                                ]"
+                            >
+                                {{ mode.label }}
+                            </button>
+                        </div>
+
                         <form @submit.prevent="addTeamMember" class="space-y-4">
-                            <div>
-                                <InputLabel for="user_id" value="System User" />
-                                <Autocomplete
-                                    v-model="teamForm.user_id"
-                                    :options="userOptions"
-                                    label-key="label"
-                                    value-key="id"
-                                    placeholder="Select a user..."
-                                    @update:modelValue="syncTeamTargetFromUser"
-                                />
-                                <InputError :message="teamForm.errors.user_id" />
-                            </div>
-
-                            <div class="relative py-2">
-                                <div class="absolute inset-0 flex items-center" aria-hidden="true">
-                                    <div class="w-full border-t border-gray-200 dark:border-gray-700"></div>
+                            <!-- Internal: a system user, with their department and project role -->
+                            <template v-if="teamMemberMode === 'internal'">
+                                <div>
+                                    <InputLabel for="user_id" value="System User" />
+                                    <Autocomplete
+                                        v-model="teamForm.user_id"
+                                        :options="userOptions"
+                                        label-key="label"
+                                        value-key="id"
+                                        placeholder="Select a user..."
+                                        @update:modelValue="syncTeamTargetFromUser"
+                                    />
+                                    <InputError :message="teamForm.errors.user_id" />
                                 </div>
-                                <div class="relative flex justify-center text-[10px] uppercase font-black">
-                                    <span class="px-2 bg-gray-50 text-gray-400 dark:bg-gray-900/50 dark:text-gray-400">Or External Name</span>
+
+                                <div>
+                                    <InputLabel value="Department" />
+                                    <Autocomplete
+                                        :model-value="teamForm.department || null"
+                                        :options="departmentNameOptions"
+                                        placeholder="Select a department..."
+                                        @update:modelValue="onDepartmentSelected"
+                                    />
+                                    <InputError :message="teamForm.errors.department" />
                                 </div>
-                            </div>
 
-                            <div>
-                                <InputLabel for="external_name" value="External/Manual Name" />
-                                <TextInput 
-                                    id="external_name" 
-                                    type="text" 
-                                    v-model="teamForm.external_name" 
-                                    class="w-full"
-                                    placeholder="e.g. Franchisee Name"
-                                    @input="teamForm.user_id = ''"
-                                />
-                                <InputError :message="teamForm.errors.external_name" />
-                            </div>
-
-                            <div>
-                                <InputLabel value="Department" />
-                                <Autocomplete
-                                    :model-value="teamForm.department || null"
-                                    :options="departmentNameOptions"
-                                    placeholder="Select a department..."
-                                    @update:modelValue="onDepartmentSelected"
-                                />
-                                <InputError :message="teamForm.errors.department" />
-                            </div>
-
-                            <div>
-                                <InputLabel for="role_type" value="Role in Project" />
-                                <select 
-                                    v-model="teamForm.role_type" 
-                                    id="role_type"
-                                    class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm dark:border-gray-600"
-                                    required
-                                >
-                                    <option value="">Select role...</option>
-                                    <option value="Lead Partner">Lead Partner</option>
-                                    <option value="Leader">Leader</option>
-                                    <option value="SO Rep">SO Rep</option>
-                                    <option value="SMITS">SMITS</option>
-                                    <option value="Marketing">Marketing</option>
-                                    <option value="Training">Training</option>
-                                    <option value="SCM">SCM</option>
-                                    <option value="Contractor">Contractor</option>
-                                    <option value="Franchisee">Franchisee</option>
-                                    <option value="Other">Other</option>
-                                </select>
-                                <InputError :message="teamForm.errors.role_type" />
-                            </div>
-
-                            <div>
-                                <InputLabel for="team_category" value="Team Category" />
-                                <div class="flex gap-4 mt-2">
-                                    <label class="flex items-center">
-                                        <input type="radio" v-model="teamForm.team_category" value="CASA Team" class="text-blue-600 focus:ring-blue-500" />
-                                        <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">CASA Team</span>
-                                    </label>
-                                    <label class="flex items-center">
-                                        <input type="radio" v-model="teamForm.team_category" value="Extended Team" class="text-blue-600 focus:ring-blue-500" />
-                                        <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Extended</span>
-                                    </label>
+                                <div>
+                                    <InputLabel for="role_type" value="Role in Project" />
+                                    <ManageableAutocomplete
+                                        id="role_type"
+                                        v-model="teamForm.role_type"
+                                        :options="localProjectRoles"
+                                        option-type="project_role"
+                                        placeholder="Select role..."
+                                        :can-create="hasPermission('reference_options.create')"
+                                        :can-edit="hasPermission('reference_options.edit')"
+                                        :can-delete="hasPermission('reference_options.delete')"
+                                        @options-changed="localProjectRoles = $event"
+                                    />
+                                    <InputError :message="teamForm.errors.role_type" />
                                 </div>
-                                <InputError :message="teamForm.errors.team_category" />
-                            </div>
+                            </template>
+
+                            <!-- External: someone outside the system — a name is enough -->
+                            <template v-else>
+                                <div>
+                                    <InputLabel for="external_name" value="External/Manual Name" />
+                                    <TextInput
+                                        id="external_name"
+                                        type="text"
+                                        v-model="teamForm.external_name"
+                                        class="w-full"
+                                        placeholder="e.g. Franchisee Name"
+                                        @input="teamForm.user_id = ''"
+                                    />
+                                    <InputError :message="teamForm.errors.external_name" />
+                                </div>
+                            </template>
 
                             <div class="pt-4">
                                 <PrimaryButton class="w-full justify-center py-3 text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200 shadow-lg" :disabled="teamForm.processing">
@@ -917,6 +981,13 @@ const getStatusColor = (status) => {
                                 <p class="text-xl font-black">{{ formatDate(project.target_go_live) }}</p>
                             </div>
                         </div>
+                        <div v-if="calculatedGoLive" class="text-center border-l border-gray-50 pl-8">
+                            <p class="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1 dark:text-gray-400">Calculated Go-Live</p>
+                            <div class="flex items-center justify-center text-indigo-600 dark:text-indigo-300">
+                                <CalendarDaysIcon class="w-5 h-5 mr-2 opacity-50" />
+                                <p class="text-xl font-black">{{ formatDate(calculatedGoLive) }}</p>
+                            </div>
+                        </div>
                     </div>
                     <button
                         type="button"
@@ -977,7 +1048,7 @@ const getStatusColor = (status) => {
                         :class="[activeTab === 'assets' ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-300' : 'text-gray-500 hover:text-gray-700 dark:text-slate-300 dark:hover:text-slate-100', 'px-6 py-2.5 rounded-xl text-sm font-bold flex items-center transition-all']"
                     >
                         <CpuChipIcon class="w-4 h-4 mr-2" />
-                        IT Assets Board
+                        Asset Board
                     </button>
                 </nav>
             </div>
@@ -1058,7 +1129,7 @@ const getStatusColor = (status) => {
                                         </div>
                                     </div>
                                     <span class="text-[10px] uppercase font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded dark:bg-gray-900/50 dark:text-gray-400">
-                                        {{ member.team_category }}
+                                        {{ member.user_id ? 'Internal' : 'External' }}
                                     </span>
                                 </div>
                                 <button v-if="canManageProject" @click.stop="showManageTeamModal = true" class="w-full mt-4 py-2 border-2 border-dashed border-gray-300 rounded-md text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500 transition-colors dark:text-gray-300 dark:border-gray-600">

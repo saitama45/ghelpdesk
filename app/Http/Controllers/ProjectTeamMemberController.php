@@ -2,30 +2,27 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Project;
+use App\Jobs\SyncProjectTaskBoardsJob;
 use App\Models\ProjectTeamMember;
 use App\Models\User;
-use App\Services\ProjectTaskBoardSyncService;
 use Illuminate\Http\Request;
 
 class ProjectTeamMemberController extends Controller
 {
-    public function __construct(private ProjectTaskBoardSyncService $projectTaskBoards)
-    {
-    }
-
     public function store(Request $request)
     {
         $validated = $request->validate([
             'project_id' => 'required|exists:projects,id',
             'user_id' => 'required_without:external_name|nullable|exists:users,id',
             'external_name' => 'required_without:user_id|nullable|string|max:255',
-            'department' => 'required|string|max:255',
+            // Department and role describe an internal member. An external member
+            // is just a name, so both stay optional on that path.
+            'department' => 'required_with:user_id|nullable|string|max:255',
             // Optional: members are targeted by department, and the sub-unit is
             // only inherited from the selected system user's org_path.
             'sub_unit' => 'nullable|string|max:255',
-            'role_type' => 'required|string|max:255',
-            'team_category' => 'required|string|max:255',
+            'role_type' => 'nullable|string|max:255',
+            'team_category' => 'nullable|string|max:255',
         ], [
             'user_id.required_without' => 'Please select a system user or enter an external name.',
             'external_name.required_without' => 'Please select a system user or enter an external name.',
@@ -55,8 +52,13 @@ class ProjectTeamMemberController extends Controller
 
         ProjectTeamMember::create($validated);
 
-        $project = Project::with(['teamMembers.user', 'tasks'])->findOrFail($validated['project_id']);
-        $this->projectTaskBoards->syncProject($project, $request->user(), null, $request->boolean('auto_create_monthly_boards'));
+        // The board rebuild is seconds of work and nothing on this page waits for
+        // it, so it runs on the queue — the member row itself is already saved.
+        SyncProjectTaskBoardsJob::dispatch(
+            (int) $validated['project_id'],
+            $request->user()?->id,
+            $request->boolean('auto_create_monthly_boards')
+        );
 
         return redirect()->back()->with('success', 'Team member added successfully.');
     }
@@ -67,7 +69,7 @@ class ProjectTeamMemberController extends Controller
         $projects_team_member->delete();
 
         if ($project) {
-            $this->projectTaskBoards->syncProject($project->fresh(['teamMembers.user', 'tasks']), $request->user(), null, true);
+            SyncProjectTaskBoardsJob::dispatch((int) $project->id, $request->user()?->id, true);
         }
 
         return redirect()->back()->with('success', 'Team member removed successfully.');

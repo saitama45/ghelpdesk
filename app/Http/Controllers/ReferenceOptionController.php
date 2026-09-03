@@ -16,6 +16,7 @@ class ReferenceOptionController extends Controller implements HasMiddleware
 {
     private const ALLOWED_TYPES = [
         'project_type',
+        'project_role',
         'company_type',
         'store_class',
         'store_hookup',
@@ -110,6 +111,10 @@ class ReferenceOptionController extends Controller implements HasMiddleware
 
         if ($type === 'project_type') {
             return [ProjectTemplate::where('project_type', $value)->exists(), 'project templates'];
+        }
+
+        if ($type === 'project_role') {
+            return [\App\Models\ProjectTeamMember::where('role_type', $value)->exists(), 'project team members'];
         }
 
         if ($type === 'company_type') {
