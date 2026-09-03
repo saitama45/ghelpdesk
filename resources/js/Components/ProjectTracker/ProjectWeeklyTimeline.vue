@@ -32,6 +32,8 @@ import ProjectTaskStatusPill from './ProjectTaskStatusPill.vue';
 
 const props = defineProps({
     project: { type: Object, required: true },
+    progressHistory: { type: Array, default: () => [] },
+    weeklyProgress: { type: Object, default: () => ({}) },
     users: { type: Array, default: () => [] },
     holidays: { type: Array, default: () => [] },
     taskListTargets: { type: Object, default: () => ({}) },
@@ -419,6 +421,7 @@ const saveEditedTask = async () => {
         return {
             ...rest,
             progress: rest.task_progress,
+            progress_recorded_at: formatLocalDate(selectedWeek.value?.end),
             auto_create_monthly_boards: true,
         };
     }).put(route('projects-tasks.update', { projects_task: editingTaskId.value, tab: 'weekly-timeline' }), {
@@ -444,6 +447,11 @@ const formatShortDate = (date) => {
 const formatFullDate = (date) => {
     if (!date) return 'TBD';
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const formatLocalDate = (date) => {
+    if (!date) return null;
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
 const getDayOfWeekIndex = (date) => {
@@ -955,8 +963,72 @@ const getTaskDaySpan = (task, week) => {
 };
 
 /* ----------------------------------------------------- S-Curve & Velocity Math */
-// For each week, calculate Planned Progress % and Actual Progress %
-const weeklyCurveData = computed(() => {
+// Planned is the cumulative weighted amount that should be complete by each
+// week end, based on each leaf task's scheduled start/end dates. Actual replays
+// the append-only task progress log at that same cutoff so every point is a real
+// historical snapshot, not today's value copied backwards.
+const progressHistoryByTask = computed(() => {
+    const grouped = new Map();
+    const taskById = new Map(executableProgressTasks.value.map(task => [Number(task.id), task]));
+
+    (props.progressHistory || []).forEach(entry => {
+        const taskId = Number(entry.project_task_id);
+        const recordedAt = new Date(entry.recorded_at);
+        if (!taskId || Number.isNaN(recordedAt.getTime())) return;
+
+        // Old entries only stored the save time. If work for a future task was
+        // entered early, keep it in that task's scheduled reporting period
+        // instead of pulling the red line backwards into the current week.
+        const scheduledStart = parseLocalDate(taskById.get(taskId)?.start_date);
+        const effectiveAt = scheduledStart && recordedAt < scheduledStart
+            ? scheduledStart
+            : recordedAt;
+
+        if (!grouped.has(taskId)) grouped.set(taskId, []);
+        grouped.get(taskId).push({
+            at: effectiveAt,
+            progress: Math.min(100, Math.max(0, Number(entry.progress) || 0)),
+        });
+    });
+
+    grouped.forEach(entries => entries.sort((a, b) => a.at - b.at));
+    return grouped;
+});
+
+const taskProgressAt = (task, cutoff) => {
+    const scheduledStart = parseLocalDate(task.start_date);
+    if (scheduledStart && cutoff < scheduledStart) return 0;
+
+    const entries = progressHistoryByTask.value.get(Number(task.id)) || [];
+    let value = 0;
+
+    for (const entry of entries) {
+        if (entry.at > cutoff) break;
+        value = entry.progress;
+    }
+
+    // Legacy rows without any log use their current value, matching the existing
+    // project progress chart's backwards-compatible fallback.
+    if (entries.length === 0) {
+        return Math.min(100, Math.max(0, Number(task.progress) || 0));
+    }
+
+    return value;
+};
+
+const actualProgressHorizon = computed(() => {
+    let latest = new Date();
+
+    progressHistoryByTask.value.forEach(entries => {
+        entries.forEach(entry => {
+            if (entry.at > latest) latest = entry.at;
+        });
+    });
+
+    return latest;
+});
+
+const locallyCalculatedWeeklyCurveData = computed(() => {
     const weeks = projectWeeks.value;
     const tasks = executableProgressTasks.value;
     const totalWeight = tasks.reduce((sum, task) => sum + taskProgressWeight(task), 0) || 1;
@@ -964,7 +1036,7 @@ const weeklyCurveData = computed(() => {
     const plannedValues = [];
     const actualValues = [];
 
-    const now = new Date();
+    const actualThrough = actualProgressHorizon.value;
 
     weeks.forEach((week) => {
         let plannedCompletionSum = 0;
@@ -973,7 +1045,6 @@ const weeklyCurveData = computed(() => {
         tasks.forEach(t => {
             const s = parseLocalDate(t.start_date);
             const e = parseLocalDate(t.end_date);
-            const prog = Number(t.progress) || 0;
             const weight = taskProgressWeight(t);
 
             if (s && e) {
@@ -987,18 +1058,23 @@ const weeklyCurveData = computed(() => {
                     plannedCompletionSum += ratio * 100 * weight;
                 }
 
-                // Actual calculation (only up to current week, or simulated)
-                if (week.start <= now || week.isCurrentWeek) {
-                    actualCompletionSum += prog * weight;
+                // A selected future reporting week is intentionally plotted up
+                // to that week; later weeks remain blank until they are reported.
+                if (week.start <= actualThrough || week.isCurrentWeek) {
+                    const cutoff = week.end > actualThrough ? actualThrough : week.end;
+                    actualCompletionSum += taskProgressAt(t, cutoff) * weight;
                 }
             } else {
-                actualCompletionSum += prog * weight;
+                if (week.start <= actualThrough || week.isCurrentWeek) {
+                    const cutoff = week.end > actualThrough ? actualThrough : week.end;
+                    actualCompletionSum += taskProgressAt(t, cutoff) * weight;
+                }
                 plannedCompletionSum += (t.status === 'Done' ? 100 : 0) * weight;
             }
         });
 
         const plannedPercent = Math.round(plannedCompletionSum / totalWeight);
-        const actualPercent = week.start <= now || week.isCurrentWeek
+        const actualPercent = week.start <= actualThrough || week.isCurrentWeek
             ? Math.min(100, Math.round(actualCompletionSum / totalWeight))
             : null;
 
@@ -1012,10 +1088,26 @@ const weeklyCurveData = computed(() => {
     };
 });
 
+// The default project view consumes the same server-built series as the PDF.
+// The local calculation remains available for the optional full-schedule scope.
+const weeklyCurveData = computed(() => {
+    const serverPlanned = props.weeklyProgress?.planned;
+    const serverActual = props.weeklyProgress?.actual;
+    const matchesProjectWindow = timelineScope.value === 'project'
+        && Array.isArray(serverPlanned)
+        && Array.isArray(serverActual)
+        && serverPlanned.length === projectWeeks.value.length
+        && serverActual.length === projectWeeks.value.length;
+
+    return matchesProjectWindow
+        ? { planned: serverPlanned, actual: serverActual }
+        : locallyCalculatedWeeklyCurveData.value;
+});
+
 /* ------------------------------------------------------- SVG Geometry & Curves */
 const SVG_W = 1000;
-const SVG_H = 340;
-const SVG_PAD = { top: 24, right: 36, bottom: 44, left: 56 };
+const SVG_H = 380;
+const SVG_PAD = { top: 34, right: 36, bottom: 72, left: 56 };
 const plotW = SVG_W - SVG_PAD.left - SVG_PAD.right;
 const plotH = SVG_H - SVG_PAD.top - SVG_PAD.bottom;
 
@@ -1026,6 +1118,19 @@ const xAtWeek = (index, total = projectWeeks.value.length) => {
 
 const yAtVal = (val) => {
     return SVG_PAD.top + ((100 - val) / 100) * plotH;
+};
+
+const curveLabelY = (series, index) => {
+    const value = weeklyCurveData.value[series][index];
+    if (value === null || value === undefined) return 0;
+
+    const otherSeries = series === 'planned' ? 'actual' : 'planned';
+    const otherValue = weeklyCurveData.value[otherSeries][index];
+    const linesAreClose = otherValue !== null && otherValue !== undefined
+        && Math.abs(value - otherValue) < 9;
+    const putBelow = value >= 94 || (series === 'actual' && linesAreClose);
+
+    return Math.max(SVG_PAD.top + 12, Math.min(yAtVal(0) - 6, yAtVal(value) + (putBelow ? 18 : -10)));
 };
 
 const smoothBezierPath = (points) => {
@@ -1073,68 +1178,6 @@ const actualPathD = computed(() => {
         }
     });
     return smoothBezierPath(points);
-});
-
-const actualAreaPathD = computed(() => {
-    const count = projectWeeks.value.length;
-    const points = [];
-    weeklyCurveData.value.actual.forEach((val, i) => {
-        if (val !== null && val !== undefined) {
-            points.push({
-                x: xAtWeek(i + 1, count),
-                y: yAtVal(val),
-            });
-        }
-    });
-    if (!points.length) return '';
-    const curve = smoothBezierPath(points);
-    const first = points[0];
-    const last = points[points.length - 1];
-    const baseY = yAtVal(0);
-    return `${curve} L${last.x},${baseY} L${first.x},${baseY} Z`;
-});
-
-/* ---------------------------------------------------- Milestone markers on chart */
-const milestonePins = computed(() => {
-    const pins = [];
-    const weeks = projectWeeks.value;
-    if (!weeks.length) return pins;
-
-    const milestones = [
-        { label: 'Day 1', dateStr: props.project.day1_date, color: '#3b82f6' },
-        { label: 'Store T.O.', dateStr: props.project.turn_over_date, color: '#10b981' },
-        { label: 'Training', dateStr: props.project.training_date, color: '#8b5cf6' },
-        { label: 'Testing', dateStr: props.project.testing_date, color: '#f59e0b' },
-        { label: 'Mock Service', dateStr: props.project.mock_service_date, color: '#ec4899' },
-        { label: 'Franchisee T.O.', dateStr: props.project.turn_over_to_franchisee_date, color: '#06b6d4' },
-        { label: 'Go-Live', dateStr: props.project.target_go_live, color: '#ef4444' },
-    ];
-
-    milestones.forEach(m => {
-        if (!m.dateStr) return;
-        const d = parseLocalDate(m.dateStr);
-        if (!d) return;
-
-        // Find which week this milestone falls into
-        const weekIdx = weeks.findIndex(w => d >= w.start && d <= w.end);
-        if (weekIdx !== -1) {
-            const week = weeks[weekIdx];
-            const ratio = (d - week.start) / (week.end - week.start);
-            const x1 = xAtWeek(week.index, weeks.length);
-            const x2 = weekIdx < weeks.length - 1 ? xAtWeek(week.index + 1, weeks.length) : x1;
-            const x = x1 + (x2 - x1) * ratio;
-
-            pins.push({
-                ...m,
-                date: d,
-                formattedDate: formatShortDate(d),
-                x,
-                weekNumber: week.index,
-            });
-        }
-    });
-
-    return pins;
 });
 
 /* ---------------------------------------------------------- Hover Tooltip State */
@@ -1364,6 +1407,7 @@ const commitTaskProgress = async (task, newProgress) => {
     router.put(route('projects-tasks.update', { projects_task: task.id, tab: 'weekly-timeline' }), {
         progress: prog,
         status: nextStatus,
+        progress_recorded_at: formatLocalDate(selectedWeek.value?.end),
         auto_create_monthly_boards: true,
     }, {
         preserveScroll: true,
@@ -1850,26 +1894,22 @@ const jumpToGantt = (department = null) => {
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <h4 class="text-sm font-bold text-gray-900 dark:text-gray-100">
-                        Cumulative Progress S-Curve Plot
+                        Planned Progress vs Actual Progress
                     </h4>
                     <p class="text-xs text-gray-500 dark:text-gray-400">
-                        Planned trajectory vs actual pace across all project weeks with critical milestones.
+                        Planned is the cumulative weighted target from scheduled task dates; Actual is the recorded cumulative progress at each week end.
                     </p>
                 </div>
 
                 <!-- Legend -->
                 <div class="flex items-center gap-3 text-xs">
                     <div class="flex items-center gap-1.5">
-                        <span class="h-2 w-5 rounded bg-blue-500" style="border-bottom: 2px dashed #1d4ed8;"></span>
-                        <span class="font-bold text-gray-600 dark:text-gray-300 text-[11px]">Planned</span>
+                        <span class="h-0.5 w-5 rounded bg-blue-500"></span>
+                        <span class="font-bold text-gray-600 dark:text-gray-300 text-[11px]">Planned Progress</span>
                     </div>
                     <div class="flex items-center gap-1.5">
-                        <span class="h-2 w-5 rounded bg-emerald-500"></span>
-                        <span class="font-bold text-gray-600 dark:text-gray-300 text-[11px]">Actual</span>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                        <span class="h-2 w-2 rounded-full bg-amber-400"></span>
-                        <span class="font-bold text-gray-600 dark:text-gray-300 text-[11px]">Milestone</span>
+                        <span class="h-0.5 w-5 rounded bg-red-500"></span>
+                        <span class="font-bold text-gray-600 dark:text-gray-300 text-[11px]">Actual Progress</span>
                     </div>
                 </div>
             </div>
@@ -1878,7 +1918,7 @@ const jumpToGantt = (department = null) => {
             <div class="relative mt-4 overflow-hidden rounded-lg bg-gray-50/50 p-2 dark:bg-gray-900/40">
                 <svg
                     ref="svgPlotRef"
-                    viewBox="0 0 1000 340"
+                    viewBox="0 0 1000 380"
                     class="h-auto w-full select-none"
                     @mousemove="onSvgMouseMove"
                     @mouseleave="onSvgMouseLeave"
@@ -1893,7 +1933,6 @@ const jumpToGantt = (department = null) => {
                                 :y2="yAtVal(gridVal)"
                                 :stroke="isDark ? '#374151' : '#e5e7eb'"
                                 stroke-width="1"
-                                :stroke-dasharray="gridVal === 0 || gridVal === 100 ? '0' : '4 4'"
                             />
                             <text
                                 :x="SVG_PAD.left - 10"
@@ -1921,13 +1960,14 @@ const jumpToGantt = (department = null) => {
                             />
                             <text
                                 :x="xAtWeek(w.index, projectWeeks.length)"
-                                :y="SVG_H - SVG_PAD.bottom + 20"
-                                text-anchor="middle"
+                                :y="SVG_H - SVG_PAD.bottom + 18"
+                                :transform="`rotate(-42 ${xAtWeek(w.index, projectWeeks.length)} ${SVG_H - SVG_PAD.bottom + 18})`"
+                                text-anchor="end"
                                 font-size="10"
                                 font-weight="700"
                                 :fill="w.index === selectedWeekIndex ? (isDark ? '#60a5fa' : '#2563eb') : (isDark ? '#9ca3af' : '#6b7280')"
                             >
-                                W{{ w.index }}
+                                Week {{ w.index }}
                             </text>
                         </template>
                     </g>
@@ -1945,60 +1985,62 @@ const jumpToGantt = (department = null) => {
                         opacity="0.6"
                     />
 
-                    <!-- Actual Area Fill -->
-                    <path
-                        v-if="actualAreaPathD"
-                        :d="actualAreaPathD"
-                        fill="url(#actualProgressGradient)"
-                        opacity="0.15"
-                    />
-
-                    <!-- Linear Gradients -->
-                    <defs>
-                        <linearGradient id="actualProgressGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" stop-color="#10b981" />
-                            <stop offset="100%" stop-color="#10b981" stop-opacity="0" />
-                        </linearGradient>
-                    </defs>
-
-                    <!-- Planned S-Curve (Dashed Blue) -->
+                    <!-- Planned Progress (Blue) -->
                     <path
                         :d="plannedPathD"
                         fill="none"
                         stroke="#3b82f6"
-                        stroke-width="3"
-                        stroke-dasharray="6 4"
+                        stroke-width="2.75"
+                        stroke-linecap="round"
                     />
 
-                    <!-- Actual S-Curve (Solid Emerald) -->
+                    <!-- Actual Progress (Red) -->
                     <path
                         v-if="actualPathD"
                         :d="actualPathD"
                         fill="none"
-                        stroke="#10b981"
-                        stroke-width="3.5"
+                        stroke="#ef5547"
+                        stroke-width="2.75"
+                        stroke-linecap="round"
                     />
 
-                    <!-- Milestone Vertical Pins & Badges -->
-                    <g v-for="pin in milestonePins" :key="pin.label">
-                        <line
-                            :x1="pin.x"
-                            :y1="SVG_PAD.top + 10"
-                            :x2="pin.x"
-                            :y2="SVG_H - SVG_PAD.bottom"
-                            :stroke="pin.color"
-                            stroke-width="1.5"
-                            stroke-dasharray="2 2"
-                            opacity="0.7"
-                        />
+                    <!-- Always-visible plotted percentages, matching the report style. -->
+                    <g v-for="(value, index) in weeklyCurveData.planned" :key="`planned-${index}`">
                         <circle
-                            :cx="pin.x"
-                            :cy="SVG_PAD.top + 10"
-                            r="5"
-                            :fill="pin.color"
-                            stroke="#ffffff"
-                            stroke-width="1.5"
+                            :cx="xAtWeek(index + 1, projectWeeks.length)"
+                            :cy="yAtVal(value)"
+                            r="3"
+                            fill="#3b82f6"
                         />
+                        <text
+                            :x="xAtWeek(index + 1, projectWeeks.length)"
+                            :y="curveLabelY('planned', index)"
+                            text-anchor="middle"
+                            font-size="10"
+                            font-weight="800"
+                            fill="#60a5fa"
+                        >{{ value }}%</text>
+                    </g>
+
+                    <g
+                        v-for="(value, index) in weeklyCurveData.actual"
+                        v-show="value !== null && value !== undefined"
+                        :key="`actual-${index}`"
+                    >
+                        <circle
+                            :cx="xAtWeek(index + 1, projectWeeks.length)"
+                            :cy="yAtVal(value ?? 0)"
+                            r="3"
+                            fill="#ef5547"
+                        />
+                        <text
+                            :x="xAtWeek(index + 1, projectWeeks.length)"
+                            :y="curveLabelY('actual', index)"
+                            text-anchor="middle"
+                            font-size="10"
+                            font-weight="800"
+                            fill="#f87171"
+                        >{{ value }}%</text>
                     </g>
 
                     <!-- Interactive Hover Circle & Marker -->
@@ -2026,7 +2068,7 @@ const jumpToGantt = (department = null) => {
                             :cx="xAtWeek(hoverWeekIndex, projectWeeks.length)"
                             :cy="yAtVal(weeklyCurveData.actual[hoverWeekIndex - 1])"
                             r="6"
-                            fill="#10b981"
+                            fill="#ef5547"
                             stroke="#ffffff"
                             stroke-width="2"
                         />
@@ -2056,7 +2098,7 @@ const jumpToGantt = (department = null) => {
                         </div>
                         <div v-if="weeklyCurveData.actual[activeInspectWeek.index - 1] !== null">
                             <span class="text-gray-400">Actual:</span>
-                            <span class="ml-1 font-black text-emerald-600 dark:text-emerald-400">
+                            <span class="ml-1 font-black text-red-600 dark:text-red-400">
                                 {{ weeklyCurveData.actual[activeInspectWeek.index - 1] }}%
                             </span>
                         </div>

@@ -38,6 +38,8 @@ import {
 
 const props = defineProps({
     project: Object,
+    projectProgressHistory: { type: Array, default: () => [] },
+    weeklyProgress: { type: Object, default: () => ({}) },
     projectTypes: { type: Array, default: () => [] },
     users: Array,
     stores: Array,
@@ -1104,6 +1106,8 @@ const getStatusColor = (status) => {
                 <div v-if="activeTab === 'weekly-timeline'">
                     <ProjectWeeklyTimeline
                         :project="project"
+                        :progressHistory="projectProgressHistory"
+                        :weeklyProgress="weeklyProgress"
                         :users="users"
                         :holidays="holidays"
                         :taskListTargets="taskListTargets"

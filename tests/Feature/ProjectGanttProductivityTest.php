@@ -9,6 +9,8 @@ use App\Models\TaskBoard;
 use App\Models\TaskChecklistItem;
 use App\Models\User;
 use App\Services\ProjectWorkspaceService;
+use App\Services\ProjectWeeklyProgressChart;
+use App\Services\ProjectWeeklyProgressService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
@@ -270,9 +272,58 @@ class ProjectGanttProductivityTest extends TestCase
         $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
         $this->assertStringContainsString('inline', (string) $response->headers->get('content-disposition'));
         $this->assertStringStartsWith('%PDF', (string) $response->getContent());
+        $this->assertMatchesRegularExpression('/\/Subtype\s*\/Image\b/', (string) $response->getContent());
         // Summary, weekly report and detailed Gantt: no empty page inserted
         // between the latter two by a trailing page-break element.
         $this->assertSame(3, preg_match_all('/\/Type\s*\/Page\b/', (string) $response->getContent()));
+    }
+
+    public function test_shared_weekly_series_keeps_future_week_progress_out_of_week_one(): void
+    {
+        $this->travelTo('2026-09-03 09:00:00');
+        $owner = $this->projectUser();
+        $project = $this->project($owner);
+        $project->update([
+            'day1_date' => '2026-09-01',
+            'target_go_live' => '2026-09-13',
+        ]);
+        $activity = $this->task($project, 'Week 2 activity', null, [
+            'start_date' => '2026-09-07',
+            'end_date' => '2026-09-08',
+        ]);
+        $this->task($project, 'Week 2 delivery', $activity->id, [
+            'progress' => 60,
+            'start_date' => '2026-09-07',
+            'end_date' => '2026-09-08',
+            'milestone_weight' => 100,
+            'activity_weight' => 100,
+            'sub_task_weight' => 100,
+        ]);
+
+        $series = app(ProjectWeeklyProgressService::class)->build($project->fresh('tasks'));
+
+        $this->assertSame(['2026-08-31', '2026-09-07'], collect($series['weeks'])->pluck('start')->all());
+        $this->assertSame([0, 60], $series['actual']);
+        $this->assertSame(0, $series['active_index']);
+    }
+
+    public function test_weekly_progress_chart_renders_as_an_embeddable_png(): void
+    {
+        $chart = app(ProjectWeeklyProgressChart::class)->render([
+            'weeks' => [
+                ['index' => 1, 'start' => '2026-08-31'],
+                ['index' => 2, 'start' => '2026-09-07'],
+                ['index' => 3, 'start' => '2026-09-14'],
+            ],
+            'planned' => [7, 13, 27],
+            'actual' => [0, 4, null],
+        ]);
+
+        $this->assertNotNull($chart);
+        $this->assertStringStartsWith('data:image/png;base64,', $chart);
+        $png = base64_decode(substr($chart, strlen('data:image/png;base64,')), true);
+        $this->assertIsString($png);
+        $this->assertStringStartsWith("\x89PNG\r\n\x1a\n", $png);
     }
 
     public function test_department_progress_uses_weighted_leaf_rows_without_double_counting_parent_rollups(): void

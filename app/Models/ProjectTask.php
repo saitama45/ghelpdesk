@@ -13,6 +13,9 @@ class ProjectTask extends Model
 {
     use HasFactory, SoftDeletes;
 
+    /** Reporting cutoff selected by Weekly Timeline for the next progress log. */
+    public ?\DateTimeInterface $progressRecordedAt = null;
+
     protected $fillable = [
         'project_id',
         'store_id',

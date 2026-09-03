@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\ActivityTemplate;
 use App\Models\Company;
 use App\Models\Project;
+use App\Models\ProjectProgressLog;
 use App\Models\ProjectTask;
 use App\Models\ProjectTemplate;
 use App\Models\Store;
@@ -441,6 +442,41 @@ class ProjectActivitySubTaskTest extends TestCase
         // Second task now starts right after the first's new (longer) span.
         $this->assertSame('2026-09-08', $second->refresh()->start_date->toDateString());
         $this->assertSame('2026-09-10', $second->end_date->toDateString());
+    }
+
+    public function test_weekly_progress_is_recorded_against_the_selected_reporting_week(): void
+    {
+        $this->withoutMiddleware(\Spatie\Permission\Middleware\PermissionMiddleware::class);
+        $user = User::factory()->create();
+        $project = $this->createProject('Weekly Reporting', $user);
+        $task = ProjectTask::create([
+            'project_id' => $project->id,
+            'name' => 'Week two task',
+            'category' => 'Delivery',
+            'status' => 'Pending',
+            'progress' => 0,
+            'start_date' => '2026-09-07',
+            'end_date' => '2026-09-08',
+            'assigned_to' => $user->id,
+            'created_by' => $user->id,
+        ]);
+
+        $this->actingAs($user)
+            ->put(route('projects-tasks.update', $task), [
+                'progress' => 60,
+                'status' => 'Ongoing',
+                'progress_recorded_at' => '2026-09-13',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $log = ProjectProgressLog::where('project_task_id', $task->id)
+            ->where('progress', 60)
+            ->latest('id')
+            ->firstOrFail();
+
+        $this->assertSame('2026-09-13', $log->recorded_at->toDateString());
+        $this->assertSame(60, $task->refresh()->progress);
     }
 
     public function test_adding_a_task_reschedules_the_whole_project(): void

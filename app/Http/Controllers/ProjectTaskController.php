@@ -9,6 +9,7 @@ use App\Models\ProjectTemplate;
 use App\Models\Store;
 use App\Services\ProjectTaskBoardSyncService;
 use App\Support\ProjectPlanAccess;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -854,6 +855,7 @@ class ProjectTaskController extends Controller
             'status' => 'sometimes|required|string',
             'manual_status' => 'sometimes|nullable|string|in:' . implode(',', ProjectTask::manualStatuses()),
             'progress' => 'sometimes|integer|min:0|max:100',
+            'progress_recorded_at' => 'sometimes|nullable|date',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date',
             'lead_time_days' => 'sometimes|nullable|integer|min:1',
@@ -861,6 +863,28 @@ class ProjectTaskController extends Controller
             'support_by' => 'nullable',
             'order' => 'sometimes|numeric',
         ]);
+
+        $progressRecordedAt = null;
+        if (array_key_exists('progress', $validated) && ! empty($validated['progress_recorded_at'])) {
+            // Noon on the reporting Sunday avoids SQL Server datetime rounding
+            // 23:59:59.999 into Monday, which would shift the point one week.
+            $progressRecordedAt = CarbonImmutable::parse($validated['progress_recorded_at'])->setTime(12, 0);
+            $reportingWeekStart = $progressRecordedAt->subDays(6)->startOfDay();
+            $taskStart = $projects_task->start_date
+                ? CarbonImmutable::parse($projects_task->start_date)->startOfDay()
+                : null;
+            $taskEnd = $projects_task->end_date
+                ? CarbonImmutable::parse($projects_task->end_date)->endOfDay()
+                : null;
+
+            if ($taskStart && $taskEnd
+                && ($taskEnd->lessThan($reportingWeekStart) || $taskStart->greaterThan($progressRecordedAt))) {
+                throw ValidationException::withMessages([
+                    'progress_recorded_at' => 'The selected reporting week does not contain this task.',
+                ]);
+            }
+        }
+        unset($validated['progress_recorded_at']);
 
         // A finished row is not blocked or awaiting approval — clear the manual
         // state rather than leaving a stale "Blocked" pill on a 100% activity.
@@ -1028,6 +1052,7 @@ class ProjectTaskController extends Controller
 
         $validated['updated_by'] = $request->user()->id;
 
+        $projects_task->progressRecordedAt = $progressRecordedAt;
         $projects_task->update($validated);
 
         if ($milestoneMove) {

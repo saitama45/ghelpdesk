@@ -114,6 +114,8 @@ class ProjectSubTaskTicketTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Projects/Show')
+                ->has('projectProgressHistory', 1)
+                ->where('projectProgressHistory.0.project_task_id', $subTask->id)
                 ->has('project.tasks', 2)
                 ->where('project.tasks.1.id', $subTask->id)
                 ->has('project.tasks.1.tickets', 2)

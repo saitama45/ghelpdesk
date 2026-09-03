@@ -235,6 +235,24 @@
                 </tr>
             </table>
 
+            <div style="margin-top:8px;border:1px solid #e2e8f0;background:#ffffff;padding:5px 7px;page-break-inside:avoid;">
+                <table style="width:100%;border-collapse:collapse;margin-bottom:2px;"><tr>
+                    <td style="font-size:8px;font-weight:bold;color:#334155;text-transform:uppercase;">Planned Progress vs Actual Progress</td>
+                    <td style="text-align:right;font-size:6.5px;color:#64748b;">
+                        <span style="color:#3b82f6;font-weight:bold;">&#8212; Planned Progress</span>
+                        <span style="margin-left:12px;color:#ef5547;font-weight:bold;">&#8212; Actual Progress</span>
+                    </td>
+                </tr></table>
+                @if($weeklyChartImage)
+                    <img src="{{ $weeklyChartImage }}" alt="Planned and actual weekly progress chart" style="display:block;width:100%;height:142px;" />
+                @else
+                    <div style="height:142px;line-height:142px;text-align:center;color:#64748b;font-size:8px;">Weekly progress chart is unavailable.</div>
+                @endif
+                <div style="font-size:6px;color:#64748b;margin-top:-2px;">
+                    Planned uses weighted leaf-task schedules. Actual uses progress recorded for each reporting week; future unreported weeks remain blank.
+                </div>
+            </div>
+
             @if(($weeklyReport['storeRollout']['target'] ?? 0) > 0)
                 <div style="margin-top:9px;page-break-inside:avoid;">
                     <table style="width:100%;border-collapse:collapse;background:#ecfeff;border:1px solid #a5f3fc;">

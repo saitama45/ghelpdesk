@@ -13,6 +13,7 @@ use App\Models\Vendor;
 use App\Models\ProjectTemplate;
 use App\Services\ProjectProgressChartService;
 use App\Services\ProjectTaskBoardSyncService;
+use App\Services\ProjectWeeklyProgressService;
 use App\Services\OrganizationReferenceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,6 +27,7 @@ class ProjectController extends Controller
         private ProjectTaskBoardSyncService $projectTaskBoards,
         private OrganizationReferenceService $organizationReferenceService,
         private ProjectProgressChartService $progressChart,
+        private ProjectWeeklyProgressService $weeklyProgress,
         private \App\Services\ProjectScheduler $scheduler,
         private \App\Services\ProjectOverviewService $overview,
         private \App\Services\ProjectWorkspaceService $workspace
@@ -293,8 +295,15 @@ class ProjectController extends Controller
             ->map(fn ($b) => ['id' => $b->id, 'title' => $b->title])
             ->values();
 
+        $weeklyProgress = $this->weeklyProgress->build($project, $project->tasks);
+
         return Inertia::render('Projects/Show', [
             'project'        => $project,
+            'weeklyProgress' => collect($weeklyProgress)->except('history')->all(),
+            // Weekly Timeline replays these append-only task snapshots at each
+            // week end. This keeps the Actual line historical instead of
+            // repeating today's progress across every past week.
+            'projectProgressHistory' => $weeklyProgress['history'],
             // Whether the viewer may manage the whole project (edit every row,
             // apply templates, add/delete/reorder). Non-managers may only edit
             // the activity / sub-task rows assigned to them.

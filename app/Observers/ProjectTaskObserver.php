@@ -67,7 +67,9 @@ class ProjectTaskObserver
             'project_id'      => $projectTask->project_id,
             'project_task_id' => $projectTask->id,
             'progress'        => max(0, min(100, (int) $projectTask->progress)),
-            'recorded_at'     => now(),
+            // Weekly Timeline may record work against the week being edited.
+            // created_at remains the audit timestamp for when it was saved.
+            'recorded_at'     => $projectTask->progressRecordedAt ?? now(),
         ]);
     }
 }
