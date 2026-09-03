@@ -125,6 +125,14 @@ class ProjectTask extends Model
         return $this->hasMany(ProjectAsset::class, 'project_task_id');
     }
 
+    /** Support tickets raised for this specific Gantt sub-task. */
+    public function tickets(): HasMany
+    {
+        return $this->hasMany(Ticket::class, 'project_task_id')
+            ->withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->latest();
+    }
+
     /**
      * The manual states a task may be put into, on top of the progress-derived
      * Pending / Ongoing / Done. Editable in reference_options; the constant is

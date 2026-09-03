@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreTicketRequest;
 use App\Http\Requests\UpdateTicketRequest;
+use App\Jobs\SendTicketCreationNotifications;
 use App\Mail\NewTicketCreated;
 use App\Mail\TicketMergedNotification;
 use App\Mail\TicketAssigned;
@@ -18,6 +19,7 @@ use App\Models\User;
 use App\Models\Company;
 use App\Models\Store;
 use App\Models\Vendor;
+use App\Models\ProjectTask;
 use App\Models\Schedule;
 use App\Services\TicketKnowledgeBaseService;
 use App\Support\DepartmentContext;
@@ -861,6 +863,26 @@ class TicketController extends Controller
     public function store(StoreTicketRequest $request)
     {
         $data = $request->validated();
+
+        if (! empty($data['project_task_id'])) {
+            abort_unless(
+                $request->user()->can('tickets.create') && $request->user()->can('projects.view'),
+                403
+            );
+
+            $projectTask = ProjectTask::with('project')->findOrFail($data['project_task_id']);
+
+            if (! $projectTask->parent_task_id) {
+                throw ValidationException::withMessages([
+                    'project_task_id' => 'Tickets can only be linked to project sub-tasks.',
+                ]);
+            }
+
+            // The linked plan is authoritative for entity and location. This also
+            // prevents a crafted request from attaching a cross-entity ticket.
+            $data['company_id'] = $projectTask->project->company_id ?: $data['company_id'];
+            $data['store_id'] = $projectTask->store_id ?: $projectTask->project->store_id;
+        }
         
         $ticket = DB::transaction(function () use ($data, $request) {
             // Handle requester options
@@ -941,47 +963,37 @@ class TicketController extends Controller
             return $ticket;
         });
 
-        $ticket->load(['reporter', 'assignee']);
-        $sentTo = [];
+        // SMTP fan-out can take many seconds. Persist one lightweight database
+        // job and return immediately; the existing queue worker sends requester,
+        // assignee, CC, role-watcher and urgent notifications in the background.
+        SendTicketCreationNotifications::dispatch(
+            $ticket->id,
+            $request->boolean('notify_requester', true),
+        );
 
-        // Notify requester conditionally
-        if ($request->boolean('notify_requester', true)) {
-            if ($ticket->reporter && $ticket->reporter->email) {
-                $pending = Mail::to($ticket->reporter->email);
-                $cc = $this->attachTicketCcs($pending, $ticket, [$ticket->reporter->email]);
-                $pending->send(new NewTicketCreated($ticket, $ticket->reporter->name));
-                $sentTo[] = $ticket->reporter->email;
-                $sentTo = array_merge($sentTo, $cc);
-            } elseif ($ticket->sender_email) {
-                $pending = Mail::to($ticket->sender_email);
-                $cc = $this->attachTicketCcs($pending, $ticket, [$ticket->sender_email]);
-                $pending->send(new NewTicketCreated($ticket, $ticket->sender_name ?? 'External User'));
-                $sentTo[] = $ticket->sender_email;
-                $sentTo = array_merge($sentTo, $cc);
-            }
-        }
+        // The Gantt creates tickets inline and only needs the new row back. Avoid
+        // redirecting through the very large project show payload (workspace,
+        // monitoring, templates, users, stores, and the full plan).
+        if ($request->expectsJson()) {
+            $ticket->load([
+                'assignee:id,name',
+                'slaMetric:ticket_id,response_target_at,resolution_target_at,first_response_at,resolved_at,is_response_breached,is_resolution_breached',
+            ]);
 
-        if ($ticket->assignee && $ticket->assignee->email && $ticket->assignee->id !== $ticket->reporter_id) {
-            $shouldNotifyAssignee = $ticket->assignee->roles()->where('notify_on_ticket_assign', true)->exists();
-            if ($shouldNotifyAssignee) {
-                Mail::to($ticket->assignee->email)->send(new NewTicketCreated($ticket, $ticket->assignee->name));
-                $sentTo[] = $ticket->assignee->email;
-            }
-        }
-
-        $this->notifyTicketCreationWatchers($ticket, $sentTo);
-
-        if (strtolower($ticket->priority) === 'urgent') {
-            $urgentWatchers = User::whereHas('roles', function ($q) {
-                $q->where('notify_on_urgent_ticket', true);
-            })->get();
-
-            foreach ($urgentWatchers as $watcher) {
-                if ($watcher->email && !in_array($watcher->email, $sentTo)) {
-                    Mail::to($watcher->email)->send(new TicketAssigned($ticket, $watcher->name));
-                    $sentTo[] = $watcher->email;
-                }
-            }
+            return response()->json([
+                'message' => 'Ticket created successfully.',
+                'ticket' => [
+                    'id' => $ticket->id,
+                    'project_task_id' => $ticket->project_task_id,
+                    'ticket_key' => $ticket->ticket_key,
+                    'title' => $ticket->title,
+                    'status' => $ticket->status,
+                    'priority' => $ticket->priority,
+                    'created_at' => $ticket->created_at,
+                    'assignee' => $ticket->assignee,
+                    'sla_metric' => $ticket->slaMetric,
+                ],
+            ], 201);
         }
 
         return redirect()->back()->with('success', 'Ticket created successfully.');

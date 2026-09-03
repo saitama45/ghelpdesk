@@ -28,6 +28,7 @@ class Ticket extends Model
         'assignee_id',
         'project_id',
         'milestone_id',
+        'project_task_id',
         'company_id',
         'store_id',
         'category_id',
@@ -294,6 +295,11 @@ class Ticket extends Model
     public function slaMetric()
     {
         return $this->hasOne(TicketSlaMetric::class);
+    }
+
+    public function projectTask()
+    {
+        return $this->belongsTo(ProjectTask::class, 'project_task_id');
     }
 
     public function survey()

@@ -272,6 +272,16 @@ class ProjectController extends Controller
             'tasks.store:id,code,name',
             'tasks.assignedUser:id,name,profile_photo,org_path',
             'tasks.supportUser:id,name,profile_photo,org_path',
+            'tasks.tickets' => fn ($query) => $query
+                ->when(! auth()->user()->can('tickets.view'), fn ($tickets) => $tickets->whereRaw('1 = 0'))
+                ->select([
+                    'id', 'project_task_id', 'ticket_key', 'title', 'status',
+                    'priority', 'assignee_id', 'created_at',
+                ])
+                ->with([
+                    'assignee:id,name',
+                    'slaMetric:ticket_id,response_target_at,resolution_target_at,first_response_at,resolved_at,is_response_breached,is_resolution_breached',
+                ]),
             'assets'
         ]);
 
@@ -488,6 +498,16 @@ class ProjectController extends Controller
             }
             $project->teamMembers()->delete();
             $project->assets()->delete();
+
+            // SQL Server requires the ticket -> project task FK to use NO ACTION
+            // (SET NULL creates multiple cascade paths), so detach the durable
+            // tickets explicitly before permanently removing project tasks.
+            $projectTaskIds = $project->tasks()->withTrashed()->pluck('id');
+            if ($projectTaskIds->isNotEmpty()) {
+                \App\Models\Ticket::withoutGlobalScopes()
+                    ->whereIn('project_task_id', $projectTaskIds)
+                    ->update(['project_task_id' => null]);
+            }
             
             // Delete subtasks first to avoid parent_task_id constraint cycle issues
             $project->tasks()->whereNotNull('parent_task_id')->forceDelete();

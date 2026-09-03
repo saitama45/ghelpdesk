@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
+import axios from 'axios';
 import { 
     PlusIcon, 
     TrashIcon, 
@@ -16,11 +17,14 @@ import {
     XMarkIcon,
     DocumentDuplicateIcon,
     UserPlusIcon,
-    DocumentChartBarIcon
+    DocumentChartBarIcon,
+    TicketIcon,
+    ArrowTopRightOnSquareIcon
 } from '@heroicons/vue/24/outline';
 
 import { useToast } from '@/Composables/useToast.js';
 import { useConfirm } from '@/Composables/useConfirm.js';
+import { usePermission } from '@/Composables/usePermission.js';
 import { canonicalDepartment, sameDepartment, uniqueDepartmentNames } from '@/Composables/useDepartmentNames.js';
 import Modal from '@/Components/Modal.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
@@ -164,6 +168,7 @@ const myMilestones = computed(() => {
 
 const { success, info, error } = useToast();
 const { confirm: confirmAction } = useConfirm();
+const { hasPermission } = usePermission();
 const isAddingTask = ref(false);
 const isEditing = ref(false);
 const editingTaskId = ref(null);
@@ -190,6 +195,128 @@ const quickIncludeSubtasks = ref(true);
 const isBulkAssigning = ref(false);
 const collapsedMilestones = ref([]);
 const collapsedActivities = ref([]);
+const showTicketCreateModal = ref(false);
+const showTicketDetailsModal = ref(false);
+const activeTicketTask = ref(null);
+const ticketItems = ref([]);
+const isLoadingTicketItems = ref(false);
+const isCreatingTicket = ref(false);
+
+const ticketForm = useForm({
+    project_task_id: null,
+    company_id: props.project.company_id || '',
+    store_id: '',
+    item_id: '',
+    title: '',
+    description: '',
+    type: 'task',
+    status: 'open',
+    priority: 'medium',
+    severity: 'minor',
+    assignee_id: '',
+    is_self_requester: true,
+    notify_requester: true,
+});
+
+const fetchTicketItems = async () => {
+    if (ticketItems.value.length || isLoadingTicketItems.value) return;
+
+    isLoadingTicketItems.value = true;
+    try {
+        const response = await fetch(route('tickets.data.items', undefined, false), {
+            headers: { Accept: 'application/json' },
+        });
+        if (!response.ok) throw new Error('Unable to load ticket items.');
+        ticketItems.value = await response.json();
+    } catch (exception) {
+        error(exception.message || 'Unable to load ticket items.');
+    } finally {
+        isLoadingTicketItems.value = false;
+    }
+};
+
+const openTicketCreate = async (task) => {
+    if (!task?.parent_task_id || !hasPermission('tickets.create')) return;
+
+    activeTicketTask.value = task;
+    ticketForm.reset();
+    ticketForm.clearErrors();
+    ticketForm.project_task_id = task.id;
+    ticketForm.company_id = props.project.company_id || '';
+    ticketForm.store_id = task.store_id || props.project.store_id || '';
+    ticketForm.title = task.name;
+    ticketForm.description = `Project: ${props.project.name}\nMilestone: ${normaliseCategory(task.category)}\nSub-task: ${task.name}`;
+    ticketForm.assignee_id = hasPermission('tickets.assign') ? (task.assigned_to || '') : '';
+    showTicketCreateModal.value = true;
+    await fetchTicketItems();
+};
+
+const closeTicketCreate = () => {
+    if (isCreatingTicket.value) return;
+    showTicketCreateModal.value = false;
+    activeTicketTask.value = null;
+    ticketForm.clearErrors();
+};
+
+watch(() => ticketForm.item_id, (itemId) => {
+    const item = ticketItems.value.find(candidate => String(candidate.id) === String(itemId));
+    if (item?.priority) ticketForm.priority = String(item.priority).toLowerCase();
+});
+
+const createSubTaskTicket = async () => {
+    if (isCreatingTicket.value) return;
+
+    isCreatingTicket.value = true;
+    ticketForm.clearErrors();
+
+    try {
+        const response = await axios.post(route('tickets.store'), ticketForm.data(), {
+            headers: { Accept: 'application/json' },
+        });
+        const createdTicket = response.data.ticket;
+
+        localTasks.value = localTasks.value.map(task => Number(task.id) === Number(ticketForm.project_task_id)
+            ? { ...task, tickets: [createdTicket, ...(task.tickets || [])] }
+            : task);
+
+        showTicketCreateModal.value = false;
+        activeTicketTask.value = null;
+        success(`${createdTicket.ticket_key} created and linked to the sub-task.`);
+    } catch (exception) {
+        const validationErrors = exception.response?.data?.errors;
+
+        if (validationErrors) {
+            ticketForm.setError(Object.fromEntries(
+                Object.entries(validationErrors).map(([field, messages]) => [
+                    field,
+                    Array.isArray(messages) ? messages[0] : messages,
+                ]),
+            ));
+        }
+
+        error(exception.response?.data?.message || 'Please check the ticket details and try again.');
+    } finally {
+        isCreatingTicket.value = false;
+    }
+};
+
+const openTicketDetails = (task) => {
+    activeTicketTask.value = task;
+    showTicketDetailsModal.value = true;
+};
+
+const closeTicketDetails = () => {
+    showTicketDetailsModal.value = false;
+    activeTicketTask.value = null;
+};
+
+const ticketEditUrl = (ticket) => route('tickets.edit', ticket.ticket_key || ticket.id);
+
+const formatTicketDue = (value) => value
+    ? new Date(value).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : 'No target';
+
+const ticketStatusLabel = (status) => String(status || '').replaceAll('_', ' ');
 
 const missingTaskListTargets = computed(() => props.taskListTargets?.missing || []);
 
@@ -2282,6 +2409,27 @@ const isWeekend = (date) => {
                                                     {{ taskOrganizationLabel(row.task) }}
                                                 </span>
                                             </div>
+                                            <div v-if="row.isSubTask && row.task.tickets?.length && hasPermission('tickets.view')"
+                                                 class="mt-1 flex min-w-0 items-center gap-1"
+                                                 @click.stop>
+                                                <TicketIcon class="h-3 w-3 shrink-0 text-sky-500" />
+                                                <a v-for="ticket in row.task.tickets.slice(0, 2)"
+                                                   :key="ticket.id"
+                                                   :href="ticketEditUrl(ticket)"
+                                                   target="_blank"
+                                                   rel="noopener noreferrer"
+                                                   class="inline-flex shrink-0 items-center gap-0.5 rounded border border-sky-200 bg-sky-50 px-1 py-0.5 text-[8px] font-black text-sky-700 hover:bg-sky-100 hover:text-sky-900 dark:border-sky-400/30 dark:bg-sky-500/10 dark:text-sky-200"
+                                                   :title="`${ticket.ticket_key}: ${ticket.title}`">
+                                                    {{ ticket.ticket_key }}
+                                                    <ArrowTopRightOnSquareIcon class="h-2.5 w-2.5" />
+                                                </a>
+                                                <button v-if="row.task.tickets.length > 2"
+                                                        type="button"
+                                                        @click="openTicketDetails(row.task)"
+                                                        class="shrink-0 text-[8px] font-black text-sky-600 hover:underline dark:text-sky-300">
+                                                    +{{ row.task.tickets.length - 2 }} more
+                                                </button>
+                                            </div>
                                             <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden mt-0.5 dark:bg-slate-800">
                                                 <div class="h-full transition-all duration-300" 
                                                      :class="getBarColorClass(row.task.status)" 
@@ -2320,7 +2468,24 @@ const isWeekend = (date) => {
                                                 {{ row.task.status }}
                                             </span>
                                         </div>
-                                        <div v-if="canAddSubTaskTo(row.task) || canDeleteTask(row.task)" class="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div v-if="canAddSubTaskTo(row.task) || canDeleteTask(row.task) || (row.isSubTask && (hasPermission('tickets.create') || (hasPermission('tickets.view') && row.task.tickets?.length)))"
+                                             class="flex items-center gap-0.5 shrink-0 transition-opacity"
+                                             :class="row.isSubTask && hasPermission('tickets.create') ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'">
+                                            <button v-if="row.isSubTask && hasPermission('tickets.view') && row.task.tickets?.length"
+                                                    type="button"
+                                                    @click.stop="openTicketDetails(row.task)"
+                                                    class="inline-flex items-center gap-0.5 rounded bg-sky-50 px-1 py-0.5 text-[8px] font-black text-sky-700 hover:bg-sky-100 dark:bg-sky-500/10 dark:text-sky-200"
+                                                    :title="`View ${row.task.tickets.length} linked ticket${row.task.tickets.length === 1 ? '' : 's'}`">
+                                                <TicketIcon class="h-3 w-3" />
+                                                {{ row.task.tickets.length }}
+                                            </button>
+                                            <button v-if="row.isSubTask && hasPermission('tickets.create')"
+                                                    type="button"
+                                                    @click.stop="openTicketCreate(row.task)"
+                                                    class="p-1 text-sky-500 hover:text-sky-700 hover:bg-sky-50 rounded transition-colors dark:hover:bg-sky-500/20"
+                                                    title="Create ticket for this sub-task">
+                                                <TicketIcon class="w-3.5 h-3.5" />
+                                            </button>
                                             <button v-if="canAddSubTaskTo(row.task)"
                                                     @click.stop="openSubTaskForm(row.task)"
                                                     class="p-1 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 rounded transition-colors dark:hover:bg-indigo-500/20"
@@ -2512,6 +2677,121 @@ const isWeekend = (date) => {
                     <PrimaryButton @click="confirmApplyTemplate" :disabled="!selectedTemplateId || isApplyingTemplates || (templateNeedsStores && selectedStoreIds.length === 0)" class="bg-indigo-600 hover:bg-indigo-700">
                         {{ isApplyingTemplates ? 'Applying...' : 'Apply Template' }}
                     </PrimaryButton>
+                </div>
+            </div>
+        </Modal>
+
+        <!-- Create through the normal ticket store flow so numbering, assignment,
+             notifications and SLA metrics remain identical to /tickets. -->
+        <Modal :show="showTicketCreateModal" maxWidth="lg" :closeable="!isCreatingTicket" @close="closeTicketCreate">
+            <form class="p-6 dark:bg-slate-900" @submit.prevent="createSubTaskTicket">
+                <div class="mb-5 flex items-start justify-between gap-4">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="rounded-lg bg-sky-100 p-2 text-sky-700 dark:bg-sky-500/15 dark:text-sky-200">
+                                <TicketIcon class="h-5 w-5" />
+                            </span>
+                            <h3 class="text-base font-black text-slate-900 dark:text-slate-100">Create Sub-task Ticket</h3>
+                        </div>
+                        <p class="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                            {{ activeTicketTask?.name }}
+                        </p>
+                    </div>
+                    <button type="button" @click="closeTicketCreate" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <XMarkIcon class="h-5 w-5" />
+                    </button>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                            SLA Item <span class="text-red-500">*</span>
+                        </label>
+                        <Autocomplete
+                            v-model="ticketForm.item_id"
+                            :options="ticketItems"
+                            label-key="display_name"
+                            value-key="id"
+                            :placeholder="isLoadingTicketItems ? 'Loading items...' : 'Select the item that sets the SLA'"
+                            :disabled="isLoadingTicketItems"
+                            size="sm"
+                        />
+                        <p v-if="ticketForm.errors.item_id" class="mt-1 text-xs font-semibold text-red-600">{{ ticketForm.errors.item_id }}</p>
+                        <p v-else class="mt-1 text-[10px] text-slate-500 dark:text-slate-400">The selected item supplies the ticket priority and SLA targets.</p>
+                    </div>
+
+                    <div>
+                        <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Title <span class="text-red-500">*</span></label>
+                        <input v-model="ticketForm.title" type="text" maxlength="255" required class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+                        <p v-if="ticketForm.errors.title" class="mt-1 text-xs font-semibold text-red-600">{{ ticketForm.errors.title }}</p>
+                    </div>
+
+                    <div>
+                        <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Description</label>
+                        <textarea v-model="ticketForm.description" rows="5" class="block w-full rounded-lg border-slate-300 text-sm shadow-sm focus:border-sky-500 focus:ring-sky-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"></textarea>
+                        <p v-if="ticketForm.errors.description" class="mt-1 text-xs font-semibold text-red-600">{{ ticketForm.errors.description }}</p>
+                    </div>
+
+                    <div v-if="hasPermission('tickets.assign')">
+                        <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Assign To</label>
+                        <Autocomplete v-model="ticketForm.assignee_id" :options="users" label-key="name" value-key="id" placeholder="Leave unassigned" size="sm" />
+                        <p v-if="ticketForm.errors.assignee_id" class="mt-1 text-xs font-semibold text-red-600">{{ ticketForm.errors.assignee_id }}</p>
+                    </div>
+
+                    <div class="rounded-lg border border-sky-100 bg-sky-50 p-3 text-[11px] font-semibold text-sky-800 dark:border-sky-400/20 dark:bg-sky-500/10 dark:text-sky-200">
+                        You can create more than one ticket for this sub-task. Each ticket will appear beside the row after creation.
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end gap-3 border-t border-slate-200 pt-5 dark:border-slate-700">
+                    <SecondaryButton type="button" @click="closeTicketCreate" :disabled="isCreatingTicket">Cancel</SecondaryButton>
+                    <PrimaryButton type="submit" :disabled="isCreatingTicket || !ticketForm.item_id || !ticketForm.title" class="bg-sky-600 hover:bg-sky-700">
+                        {{ isCreatingTicket ? 'Creating...' : 'Create Ticket' }}
+                    </PrimaryButton>
+                </div>
+            </form>
+        </Modal>
+
+        <Modal :show="showTicketDetailsModal" maxWidth="2xl" @close="closeTicketDetails">
+            <div class="p-6 dark:bg-slate-900">
+                <div class="mb-5 flex items-start justify-between gap-4">
+                    <div>
+                        <h3 class="text-base font-black text-slate-900 dark:text-slate-100">Sub-task Tickets</h3>
+                        <p class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{{ activeTicketTask?.name }}</p>
+                    </div>
+                    <button type="button" @click="closeTicketDetails" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <XMarkIcon class="h-5 w-5" />
+                    </button>
+                </div>
+
+                <div class="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+                    <div v-for="ticket in (activeTicketTask?.tickets || [])" :key="ticket.id" class="rounded-xl border border-slate-200 p-4 dark:border-slate-700 dark:bg-slate-950/50">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <a :href="ticketEditUrl(ticket)" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-sm font-black text-sky-700 hover:underline dark:text-sky-300">
+                                    {{ ticket.ticket_key }}
+                                    <ArrowTopRightOnSquareIcon class="h-3.5 w-3.5" />
+                                </a>
+                                <p class="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">{{ ticket.title }}</p>
+                            </div>
+                            <span class="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[9px] font-black uppercase tracking-wider text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                {{ ticketStatusLabel(ticket.status) }}
+                            </span>
+                        </div>
+                        <div class="mt-3 grid gap-2 text-[10px] font-semibold text-slate-500 sm:grid-cols-3 dark:text-slate-400">
+                            <div><span class="block font-black uppercase tracking-wider">Priority</span>{{ ticket.priority || 'Not set' }}</div>
+                            <div><span class="block font-black uppercase tracking-wider">Assignee</span>{{ ticket.assignee?.name || 'Unassigned' }}</div>
+                            <div><span class="block font-black uppercase tracking-wider">Resolution target</span>{{ formatTicketDue(ticket.sla_metric?.resolution_target_at) }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-between border-t border-slate-200 pt-5 dark:border-slate-700">
+                    <button v-if="hasPermission('tickets.create')" type="button" @click="showTicketDetailsModal = false; openTicketCreate(activeTicketTask)" class="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 text-xs font-black text-white hover:bg-sky-700">
+                        <TicketIcon class="h-4 w-4" />
+                        Create Another Ticket
+                    </button>
+                    <SecondaryButton type="button" class="ml-auto" @click="closeTicketDetails">Close</SecondaryButton>
                 </div>
             </div>
         </Modal>
