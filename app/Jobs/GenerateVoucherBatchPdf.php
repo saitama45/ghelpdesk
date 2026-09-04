@@ -18,6 +18,9 @@ class GenerateVoucherBatchPdf implements ShouldQueue
 
     public $timeout = 300;
 
+    /** Do not leave the batch in "processing" if rendering reaches the timeout. */
+    public $failOnTimeout = true;
+
     public function __construct(public int $batchId, public int $requesterId)
     {
         $this->onQueue('voucher-pdfs');
@@ -26,6 +29,13 @@ class GenerateVoucherBatchPdf implements ShouldQueue
     public function handle(): void
     {
         $batch = VoucherBatch::with(['company', 'vouchers' => fn ($q) => $q->orderBy('id')])->findOrFail($this->batchId);
+
+        // A request may have completed this batch while an older duplicate queue
+        // record was still waiting. Do not render and notify a second time.
+        if ($batch->pdf_status === 'ready' && $batch->pdf_path && Storage::disk('local')->exists($batch->pdf_path)) {
+            return;
+        }
+
         $batch->update(['pdf_status' => 'processing']);
         $barcode = new DNS1D;
         $vouchers = $batch->vouchers->map(fn ($voucher) => [

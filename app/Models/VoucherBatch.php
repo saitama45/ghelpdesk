@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class VoucherBatch extends Model
 {
-    protected $appends = ['effective_status'];
+    protected $appends = ['effective_status', 'pdf_is_stale'];
     protected $fillable = [
         'company_id', 'partner_name', 'title', 'description', 'quantity', 'face_value',
         'turnover_date', 'claim_starts_on', 'claim_ends_on', 'claim_instructions',
@@ -41,4 +41,11 @@ class VoucherBatch extends Model
     }
 
     public function getEffectiveStatusAttribute(): string { return $this->effectiveStatus(); }
+
+    public function getPdfIsStaleAttribute(): bool
+    {
+        return in_array($this->pdf_status, ['queued', 'processing'], true)
+            && $this->updated_at
+            && $this->updated_at->lt(now()->subMinutes(6));
+    }
 }

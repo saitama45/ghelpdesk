@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
+use Inertia\Inertia;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -81,13 +82,16 @@ class HandleInertiaRequests extends Middleware
                 return $val ? json_decode($val, true) : null;
             }),
             'dynamicForms' => $this->activeFormDefinitions(),
-            'flash' => [
+            // A partial reload normally retains props omitted by the server. Flash
+            // messages must always be returned (including as null after they are
+            // consumed), or background polls can replay the previous toast forever.
+            'flash' => Inertia::always(fn () => [
                 'success' => $request->session()->get('success'),
                 'error' => $request->session()->get('error'),
                 'warning' => $request->session()->get('warning'),
                 'info' => $request->session()->get('info'),
                 'created_store_id' => $request->session()->get('created_store_id'),
-            ],
+            ]),
         ]);
     }
 

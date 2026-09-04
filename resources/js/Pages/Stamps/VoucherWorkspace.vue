@@ -28,7 +28,7 @@ const batchStatusHelp = batch => {
     if (batch.effective_status === 'active') return `Valid until ${date(batch.claim_ends_on)}`
     return ''
 }
-const pdfBusy = batch => ['queued', 'processing'].includes(batch.pdf_status)
+const pdfBusy = batch => ['queued', 'processing'].includes(batch.pdf_status) && !batch.pdf_is_stale
 
 let pdfPoll = null
 let voucherAutoVerifyTimer = null
@@ -211,7 +211,7 @@ const storeOptions = computed(() => props.stores.map(s => ({ value: s.id, label:
                             <button v-if="hasPermission('stamps.edit') && batch.status !== 'draft' && batch.status !== 'cancelled'" @click="openClaimPeriod(batch)" :disabled="pdfBusy(batch)" class="rounded px-2 py-1 text-blue-600 hover:bg-blue-50 disabled:cursor-wait disabled:opacity-50">Edit Claim Period</button>
                             <button v-if="hasPermission('stamps.approve') && ['draft','suspended'].includes(batch.status)" @click="activate(batch)" class="rounded px-2 py-1 text-green-700 hover:bg-green-50">{{ batch.status === 'suspended' ? 'Resume' : 'Activate' }}</button>
                             <button v-if="hasPermission('stamps.approve') && batch.status === 'active'" @click="postBatchAction(batch, 'suspend')" class="rounded px-2 py-1 text-orange-700 hover:bg-orange-50">Suspend</button>
-                            <button v-if="hasPermission('stamps.export') && batch.pdf_status !== 'ready'" @click="requestPdf(batch)" :disabled="pdfBusy(batch)" class="rounded px-2 py-1 text-indigo-700 hover:bg-indigo-50 disabled:cursor-wait disabled:opacity-60">{{ pdfBusy(batch) ? 'Preparing Print PDFâ€¦' : (batch.pdf_status === 'failed' ? 'Retry Print PDF' : 'Prepare Print PDF') }}</button>
+                            <button v-if="hasPermission('stamps.export') && batch.pdf_status !== 'ready'" @click="requestPdf(batch)" :disabled="pdfBusy(batch)" class="rounded px-2 py-1 text-indigo-700 hover:bg-indigo-50 disabled:cursor-wait disabled:opacity-60">{{ pdfBusy(batch) ? 'Preparing Print PDF…' : (batch.pdf_status === 'failed' || batch.pdf_is_stale ? 'Retry Print PDF' : 'Prepare Print PDF') }}</button>
                             <a v-if="hasPermission('stamps.export') && batch.pdf_status === 'ready'" :href="route('stamps.voucher-batches.pdf.download', batch.id)" target="_blank" rel="noopener" class="rounded bg-indigo-600 px-2 py-1 font-bold text-white hover:bg-indigo-700">Open / Print Vouchers</a>
                             <button v-if="hasPermission('stamps.cancel') && batch.status !== 'cancelled'" @click="askReason('cancel', batch, 'Cancel voucher batch')" class="rounded px-2 py-1 text-red-700 hover:bg-red-50">Cancel</button>
                         </div></td>
@@ -253,7 +253,7 @@ const storeOptions = computed(() => props.stores.map(s => ({ value: s.id, label:
                 <label class="text-sm">Claim starts<input v-model="claimForm.claim_starts_on" type="date" class="mt-1 w-full rounded-lg border-gray-300 dark:bg-gray-900"/><span class="text-xs text-red-600">{{ claimForm.errors.claim_starts_on }}</span></label>
                 <label class="text-sm">Claim ends<input v-model="claimForm.claim_ends_on" type="date" class="mt-1 w-full rounded-lg border-gray-300 dark:bg-gray-900"/><span class="text-xs text-red-600">{{ claimForm.errors.claim_ends_on }}</span></label>
             </div>
-            <div class="mt-6 flex justify-end gap-2"><button @click="claimModal=false" class="rounded-lg px-4 py-2 text-sm">Cancel</button><button @click="submitClaimPeriod" :disabled="claimForm.processing" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{{ claimForm.processing ? 'Savingâ€¦' : 'Save Claim Period' }}</button></div>
+            <div class="mt-6 flex justify-end gap-2"><button @click="claimModal=false" class="rounded-lg px-4 py-2 text-sm">Cancel</button><button @click="submitClaimPeriod" :disabled="claimForm.processing" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{{ claimForm.processing ? 'Saving…' : 'Save Claim Period' }}</button></div>
         </div></Modal>
 
         <Modal :show="scan.open" @close="scan.open=false" max-width="2xl"><div class="p-6"><div class="flex items-center justify-between"><div><h3 class="text-lg font-bold dark:text-white">Verify / Use Voucher</h3><p class="text-xs text-gray-500">Scanning verifies first. The voucher is used only after payment confirmation.</p></div><button v-if="scan.result" @click="resetScan" class="text-sm font-bold text-blue-600">Scan another</button></div>

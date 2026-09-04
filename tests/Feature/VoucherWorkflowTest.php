@@ -14,7 +14,6 @@ use App\Support\CompanyContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Queue;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -200,9 +199,9 @@ class VoucherWorkflowTest extends TestCase
         $this->assertSame(2, preg_match_all('/\/Type\s*\/Page\b/', $pdf));
     }
 
-    public function test_manager_can_activate_a_batch_and_queue_its_pdf(): void
+    public function test_manager_can_activate_a_batch_and_generate_its_pdf_without_a_queue_worker(): void
     {
-        Queue::fake();
+        Storage::fake('local');
         $batch = $this->batch(['status' => 'draft']);
         app(VoucherService::class)->generateCodes($batch);
 
@@ -212,8 +211,42 @@ class VoucherWorkflowTest extends TestCase
 
         $this->actingAs($this->cashier)->withSession($this->session)
             ->post(route('stamps.voucher-batches.pdf', $batch))->assertRedirect();
-        Queue::assertPushed(GenerateVoucherBatchPdf::class, fn ($job) => $job->batchId === $batch->id);
-        Queue::assertPushedOn('voucher-pdfs', GenerateVoucherBatchPdf::class);
+
+        $batch->refresh();
+        $this->assertSame('ready', $batch->pdf_status);
+        Storage::disk('local')->assertExists($batch->pdf_path);
+    }
+
+    public function test_an_abandoned_pdf_request_becomes_retryable(): void
+    {
+        $batch = $this->batch(['pdf_status' => 'queued']);
+        $batch->forceFill(['updated_at' => now()->subMinutes(7)])->saveQuietly();
+
+        $this->assertTrue($batch->fresh()->pdf_is_stale);
+    }
+
+    public function test_pdf_job_timeout_cannot_leave_a_batch_processing_forever(): void
+    {
+        $job = new GenerateVoucherBatchPdf(123, $this->cashier->id);
+
+        $this->assertSame(300, $job->timeout);
+        $this->assertTrue($job->failOnTimeout);
+        $this->assertGreaterThan($job->timeout, config('queue.connections.database.retry_after'));
+    }
+
+    public function test_stamp_pdf_poll_always_clears_consumed_flash_messages(): void
+    {
+        $response = $this->actingAs($this->cashier)
+            ->withSession($this->session)
+            ->withHeaders([
+                'X-Inertia' => 'true',
+                'X-Inertia-Partial-Component' => 'Stamps/Index',
+                'X-Inertia-Partial-Data' => 'voucherBatches',
+                'X-Inertia-Version' => app(\App\Http\Middleware\HandleInertiaRequests::class)->version(request()),
+            ])
+            ->get(route('stamps.index', ['tab' => 'vouchers']));
+
+        $response->assertOk()->assertJsonPath('props.flash.success', null);
     }
 
     private function batch(array $overrides = []): VoucherBatch

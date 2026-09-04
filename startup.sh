@@ -92,10 +92,15 @@ nohup php /home/site/wwwroot/artisan schedule:work >> /home/site/wwwroot/storage
 # jobs table forever — including SendDecisionCallbackJob (the linkportal accounting
 # callback). It also lets page-load triggers hand slow work (FetchEmailsJob's IMAP
 # fetch) to a background process instead of holding a PHP-FPM worker.
-# --max-time recycles the worker hourly so a long-lived process cannot leak memory or
-# hold stale container state; the container restarts it.
+# --max-time recycles each worker hourly so a long-lived process cannot leak memory
+# or hold stale container state; the loops below immediately restart it.
 echo "🚀 Starting Laravel Queue worker..."
 touch /home/site/wwwroot/storage/logs/queue.log
-nohup php /home/site/wwwroot/artisan queue:work --tries=3 --max-time=3600 --sleep=3 >> /home/site/wwwroot/storage/logs/queue.log 2>&1 &
+# Keep both workers in restart loops. A one-shot queue:work process exits at
+# --max-time (or after a fatal error) while PHP-FPM keeps the container alive,
+# which otherwise leaves queued jobs stuck indefinitely. PDF work is isolated so
+# a large print run starts promptly and cannot block normal background jobs.
+nohup sh -c 'while true; do php /home/site/wwwroot/artisan queue:work --queue=default --tries=3 --timeout=300 --max-time=3600 --sleep=3; sleep 2; done' >> /home/site/wwwroot/storage/logs/queue.log 2>&1 &
+nohup sh -c 'while true; do php /home/site/wwwroot/artisan queue:work --queue=voucher-pdfs --tries=3 --timeout=300 --max-time=3600 --sleep=1; sleep 2; done' >> /home/site/wwwroot/storage/logs/queue.log 2>&1 &
 
 echo "🚀 Startup script finished! PHP-FPM taking over."

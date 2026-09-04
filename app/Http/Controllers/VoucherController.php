@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class VoucherController extends Controller implements HasMiddleware
 {
@@ -205,12 +206,25 @@ class VoucherController extends Controller implements HasMiddleware
     public function requestPdf(Request $request, VoucherBatch $batch)
     {
         $this->guardBatch($batch);
-        if (in_array($batch->pdf_status, ['queued', 'processing'], true)) {
+        if (in_array($batch->pdf_status, ['queued', 'processing'], true) && ! $batch->pdf_is_stale) {
             throw ValidationException::withMessages(['pdf' => 'This voucher PDF is already being generated.']);
         }
         $batch->update(['pdf_status' => 'queued', 'pdf_requested_by' => $request->user()->id]);
-        GenerateVoucherBatchPdf::dispatch($batch->id, $request->user()->id);
-        return back()->with('success', 'Voucher PDF generation queued.');
+
+        // Generate inline so this feature works even when the installation is run
+        // with `php artisan serve` and has no separate queue worker. Large batches
+        // previously sat in the database forever with zero attempts.
+        $job = new GenerateVoucherBatchPdf($batch->id, $request->user()->id);
+        try {
+            $job->handle();
+        } catch (Throwable $exception) {
+            $job->failed($exception);
+            report($exception);
+
+            return back()->with('error', 'The voucher PDF could not be generated. Please try again.');
+        }
+
+        return back()->with('success', 'Voucher PDF is ready to open and print.');
     }
 
     public function downloadPdf(VoucherBatch $batch)
