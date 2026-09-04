@@ -465,6 +465,68 @@ const submitPurchase = () => {
 }
 
 /* ------------------------------------------------------------------ *
+ | Scan Redeem QR modal — the redemption counterpart of Scan Customer QR.
+ | The member taps "Redeem Now" in the mobile app, which shows a signed code
+ | for that one full card (LoyaltyRedeemQrService); scanning it here resolves
+ | the card and hands it straight to the existing Redeem Reward modal, so
+ | staff never look the customer up by hand and never redeem the wrong card.
+ |
+ | It stops at the modal rather than redeeming outright on scan: a redemption
+ | deducts specific coded inventory units, and only the person at the counter
+ | knows which unit is leaving the shelf.
+ * ------------------------------------------------------------------ */
+const redeemScanModal = reactive({ open: false, resolving: false, error: null })
+const redeemScanTokenInput = ref('')
+const redeemScanTokenInputRef = ref(null)
+
+const openRedeemScanModal = () => {
+    redeemScanModal.open = true
+    redeemScanModal.resolving = false
+    redeemScanModal.error = null
+    redeemScanTokenInput.value = ''
+    // Same reason as openScanModal: a hardware scanner types into whatever
+    // has focus, so the field has to be ready before anyone clicks.
+    nextTick(() => redeemScanTokenInputRef.value?.focus())
+}
+const closeRedeemScanModal = () => { redeemScanModal.open = false }
+
+const submitRedeemScanToken = async () => {
+    const token = redeemScanTokenInput.value.trim()
+    if (!token || redeemScanModal.resolving) return
+    redeemScanModal.resolving = true
+    redeemScanModal.error = null
+    try {
+        const res = await axios.post(route('stamps.scan.resolve-redeem'), { token })
+        redeemScanModal.open = false
+        // One redemption path, not two — this is the same modal the Action
+        // column opens, just reached by scanning instead of searching.
+        openRedeemModal(res.data.card)
+    } catch (e) {
+        // The server says exactly why (already redeemed, card not full,
+        // unknown code) — surface that rather than a generic failure, since
+        // "already redeemed" is the one the member will argue about.
+        redeemScanModal.error = e.response?.data?.errors?.token?.[0] || 'That code could not be read. Try scanning again.'
+        redeemScanTokenInput.value = ''
+        nextTick(() => redeemScanTokenInputRef.value?.focus())
+    } finally {
+        redeemScanModal.resolving = false
+    }
+}
+
+// Matches LoyaltyRedeemQrService::encode — "LRDM1:{stamp_card_id}:{24 hex}".
+// Same auto-submit-on-complete behavior as the customer scan above.
+const REDEEM_SCAN_TOKEN_PATTERN = /^LRDM1:\d+:[0-9a-f]{24}$/
+let redeemScanAutoSubmitTimer = null
+watch(redeemScanTokenInput, (val) => {
+    if (redeemScanAutoSubmitTimer) clearTimeout(redeemScanAutoSubmitTimer)
+    const trimmed = val.trim()
+    if (!redeemScanModal.open || redeemScanModal.resolving || !REDEEM_SCAN_TOKEN_PATTERN.test(trimmed)) return
+    redeemScanAutoSubmitTimer = setTimeout(() => {
+        if (redeemScanTokenInput.value.trim() === trimmed) submitRedeemScanToken()
+    }, 150)
+})
+
+/* ------------------------------------------------------------------ *
  | Redeem modal (loads inventory items with stock at the chosen store)
  * ------------------------------------------------------------------ */
 const redeemModal = reactive({ open: false, card: null })
@@ -779,7 +841,11 @@ const submitRedeem = () => {
                         <div class="flex items-center gap-2">
                             <button v-if="hasPermission('stamps.create')" @click="openScanModal()" title="Scan a member's QR code to add a stamp — no manual customer/store lookup" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg whitespace-nowrap inline-flex items-center gap-1.5">
                                 <QrCodeIcon class="w-4 h-4" />
-                                Scan Customer
+                                Scan Customer QR
+                            </button>
+                            <button v-if="hasPermission('stamps.redeem')" @click="openRedeemScanModal()" title="Scan the code the member's app shows when they tap Redeem Now — opens the redemption for that exact card" class="bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium px-4 py-2 rounded-lg whitespace-nowrap inline-flex items-center gap-1.5">
+                                <QrCodeIcon class="w-4 h-4" />
+                                Scan Redeem QR
                             </button>
                             <button @click="openCardModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg whitespace-nowrap inline-flex items-center">+ New Card</button>
                         </div>
@@ -1042,11 +1108,40 @@ const submitRedeem = () => {
             </div>
         </Modal>
 
+        <!-- Scan Redeem QR Modal — member's "Redeem Now" code in, then straight
+             into the ordinary Redeem Reward modal for that exact card. -->
+        <Modal :show="redeemScanModal.open" @close="closeRedeemScanModal" max-width="md">
+            <div class="p-6 space-y-4">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    <QrCodeIcon class="w-5 h-5 text-amber-600" /> Scan Redeem QR
+                </h3>
+                <p class="text-sm text-gray-500 dark:text-gray-300">Point the barcode scanner at the code shown in the member's app after they tap “Redeem Now” — no need to click first.</p>
+                <div>
+                    <input
+                        ref="redeemScanTokenInputRef"
+                        v-model="redeemScanTokenInput"
+                        type="text"
+                        autocomplete="off"
+                        placeholder="Waiting for scan…"
+                        :disabled="redeemScanModal.resolving"
+                        @keydown.enter.prevent="submitRedeemScanToken"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-center tracking-wide focus:ring-2 focus:ring-amber-500 focus:border-amber-500 dark:border-gray-600"
+                    />
+                    <p v-if="redeemScanModal.error" class="text-xs text-red-600 mt-1">{{ redeemScanModal.error }}</p>
+                </div>
+                <p v-if="redeemScanModal.resolving" class="text-xs text-gray-500 dark:text-gray-300">Verifying reward…</p>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button @click="closeRedeemScanModal" class="px-4 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700">Cancel</button>
+                    <button @click="submitRedeemScanToken" :disabled="!redeemScanTokenInput.trim() || redeemScanModal.resolving" class="px-4 py-2 text-sm rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50">Verify</button>
+                </div>
+            </div>
+        </Modal>
+
         <!-- Scan Customer Modal — QR in, only Program picked manually -->
         <Modal :show="scanModal.open" @close="closeScanModal" max-width="md">
             <div class="p-6 space-y-4">
                 <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                    <QrCodeIcon class="w-5 h-5 text-emerald-600" /> Scan Customer
+                    <QrCodeIcon class="w-5 h-5 text-emerald-600" /> Scan Customer QR
                 </h3>
 
                 <!-- Step 1: scan -->

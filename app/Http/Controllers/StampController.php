@@ -15,6 +15,7 @@ use App\Models\StampRedemptionUnit;
 use App\Models\StockIn;
 use App\Models\Store;
 use App\Services\LoyaltyQrService;
+use App\Services\LoyaltyRedeemQrService;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -36,7 +37,7 @@ class StampController extends Controller implements HasMiddleware
             ]),
             new Middleware('can:stamps.edit', only: ['updateCustomer', 'updateProgram']),
             new Middleware('can:stamps.delete', only: ['destroyCustomer', 'destroyProgram', 'destroyCard']),
-            new Middleware('can:stamps.redeem', only: ['redeem']),
+            new Middleware('can:stamps.redeem', only: ['redeem', 'resolveRedeemScan']),
         ];
     }
 
@@ -493,6 +494,78 @@ class StampController extends Controller implements HasMiddleware
     /* ----------------------------------------------------------------------
      | Redemption (deducts inventory)
      * ------------------------------------------------------------------- */
+
+    /**
+     * Resolve a scanned redemption QR (shown by the member's mobile app when
+     * they tap "Redeem Now") to the specific full card it authorizes.
+     * Step 1 of the "Scan Redeem QR" flow, and the exact counterpart of
+     * `resolveScan` for the earning side: it verifies and looks up, but
+     * commits nothing.
+     *
+     * Step 2 is the ordinary `redeem()` below, reached through the same
+     * Redeem Reward modal staff already use from the Action column. That is
+     * deliberate rather than a one-tap "scan and it's done": a redemption
+     * deducts specific, individually coded inventory units, and which unit
+     * leaves the shelf is something only the person at the counter can say.
+     * The scan replaces the customer/card *lookup*, not the stock decision.
+     *
+     * Every reason a code can fail lands here rather than at redeem() time,
+     * so staff get a straight answer while the member is still standing
+     * there — including the replay case: a screenshotted code whose card has
+     * already been redeemed resolves to a card that is no longer
+     * `completed`, and is refused with a message that says so.
+     */
+    public function resolveRedeemScan(Request $request)
+    {
+        $data = $request->validate(['token' => 'required|string|max:255']);
+
+        $cardId = LoyaltyRedeemQrService::decode($data['token']);
+        if (! $cardId) {
+            throw ValidationException::withMessages([
+                'token' => 'That code is not a valid reward redemption QR.',
+            ]);
+        }
+
+        $card = StampCard::with([
+            // is_active is checked below, so it has to be selected — a
+            // constrained eager load that omits it reads back as null and
+            // would refuse every scan as "inactive".
+            'customer:id,name,email,phone,is_active',
+            'program:id,name,stamps_required',
+        ])->find($cardId);
+
+        if (! $card) {
+            throw ValidationException::withMessages([
+                'token' => 'That reward card no longer exists.',
+            ]);
+        }
+
+        if ($card->status === 'redeemed') {
+            throw ValidationException::withMessages([
+                'token' => 'This reward has already been redeemed'
+                    . ($card->redeemed_at ? ' on ' . $card->redeemed_at->format('M j, Y g:i A') : '')
+                    . '.',
+            ]);
+        }
+
+        if ($card->status !== 'completed') {
+            throw ValidationException::withMessages([
+                'token' => "This card is not full yet ({$card->stamps_count} of "
+                    . "{$card->program->stamps_required} stamps) and cannot be redeemed.",
+            ]);
+        }
+
+        if ($card->customer && ! $card->customer->is_active) {
+            throw ValidationException::withMessages([
+                'token' => 'That member could not be found or is inactive.',
+            ]);
+        }
+
+        // Shaped like a row of the Cards table on purpose — the frontend
+        // hands it straight to the same openRedeemModal() the Action column
+        // uses, so there is one redemption modal, not two.
+        return response()->json(['card' => $card]);
+    }
 
     public function redeem(Request $request, StampCard $card)
     {

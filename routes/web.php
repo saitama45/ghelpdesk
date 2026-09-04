@@ -691,9 +691,14 @@ Route::middleware('auth')->group(function () {
         Route::post('voucher-redemptions/{redemption}/void', [\App\Http\Controllers\VoucherController::class, 'voidRedemption'])->name('voucher-redemptions.void');
         Route::get('voucher-redemptions/export', [\App\Http\Controllers\VoucherController::class, 'exportRedemptions'])->name('voucher-redemptions.export');
 
-        // Scan Customer (member QR → auto-fill; only Program is picked manually)
+        // Scan Customer QR (member QR → auto-fill; only Program is picked manually)
         Route::post('scan/resolve', [\App\Http\Controllers\StampController::class, 'resolveScan'])->name('scan.resolve');
         Route::post('scan/add-stamp', [\App\Http\Controllers\StampController::class, 'scanAddStamp'])->name('scan.add-stamp');
+
+        // Scan Redeem QR (the member's "Redeem Now" code → the one full card
+        // it authorizes; the redemption itself still runs through
+        // cards/{card}/redeem so inventory units are picked as usual)
+        Route::post('scan/resolve-redeem', [\App\Http\Controllers\StampController::class, 'resolveRedeemScan'])->name('scan.resolve-redeem');
 
         // Cards & stamps
         Route::post('cards', [\App\Http\Controllers\StampController::class, 'storeCard'])->name('cards.store');
