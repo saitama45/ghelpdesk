@@ -342,9 +342,20 @@
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-center">
-                                        <span class="text-sm font-black" :class="(row.soh || 0) <= 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'">
+                                        <!-- Clickable: opens the individual units behind this
+                                             figure. Disabled at zero — there is nothing to list. -->
+                                        <button
+                                            type="button"
+                                            :disabled="(row.soh || 0) <= 0"
+                                            @click="viewUnits(row)"
+                                            :title="(row.soh || 0) > 0 ? 'View the individual items behind this figure' : 'Nothing in stock here'"
+                                            class="text-sm font-black rounded-md px-2 py-1 transition-colors disabled:cursor-default"
+                                            :class="(row.soh || 0) <= 0
+                                                ? 'text-red-600 dark:text-red-400'
+                                                : 'text-emerald-700 underline decoration-dotted underline-offset-4 hover:bg-emerald-50 hover:text-emerald-900 dark:text-emerald-400 dark:hover:bg-emerald-500/15'"
+                                        >
                                             {{ row.soh || 0 }}
-                                        </span>
+                                        </button>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
                                         <span class="text-sm text-gray-600 dark:text-gray-300">
@@ -373,6 +384,88 @@
                 </template>
             </div>
         </div>
+
+        <!-- Stock on Hand → units behind the number -->
+        <Modal :show="showUnitsModal" @close="closeUnitsModal" max-width="3xl">
+            <div class="p-6">
+                <div class="flex items-start justify-between mb-5">
+                    <div>
+                        <h3 class="text-lg font-black text-gray-900 uppercase tracking-tight dark:text-gray-100">Items in Stock</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-300" v-if="unitsPayload">
+                            <span class="font-bold text-blue-600">{{ unitsPayload.asset?.item_code }}</span>
+                            <span v-if="unitsPayload.asset?.brand || unitsPayload.asset?.model">
+                                — {{ unitsPayload.asset?.brand }} {{ unitsPayload.asset?.model }}
+                            </span>
+                            at <span class="font-bold text-gray-900 dark:text-gray-100">{{ unitsPayload.location }}</span>
+                        </p>
+                        <p class="text-xs font-bold uppercase tracking-widest text-emerald-700 mt-1 dark:text-emerald-400" v-if="unitsPayload">
+                            Stock on hand: {{ unitsPayload.soh }} · Listed: {{ unitsPayload.unit_count }}
+                        </p>
+                    </div>
+                    <button @click="closeUnitsModal" class="text-gray-400 hover:text-gray-600 dark:text-gray-400">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                <div v-if="isLoadingUnits" class="py-10 text-center text-sm text-gray-500 dark:text-gray-300">Loading items…</div>
+
+                <div v-else-if="unitsError" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+                    {{ unitsError }}
+                </div>
+
+                <template v-else-if="unitsPayload">
+                    <div v-if="unitsMismatch" class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                        {{ unitsMismatch }}
+                    </div>
+
+                    <div v-if="unitsAreUncounted" class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300">
+                        This item is tracked by quantity only — there are no individually coded units to list.
+                    </div>
+
+                    <template v-else>
+                        <input
+                            v-model="unitsSearch"
+                            type="search"
+                            autocomplete="off"
+                            placeholder="Filter by serial, barcode or QR code…"
+                            class="w-full mb-3 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                        />
+
+                        <div class="max-h-[26rem] overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                            <table class="min-w-full text-sm">
+                                <thead class="bg-gray-50 sticky top-0 dark:bg-gray-900">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">#</th>
+                                        <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Serial No</th>
+                                        <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Barcode</th>
+                                        <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">QR Code</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                                    <tr v-for="(unit, index) in filteredUnits" :key="unit.stock_in_id" class="hover:bg-gray-50 dark:hover:bg-gray-800/60">
+                                        <td class="px-4 py-2 text-xs text-gray-400 align-top">{{ index + 1 }}</td>
+                                        <td class="px-4 py-2 font-mono text-xs text-gray-900 align-top dark:text-gray-100">{{ unit.serial_no || '—' }}</td>
+                                        <td class="px-4 py-2 font-mono text-xs text-gray-900 align-top dark:text-gray-100">{{ unit.barcode || '—' }}</td>
+                                        <td class="px-4 py-2 align-top">
+                                            <!-- The printed QR encodes the whole asset card, so it is
+                                                 many lines long — kept scrollable instead of blowing
+                                                 the row height out. -->
+                                            <pre v-if="unit.qrcode" class="font-mono text-[11px] leading-4 text-gray-600 whitespace-pre-wrap break-all max-h-20 overflow-y-auto m-0 dark:text-gray-300">{{ unit.qrcode }}</pre>
+                                            <span v-else class="font-mono text-xs text-gray-400">—</span>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="!filteredUnits.length">
+                                        <td colspan="4" class="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-300">
+                                            {{ unitsSearch ? 'No item matches that code.' : 'No individually coded items are on hand here.' }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
+                </template>
+            </div>
+        </Modal>
 
         <!-- History Modal -->
         <Modal :show="showHistoryModal" @close="closeHistoryModal" max-width="4xl">
@@ -869,6 +962,98 @@ const groupedHistory = computed(() => {
                 .sort((a, b) => toTimestamp(b.latest_tx_at) - toTimestamp(a.latest_tx_at)),
         }))
         .sort((a, b) => sortDateKey(b.date).localeCompare(sortDateKey(a.date)))
+})
+
+/* ------------------------------------------------------------------ *
+ | Stock on Hand → the units behind the number.
+ |
+ | SOH is a ledger SUM: it says how many, never which ones. Clicking it
+ | resolves the same asset+location pair down to the actual stock_ins rows
+ | sitting there, with the codes staff scan.
+ * ------------------------------------------------------------------ */
+const showUnitsModal = ref(false)
+const isLoadingUnits = ref(false)
+const unitsError = ref(null)
+const unitsPayload = ref(null)
+const unitsSearch = ref('')
+
+const viewUnits = async (row) => {
+    showUnitsModal.value = true
+    isLoadingUnits.value = true
+    unitsError.value = null
+    unitsPayload.value = null
+    unitsSearch.value = ''
+
+    try {
+        const response = await axios.get(route('reports.inventory.units', row.asset_id), {
+            params: { location: row.location }
+        })
+        unitsPayload.value = response.data
+    } catch (error) {
+        unitsError.value = error.response?.data?.message
+            || 'Could not load the stock units for this item.'
+    } finally {
+        isLoadingUnits.value = false
+    }
+}
+
+const closeUnitsModal = () => {
+    showUnitsModal.value = false
+}
+
+const filteredUnits = computed(() => {
+    const units = unitsPayload.value?.units || []
+    const query = String(unitsSearch.value || '').trim().toLowerCase()
+    if (!query) return units
+    return units.filter(unit =>
+        [unit.serial_no, unit.barcode, unit.qrcode]
+            .some(value => String(value || '').toLowerCase().includes(query)))
+})
+
+/** Counted stock rather than serialised — no unit rows exist to list. */
+const unitsAreUncounted = computed(() =>
+    !!unitsPayload.value && unitsPayload.value.unit_count === 0 && unitsPayload.value.soh > 0)
+
+/**
+ * Unit rows and the ledger disagree — explain WHY, in plain terms.
+ *
+ * "Stock on hand 5, listed 6" on its own is just confusing. The usual cause
+ * is knowable and worth naming: a redemption that deducted stock before the
+ * system recorded which unit was handed over, so that item is still listed
+ * even though it physically left. Stock on hand stays the trustworthy number.
+ */
+const unitsMismatch = computed(() => {
+    const payload = unitsPayload.value
+    if (!payload || payload.unit_count === 0) return null
+    if (payload.unit_count === payload.soh) return null
+
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+    if (payload.unit_count < payload.soh) {
+        const gap = payload.soh - payload.unit_count
+        return `Stock on hand is ${payload.soh}, but only ${plural(payload.unit_count, 'item')} `
+            + `here carr${payload.unit_count === 1 ? 'ies' : 'y'} its own code — `
+            + `${plural(gap, 'item')} ${gap === 1 ? 'was' : 'were'} booked in as a quantity rather than individually. `
+            + `Stock on hand is still the correct count.`
+    }
+
+    const extra = payload.unit_count - payload.soh
+    const unattributed = payload.unattributed_redemptions || 0
+
+    if (unattributed > 0) {
+        const dates = (payload.unattributed_redeemed_at || [])
+            .map(value => formatDateTime(value))
+            .filter(Boolean)
+        const when = dates.length ? ` (${dates.join(', ')})` : ''
+        return `Stock on hand is ${payload.soh}, but ${plural(payload.unit_count, 'item')} are listed below. `
+            + `${plural(Math.min(extra, unattributed), 'reward redemption')}${when} took an item from this location `
+            + `without recording which code was handed over, so ${extra === 1 ? 'one of the items below is' : `${extra} of the items below are`} `
+            + `already gone and cannot be told apart from the rest. `
+            + `Stock on hand (${payload.soh}) is the count to trust.`
+    }
+
+    return `Stock on hand is ${payload.soh}, but ${plural(payload.unit_count, 'item')} are listed below — `
+        + `${plural(extra, 'item')} left the shelf without a matching ledger entry. Stock on hand is the count to trust.`
 })
 
 const viewHistory = async (row) => {

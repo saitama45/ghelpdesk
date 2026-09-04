@@ -532,6 +532,8 @@ Route::middleware('auth')->group(function () {
     Route::get('reports/inventory/assets/search', [\App\Http\Controllers\InventoryReportController::class, 'assetsSearch'])->name('reports.inventory.assets-search');
     Route::get('reports/inventory/{asset}/history', [\App\Http\Controllers\InventoryReportController::class, 'history'])->name('reports.inventory.history');
     Route::get('reports/inventory/{asset}/ticket-activity', [\App\Http\Controllers\InventoryReportController::class, 'ticketActivity'])->name('reports.inventory.ticket-activity');
+    // The individual units behind one Stock on Hand figure (the clickable SOH cell).
+    Route::get('reports/inventory/{asset}/units', [\App\Http\Controllers\InventoryReportController::class, 'units'])->name('reports.inventory.units');
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

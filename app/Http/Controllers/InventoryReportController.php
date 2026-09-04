@@ -30,7 +30,7 @@ class InventoryReportController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('can:reports.inventory', only: ['index', 'movement']),
+            new Middleware('can:reports.inventory', only: ['index', 'movement', 'units']),
         ];
     }
 
@@ -183,6 +183,109 @@ class InventoryReportController extends Controller implements HasMiddleware
      * Search physical units (Fixed) and consumable types currently at the ticket's store,
      * for tagging on a ticket.
      */
+    /**
+     * The individual stock units behind one Stock on Hand figure — what the
+     * report's SOH cell opens when clicked.
+     *
+     * SOH is a ledger SUM, so on its own it answers "how many" but never
+     * "which ones". This resolves the same asset+location pair down to the
+     * actual `stock_ins` rows currently sitting there, with the codes staff
+     * scan (serial / barcode / QR).
+     *
+     * Unit membership deliberately mirrors `StampController::redeemableUnitsAt`
+     * — current location follows the latest Received transfer, units already
+     * consumed by a stamp redemption are gone, and units on an unreceived
+     * transfer have left the shelf — so this report and the redemption picker
+     * can never disagree about what is physically there. The one difference:
+     * units with no barcode or QR are still listed here. The picker excludes
+     * them because it needs something to scan; a report that hid them would
+     * be under-reporting real stock.
+     *
+     * Two mismatches are surfaced rather than hidden, because both mean
+     * something is wrong upstream and quietly padding or truncating the list
+     * would bury it:
+     *  - `unit_count` < `soh` — ledger movements exist without unit rows
+     *    (typical for stock booked in bulk on one quantity>1 stock-in);
+     *  - `unit_count` > `soh` — units that left the shelf without being named.
+     *
+     * The second case has one dominant, knowable cause, so it is measured
+     * rather than left as a mystery: redemptions predating
+     * `stamp_redemption_units` deducted the ledger without recording WHICH
+     * unit was handed over. `unattributed_redemptions` counts exactly that
+     * shortfall, which lets the page say "one of these six is already gone,
+     * and here is why" instead of showing an unexplained 5-vs-6.
+     */
+    public function units(Asset $asset, Request $request)
+    {
+        $location = $this->normalizeStoreCode($request->input('location'));
+
+        if (! $location) {
+            return response()->json([
+                'message' => 'A location is required to list stock units.',
+            ], 422);
+        }
+
+        $variants = $this->locationVariants($location);
+
+        $soh = (int) InventoryTransaction::query()
+            ->validInventoryLedger('inventory_transactions', 'report_units_soh')
+            ->where('inventory_transactions.asset_id', $asset->id)
+            ->whereIn('inventory_transactions.location', $variants)
+            ->sum('inventory_transactions.quantity');
+
+        $units = $this->fixedUnitsCurrentlyAt($variants, function ($query) use ($asset) {
+            $query->where('stock_ins.asset_id', $asset->id)
+                ->whereNotIn('stock_ins.id', StampRedemptionUnit::query()->select('stock_in_id'));
+        })
+            ->reject(fn (StockIn $unit) => $unit->sourceStockTransfers->contains(
+                fn ($transfer) => in_array($transfer->status, ['For Posting', 'Posted'], true)
+            ))
+            ->map(fn (StockIn $unit) => [
+                'stock_in_id' => $unit->id,
+                'serial_no' => $unit->serial_no,
+                'barcode' => $unit->barcode,
+                'qrcode' => $unit->qrcode,
+                'received_at' => optional($unit->created_at)->toIso8601String(),
+            ])
+            ->values();
+
+        // Redemptions taken from THIS location whose units were never
+        // recorded. Each is a physical item that left the shelf anonymously,
+        // so it is still in the list above even though it is gone — the one
+        // real reason `unit_count` can exceed `soh` here.
+        //
+        // Note `stamp_redemptions.location` is where the reward item came
+        // OUT of stock, chosen by staff in the Redeem Reward modal. It is
+        // unrelated to the store the customer's card was issued at, which is
+        // why a card from another branch still shows up against this
+        // location's inventory.
+        $redemptions = StampRedemption::query()
+            ->where('asset_id', $asset->id)
+            ->whereIn('location', $variants)
+            ->withCount('units')
+            ->get(['id', 'quantity', 'created_at']);
+
+        $unattributed = 0;
+        $unattributedAt = [];
+        foreach ($redemptions as $redemption) {
+            $shortfall = max(0, (int) $redemption->quantity - (int) $redemption->units_count);
+            if ($shortfall > 0) {
+                $unattributed += $shortfall;
+                $unattributedAt[] = optional($redemption->created_at)->toIso8601String();
+            }
+        }
+
+        return response()->json([
+            'asset' => $asset->only(['id', 'item_code', 'brand', 'model', 'description', 'type']),
+            'location' => $location,
+            'soh' => $soh,
+            'unit_count' => $units->count(),
+            'unattributed_redemptions' => $unattributed,
+            'unattributed_redeemed_at' => array_values(array_filter($unattributedAt)),
+            'units' => $units,
+        ]);
+    }
+
     public function assetsSearch(Request $request)
     {
         $search = trim((string) $request->input('q', ''));

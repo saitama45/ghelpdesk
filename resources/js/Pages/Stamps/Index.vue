@@ -228,7 +228,11 @@ const submitCard = () => {
     cardForm.post(route('stamps.cards.store'), { preserveScroll: true, preserveState: true, onSuccess: () => { cardModal.value = false; cardForm.reset() } })
 }
 const deleteCard = async (card) => {
-    if (!await confirm({ title: 'Delete card', message: `Delete this card for ${card.customer?.name}?`, confirmLabel: 'Delete' })) return
+    if (!await confirm({
+        title: 'Delete card',
+        message: `Delete this empty card for ${card.customer?.name}? Only cards with no stamps yet can be removed — once a stamp is earned the card is permanent.`,
+        confirmLabel: 'Delete',
+    })) return
     router.delete(route('stamps.cards.destroy', card.id), { preserveScroll: true, preserveState: true })
 }
 
@@ -531,6 +535,12 @@ watch(redeemScanTokenInput, (val) => {
  * ------------------------------------------------------------------ */
 const redeemModal = reactive({ open: false, card: null })
 const redeemForm = useForm({ location: null, asset_id: null, stock_in_ids: [], quantity: 0, remarks: '' })
+// Remembered per device, exactly like the store on the Scan Customer QR flow
+// (see rememberedRef): staff work one branch per shift, so re-picking the
+// same store on every single redemption is pure friction. Stored as the store
+// CODE, which is what storeLocationOptions uses as its value — hence String
+// rather than rememberedRef's default Number parser.
+const rememberedRedeemLocation = rememberedRef('stamps:currentRedeemLocation', String)
 const assetOptions = ref([])
 const loadingAssets = ref(false)
 const redeemUnitOptions = ref([])
@@ -541,27 +551,61 @@ const openRedeemModal = (card) => {
     redeemForm.clearErrors(); redeemForm.reset()
     assetOptions.value = []
     redeemUnitOptions.value = []
-    redeemCodeSearch.value = ''
+    // Half a scan left over from a previous card must never leak into this
+    // one — clearRedeemScan drops the input, the buffer and the idle timer.
+    clearRedeemScan()
     redeemModal.card = card; redeemModal.open = true
+
+    // Restore the remembered store, but only if it is still a real option —
+    // a store that has been retired, or belongs to another active entity,
+    // must not silently preselect itself. Setting it fires the existing
+    // location watcher, so the reward items load without a second click.
+    const remembered = rememberedRedeemLocation.value
+    if (remembered && storeLocationOptions.value.some(option => option.value === remembered)) {
+        redeemForm.location = remembered
+        // Load the reward items explicitly rather than leaning on the location
+        // watcher. reset() → null → remembered all happens inside one flush,
+        // so when the form still held this same store from the last
+        // redemption Vue sees NO net change, the watcher never fires, and the
+        // item list stays empty ("No results found") even though a store is
+        // clearly selected. loadAssets is guarded against the double call.
+        loadAssets(remembered)
+    }
 }
+
+// Persist whatever staff actually pick, so the next redemption opens on it.
+watch(() => redeemForm.location, (location) => {
+    if (location) rememberedRedeemLocation.value = location
+})
+// Which location the in-flight request is for. Guards two things: a second
+// call for the SAME location while one is already running (openRedeemModal
+// loads directly AND the location watcher may fire), and a slow response for
+// a store staff have already switched away from overwriting the new list.
+let assetsRequestLocation = null
+
 const loadAssets = async (location) => {
+    if (location && location === assetsRequestLocation && loadingAssets.value) return
+
     redeemForm.asset_id = null
     redeemForm.stock_in_ids = []
     redeemForm.quantity = 0
     assetOptions.value = []
     redeemUnitOptions.value = []
-    redeemCodeSearch.value = ''
-    if (!location) return
+    clearRedeemScan()
+    if (!location) { assetsRequestLocation = null; return }
+
+    assetsRequestLocation = location
     loadingAssets.value = true
     try {
         const res = await fetch(route('stamps.assets-at-location', { location }), { headers: { Accept: 'application/json' } })
         const json = await res.json()
+        if (assetsRequestLocation !== location) return
         assetOptions.value = (json || []).map(a => ({ label: `${assetLabel(a)} — SOH ${a.soh}`, value: a.id }))
         if (!assetOptions.value.length) addToast('No stock available at this location.', 'error')
     } catch (e) {
-        addToast('Failed to load available items.', 'error')
+        if (assetsRequestLocation === location) addToast('Failed to load available items.', 'error')
     } finally {
-        loadingAssets.value = false
+        if (assetsRequestLocation === location) loadingAssets.value = false
     }
 }
 watch(() => redeemForm.location, (loc) => loadAssets(loc))
@@ -610,6 +654,9 @@ const addRedeemUnit = (unit) => {
     }
     redeemForm.stock_in_ids = [...redeemForm.stock_in_ids, stockInId]
     redeemForm.quantity = redeemForm.stock_in_ids.length
+    // Whole scan consumed — input AND buffer, so the next scan starts clean
+    // (this also covers a unit picked by clicking a suggestion).
+    redeemScanBuffer.value = ''
     redeemCodeSearch.value = ''
     redeemForm.clearErrors('stock_in_ids', 'quantity')
     nextTick(() => redeemCodeInput.value?.focus())
@@ -619,31 +666,152 @@ const removeRedeemUnit = (stockInId) => {
     redeemForm.quantity = redeemForm.stock_in_ids.length
     nextTick(() => redeemCodeInput.value?.focus())
 }
-const scanRedeemCode = () => {
-    const rawCode = String(redeemCodeSearch.value || '').trim()
-    if (!rawCode) return
+/* ------------------------------------------------------------------ *
+ | Scanning a unit's code.
+ |
+ | The QR labels this system prints are MULTI-LINE — the whole asset card:
+ |   "Item Code: SKU100081\nDescription: OREO TUMBLER\n…
+ |    Barcode: SKU100081-1788318064432-1\n…"
+ | A hardware scanner types that payload keystroke by keystroke, and a
+ | single-line <input> cannot hold newlines: each embedded newline arrives as
+ | Enter. So the old handler ran on a fragment ("Item Code: SKU100081"),
+ | matched nothing, and toasted an error — for every line of every scan.
+ | Scanning a QR label simply never worked; only the plain 1D barcode did.
+ |
+ | Fixed by treating a scan as something that ACCUMULATES rather than
+ | something each Enter completes:
+ |   * Enter appends the line to a buffer instead of deciding anything;
+ |   * every candidate the payload contains is tried — the whole text, each
+ |     line, and the value of any "Barcode:" / "Serial No:" style label;
+ |   * failure is only reported once the scan has gone quiet, or when staff
+ |     explicitly press Add, so a mid-scan fragment no longer cries wolf.
+ * ------------------------------------------------------------------ */
+const redeemScanBuffer = ref('')
+let redeemScanIdleTimer = null
 
-    const normalized = normalizeRedeemCode(rawCode)
-    const embeddedBarcode = rawCode.match(/Barcode:\s*([^\\\r\n]+)/i)?.[1]?.trim()
-    const exactUnit = redeemUnitOptions.value.find(unit =>
-        [unit.serial_no, unit.barcode, unit.qrcode]
-            .some(value => normalizeRedeemCode(value) === normalized)
-        || (embeddedBarcode && normalizeRedeemCode(unit.barcode) === normalizeRedeemCode(embeddedBarcode))
-    )
+/** Every string in a scanned payload that could BE the code. */
+const redeemCodeCandidates = (text) => {
+    const raw = String(text || '')
+    const out = [raw, ...raw.split(/[\r\n]+/)]
 
-    if (exactUnit) {
-        addRedeemUnit(exactUnit)
+    // "Barcode: SKU-123", "Serial No: N/A", … — the labelled lines of a
+    // printed asset card.
+    for (const line of raw.split(/[\r\n]+/)) {
+        const labelled = line.match(/^\s*(?:barcode|serial\s*no\.?|qr\s*code|item\s*code)\s*:\s*(.+)$/i)
+        if (labelled) out.push(labelled[1])
+    }
+
+    return out
+        .map(value => normalizeRedeemCode(value))
+        // "n/a" is what the label prints for a missing serial; it would
+        // otherwise match every unit that has no serial number.
+        .filter(value => value && value !== 'n/a')
+}
+
+const findRedeemUnitFor = (text) => {
+    const candidates = redeemCodeCandidates(text)
+    if (!candidates.length) return null
+
+    return redeemUnitOptions.value.find(unit =>
+        [unit.serial_no, unit.barcode, unit.qrcode].some(value => {
+            const normalized = normalizeRedeemCode(value)
+            return normalized && candidates.includes(normalized)
+        })
+    ) || null
+}
+
+const clearRedeemScan = () => {
+    redeemScanBuffer.value = ''
+    redeemCodeSearch.value = ''
+    if (redeemScanIdleTimer) { clearTimeout(redeemScanIdleTimer); redeemScanIdleTimer = null }
+}
+
+const failRedeemScan = () => {
+    addToast(filteredRedeemUnits.value.length > 1
+        ? 'Multiple codes match. Continue scanning or choose the correct result.'
+        : 'Barcode/QR code not found in available stock at this location.', 'error')
+    clearRedeemScan()
+    nextTick(() => redeemCodeInput.value?.focus())
+}
+
+/**
+ * @param {boolean} explicit staff pressed Add (report failure immediately)
+ *                           rather than a scanner still mid-payload.
+ */
+const scanRedeemCode = (explicit = true) => {
+    if (redeemScanIdleTimer) { clearTimeout(redeemScanIdleTimer); redeemScanIdleTimer = null }
+
+    const text = [redeemScanBuffer.value, redeemCodeSearch.value]
+        .filter(part => String(part || '').trim())
+        .join('\n')
+    if (!text.trim()) return
+
+    const unit = findRedeemUnitFor(text)
+    if (unit) {
+        redeemScanBuffer.value = ''
+        addRedeemUnit(unit)
         return
     }
+
+    // Typed by hand and narrowed to exactly one — keep the old convenience.
     if (filteredRedeemUnits.value.length === 1) {
+        redeemScanBuffer.value = ''
         addRedeemUnit(filteredRedeemUnits.value[0])
         return
     }
 
-    addToast(filteredRedeemUnits.value.length > 1
-        ? 'Multiple codes match. Continue scanning or choose the correct result.'
-        : 'Barcode/QR code not found in available stock at this location.', 'error')
+    if (explicit) {
+        failRedeemScan()
+        return
+    }
+
+    // Mid-scan: stay quiet and give the rest of the payload time to land.
+    redeemScanIdleTimer = setTimeout(() => {
+        redeemScanIdleTimer = null
+        const settled = [redeemScanBuffer.value, redeemCodeSearch.value]
+            .filter(part => String(part || '').trim())
+            .join('\n')
+        if (!settled.trim()) return
+
+        const late = findRedeemUnitFor(settled)
+        if (late) {
+            redeemScanBuffer.value = ''
+            addRedeemUnit(late)
+        } else {
+            failRedeemScan()
+        }
+    }, 700)
 }
+
+/**
+ * Enter, from a scanner or a person: bank the line and try to resolve what
+ * we have so far. Never decides "not found" on its own — the payload may
+ * have more lines coming.
+ */
+const captureRedeemScanLine = () => {
+    const line = String(redeemCodeSearch.value || '')
+    redeemScanBuffer.value = redeemScanBuffer.value
+        ? `${redeemScanBuffer.value}\n${line}`
+        : line
+    redeemCodeSearch.value = ''
+    scanRedeemCode(false)
+}
+
+// Scanners that send no terminating Enter at all still resolve, once their
+// burst of typing stops.
+watch(redeemCodeSearch, (value) => {
+    if (!String(value || '').trim()) return
+    if (redeemScanIdleTimer) clearTimeout(redeemScanIdleTimer)
+    redeemScanIdleTimer = setTimeout(() => {
+        redeemScanIdleTimer = null
+        const unit = findRedeemUnitFor([redeemScanBuffer.value, redeemCodeSearch.value]
+            .filter(Boolean).join('\n'))
+        if (unit) {
+            redeemScanBuffer.value = ''
+            addRedeemUnit(unit)
+        }
+    }, 400)
+})
 const submitRedeem = () => {
     redeemForm.post(route('stamps.cards.redeem', redeemModal.card.id), { preserveScroll: true, preserveState: true, onSuccess: () => { redeemModal.open = false; redeemForm.reset() } })
 }
@@ -889,7 +1057,12 @@ const submitRedeem = () => {
                                     <button v-if="card.status === 'completed'" @click="openRedeemModal(card)" title="Redeem Reward" class="p-2 text-amber-600 hover:text-amber-900 hover:bg-amber-50 rounded-full transition-colors">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-9-9.75h18" /></svg>
                                     </button>
-                                    <button v-if="card.status !== 'redeemed'" @click="deleteCard(card)" title="Delete Card" class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors">
+                                    <!-- Only an untouched card can be deleted: stamp_entries
+                                         cascade with the card, so removing one that has history
+                                         would erase the customer's earned stamps. The server
+                                         enforces this; hiding it here means staff meet the rule
+                                         before they meet the error. -->
+                                    <button v-if="card.status !== 'redeemed' && !(card.stamps_count > 0)" @click="deleteCard(card)" title="Delete Card" class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                     </button>
                                 </div>
@@ -1292,6 +1465,7 @@ const submitRedeem = () => {
                     <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Location / Store <span class="text-red-500">*</span></label>
                     <Autocomplete v-model="redeemForm.location" :options="storeLocationOptions" placeholder="Search store..." />
                     <p v-if="redeemForm.errors.location" class="text-xs text-red-600 mt-1">{{ redeemForm.errors.location }}</p>
+                    <p v-else class="mt-1 text-xs text-gray-500 dark:text-gray-400">Remembered on this device for the next redemption — change it any time.</p>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">Reward item <span class="text-red-500">*</span></label>
@@ -1308,13 +1482,13 @@ const submitRedeem = () => {
                                 v-model="redeemCodeSearch"
                                 type="search"
                                 autocomplete="off"
-                                placeholder="Scan barcode / QR code, then press Enter"
+                                placeholder="Scan QR Code / Barcode of the item"
                                 class="min-w-0 flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-amber-500 focus:border-amber-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-                                @keydown.enter.prevent="scanRedeemCode"
+                                @keydown.enter.prevent="captureRedeemScanLine"
                             />
-                            <button type="button" @click="scanRedeemCode" class="px-4 py-2 text-sm font-semibold rounded-lg bg-gray-800 text-white hover:bg-gray-900 dark:bg-gray-600 dark:hover:bg-gray-500">Add</button>
+                            <button type="button" @click="scanRedeemCode(true)" class="px-4 py-2 text-sm font-semibold rounded-lg bg-gray-800 text-white hover:bg-gray-900 dark:bg-gray-600 dark:hover:bg-gray-500">Add</button>
                         </div>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Keep scanning to select multiple units. Each successful scan is added automatically.</p>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Keep scanning to select multiple units. Each successful scan is added automatically — the printed QR label works as well as the barcode.</p>
 
                         <div v-if="redeemCodeSearch" class="mt-2 max-h-44 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100 dark:border-gray-700 dark:divide-gray-700">
                             <button

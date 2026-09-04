@@ -20,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
@@ -359,11 +360,51 @@ class StampController extends Controller implements HasMiddleware
         return response()->json(['card' => $card, 'applied' => $applied]);
     }
 
+    /**
+     * Delete a stamp card — but only one that has no history to lose.
+     *
+     * `stamp_entries.stamp_card_id` is `cascadeOnDelete()`, so removing a card
+     * silently takes every stamp the customer ever earned on it with it. The
+     * status check alone was not enough protection: a card sitting at 11 of 12
+     * stamps is not `redeemed`, so it was deletable in one click and its
+     * months of history went with it, leaving no trace that it had existed.
+     *
+     * So deletion is now limited to what it is actually for — clearing a card
+     * created by mistake, before anything was recorded against it. Anything
+     * with a single stamp or a redemption is refused, and the message says
+     * what to do instead.
+     *
+     * (A redemption would already be refused by the database — that FK has no
+     * cascade — but failing here gives staff a sentence rather than a 500.)
+     */
     public function destroyCard(StampCard $card)
     {
         if ($card->status === 'redeemed') {
             return back()->with('error', 'Cannot delete a redeemed card.');
         }
+
+        $entryCount = $card->entries()->count();
+        $hasRedemption = $card->redemption()->exists();
+
+        if ($entryCount > 0 || $hasRedemption) {
+            $held = $entryCount > 0
+                ? "{$entryCount} stamp " . ($entryCount === 1 ? 'entry' : 'entries')
+                : 'a redemption';
+
+            return back()->with('error',
+                "Cannot delete this card — it already holds {$held}, and deleting it would "
+                . 'permanently erase that history. Only a card with no activity can be removed.');
+        }
+
+        // Rare enough to be worth a line in the log: an empty card is
+        // disposable, but knowing who removed what still beats guessing later.
+        Log::info('Stamp card deleted', [
+            'stamp_card_id' => $card->id,
+            'customer_id' => $card->customer_id,
+            'stamp_program_id' => $card->stamp_program_id,
+            'stamps_count' => $card->stamps_count,
+            'deleted_by' => request()->user()?->id,
+        ]);
 
         $card->delete();
 
