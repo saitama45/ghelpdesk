@@ -28,7 +28,8 @@ const batchStatusHelp = batch => {
     if (batch.effective_status === 'active') return `Valid until ${date(batch.claim_ends_on)}`
     return ''
 }
-const pdfBusy = batch => ['queued', 'processing'].includes(batch.pdf_status) && !batch.pdf_is_stale
+const pdfRequestingId = ref(null)
+const pdfBusy = batch => pdfRequestingId.value === batch.id || (['queued', 'processing'].includes(batch.pdf_status) && !batch.pdf_is_stale)
 
 let pdfPoll = null
 let voucherAutoVerifyTimer = null
@@ -85,7 +86,14 @@ const activate = batch => {
     }
     postBatchAction(batch, batch.status === 'suspended' ? 'resume' : 'activate')
 }
-const requestPdf = batch => postBatchAction(batch, 'pdf')
+const requestPdf = batch => {
+    pdfRequestingId.value = batch.id
+    router.post(route('stamps.voucher-batches.pdf', batch.id), {}, {
+        preserveScroll: true,
+        onError: errors => addToast(Object.values(errors || {})[0] || 'The voucher PDF could not be generated.', 'error'),
+        onFinish: () => { pdfRequestingId.value = null },
+    })
+}
 
 const claimModal = ref(false)
 const claimBatch = ref(null)
@@ -213,6 +221,7 @@ const storeOptions = computed(() => props.stores.map(s => ({ value: s.id, label:
                             <button v-if="hasPermission('stamps.approve') && batch.status === 'active'" @click="postBatchAction(batch, 'suspend')" class="rounded px-2 py-1 text-orange-700 hover:bg-orange-50">Suspend</button>
                             <button v-if="hasPermission('stamps.export') && batch.pdf_status !== 'ready'" @click="requestPdf(batch)" :disabled="pdfBusy(batch)" class="rounded px-2 py-1 text-indigo-700 hover:bg-indigo-50 disabled:cursor-wait disabled:opacity-60">{{ pdfBusy(batch) ? 'Preparing Print PDF…' : (batch.pdf_status === 'failed' || batch.pdf_is_stale ? 'Retry Print PDF' : 'Prepare Print PDF') }}</button>
                             <a v-if="hasPermission('stamps.export') && batch.pdf_status === 'ready'" :href="route('stamps.voucher-batches.pdf.download', batch.id)" target="_blank" rel="noopener" class="rounded bg-indigo-600 px-2 py-1 font-bold text-white hover:bg-indigo-700">Open / Print Vouchers</a>
+                            <button v-if="hasPermission('stamps.export') && batch.pdf_status === 'ready'" @click="requestPdf(batch)" :disabled="pdfBusy(batch)" class="rounded px-2 py-1 text-indigo-700 hover:bg-indigo-50 disabled:cursor-wait disabled:opacity-60">{{ pdfBusy(batch) ? 'Rebuilding…' : 'Rebuild Smaller PDF' }}</button>
                             <button v-if="hasPermission('stamps.cancel') && batch.status !== 'cancelled'" @click="askReason('cancel', batch, 'Cancel voucher batch')" class="rounded px-2 py-1 text-red-700 hover:bg-red-50">Cancel</button>
                         </div></td>
                     </tr>

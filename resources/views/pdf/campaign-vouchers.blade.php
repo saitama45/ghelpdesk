@@ -4,40 +4,40 @@
     <meta charset="utf-8">
     <title>{{ $batch->title }}</title>
     <style>
-        @page { margin: 10mm 19mm; }
-        body { margin: 0; font-family: DejaVu Sans, Arial, sans-serif; color: #111827; }
+        @page { margin: 6mm; }
+        body { margin: 0; font-family: Helvetica, Arial, sans-serif; color: #111827; }
         table.sheet { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        td.cell { width: 50%; height: 50mm; padding: 0; vertical-align: top; border: .2mm dashed #9ca3af; }
-        .voucher { height: 50mm; padding: 2mm 4mm; box-sizing: border-box; overflow: hidden; text-align: center; }
-        .logos { height: 8mm; margin-bottom: 1mm; }
-        .logos img { max-height: 8mm; max-width: 28mm; margin: 0 2mm; vertical-align: middle; }
-        .partner { font-size: 6.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: .5px; color: #4b5563; }
-        .title { font-size: 10pt; font-weight: bold; margin-top: .5mm; white-space: nowrap; overflow: hidden; }
-        .value { font-size: 16pt; line-height: 1; font-weight: bold; color: #7c2d12; margin: 1mm 0; }
-        .claim { font-size: 6pt; color: #374151; height: 4mm; overflow: hidden; }
-        .code { font-family: DejaVu Sans Mono, monospace; font-size: 7pt; font-weight: bold; letter-spacing: .3px; margin: 1mm 0 .5mm; }
-        .barcode { display: block; width: 72mm; max-width: 100%; height: 10mm; margin: 0 auto 1mm; }
-        .terms { font-size: 5pt; line-height: 1.15; color: #4b5563; height: 6mm; overflow: hidden; }
+        td.cell { width: 33.333%; height: 50mm; padding: 0; vertical-align: top; border: .2mm dashed #9ca3af; }
+        .voucher { height: 50mm; padding: 2mm 2.5mm; box-sizing: border-box; overflow: hidden; text-align: center; }
+        .logos { height: 6mm; margin-bottom: .5mm; }
+        .logos img { max-height: 6mm; max-width: 20mm; margin: 0 1mm; vertical-align: middle; }
+        .partner { font-size: 5.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: .3px; color: #4b5563; }
+        .title { font-size: 8.5pt; font-weight: bold; margin-top: .4mm; white-space: nowrap; overflow: hidden; }
+        .value { font-size: 13pt; line-height: 1; font-weight: bold; color: #7c2d12; margin: .7mm 0; }
+        .claim { font-size: 5.2pt; color: #374151; height: 3.5mm; overflow: hidden; }
+        .code { font-family: Courier, monospace; font-size: 6pt; font-weight: bold; letter-spacing: .2px; margin: .7mm 0 .4mm; }
+        .barcode { display: block; width: 55mm; max-width: 100%; height: 9mm; margin: 0 auto .7mm; }
+        .terms { font-size: 4.5pt; line-height: 1.1; color: #4b5563; height: 5mm; overflow: hidden; }
     </style>
 </head>
 <body>
 <table class="sheet">
-    @foreach($vouchers->chunk(2) as $row)
+    @foreach($vouchers->chunk(3) as $row)
         <tr>
             @foreach($row as $item)
                 @php($voucher = $item['voucher'])
                 <td class="cell"><div class="voucher">
                     <div class="logos">
-                        @if($batch->company?->logo && file_exists(storage_path('app/public/'.$batch->company->logo)))
-                            <img src="{{ storage_path('app/public/'.$batch->company->logo) }}" alt="Company logo">
+                        @if($companyLogo)
+                            <img src="{{ $companyLogo }}" alt="Company logo">
                         @endif
-                        @if($batch->partner_logo_path && \Illuminate\Support\Facades\Storage::disk('local')->exists($batch->partner_logo_path))
-                            <img src="{{ \Illuminate\Support\Facades\Storage::disk('local')->path($batch->partner_logo_path) }}" alt="Partner logo">
+                        @if($partnerLogo)
+                            <img src="{{ $partnerLogo }}" alt="Partner logo">
                         @endif
                     </div>
                     <div class="partner">{{ $batch->company?->name }} × {{ $batch->partner_name }}</div>
                     <div class="title">{{ $batch->title }}</div>
-                    <div class="value">₱{{ number_format((float) $batch->face_value, 2) }}</div>
+                    <div class="value">PHP {{ number_format((float) $batch->face_value, 2) }}</div>
                     <div class="claim">
                         @if($batch->claim_starts_on && $batch->claim_ends_on)
                             Valid {{ $batch->claim_starts_on->format('M d, Y') }} – {{ $batch->claim_ends_on->format('M d, Y') }}
@@ -51,10 +51,10 @@
                     <div class="terms">{{ $batch->short_terms ?: 'Single use only. No cash change. Present this voucher at the cashier.' }}</div>
                 </div></td>
             @endforeach
-            @for($i = $row->count(); $i < 2; $i++)<td class="cell"></td>@endfor
+            @for($i = $row->count(); $i < 3; $i++)<td class="cell"></td>@endfor
         </tr>
         @if($loop->iteration % 5 === 0 && ! $loop->last)
-            </table><div style="page-break-after: always"></div><table class="sheet">
+            </table><div style="height: 0; line-height: 0; page-break-after: always"></div><table class="sheet">
         @endif
     @endforeach
 </table>

@@ -186,7 +186,7 @@ class VoucherWorkflowTest extends TestCase
     public function test_pdf_job_creates_a_private_barcode_print_file(): void
     {
         Storage::fake('local');
-        $batch = $this->batch(['quantity' => 11, 'status' => 'draft']);
+        $batch = $this->batch(['quantity' => 19, 'status' => 'draft']);
         app(VoucherService::class)->generateCodes($batch);
 
         (new GenerateVoucherBatchPdf($batch->id, $this->cashier->id))->handle();
@@ -197,6 +197,7 @@ class VoucherWorkflowTest extends TestCase
         $pdf = Storage::disk('local')->get($batch->pdf_path);
         $this->assertStringStartsWith('%PDF', $pdf);
         $this->assertSame(2, preg_match_all('/\/Type\s*\/Page\b/', $pdf));
+        $this->assertLessThan(200_000, strlen($pdf));
     }
 
     public function test_manager_can_activate_a_batch_and_generate_its_pdf_without_a_queue_worker(): void
