@@ -25,6 +25,7 @@ class ReferenceOptionController extends Controller implements HasMiddleware
         'store_connectivity_type',
         'store_remote_app',
         'payment_mode',
+        'vendor_type',
     ];
 
     // Maps store_options reference types to the store_options.type they populate.
@@ -115,6 +116,10 @@ class ReferenceOptionController extends Controller implements HasMiddleware
 
         if ($type === 'project_role') {
             return [\App\Models\ProjectTeamMember::where('role_type', $value)->exists(), 'project team members'];
+        }
+
+        if ($type === 'vendor_type') {
+            return [\App\Models\Vendor::where('vendor_type', $value)->exists(), 'vendors'];
         }
 
         if ($type === 'company_type') {

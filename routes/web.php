@@ -314,6 +314,21 @@ Route::middleware('auth')->group(function () {
     Route::get('stores/{store}/blueprints/{blueprint}', [\App\Http\Controllers\StoreController::class, 'downloadBlueprint'])->name('stores.blueprints.download');
     Route::delete('stores/{store}/blueprints/{blueprint}', [\App\Http\Controllers\StoreController::class, 'destroyBlueprint'])->name('stores.blueprints.destroy');
     Route::resource('stores', \App\Http\Controllers\StoreController::class)->except(['show', 'create', 'edit']);
+    // Portal-account actions, gated on their own permissions inside the
+    // controller. Declared before the resource so `{vendor}` cannot swallow them.
+    // Company profile the vendor maintains in the portal — read here, and its
+    // staged changes accepted or refused here (maker-checker).
+    Route::get('vendors/{vendor}/profile', [\App\Http\Controllers\VendorProfileController::class, 'show'])->name('vendors.profile.show');
+    Route::put('vendors/{vendor}/profile/review', [\App\Http\Controllers\VendorProfileController::class, 'review'])->name('vendors.profile.review');
+    // Bank details are verified separately — payments are released against them.
+    Route::put('vendors/{vendor}/bank-accounts/{bankAccount}/review', [\App\Http\Controllers\VendorProfileController::class, 'reviewBankAccount'])->name('vendors.bank-accounts.review');
+    // Accreditation files submitted through the vendor portal (read-only here).
+    Route::get('vendors/{vendor}/documents', [\App\Http\Controllers\VendorDocumentController::class, 'index'])->name('vendors.documents.index');
+    Route::get('vendors/{vendor}/documents/{document}/file', [\App\Http\Controllers\VendorDocumentController::class, 'file'])->name('vendors.documents.file');
+    // Accrediting ONE document — not the vendor account (see vendors.approval).
+    Route::put('vendors/{vendor}/documents/{document}/review', [\App\Http\Controllers\VendorDocumentController::class, 'review'])->name('vendors.documents.review');
+    Route::put('vendors/{vendor}/approval', [\App\Http\Controllers\VendorController::class, 'approval'])->name('vendors.approval');
+    Route::put('vendors/{vendor}/password', [\App\Http\Controllers\VendorController::class, 'resetPassword'])->name('vendors.password');
     Route::resource('vendors', \App\Http\Controllers\VendorController::class)->except(['show', 'create', 'edit']);
     Route::post('holidays/generate', [\App\Http\Controllers\HolidayController::class, 'generate'])->name('holidays.generate');
     Route::resource('holidays', \App\Http\Controllers\HolidayController::class)->except(['show', 'create', 'edit']);

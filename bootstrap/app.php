@@ -25,6 +25,17 @@ return Application::configure(basePath: dirname(__DIR__))
         // module must also refuse the bare URL, or anyone who types or guesses
         // the path walks straight in. Use it as ->middleware('permission:x.view')
         // on the module's route group.
+        // Per-app CSRF cookie name: the default "XSRF-TOKEN" is shared with every
+        // other Laravel app on this host (cookies ignore the port), which is a
+        // guaranteed 419 when the vendor portal is open in the same browser.
+        // replaceInGroup, not replace: the CSRF middleware lives in the `web`
+        // group, and replace() only rewrites the global stack.
+        $middleware->replaceInGroup(
+            'web',
+            \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
+            \App\Http\Middleware\ValidateCsrfToken::class,
+        );
+
         $middleware->alias([
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
         ]);

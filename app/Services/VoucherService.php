@@ -59,6 +59,7 @@ class VoucherService
             'activeRedemption.customer:id,name,phone,email',
             'activeRedemption.store:id,code,name',
             'activeRedemption.cashier:id,name',
+            'activeRedemption.cashierVendor:id,name',
         ])->where('code', $code)->first();
 
         $result = 'invalid';
@@ -101,6 +102,7 @@ class VoucherService
                     'customer' => $voucher->activeRedemption->customer,
                     'store' => $voucher->activeRedemption->store,
                     'cashier' => $voucher->activeRedemption->cashier,
+                    'cashier_vendor' => $voucher->activeRedemption->cashierVendor,
                     'receipt_number' => $voucher->activeRedemption->receipt_number,
                     'sale_date' => $voucher->activeRedemption->sale_date?->format('Y-m-d'),
                     'gross_sale_total' => $voucher->activeRedemption->gross_sale_total,
@@ -154,7 +156,7 @@ class VoucherService
             }
 
             $voucher->update(['status' => 'used']);
-            return $redemption->load(['voucher.batch', 'customer', 'store', 'cashier']);
+            return $redemption->load(['voucher.batch', 'customer', 'store', 'cashier', 'cashierVendor']);
         });
     }
 

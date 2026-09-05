@@ -48,7 +48,7 @@ class VoucherController extends Controller implements HasMiddleware
         $redemptions = VoucherRedemption::with([
             'voucher:id,voucher_batch_id,code',
             'voucher.batch:id,title,partner_name,company_id,status,claim_starts_on,claim_ends_on',
-            'customer:id,name,phone', 'store:id,code,name', 'cashier:id,name', 'voider:id,name',
+            'customer:id,name,phone', 'store:id,code,name', 'cashier:id,name', 'cashierVendor:id,name', 'voider:id,name',
         ])->whereHas('voucher.batch', fn ($q) => $q->where('company_id', $companyId))
             ->latest('redeemed_at')->limit(100)->get();
 
@@ -242,7 +242,7 @@ class VoucherController extends Controller implements HasMiddleware
     public function exportRedemptions()
     {
         $companyId = $this->companyId();
-        $rows = VoucherRedemption::with(['voucher.batch', 'customer', 'store', 'cashier', 'voider'])
+        $rows = VoucherRedemption::with(['voucher.batch', 'customer', 'store', 'cashier', 'cashierVendor', 'voider'])
             ->whereHas('voucher.batch', fn ($q) => $q->where('company_id', $companyId))->orderBy('id')->cursor();
         return response()->streamDownload(function () use ($rows) {
             $out = fopen('php://output', 'w');
@@ -250,7 +250,7 @@ class VoucherController extends Controller implements HasMiddleware
             foreach ($rows as $r) fputcsv($out, [
                 $r->voucher->code, $r->voucher->batch->title, $r->voucher->batch->partner_name, $r->voucher->batch->face_value,
                 $r->applied_amount, $r->forfeited_amount, $r->customer->name, $r->customer->phone, $r->store->code,
-                $r->receipt_number, $r->sale_date?->format('Y-m-d'), $r->cashier->name, $r->redeemed_at?->toIso8601String(),
+                $r->receipt_number, $r->sale_date?->format('Y-m-d'), $r->cashier?->name ?? $r->cashierVendor?->name, $r->redeemed_at?->toIso8601String(),
                 $r->voided_at ? 'Voided' : 'Used', $r->void_reason,
             ]);
             fclose($out);

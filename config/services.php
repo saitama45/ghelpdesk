@@ -46,6 +46,10 @@ return [
         'base_url' => env('LINKPORTAL_URL'),
         'token' => env('LINKPORTAL_API_TOKEN'),
         'review_sla_days' => env('LINKPORTAL_REVIEW_SLA_DAYS', 3),
+        // Absolute path to the portal's public storage root, when both apps
+        // share a filesystem. Set it and vendor documents are read straight off
+        // disk; leave it unset and they are fetched over `base_url` instead.
+        'documents_root' => env('LINKPORTAL_DOCUMENTS_ROOT'),
     ],
 
 ];

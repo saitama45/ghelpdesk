@@ -95,21 +95,6 @@ const requestPdf = batch => {
     })
 }
 
-const claimModal = ref(false)
-const claimBatch = ref(null)
-const claimForm = useForm({ claim_starts_on: '', claim_ends_on: '' })
-const openClaimPeriod = batch => {
-    claimBatch.value = batch
-    claimForm.claim_starts_on = batch.claim_starts_on || ''
-    claimForm.claim_ends_on = batch.claim_ends_on || ''
-    claimForm.clearErrors()
-    claimModal.value = true
-}
-const submitClaimPeriod = () => claimForm.post(route('stamps.voucher-batches.claim-period', claimBatch.value.id), {
-    preserveScroll: true,
-    onSuccess: () => { claimModal.value = false; claimBatch.value = null },
-})
-
 const reasonModal = reactive({ open: false, kind: '', target: null, title: '', reason: '', processing: false })
 const askReason = (kind, target, title) => Object.assign(reasonModal, { open: true, kind, target, title, reason: '', processing: false })
 const submitReason = async () => {
@@ -216,12 +201,10 @@ const storeOptions = computed(() => props.stores.map(s => ({ value: s.id, label:
                         <td class="px-4 py-3"><span class="text-xs">{{ statusLabel(batch.pdf_status) }}</span><p v-if="batch.pdf_generated_at" class="text-[10px] text-gray-400">{{ dateTime(batch.pdf_generated_at) }}</p></td>
                         <td class="px-4 py-3"><div class="flex justify-end gap-1 whitespace-nowrap">
                             <button v-if="hasPermission('stamps.edit') && batch.status === 'draft'" @click="openBatch(batch)" class="rounded px-2 py-1 text-blue-600 hover:bg-blue-50">Edit</button>
-                            <button v-if="hasPermission('stamps.edit') && batch.status !== 'draft' && batch.status !== 'cancelled'" @click="openClaimPeriod(batch)" :disabled="pdfBusy(batch)" class="rounded px-2 py-1 text-blue-600 hover:bg-blue-50 disabled:cursor-wait disabled:opacity-50">Edit Claim Period</button>
                             <button v-if="hasPermission('stamps.approve') && ['draft','suspended'].includes(batch.status)" @click="activate(batch)" class="rounded px-2 py-1 text-green-700 hover:bg-green-50">{{ batch.status === 'suspended' ? 'Resume' : 'Activate' }}</button>
                             <button v-if="hasPermission('stamps.approve') && batch.status === 'active'" @click="postBatchAction(batch, 'suspend')" class="rounded px-2 py-1 text-orange-700 hover:bg-orange-50">Suspend</button>
                             <button v-if="hasPermission('stamps.export') && batch.pdf_status !== 'ready'" @click="requestPdf(batch)" :disabled="pdfBusy(batch)" class="rounded px-2 py-1 text-indigo-700 hover:bg-indigo-50 disabled:cursor-wait disabled:opacity-60">{{ pdfBusy(batch) ? 'Preparing Print PDF…' : (batch.pdf_status === 'failed' || batch.pdf_is_stale ? 'Retry Print PDF' : 'Prepare Print PDF') }}</button>
                             <a v-if="hasPermission('stamps.export') && batch.pdf_status === 'ready'" :href="route('stamps.voucher-batches.pdf.download', batch.id)" target="_blank" rel="noopener" class="rounded bg-indigo-600 px-2 py-1 font-bold text-white hover:bg-indigo-700">Open / Print Vouchers</a>
-                            <button v-if="hasPermission('stamps.export') && batch.pdf_status === 'ready'" @click="requestPdf(batch)" :disabled="pdfBusy(batch)" class="rounded px-2 py-1 text-indigo-700 hover:bg-indigo-50 disabled:cursor-wait disabled:opacity-60">{{ pdfBusy(batch) ? 'Rebuilding…' : 'Rebuild Smaller PDF' }}</button>
                             <button v-if="hasPermission('stamps.cancel') && batch.status !== 'cancelled'" @click="askReason('cancel', batch, 'Cancel voucher batch')" class="rounded px-2 py-1 text-red-700 hover:bg-red-50">Cancel</button>
                         </div></td>
                     </tr>
@@ -233,7 +216,7 @@ const storeOptions = computed(() => props.stores.map(s => ({ value: s.id, label:
         <div class="rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
             <div class="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700"><div><h3 class="font-bold text-gray-900 dark:text-white">Recent Voucher Payments</h3><p class="text-xs text-gray-500">Latest 100 redemption and reversal records.</p></div><a v-if="hasPermission('stamps.export')" :href="route('stamps.voucher-redemptions.export')" class="rounded-lg border border-gray-300 px-3 py-2 text-xs font-bold dark:border-gray-600">Export CSV</a></div>
             <div class="overflow-x-auto"><table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700"><thead class="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-gray-900/40"><tr><th class="px-4 py-3">Voucher</th><th class="px-4 py-3">Customer</th><th class="px-4 py-3">Sale</th><th class="px-4 py-3">Applied</th><th class="px-4 py-3">Cashier</th><th class="px-4 py-3">Status</th></tr></thead><tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                <tr v-for="row in redemptions" :key="row.id"><td class="px-4 py-3 font-mono text-xs">{{ row.voucher?.code }}<p class="font-sans text-gray-400">{{ row.voucher?.batch?.title }}</p></td><td class="px-4 py-3">{{ row.customer?.name }}<p class="text-xs text-gray-400">{{ row.customer?.phone }}</p></td><td class="px-4 py-3">{{ row.store?.code }} / {{ row.receipt_number }}<p class="text-xs text-gray-400">{{ date(row.sale_date) }} · Total ₱{{ money(row.gross_sale_total) }}</p></td><td class="px-4 py-3">₱{{ money(row.applied_amount) }}<p v-if="Number(row.forfeited_amount)" class="text-xs text-amber-600">₱{{ money(row.forfeited_amount) }} forfeited</p></td><td class="px-4 py-3">{{ row.cashier?.name }}<p class="text-xs text-gray-400">{{ dateTime(row.redeemed_at) }}</p></td><td class="px-4 py-3"><span :class="row.voided_at ? 'text-red-600' : 'text-green-600'" class="font-bold">{{ row.voided_at ? 'Voided' : 'Used' }}</span></td></tr>
+                <tr v-for="row in redemptions" :key="row.id"><td class="px-4 py-3 font-mono text-xs">{{ row.voucher?.code }}<p class="font-sans text-gray-400">{{ row.voucher?.batch?.title }}</p></td><td class="px-4 py-3">{{ row.customer?.name }}<p class="text-xs text-gray-400">{{ row.customer?.phone }}</p></td><td class="px-4 py-3">{{ row.store?.code }} / {{ row.receipt_number }}<p class="text-xs text-gray-400">{{ date(row.sale_date) }} · Total ₱{{ money(row.gross_sale_total) }}</p></td><td class="px-4 py-3">₱{{ money(row.applied_amount) }}<p v-if="Number(row.forfeited_amount)" class="text-xs text-amber-600">₱{{ money(row.forfeited_amount) }} forfeited</p></td><td class="px-4 py-3">{{ row.cashier?.name || row.cashier_vendor?.name || '—' }}<p class="text-xs text-gray-400">{{ dateTime(row.redeemed_at) }}</p></td><td class="px-4 py-3"><span :class="row.voided_at ? 'text-red-600' : 'text-green-600'" class="font-bold">{{ row.voided_at ? 'Voided' : 'Used' }}</span></td></tr>
                 <tr v-if="!redemptions.length"><td colspan="6" class="px-4 py-8 text-center text-gray-400">No voucher payments recorded.</td></tr>
             </tbody></table></div>
         </div>
@@ -254,17 +237,6 @@ const storeOptions = computed(() => props.stores.map(s => ({ value: s.id, label:
             </div><div class="mt-6 flex justify-end gap-2"><button @click="batchModal=false" class="rounded-lg px-4 py-2 text-sm">Cancel</button><button @click="submitBatch" :disabled="batchForm.processing" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{{ batchForm.processing ? 'Saving…' : 'Save Batch' }}</button></div>
         </div></Modal>
 
-        <Modal :show="claimModal" @close="claimModal = false" max-width="md"><div class="p-6">
-            <h3 class="text-lg font-bold dark:text-white">Edit Claim Period</h3>
-            <p class="mt-1 text-sm text-gray-500">{{ claimBatch?.title }}</p>
-            <p class="mt-2 text-xs text-amber-600">Changing these dates immediately changes whether unused vouchers can be accepted. The existing print PDF will be invalidated.</p>
-            <div class="mt-5 grid gap-4 sm:grid-cols-2">
-                <label class="text-sm">Claim starts<input v-model="claimForm.claim_starts_on" type="date" class="mt-1 w-full rounded-lg border-gray-300 dark:bg-gray-900"/><span class="text-xs text-red-600">{{ claimForm.errors.claim_starts_on }}</span></label>
-                <label class="text-sm">Claim ends<input v-model="claimForm.claim_ends_on" type="date" class="mt-1 w-full rounded-lg border-gray-300 dark:bg-gray-900"/><span class="text-xs text-red-600">{{ claimForm.errors.claim_ends_on }}</span></label>
-            </div>
-            <div class="mt-6 flex justify-end gap-2"><button @click="claimModal=false" class="rounded-lg px-4 py-2 text-sm">Cancel</button><button @click="submitClaimPeriod" :disabled="claimForm.processing" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{{ claimForm.processing ? 'Saving…' : 'Save Claim Period' }}</button></div>
-        </div></Modal>
-
         <Modal :show="scan.open" @close="scan.open=false" max-width="2xl"><div class="p-6"><div class="flex items-center justify-between"><div><h3 class="text-lg font-bold dark:text-white">Verify / Use Voucher</h3><p class="text-xs text-gray-500">Scanning verifies first. The voucher is used only after payment confirmation.</p></div><button v-if="scan.result" @click="resetScan" class="text-sm font-bold text-blue-600">Scan another</button></div>
             <div class="mt-5 grid gap-3 sm:grid-cols-2"><label class="text-sm">Current store<Autocomplete v-model="scan.store_id" :options="storeOptions" placeholder="Select store"/></label><label class="text-sm">Voucher code<input ref="scanInput" v-model="scan.code" @keydown.enter.prevent="submitVoucherScan" :disabled="!!scan.result" autocomplete="off" class="mt-1 w-full rounded-lg border-gray-300 font-mono uppercase dark:bg-gray-900" placeholder="Scan barcode or enter code"/><span class="text-xs text-gray-500">A complete barcode scan verifies automatically.</span></label></div>
             <button v-if="!scan.result" @click="verify" :disabled="scan.loading || !scan.code" class="mt-3 w-full rounded-lg bg-emerald-600 py-2.5 font-bold text-white disabled:opacity-50">{{ scan.loading ? 'Verifying…' : 'Verify Voucher' }}</button>
@@ -272,7 +244,7 @@ const storeOptions = computed(() => props.stores.map(s => ({ value: s.id, label:
             <div v-if="scan.result" class="mt-4 rounded-xl border p-4" :class="scan.result.result === 'active' ? 'border-green-300 bg-green-50' : 'border-red-200 bg-red-50'">
                 <p class="font-black" :class="scan.result.result === 'active' ? 'text-green-800' : 'text-red-800'">{{ scan.result.message }}</p>
                 <template v-if="scan.result.voucher"><p class="mt-1 font-mono text-sm">{{ scan.result.voucher.code }}</p><p class="text-sm">{{ scan.result.voucher.batch.title }} · ₱{{ money(scan.result.voucher.value) }}</p></template>
-                <div v-if="scan.result.voucher?.redemption" class="mt-3 grid gap-1 text-sm text-gray-700"><p><strong>Customer:</strong> {{ scan.result.voucher.redemption.customer?.name }}</p><p><strong>Store / receipt:</strong> {{ scan.result.voucher.redemption.store?.code }} / {{ scan.result.voucher.redemption.receipt_number }}</p><p><strong>Used:</strong> {{ dateTime(scan.result.voucher.redemption.redeemed_at) }}</p><p><strong>Processed by cashier:</strong> {{ scan.result.voucher.redemption.cashier?.name }}</p><button v-if="hasPermission('stamps.cancel')" @click="askReason('redemption', scan.result.voucher.redemption, 'Void voucher payment')" class="mt-2 self-start rounded bg-red-600 px-3 py-2 text-xs font-bold text-white">Void mistaken payment</button></div>
+                <div v-if="scan.result.voucher?.redemption" class="mt-3 grid gap-1 text-sm text-gray-700"><p><strong>Customer:</strong> {{ scan.result.voucher.redemption.customer?.name }}</p><p><strong>Store / receipt:</strong> {{ scan.result.voucher.redemption.store?.code }} / {{ scan.result.voucher.redemption.receipt_number }}</p><p><strong>Used:</strong> {{ dateTime(scan.result.voucher.redemption.redeemed_at) }}</p><p><strong>Processed by cashier:</strong> {{ scan.result.voucher.redemption.cashier?.name || scan.result.voucher.redemption.cashier_vendor?.name }}</p><button v-if="hasPermission('stamps.cancel')" @click="askReason('redemption', scan.result.voucher.redemption, 'Void voucher payment')" class="mt-2 self-start rounded bg-red-600 px-3 py-2 text-xs font-bold text-white">Void mistaken payment</button></div>
                 <button v-if="scan.result.result === 'active' && hasPermission('stamps.cancel')" @click="askReason('voucher', scan.result.voucher, 'Void unused voucher')" class="mt-2 text-xs font-bold text-red-700 underline">Void this unused voucher</button>
             </div>
             <div v-if="scan.result?.result === 'active'" class="mt-5 space-y-4 border-t pt-5"><div class="flex gap-4 text-sm"><label><input v-model="newCustomer" :value="false" type="radio"/> Existing customer</label><label><input v-model="newCustomer" :value="true" type="radio"/> New customer</label></div>

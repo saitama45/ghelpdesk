@@ -1117,7 +1117,10 @@ const submitRedeem = () => {
                                 <span v-else class="text-gray-400">Legacy quantity-only record</span>
                             </td>
                             <td class="px-6 py-3 text-sm font-medium text-gray-700 whitespace-nowrap dark:text-gray-300">₱{{ formatAmount(r.total_purchase_amount) }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{{ r.creator?.name || '—' }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">
+                                {{ r.creator?.name || r.cashier_vendor?.name || '—' }}
+                                <span v-if="!r.creator && r.cashier_vendor" class="block text-[10px] uppercase text-gray-400">Vendor portal</span>
+                            </td>
                         </tr>
                     </template>
                 </DataTable>

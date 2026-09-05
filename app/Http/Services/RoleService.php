@@ -99,6 +99,7 @@ class RoleService
             'alaga',
             'wigs',
             'vendors',
+            'vendor documents',
             'activity_templates',
             'project type & store class',
             'settings',
@@ -132,6 +133,10 @@ class RoleService
                 $categoryDisplay = 'Payments & SOA';
             } elseif ($category === 'accounting-documents') {
                 $categoryDisplay = 'Accounting Documents';
+            } elseif ($category === 'vendor-documents') {
+                // The vendor portal's own permission names, shared through the
+                // permissions table — reviewing a vendor's accreditation files.
+                $categoryDisplay = 'Vendor Documents';
             } elseif ($category === 'cctv_monitoring') {
                 $categoryDisplay = 'CCTV Monitoring';
             } elseif ($category === 'alaga') {

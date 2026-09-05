@@ -19,6 +19,7 @@ class StampCard extends Model
         'redeemed_at',
         'created_by',
         'updated_by',
+        'cashier_vendor_id',
     ];
 
     protected $casts = [
@@ -55,6 +56,13 @@ class StampCard extends Model
     public function redemption()
     {
         return $this->hasOne(StampRedemption::class);
+    }
+
+
+    /** Set instead of the user columns when the record came from the vendor portal. */
+    public function cashierVendor()
+    {
+        return $this->belongsTo(Vendor::class, 'cashier_vendor_id');
     }
 
     public function creator()

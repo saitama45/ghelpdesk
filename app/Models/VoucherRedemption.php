@@ -9,7 +9,7 @@ class VoucherRedemption extends Model
     protected $fillable = [
         'voucher_id', 'customer_id', 'store_id', 'receipt_number', 'sale_date',
         'gross_sale_total', 'applied_amount', 'forfeited_amount', 'redeemed_at',
-        'redeemed_by', 'voided_at', 'voided_by', 'void_reason',
+        'redeemed_by', 'cashier_vendor_id', 'voided_at', 'voided_by', 'void_reason',
     ];
 
     protected $casts = [
@@ -22,6 +22,8 @@ class VoucherRedemption extends Model
     public function customer() { return $this->belongsTo(Customer::class); }
     public function store() { return $this->belongsTo(Store::class); }
     public function cashier() { return $this->belongsTo(User::class, 'redeemed_by'); }
+    /** Set instead of `cashier` when the payment was taken in the vendor portal. */
+    public function cashierVendor() { return $this->belongsTo(Vendor::class, 'cashier_vendor_id'); }
     public function voider() { return $this->belongsTo(User::class, 'voided_by'); }
     public function saleClaim() { return $this->hasOne(VoucherSaleClaim::class); }
 }

@@ -6,6 +6,6 @@ use Illuminate\Database\Eloquent\Model;
 
 class VoucherVerificationAttempt extends Model
 {
-    protected $fillable = ['voucher_id', 'scanned_code', 'result', 'store_id', 'verified_by', 'verified_at'];
+    protected $fillable = ['voucher_id', 'scanned_code', 'result', 'store_id', 'verified_by', 'cashier_vendor_id', 'verified_at'];
     protected $casts = ['verified_at' => 'datetime'];
 }

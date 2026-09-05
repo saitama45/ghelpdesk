@@ -20,6 +20,7 @@ class StampRedemption extends Model
         'remarks',
         'created_by',
         'updated_by',
+        'cashier_vendor_id',
     ];
 
     protected $casts = [
@@ -61,6 +62,13 @@ class StampRedemption extends Model
     public function units()
     {
         return $this->hasMany(StampRedemptionUnit::class);
+    }
+
+
+    /** Set instead of the user columns when the record came from the vendor portal. */
+    public function cashierVendor()
+    {
+        return $this->belongsTo(Vendor::class, 'cashier_vendor_id');
     }
 
     public function creator()

@@ -17,10 +17,17 @@ const BASE = process.env.E2E_BASE_URL || 'http://127.0.0.1:8010';
  * storageState is a genuine logged-in session.
  */
 async function login(context, email, password, role) {
-    await context.request.get(`${BASE}/login`);
+    const loginPage = await context.request.get(`${BASE}/login`);
+
+    // This app names its CSRF cookie per-app rather than the shared default
+    // "XSRF-TOKEN" (cookies are scoped by host, not port, so the vendor portal
+    // on the same host used to overwrite it). The page announces the name it
+    // uses; reading "XSRF-TOKEN" blindly gets a 419.
+    const cookieName = (await loginPage.text())
+        .match(/name="csrf-cookie"\s+content="([^"]+)"/)?.[1] || 'XSRF-TOKEN';
 
     const xsrf = decodeURIComponent(
-        (await context.cookies()).find(c => c.name === 'XSRF-TOKEN')?.value || ''
+        (await context.cookies()).find(c => c.name === cookieName)?.value || ''
     );
 
     const response = await context.request.post(`${BASE}/login`, {

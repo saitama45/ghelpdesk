@@ -83,6 +83,9 @@ class StampController extends Controller implements HasMiddleware
                 'program:id,name',
                 'asset:id,item_code,brand,model,description',
                 'creator:id,name',
+                // A redemption made from the vendor portal has no `creator` —
+                // the actor is a Cashier vendor instead.
+                'cashierVendor:id,name',
                 'units:id,stamp_redemption_id,stock_in_id,serial_no,barcode,qrcode',
             ])
                 ->select('stamp_redemptions.*')
@@ -428,7 +431,7 @@ class StampController extends Controller implements HasMiddleware
     public function cardEntries(StampCard $card)
     {
         $entries = $card->entries()
-            ->with(['store:id,code,name', 'creator:id,name'])
+            ->with(['store:id,code,name', 'creator:id,name', 'cashierVendor:id,name'])
             ->orderByDesc('created_at')
             ->get();
 

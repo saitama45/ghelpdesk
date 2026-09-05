@@ -17,6 +17,7 @@ class StampEntry extends Model
         'purchase_amount',
         'note',
         'created_by',
+        'cashier_vendor_id',
     ];
 
     protected $casts = [
@@ -35,6 +36,13 @@ class StampEntry extends Model
     public function store()
     {
         return $this->belongsTo(Store::class);
+    }
+
+
+    /** Set instead of the user columns when the record came from the vendor portal. */
+    public function cashierVendor()
+    {
+        return $this->belongsTo(Vendor::class, 'cashier_vendor_id');
     }
 
     public function creator()
