@@ -40,6 +40,14 @@ const switchDepartment = (id) => {
     });
 };
 
+// TEMPORARY: the "All" pill is hidden on request (2026-09-06). Set this back to
+// true to restore it — nothing else needs changing.
+//
+// Executive mode itself is NOT gone: the "I belong to" selector on the right of
+// this same strip still offers Executive and lands on the same workspace, so
+// hiding the pill removes a shortcut, not an ability.
+const SHOW_ALL_TAB = false;
+
 // The "ALL" pill = enterprise / Executive mode.
 const selectAll = () => {
     router.post(route('department-context.belong'), { home: 'executive' }, {
@@ -73,9 +81,9 @@ const changeBelong = (event) => {
                 <span class="shrink-0 text-[10px] font-black uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
                     Department
                 </span>
-                <!-- ALL = enterprise / Executive mode -->
+                <!-- ALL = enterprise / Executive mode. Hidden for now; see SHOW_ALL_TAB. -->
                 <button
-                    v-if="canSwitchHome"
+                    v-if="SHOW_ALL_TAB && canSwitchHome"
                     type="button"
                     @click="selectAll"
                     :style="isExecutive ? { backgroundColor: '#253d5b' } : {}"
