@@ -1032,10 +1032,16 @@ class ProjectTaskBoardSyncService
         $role = $this->cardRoleForProject($project);
         $column = $board->columnForRole($role);
         $statusName = $column?->name ?? $this->fallbackRoleName($role);
-        $card = TaskCard::firstOrNew([
+        // The board/project unique key also includes soft-deleted cards.
+        // Reuse that row, just as we restore a deleted monthly board above.
+        $card = TaskCard::withTrashed()->firstOrNew([
             'task_board_id' => $board->id,
             'project_id' => $project->id,
         ]);
+
+        if ($card->trashed()) {
+            $card->restore();
+        }
 
         $isNew = !$card->exists;
         $card->fill([

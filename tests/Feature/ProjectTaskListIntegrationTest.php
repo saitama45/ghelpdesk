@@ -202,6 +202,50 @@ class ProjectTaskListIntegrationTest extends TestCase
         $this->assertSame(1, TaskCard::where('project_id', $project->id)->count());
     }
 
+    public function test_applying_templates_reuses_a_soft_deleted_project_card(): void
+    {
+        $this->withoutMiddleware(\Spatie\Permission\Middleware\PermissionMiddleware::class);
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
+        $this->createProjectTeamTargets($project, ['DS']);
+        $sync = app(\App\Services\ProjectTaskBoardSyncService::class);
+        $sync->syncProject($project->fresh(), $user);
+
+        $card = TaskCard::where('project_id', $project->id)->sole();
+        $card->delete();
+
+        $template = \App\Models\ProjectTemplate::create([
+            'name' => 'Installation',
+            'project_type' => $project->fresh()->project_type,
+        ]);
+        $template->activities()->create([
+            'activity' => 'Install POS',
+            'milestone' => 'POS',
+            'milestone_order' => 1,
+            'order' => 1,
+            'default_duration_days' => 1,
+        ]);
+
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $this->actingAs($user)
+                ->post(route('projects.apply-templates', $project), [
+                    'project_template_id' => $template->id,
+                    'auto_create_monthly_boards' => true,
+                ])
+                ->assertSessionHasNoErrors()
+                ->assertRedirect();
+
+            $this->assertSame(1, TaskCard::withTrashed()->where('project_id', $project->id)->count());
+            $this->assertSame($card->id, TaskCard::where('project_id', $project->id)->sole()->id);
+            $task = ProjectTask::where('project_id', $project->id)->where('name', 'Install POS')->sole();
+            $this->assertDatabaseHas('task_checklist_items', [
+                'task_checklist_id' => $card->checklists()->where('title', 'POS')->sole()->id,
+                'project_task_id' => $task->id,
+                'title' => 'Install POS',
+            ]);
+        }
+    }
+
     private function createProject(string $storeName = 'Test Store', ?User $owner = null): Project
     {
         $store = Store::create([
