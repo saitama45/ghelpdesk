@@ -449,6 +449,13 @@ const addTeamMember = async () => {
         return;
     }
 
+    if (teamMemberMode.value === 'internal' && !teamForm.role_type?.trim()) {
+        teamForm.setError({
+            role_type: 'Please select a role in the project.',
+        });
+        return;
+    }
+
     const ok = await confirmAutoCreateMonthlyBoards({
         department: teamForm.department,
         sub_unit: teamForm.sub_unit,
@@ -881,7 +888,7 @@ const getStatusColor = (status) => {
                                 </div>
 
                                 <div>
-                                    <InputLabel for="role_type" value="Role in Project" />
+                                    <InputLabel for="role_type" value="Role in Project (required)" />
                                     <ManageableAutocomplete
                                         id="role_type"
                                         v-model="teamForm.role_type"

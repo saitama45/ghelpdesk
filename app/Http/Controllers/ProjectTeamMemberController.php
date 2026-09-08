@@ -15,17 +15,17 @@ class ProjectTeamMemberController extends Controller
             'project_id' => 'required|exists:projects,id',
             'user_id' => 'required_without:external_name|nullable|exists:users,id',
             'external_name' => 'required_without:user_id|nullable|string|max:255',
-            // Department and role describe an internal member. An external member
-            // is just a name, so both stay optional on that path.
+            // Internal members require both a department and a project role.
             'department' => 'required_with:user_id|nullable|string|max:255',
             // Optional: members are targeted by department, and the sub-unit is
             // only inherited from the selected system user's org_path.
             'sub_unit' => 'nullable|string|max:255',
-            'role_type' => 'nullable|string|max:255',
+            'role_type' => 'required_with:user_id|nullable|string|max:255',
             'team_category' => 'nullable|string|max:255',
         ], [
             'user_id.required_without' => 'Please select a system user or enter an external name.',
             'external_name.required_without' => 'Please select a system user or enter an external name.',
+            'role_type.required_with' => 'Please select a role in the project.',
         ]);
 
         $validated['sub_unit'] = $validated['sub_unit'] ?? null;

@@ -185,15 +185,17 @@
 
                             <div v-if="isOpenForRemark(item)" class="mt-3">
                                 <label class="mb-1 block text-sm font-medium text-gray-700">
-                                    What went wrong? <span class="text-rose-600">*</span>
+                                    {{ pendingVerdict[item.id] === 'passed' ? 'Remarks' : 'What went wrong?' }}
+                                    <span v-if="pendingVerdict[item.id] === 'passed'" class="text-xs font-normal text-gray-400">(optional)</span>
+                                    <span v-else class="text-rose-600">*</span>
                                 </label>
                                 <textarea v-model="drafts[item.id]" rows="3"
-                                          placeholder="Describe what you saw and what you expected instead."
+                                          :placeholder="pendingVerdict[item.id] === 'passed' ? 'Add suggestions or notes (optional).' : 'Describe what you saw and what you expected instead.'"
                                           class="w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
 
                                 <!-- A picture of the problem. Required when something
                                      is broken; optional when it could not be tested. -->
-                                <div class="mt-3">
+                                <div v-if="pendingVerdict[item.id] !== 'passed'" class="mt-3">
                                     <label class="mb-1 block text-sm font-medium text-gray-700">
                                         Screenshot
                                         <span v-if="pendingVerdict[item.id] === 'failed'" class="text-rose-600">*</span>
@@ -511,7 +513,7 @@ const borderFor = (item) => {
     return 'border-gray-200'
 }
 
-const isOpenForRemark = (item) => ['failed', 'blocked'].includes(pendingVerdict[item.id])
+const isOpenForRemark = (item) => ['passed', 'failed', 'blocked'].includes(pendingVerdict[item.id])
 
 const toggle = async (item) => {
     if (expanded.value === item.id) {
@@ -539,11 +541,10 @@ const toggle = async (item) => {
 const setVerdict = (item, key) => {
     errors[item.id] = ''
 
-    // A problem needs an explanation, so it opens the note box instead of
-    // saving straight away. Everything else saves on the click.
-    if (['failed', 'blocked'].includes(key)) {
+    // Passed answers allow optional suggestions; problems require an explanation.
+    if (['passed', 'failed', 'blocked'].includes(key)) {
         pendingVerdict[item.id] = key
-        drafts[item.id] = drafts[item.id] || remarkOf(item) || ''
+        drafts[item.id] = drafts[item.id] ?? remarkOf(item)
         return
     }
 
@@ -554,7 +555,7 @@ const setVerdict = (item, key) => {
 const submitVerdict = (item) => {
     const key = pendingVerdict[item.id]
 
-    if (!(drafts[item.id] || '').trim()) {
+    if (['failed', 'blocked'].includes(key) && !(drafts[item.id] || '').trim()) {
         errors[item.id] = 'Please describe the problem so the team can act on it.'
         return
     }
