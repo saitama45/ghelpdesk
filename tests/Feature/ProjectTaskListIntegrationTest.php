@@ -246,6 +246,73 @@ class ProjectTaskListIntegrationTest extends TestCase
         }
     }
 
+    public function test_adding_sub_tasks_reuses_a_deleted_then_active_project_card(): void
+    {
+        $this->withoutMiddleware(\Spatie\Permission\Middleware\PermissionMiddleware::class);
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
+        $this->createProjectTeamTargets($project, ['DS']);
+        $parent = $this->createProjectTask($project, 'Site assessment');
+        app(\App\Services\ProjectTaskBoardSyncService::class)->syncProject($project->fresh(), $user);
+        $card = TaskCard::where('project_id', $project->id)->sole();
+        $card->delete();
+
+        foreach (['First sub-task', 'Second sub-task'] as $name) {
+            $this->actingAs($user)->postJson(route('projects-tasks.store'), [
+                'project_id' => $project->id,
+                'parent_task_id' => $parent->id,
+                'name' => $name,
+                'status' => 'Pending',
+                'lead_time_days' => 1,
+                'auto_create_monthly_boards' => true,
+            ])->assertCreated();
+
+            $this->assertSame(1, TaskCard::withTrashed()->where('project_id', $project->id)->count());
+            $this->assertSame($card->id, TaskCard::where('project_id', $project->id)->sole()->id);
+            $task = ProjectTask::where('project_id', $project->id)->where('name', $name)->sole();
+            $parentItem = TaskChecklistItem::where('project_task_id', $parent->id)->sole();
+            $this->assertDatabaseHas('task_checklist_items', [
+                'task_checklist_id' => $parentItem->task_checklist_id,
+                'parent_item_id' => $parentItem->id,
+                'project_task_id' => $task->id,
+            ]);
+        }
+    }
+
+    public function test_project_card_sync_recovers_when_another_insert_wins_after_lookup(): void
+    {
+        $user = User::factory()->create();
+        $project = $this->createProject('Test Store', $user);
+        $this->createProjectTeamTargets($project, ['DS']);
+        $winner = null;
+        $inserted = false;
+
+        // Insert after the empty SELECT, before the sync attempts its INSERT.
+        \Illuminate\Support\Facades\DB::listen(function ($query) use ($project, $user, &$winner, &$inserted) {
+            if ($inserted || !str_starts_with($query->sql, 'select')
+                || !str_contains($query->sql, 'from "task_cards"')
+                || !str_contains($query->sql, 'limit 1')) {
+                return;
+            }
+            $inserted = true;
+            $board = TaskBoard::where('board_source', 'monthly')->sole();
+            $winner = TaskCard::create([
+                'task_board_id' => $board->id,
+                'project_id' => $project->id,
+                'title' => 'Concurrent card',
+                'status' => 'Backlogs',
+                'created_by' => $user->id,
+            ]);
+        });
+
+        app(\App\Services\ProjectTaskBoardSyncService::class)->syncProject($project->fresh(), $user);
+
+        $this->assertNotNull($winner);
+        $card = TaskCard::where('project_id', $project->id)->sole();
+        $this->assertSame($winner->id, $card->id);
+        $this->assertSame($project->name, $card->title);
+    }
+
     private function createProject(string $storeName = 'Test Store', ?User $owner = null): Project
     {
         $store = Store::create([

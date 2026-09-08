@@ -1032,19 +1032,7 @@ class ProjectTaskBoardSyncService
         $role = $this->cardRoleForProject($project);
         $column = $board->columnForRole($role);
         $statusName = $column?->name ?? $this->fallbackRoleName($role);
-        // The board/project unique key also includes soft-deleted cards.
-        // Reuse that row, just as we restore a deleted monthly board above.
-        $card = TaskCard::withTrashed()->firstOrNew([
-            'task_board_id' => $board->id,
-            'project_id' => $project->id,
-        ]);
-
-        if ($card->trashed()) {
-            $card->restore();
-        }
-
-        $isNew = !$card->exists;
-        $card->fill([
+        $values = [
             'project_task_id' => null,
             'task_board_column_id' => $column?->id,
             'title' => $project->name,
@@ -1053,12 +1041,28 @@ class ProjectTaskBoardSyncService
             'start_at' => $project->turn_over_date ? Carbon::parse($project->turn_over_date)->startOfDay()->format('Y-m-d H:i:s') : null,
             'due_at' => $project->target_go_live ? Carbon::parse($project->target_go_live)->endOfDay()->format('Y-m-d H:i:s') : null,
             'due_complete' => $role === 'done',
-            'created_by' => $card->created_by ?: ($actor?->id ?? $board->created_by),
+        ];
+
+        // Include deleted rows and recover the winning row if another sync
+        // inserts the same board/project card between our lookup and insert.
+        $card = TaskCard::withTrashed()->firstOrCreate([
+            'task_board_id' => $board->id,
+            'project_id' => $project->id,
+        ], fn () => [
+            ...$values,
+            'created_by' => $actor?->id ?? $board->created_by,
+            'sort_order' => $this->nextCardSortOrder($board, $statusName),
         ]);
 
-        if ($isNew) {
-            $card->sort_order = $this->nextCardSortOrder($board, $statusName);
-        } elseif ($card->isDirty('status')) {
+        $isNew = $card->wasRecentlyCreated;
+        if ($card->trashed()) {
+            $card->restore();
+        }
+
+        $card->fill($values);
+        $card->created_by = $card->created_by ?: ($actor?->id ?? $board->created_by);
+
+        if ($card->isDirty('status')) {
             $card->sort_order = $this->nextCardSortOrder($board, $statusName);
         }
 
