@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Project;
 use App\Models\ProjectTask;
+use App\Models\Scopes\ActiveEntityScope;
 use App\Models\TaskBoard;
 use App\Models\TaskCard;
 use App\Models\TaskCardActivity;
@@ -1045,7 +1046,10 @@ class ProjectTaskBoardSyncService
 
         // Include deleted rows and recover the winning row if another sync
         // inserts the same board/project card between our lookup and insert.
-        $card = TaskCard::withTrashed()->firstOrCreate([
+        // Legacy/queued cards may have a blank or stale company_id. The unique
+        // key is board + project, so the entity scope must not hide that row.
+        // This lookup stays restricted to the project already resolved by the caller.
+        $card = TaskCard::withoutGlobalScope(ActiveEntityScope::class)->withTrashed()->firstOrCreate([
             'task_board_id' => $board->id,
             'project_id' => $project->id,
         ], fn () => [
@@ -1060,6 +1064,7 @@ class ProjectTaskBoardSyncService
         }
 
         $card->fill($values);
+        $card->forceFill(['company_id' => $project->company_id]);
         $card->created_by = $card->created_by ?: ($actor?->id ?? $board->created_by);
 
         if ($card->isDirty('status')) {

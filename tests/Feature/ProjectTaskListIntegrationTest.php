@@ -279,6 +279,47 @@ class ProjectTaskListIntegrationTest extends TestCase
         }
     }
 
+    public function test_sub_task_save_reuses_project_cards_hidden_by_the_active_entity(): void
+    {
+        $this->withoutMiddleware(\Spatie\Permission\Middleware\PermissionMiddleware::class);
+        $entity = \App\Models\Company::create(['name' => 'Project entity', 'code' => 'PROJ', 'type' => 'Entity', 'is_active' => true]);
+        $other = \App\Models\Company::create(['name' => 'Other entity', 'code' => 'OTHER', 'type' => 'Entity', 'is_active' => true]);
+        $user = User::factory()->create(['company_id' => $entity->id]);
+        $project = $this->createProject('Test Store', $user);
+        $project->forceFill(['company_id' => $entity->id])->save();
+        $this->createProjectTeamTargets($project, ['DS']);
+        $parent = $this->createProjectTask($project, 'Site assessment');
+        app(\App\Services\ProjectTaskBoardSyncService::class)->syncProject($project->fresh(), $user);
+        $card = TaskCard::where('project_id', $project->id)->sole();
+        $this->actingAs($user);
+
+        foreach ([null, $other->id] as $index => $oldCompanyId) {
+            $card->forceFill(['company_id' => $oldCompanyId])->save();
+            $this->assertFalse(TaskCard::whereKey($card->id)->exists());
+
+            $this->postJson(route('projects-tasks.store'), [
+                'project_id' => $project->id,
+                'parent_task_id' => $parent->id,
+                'name' => 'Sub-task ' . $index,
+                'status' => 'Pending',
+                'lead_time_days' => 1,
+                'auto_create_monthly_boards' => true,
+            ])->assertCreated();
+
+            $task = ProjectTask::where('project_id', $project->id)->where('name', 'Sub-task ' . $index)->sole();
+            $card->forceFill(['company_id' => $oldCompanyId])->save();
+            $this->putJson(route('projects-tasks.update', $task), [
+                'name' => 'Updated sub-task ' . $index,
+                'auto_create_monthly_boards' => true,
+            ])->assertOk();
+
+            $visibleCard = TaskCard::where('project_id', $project->id)->sole();
+            $this->assertSame($card->id, $visibleCard->id);
+            $this->assertEquals($entity->id, $visibleCard->company_id);
+            $this->assertSame(1, \Illuminate\Support\Facades\DB::table('task_cards')->where('project_id', $project->id)->count());
+        }
+    }
+
     public function test_project_card_sync_recovers_when_another_insert_wins_after_lookup(): void
     {
         $user = User::factory()->create();
