@@ -287,8 +287,10 @@ class StampController extends Controller implements HasMiddleware
     /**
      * Step 2 of the "Scan Customer" flow: given the same token plus Program
      * (the field staff actually search/pick), add stamps — reusing the
-     * customer's open card for that program if one exists, auto-creating one
-     * otherwise. Quantity defaults to 1, the one-scan-one-stamp behaviour this
+     * customer's active card for that program if one exists, auto-creating one
+     * otherwise. An unredeemed full card does not block the scan; it is left
+     * for redemption and a new cycle is opened instead (see the transaction
+     * below). Quantity defaults to 1, the one-scan-one-stamp behaviour this
      * flow started with; staff can raise it for a purchase that earns several
      * at once, exactly like the manual Add Stamps modal.
      *
@@ -327,9 +329,19 @@ class StampController extends Controller implements HasMiddleware
         $applied = 0;
 
         $card = DB::transaction(function () use ($customer, $data, $request, &$applied) {
+            // Only an ACTIVE card can take a stamp, so only an active card is
+            // reused here. A full card still waiting to be redeemed is passed
+            // over rather than matched and then refused: the customer is at the
+            // counter buying again, and requiring them to claim the previous
+            // reward first would be turning away a sale. The full card keeps
+            // its place in the redemption queue untouched and this purchase
+            // opens the next cycle on a new card — one customer legitimately
+            // holding two cards for one program, which the redemption side
+            // already handles (`resolveRedeemScan` resolves a specific card id).
             $card = StampCard::where('customer_id', $customer->id)
                 ->where('stamp_program_id', $data['stamp_program_id'])
-                ->whereIn('status', ['active', 'completed'])
+                ->where('status', 'active')
+                ->oldest('id')
                 ->first();
 
             if (! $card) {

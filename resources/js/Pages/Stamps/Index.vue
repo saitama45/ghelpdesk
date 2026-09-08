@@ -344,25 +344,35 @@ watch(scanTokenInput, (val) => {
     }, 150)
 })
 
+// The card this scan will actually land on — the ACTIVE one, mirroring the
+// server. A full card awaiting redemption is not it: the server leaves that
+// one alone and opens a new cycle, so treating it as the target here would
+// show 0 remaining and block a sale the server is perfectly willing to take.
 const scanCardForSelectedProgram = computed(() =>
-    scanModal.cards.find(c => c.stamp_program_id === scanProgramId.value) || null)
+    scanModal.cards.find(c => c.stamp_program_id === scanProgramId.value && c.status === 'active') || null)
+
+// A completed-but-unredeemed card for the same program. Not a blocker — just
+// worth saying out loud, so staff know a second card is about to start and can
+// offer the waiting reward while the customer is in front of them.
+const scanFullCardAwaitingRedemption = computed(() =>
+    scanModal.cards.find(c => c.stamp_program_id === scanProgramId.value && c.status === 'completed') || null)
 
 // The card the stamps land on may not exist yet (one is auto-created on the
 // server), so the room left has to fall back to the program's own requirement.
 const scanStampsRequired = computed(() =>
     scanCardForSelectedProgram.value?.program?.stamps_required
+        ?? scanFullCardAwaitingRedemption.value?.program?.stamps_required
         ?? props.programs.find(p => p.id === scanProgramId.value)?.stamps_required
         ?? 0)
 const scanRemaining = computed(() => Math.max(
     0, scanStampsRequired.value - (scanCardForSelectedProgram.value?.stamps_count ?? 0)))
 
-// Mirrors the server's own rules (`StampController::applyStamps`) so a full
-// card is said out loud here instead of coming back as a failed request.
+// Mirrors the server's own rules (`StampController::applyStamps`) so a limit is
+// said out loud here instead of coming back as a failed request.
 const scanQuantityError = computed(() => {
     if (!scanProgramId.value) return null
-    if (scanRemaining.value < 1) return 'This card is already full — redeem it before adding more stamps.'
     if (!scanQuantity.value || scanQuantity.value < 1) return 'Enter at least 1 stamp.'
-    if (scanQuantity.value > scanRemaining.value) {
+    if (scanRemaining.value > 0 && scanQuantity.value > scanRemaining.value) {
         return `Only ${scanRemaining.value} stamp${scanRemaining.value === 1 ? '' : 's'} left on this card.`
     }
     return null
@@ -1356,6 +1366,9 @@ const submitRedeem = () => {
                             Existing card: {{ scanCardForSelectedProgram.stamps_count }} / {{ scanCardForSelectedProgram.program?.stamps_required }} stamps
                         </p>
                         <p v-else-if="scanProgramId" class="text-xs text-gray-500 mt-1 dark:text-gray-400">No open card yet — one will be created automatically.</p>
+                        <p v-if="scanFullCardAwaitingRedemption" class="text-xs text-amber-700 mt-1 dark:text-amber-400">
+                            This member also has a full card ({{ scanFullCardAwaitingRedemption.stamps_count }} / {{ scanFullCardAwaitingRedemption.program?.stamps_required }}) waiting to be redeemed — it stays claimable. These stamps go on a new card.
+                        </p>
                         <p v-if="scanModal.error" class="text-xs text-red-600 mt-1">{{ scanModal.error }}</p>
                     </div>
                     <div>

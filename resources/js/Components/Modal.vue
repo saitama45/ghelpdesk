@@ -58,6 +58,12 @@ const closeOnEscape = (e) => {
     if (e.key === 'Escape') {
         e.preventDefault();
 
+        if (showConfirmModal.value) {
+            handleCancel();
+            e.stopImmediatePropagation();
+            return;
+        }
+
         if (props.show) {
             close();
         }

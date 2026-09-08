@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, reactive, nextTick, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
+import { useConfirm } from '@/Composables/useConfirm.js'
 import { PlusIcon, PencilSquareIcon, TrashIcon, CheckIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 
 const props = defineProps({
@@ -15,6 +16,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:modelValue', 'options-changed'])
+const { confirm } = useConfirm()
 
 // ── state ──────────────────────────────────────────────────────────────────────
 const isOpen       = ref(false)
@@ -94,6 +96,7 @@ const closeDropdown = () => {
 }
 
 const handleClickOutside = (e) => {
+    if (saving.value) return
     if (containerRef.value && !containerRef.value.contains(e.target)) {
         closeDropdown()
     }
@@ -137,6 +140,7 @@ const cancelInline = () => {
 
 // ── save (add or edit) ─────────────────────────────────────────────────────────
 const saveOption = async () => {
+    if (saving.value) return
     const label = inlineLabel.value.trim()
     if (!label) { inlineError.value = 'Label is required.'; return }
 
@@ -144,6 +148,16 @@ const saveOption = async () => {
     inlineError.value = ''
 
     try {
+        if (mode.value === 'edit' && props.optionType === 'project_type') {
+            const confirmed = await confirm({
+                title: 'Rename Project Type',
+                message: `Rename "${editingOption.value.label}" to "${label}"? This updates the displayed name wherever this project type is used.`,
+                confirmLabel: 'Save Changes',
+                variant: 'info',
+            })
+            if (!confirmed) return
+        }
+
         if (mode.value === 'add') {
             const { data } = await axios.post(route('reference-options.store'), {
                 type: props.optionType,
@@ -174,13 +188,27 @@ const saveOption = async () => {
 // ── delete ─────────────────────────────────────────────────────────────────────
 const deleteOption = async (option, e) => {
     e.stopPropagation()
+    if (saving.value) return
+    saving.value = true
     try {
+        if (props.optionType === 'project_type') {
+            const confirmed = await confirm({
+                title: 'Delete Project Type',
+                message: `Delete "${option.label}" from the project type options?`,
+                confirmLabel: 'Delete',
+                variant: 'danger',
+            })
+            if (!confirmed) return
+        }
+
         await axios.delete(route('reference-options.destroy', option.id))
         localOptions.value = localOptions.value.filter(o => o.id !== option.id)
         emit('options-changed', [...localOptions.value])
         if (props.modelValue === option.value) emit('update:modelValue', '')
     } catch (err) {
         alert(err.response?.data?.message || 'Cannot delete this option.')
+    } finally {
+        saving.value = false
     }
 }
 </script>
