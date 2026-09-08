@@ -107,6 +107,7 @@ class ProjectController extends Controller
             'stats'       => $stats,
             'typeCounts'  => $typeCounts,
             'projectTypes' => Project::projectTypes(),
+            'projectTypeLabels' => Project::projectTypeLabels(),
             'filters' => [
                 'search'   => $search,
                 'status'   => $status,
@@ -190,6 +191,7 @@ class ProjectController extends Controller
             'vendors'         => Vendor::active()->orderBy('name')->get(['id', 'name']),
             'departments'     => Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'projectTypes'    => $projectTypes,
+            'projectTypeLabels' => Project::projectTypeLabels(),
             'defaultType'     => $defaultType,
             'boardYears'      => $this->boardYears(),
             'availableBoards' => $availableBoards,
@@ -328,6 +330,7 @@ class ProjectController extends Controller
             // anyone who already owns one here.
             'canAddMilestone' => \App\Support\ProjectPlanAccess::canAddMilestone($project, auth()->user()),
             'projectTypes'   => Project::projectTypes(),
+            'projectTypeLabels' => Project::projectTypeLabels(),
             'users'          => User::active()->orderBy('name')->get(['id', 'name', 'department', 'org_path']),
             'stores'         => Store::orderBy('name')->get(['id', 'name']),
             // A rollout project can cover many stores. Offer only active stores

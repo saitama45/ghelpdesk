@@ -15,6 +15,7 @@ const props = defineProps({
     dashboard: { type: Object, default: null },
     projectOptions: { type: Array, default: () => [] },
     projectTypes: { type: Array, default: () => [] },
+    projectTypeLabels: { type: Object, default: () => ({}) },
     filters: { type: Object, default: () => ({}) },
 });
 
@@ -26,7 +27,7 @@ const from = ref(props.filters?.dash_from || '');
 const to = ref(props.filters?.dash_to || '');
 const loading = ref(false);
 
-const typeOptions = computed(() => props.projectTypes.map((t) => ({ label: t, value: t })));
+const typeOptions = computed(() => props.projectTypes.map((t) => ({ label: props.projectTypeLabels[t] || t, value: t })));
 
 // Every project of the chosen type(s), whether it is run on the Task Board or only
 // on /projects — the source shows in the row so nothing looks missing.

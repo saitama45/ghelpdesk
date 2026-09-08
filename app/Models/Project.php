@@ -48,6 +48,11 @@ class Project extends Model
         return ! empty($types) ? $types : self::PROJECT_TYPES;
     }
 
+    public static function projectTypeLabels(): array
+    {
+        return ReferenceOption::ofType('project_type')->pluck('label', 'value')->all();
+    }
+
     protected $fillable = [
         'store_id',
         'project_type',

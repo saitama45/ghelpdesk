@@ -16,6 +16,7 @@ import Modal from '@/Components/Modal.vue';
 const props = defineProps({
     overview: { type: Object, default: null },
     type: { type: String, default: '' },
+    typeLabel: { type: String, default: '' },
 });
 
 /* ------------------------------------------------------------------ blocks */
@@ -147,10 +148,10 @@ const closeDrill = () => { drill.value = null; };
         <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
                 <h2 class="text-lg font-black tracking-tight text-gray-900 dark:text-gray-100">
-                    {{ type }} Overview
+                    {{ typeLabel || type }} Overview
                 </h2>
                 <p class="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
-                    Schedules, department commitments, approvals and readiness across all {{ type }} projects.
+                    Schedules, department commitments, approvals and readiness across all {{ typeLabel || type }} projects.
                 </p>
             </div>
 
@@ -357,7 +358,7 @@ const closeDrill = () => { drill.value = null; };
         </div>
 
         <p v-if="!hasAnything" class="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400 dark:border-gray-600">
-            No {{ type }} projects yet. Create one to populate this overview.
+            No {{ typeLabel || type }} projects yet. Create one to populate this overview.
         </p>
 
         <!-- How this number was computed -->

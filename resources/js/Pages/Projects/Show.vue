@@ -42,6 +42,7 @@ const props = defineProps({
     projectProgressHistory: { type: Array, default: () => [] },
     weeklyProgress: { type: Object, default: () => ({}) },
     projectTypes: { type: Array, default: () => [] },
+    projectTypeLabels: { type: Object, default: () => ({}) },
     users: Array,
     stores: Array,
     rolloutStores: { type: Array, default: () => [] },
@@ -573,7 +574,7 @@ const getStatusColor = (status) => {
                                     v-model="editForm.project_type"
                                     class="w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm dark:border-gray-600 pl-2 pr-7"
                                 >
-                                    <option v-for="type in (projectTypes ?? [])" :key="type" :value="type">{{ type }}</option>
+                                    <option v-for="type in (projectTypes ?? [])" :key="type" :value="type">{{ projectTypeLabels[type] || type }}</option>
                                 </select>
                                 <InputError :message="editForm.errors.project_type" />
                             </div>
@@ -951,7 +952,7 @@ const getStatusColor = (status) => {
                         <div>
                             <div class="flex items-center gap-2 mb-2 flex-wrap">
                                 <span class="px-2.5 py-1 bg-gray-100 text-gray-600 text-[10px] font-black uppercase tracking-widest rounded-full border border-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">
-                                    {{ project.project_type || 'Store Opening' }}
+                                    {{ projectTypeLabels[project.project_type] || project.project_type || 'Store Opening' }}
                                 </span>
                                 <span v-if="project.store?.name || project.subject?.name" class="px-2.5 py-1 bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-widest rounded-full border border-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
                                     {{ project.store?.name || project.subject?.name }}

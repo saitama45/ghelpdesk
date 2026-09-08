@@ -75,6 +75,7 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    projectTypeLabels: { type: Object, default: () => ({}) },
     filters: {
         type: Object,
         default: () => ({}),
@@ -356,7 +357,8 @@ const typeTabConfig = computed(() => {
         'General':             { dot: 'bg-gray-400',   text: 'text-gray-600' },
     };
     return props.projectTypes.map(t => ({
-        label: t,
+        value: t,
+        label: props.projectTypeLabels[t] || t,
         count: props.typeCounts[t] ?? 0,
         ...(typeIconMap[t] ?? { dot: 'bg-gray-400', text: 'text-gray-600' }),
     }));
@@ -423,19 +425,19 @@ const typeTabConfig = computed(() => {
                 <!-- Per-type tabs -->
                 <button
                     v-for="tab in typeTabConfig"
-                    :key="tab.label"
+                    :key="tab.value"
                     type="button"
-                    @click="setType(tab.label)"
+                    @click="setType(tab.value)"
                     :class="[
                         'flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-all',
-                        activeTab !== 'dashboard' && activeType === tab.label
+                        activeTab !== 'dashboard' && activeType === tab.value
                             ? 'bg-gray-900 text-white shadow dark:bg-gray-100 dark:text-gray-900'
                             : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
                     ]"
                 >
                     <span :class="['inline-block h-2 w-2 rounded-full', tab.dot]" />
                     {{ tab.label }}
-                    <span v-if="tab.count > 0" :class="['rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums', activeTab !== 'dashboard' && activeType === tab.label ? 'bg-white/20 text-white dark:bg-gray-900/20 dark:text-gray-900' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400']">
+                    <span v-if="tab.count > 0" :class="['rounded-full px-1.5 py-0.5 text-[10px] font-black tabular-nums', activeTab !== 'dashboard' && activeType === tab.value ? 'bg-white/20 text-white dark:bg-gray-900/20 dark:text-gray-900' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400']">
                         {{ tab.count }}
                     </span>
                 </button>
@@ -498,6 +500,7 @@ const typeTabConfig = computed(() => {
                 v-if="activeTab === 'overview'"
                 :overview="overview"
                 :type="activeType"
+                :type-label="projectTypeLabels[activeType] || activeType"
             />
 
             <div v-if="activeTab === 'projects'" class="space-y-6">
@@ -755,6 +758,7 @@ const typeTabConfig = computed(() => {
                 :dashboard="dashboard"
                 :project-options="dashboardProjectOptions"
                 :project-types="projectTypes"
+                :project-type-labels="projectTypeLabels"
                 :filters="dashboardFilters"
             />
         </div>

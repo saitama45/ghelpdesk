@@ -10,6 +10,7 @@ const props = defineProps({
     vendors:          Array,
     departments:      Array,
     projectTypes:     Array,
+    projectTypeLabels: { type: Object, default: () => ({}) },
     defaultType:      { type: String, default: 'Store Opening' },
     boardYears:       Array,
     availableBoards:  { type: Array, default: () => [] },
@@ -153,7 +154,7 @@ const submit = () => {
                             >
                                 <span :class="['mb-1.5 inline-block h-2 w-2 rounded-full', typeConfig[type]?.color ?? 'bg-gray-400']" />
                                 <span class="font-semibold leading-tight" :class="form.project_type === type ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'">
-                                    {{ type }}
+                                    {{ projectTypeLabels[type] || type }}
                                 </span>
                                 <span class="mt-0.5 text-[10px] leading-snug text-gray-400 dark:text-gray-500">
                                     {{ typeConfig[type]?.label }}
