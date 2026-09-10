@@ -449,7 +449,11 @@ class DepartmentController extends Controller implements HasMiddleware
             DB::table('users')->where('created_by', $user->id)->update(['created_by' => null]);
             DB::table('users')->where('updated_by', $user->id)->update(['updated_by' => null]);
 
-            $user->delete();
+            // forceDelete, not delete: `users` soft-deletes now, but a vacant
+            // position is an org-chart placeholder rather than a person. It has
+            // nothing to restore, and archiving it would fill the Account Archive
+            // with empty seats. The cleanup above already ran, so the row must go.
+            $user->forceDelete();
         });
 
         return redirect()->back()->with('success', 'Vacant position removed from org chart.');

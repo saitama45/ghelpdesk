@@ -507,6 +507,12 @@ Route::middleware('auth')->group(function () {
     Route::get('settings', [\App\Http\Controllers\SettingsController::class, 'index'])->name('settings.index');
     Route::put('settings', [\App\Http\Controllers\SettingsController::class, 'update'])->name('settings.update');
     Route::post('settings/test-imap', [\App\Http\Controllers\SettingsController::class, 'testImap'])->name('settings.test-imap');
+    // Accounts deleted from /users or /stamps → Customers land here (soft-deleted).
+    // Restore and purge both act on the whole user↔customer pair.
+    Route::get('settings/account-archive', [\App\Http\Controllers\AccountArchiveController::class, 'index'])->name('account-archive.index');
+    Route::post('settings/account-archive/restore', [\App\Http\Controllers\AccountArchiveController::class, 'restore'])->name('account-archive.restore');
+    Route::delete('settings/account-archive/purge', [\App\Http\Controllers\AccountArchiveController::class, 'purge'])->name('account-archive.purge');
+
     Route::get('settings/ticket-archive', [\App\Http\Controllers\TicketArchiveController::class, 'index'])->name('ticket-archive.index');
     Route::post('settings/ticket-archive/bulk-restore', [\App\Http\Controllers\TicketArchiveController::class, 'bulkRestore'])->name('ticket-archive.bulk-restore');
     Route::delete('settings/ticket-archive/bulk-purge', [\App\Http\Controllers\TicketArchiveController::class, 'bulkPurge'])->name('ticket-archive.bulk-purge');
@@ -752,6 +758,33 @@ Route::get('/public/uat/{token}/cases/{case}', [App\Http\Controllers\PublicUatCo
 Route::post('/public/uat/{token}/verdict', [App\Http\Controllers\PublicUatController::class, 'storeVerdict'])->middleware('throttle:60,1')->name('public.uat.verdict');
 Route::post('/public/uat/{token}/finding', [App\Http\Controllers\PublicUatController::class, 'storeFinding'])->middleware('throttle:20,1')->name('public.uat.finding');
 Route::post('/public/uat/{token}/signoff', [App\Http\Controllers\PublicUatController::class, 'storeSignoff'])->middleware('throttle:10,1')->name('public.uat.signoff');
+
+// Google Play data-safety requirement for the mobile loyalty app
+// ("The Coffee Bean & Tea Leaf Rewards"): a publicly reachable, login-free page
+// describing how a member requests deletion of their account and data.
+// Deliberately a plain Blade view, not an Inertia page — Google's reviewer and
+// crawlers must be able to read it with no JS and no built assets.
+Route::get('/account-deletion', function () {
+    // The contact address is whatever mailbox is configured on /settings → Mail:
+    // the IMAP account is the one whose inbound mail becomes tickets, so a request
+    // sent there is filed automatically. Falls back to the "from" address.
+    $supportEmail = config('imap.accounts.default.username')
+        ?: config('mail.from.address')
+        ?: 'tgiservices@tablegroup.com';
+
+    $view = resource_path('views/public/account-deletion.blade.php');
+
+    return response()
+        ->view('public.account-deletion', [
+            'supportEmail' => $supportEmail,
+            'developer' => 'Table Group Inc.',
+            'updatedAt' => date('F j, Y', is_file($view) ? filemtime($view) : time()),
+        ])
+        ->header('Cache-Control', 'public, max-age=3600');
+})->name('public.account-deletion');
+
+// Convenience alias — the wording people guess most often.
+Route::redirect('/delete-account', '/account-deletion');
 
 Route::get('/public/survey-thank-you', function () {
     return Inertia::render('Public/SurveyThankYou');

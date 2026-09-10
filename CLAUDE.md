@@ -68,6 +68,7 @@ Laravel 12 + Inertia v2 + Vue 3 + Tailwind v4 (Vite) on SQL Server, with Spatie 
 | SLA business-hours math | `app/Services/SlaService.php` |
 | Bell notifications | `app/Services/NotificationService.php` + `app/Notifications/ActivityNotification.php` |
 | Permission catalogue / grouping | `app/Http/Services/RoleService.php` |
+| User ↔ loyalty-customer archive pair (soft delete, restore, purge) | `app/Services/AccountArchiveService.php` |
 | Gantt scheduling chain | `app/Services/ProjectScheduler.php`, `ScheduleChain.php`, `HolidayCalendar.php` |
 | Project ↔ board sync | `app/Services/ProjectTaskBoardSyncService.php` |
 | Module tree (sidebar + hub + layout settings) | `resources/js/Composables/useModuleRegistry.js` |

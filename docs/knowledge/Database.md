@@ -46,6 +46,7 @@ Session, cache and queue all use the `database` driver in dev/prod (`sessions`, 
 - `company_id` on every table in `CompanyContext::MODULE_TABLES` — auto-stamped at creation, filtered on the subset in `SCOPED_MODELS`. `users.company_id` is explicitly **excluded** from stamping.
 - Work items carry both `department_id` (requester) and `serving_department_id` (owning desk).
 - `users.org_path` replaced the removed `users.sub_unit`.
+- `deleted_at` + `deleted_by` on `users` and `customers` (2026-09-10). Both models use `SoftDeletes`: the delete icon on `/users` and on `/stamps` → Customers **archives**, and `App\Services\AccountArchiveService` archives/restores/purges the `users.customer_id` pair together, whichever side was clicked. Restore and permanent purge live on `/settings/account-archive` behind the `account_retention_*` settings. Two consequences worth remembering: the SoftDeletes scope hides an archived user from every relation (an archived assignee reads as `null` — use `withTrashed()` where history must render), and `unique:users` still sees archived rows, so an archived email/employee ID blocks reuse until it is restored or purged.
 
 ## SQL Server gotchas (mandatory patterns — see also `GEMINI.md`)
 1. **No multiple cascade paths.** Secondary FKs must use `->onDelete('no action')`, or the migration fails on SQL Server.

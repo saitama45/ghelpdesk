@@ -165,6 +165,8 @@ class SettingsController extends Controller implements HasMiddleware
                 $group = 'mail';
             } elseif (str_starts_with($key, 'ticket_retention_')) {
                 $group = 'ticket_retention';
+            } elseif (str_starts_with($key, 'account_retention_')) {
+                $group = 'account_retention';
             } elseif (str_starts_with($key, 'threshold_')) {
                 $group = 'thresholds';
             } elseif (str_starts_with($key, 'business_') || str_starts_with($key, 'working_days')) {
@@ -185,6 +187,10 @@ class SettingsController extends Controller implements HasMiddleware
             } elseif ($key === 'ticket_retention_value') {
                 $value = max(1, (int) $value);
             } elseif ($key === 'ticket_retention_unit' && !in_array($value, ['months', 'years'], true)) {
+                $value = 'months';
+            } elseif ($key === 'account_retention_value') {
+                $value = max(1, (int) $value);
+            } elseif ($key === 'account_retention_unit' && !in_array($value, ['months', 'years'], true)) {
                 $value = 'months';
             } elseif ($key === 'queue_refresh_seconds') {
                 $value = max(3, (int) $value);

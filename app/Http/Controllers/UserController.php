@@ -6,6 +6,7 @@ use App\Mail\GoogleRegistrationApproved;
 use App\Models\DepartmentNode;
 use App\Models\Store;
 use App\Models\User;
+use App\Services\AccountArchiveService;
 use App\Services\OrganizationReferenceService;
 use App\Support\UserDeletionBlockers;
 use Carbon\Carbon;
@@ -247,6 +248,12 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
+        // Runs before validation on purpose: `unique:users` queries the table
+        // directly, so an ARCHIVED account still owns its email and employee ID,
+        // and its "already been taken" would point at a row that is nowhere to be
+        // seen on this page. Name the archive instead.
+        $this->rejectArchivedIdentityClash($request->input('email'), $request->input('employee_id_no'));
+
         $request->validate([
             'name' => 'required|string|max:255',
             'employee_id_no' => 'required|string|max:255|unique:users,employee_id_no',
@@ -357,106 +364,62 @@ class UserController extends Controller
         return redirect()->back()->with('success', 'User updated successfully.');
     }
 
-    public function destroy(User $user, UserDeletionBlockers $blockers)
+    /**
+     * Archive, not destroy. The row is soft-deleted and recoverable from
+     * Settings → Account Archive; when the account is a mobile-app member their
+     * paired `customers` record is archived in the same transaction, so /users
+     * and /stamps → Customers never disagree about who exists.
+     *
+     * The reference cleanup this method used to perform now runs at purge time
+     * in AccountArchiveService — clearing tickets and attendance up front would
+     * have made the archive unrecoverable.
+     */
+    public function destroy(User $user, AccountArchiveService $archive)
     {
-        try {
-            DB::transaction(function () use ($user, $blockers) {
-                // Null out references in tickets
-                DB::table('tickets')->where('reporter_id', $user->id)->update(['reporter_id' => null]);
-                DB::table('tickets')->where('assignee_id', $user->id)->update(['assignee_id' => null]);
-
-                // Null out references in ticket comments and history
-                DB::table('ticket_comments')->where('user_id', $user->id)->update(['user_id' => null]);
-                DB::table('ticket_histories')->where('user_id', $user->id)->update(['user_id' => null]);
-
-                // Null out references in project tasks
-                DB::table('project_tasks')->where('assigned_to', $user->id)->update(['assigned_to' => null]);
-                DB::table('project_tasks')->where('support_by', $user->id)->update(['support_by' => null]);
-
-                // Null out references in inventory transactions
-                if (Schema::hasTable('inventory_transactions')) {
-                    DB::table('inventory_transactions')->where('created_by', $user->id)->update(['created_by' => null]);
-                    DB::table('inventory_transactions')->where('updated_by', $user->id)->update(['updated_by' => null]);
-                }
-
-                // Cleanup SAP and POS requests
-                if (Schema::hasTable('sap_requests')) {
-                    DB::table('sap_requests')->where('user_id', $user->id)->update(['user_id' => null]);
-                }
-                if (Schema::hasTable('sap_request_approvals')) {
-                    DB::table('sap_request_approvals')->where('user_id', $user->id)->delete();
-                }
-                if (Schema::hasTable('pos_requests')) {
-                    DB::table('pos_requests')->where('user_id', $user->id)->delete();
-                }
-                if (Schema::hasTable('pos_request_approvals')) {
-                    DB::table('pos_request_approvals')->where('user_id', $user->id)->delete();
-                }
-                if (Schema::hasTable('schedule_change_requests')) {
-                    DB::table('schedule_change_requests')->where('requester_id', $user->id)->delete();
-                    DB::table('schedule_change_requests')->where('approved_by', $user->id)->update(['approved_by' => null]);
-                    DB::table('schedule_change_requests')->where('rejected_by', $user->id)->update(['rejected_by' => null]);
-                }
-
-                // Cleanup attendance and schedules (Required fields, manual delete for safety)
-                if (Schema::hasTable('attendance_logs')) {
-                    DB::table('attendance_logs')->where('user_id', $user->id)->delete();
-                }
-                if (Schema::hasTable('schedules')) {
-                    DB::table('schedules')->where('user_id', $user->id)->delete();
-                }
-                if (Schema::hasTable('user_presence_logs')) {
-                    DB::table('user_presence_logs')->where('user_id', $user->id)->delete();
-                }
-
-                // Cleanup task board memberships and assignments
-                if (Schema::hasTable('task_board_members')) {
-                    DB::table('task_board_members')->where('user_id', $user->id)->delete();
-                }
-                if (Schema::hasTable('task_board_watchers')) {
-                    DB::table('task_board_watchers')->where('user_id', $user->id)->delete();
-                }
-                if (Schema::hasTable('task_card_assignees')) {
-                    DB::table('task_card_assignees')->where('user_id', $user->id)->delete();
-                }
-                if (Schema::hasTable('task_card_watchers')) {
-                    DB::table('task_card_watchers')->where('user_id', $user->id)->delete();
-                }
-                if (Schema::hasTable('task_card_comments')) {
-                    DB::table('task_card_comments')->where('user_id', $user->id)->delete();
-                }
-
-                // Remove manager associations
-                DB::table('manager_user')->where('manager_id', $user->id)->delete();
-
-                // Null out audit columns in users table
-                DB::table('users')->where('created_by', $user->id)->update(['created_by' => null]);
-                DB::table('users')->where('updated_by', $user->id)->update(['updated_by' => null]);
-
-                // Everything this method knows how to clear is now cleared, so whatever
-                // still points at the user is a genuine blocker. Asking the schema
-                // beats extending the list above every time a table is added — that
-                // is how `customers.created_by` reached an admin as a SQLSTATE page.
-                $remaining = $blockers->for($user);
-
-                if (! empty($remaining)) {
-                    throw ValidationException::withMessages([
-                        'user' => $blockers->message($user, $remaining),
-                    ]);
-                }
-
-                // Finally delete the user
-                $user->delete();
-            });
-        } catch (QueryException $e) {
-            // Net for a constraint the scan could not see (a differently-schema'd
-            // table, a view). The driver still names the table and column.
+        if ($user->id === auth()->id()) {
             throw ValidationException::withMessages([
-                'user' => $blockers->messageFromException($user, $e),
+                'user' => 'You cannot delete the account you are signed in with.',
             ]);
         }
 
-        return redirect()->back()->with('success', 'User deleted successfully.');
+        $archived = $archive->archiveUser($user, auth()->id());
+
+        $message = $archived['customer']
+            ? "User archived. Their loyalty customer record \"{$archived['customer']}\" was archived too."
+            : 'User archived. Restore it from Settings → Account Archive.';
+
+        return redirect()->back()->with('success', $message);
+    }
+
+    /**
+     * Refuse a new account whose email or employee ID is still held by an
+     * archived one, and say where that row is so the admin can restore or purge
+     * it instead of guessing at a phantom duplicate.
+     */
+    private function rejectArchivedIdentityClash(?string $email, ?string $employeeId): void
+    {
+        $archived = User::onlyTrashed()
+            ->where(function ($query) use ($email, $employeeId) {
+                if ($email) {
+                    $query->orWhere('email', $email);
+                }
+                if ($employeeId) {
+                    $query->orWhere('employee_id_no', $employeeId);
+                }
+            })
+            ->when(!$email && !$employeeId, fn ($query) => $query->whereRaw('1 = 0'))
+            ->first();
+
+        if (!$archived) {
+            return;
+        }
+
+        $field = ($email && $archived->email === $email) ? 'email' : 'employee_id_no';
+        $label = $field === 'email' ? 'email address' : 'employee ID';
+
+        throw ValidationException::withMessages([
+            $field => "That {$label} belongs to \"{$archived->name}\", an archived account. Restore or purge it from Settings → Account Archive first.",
+        ]);
     }
 
     public function resetPassword(Request $request, User $user)

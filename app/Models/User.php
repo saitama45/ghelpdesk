@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Notifications\Notifiable;
@@ -13,7 +14,12 @@ use App\Models\Company;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable, HasRoles;
+    // Deleting a user archives the row (Settings → Account Archive) instead of
+    // destroying it. The permanent purge lives on that page, behind retention.
+    // Consequence to keep in mind: the SoftDeletes global scope hides archived
+    // users from every relation too, so an archived assignee/reporter reads as
+    // null until they are restored — use withTrashed() where history must show.
+    use HasApiTokens, HasFactory, Notifiable, HasRoles, SoftDeletes;
 
     protected $fillable = [
         'name',
@@ -40,6 +46,7 @@ class User extends Authenticatable
         'date_hired',
         'created_by',
         'updated_by',
+        'deleted_by',
     ];
 
     /**
@@ -176,6 +183,8 @@ class User extends Authenticatable
             'date_hired' => 'date:Y-m-d',
             'created_by' => 'integer',
             'updated_by' => 'integer',
+            'deleted_by' => 'integer',
+            'deleted_at' => 'datetime',
         ];
     }
 

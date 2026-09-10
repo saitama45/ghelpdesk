@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { Head, useForm, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, useForm, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
@@ -51,6 +51,7 @@ const tabs = [
     { id: 'business_hours', name: 'Business Hours', icon: ClockIcon, description: 'Define operational hours and working days for SLA calculations.' },
     { id: 'sla_targets', name: 'SLA Targets', icon: ShieldCheckIcon, description: 'Configure response and resolution targets per ticket priority.' },
     { id: 'ticket_retention', name: 'Ticket Retention', icon: ArchiveBoxIcon, description: 'Control when archived tickets become eligible for permanent purge.' },
+    { id: 'account_retention', name: 'Account Retention', icon: ArchiveBoxIcon, description: 'Control when archived users and loyalty customers become eligible for permanent purge.' },
     { id: 'integrations', name: 'Integrations', icon: MapIcon, description: 'External API keys and third-party services.' },
     { id: 'thresholds', name: 'Health Thresholds', icon: ChartBarIcon, description: 'Ticket count limits and status labels.' },
     { id: 'sidebar_layout', name: 'Sidebar Layout', icon: Bars3BottomLeftIcon, description: 'Drag to reorder sidebar sections and sub-menu items.' },
@@ -455,6 +456,8 @@ const getInitialFormData = () => {
         waiting_aging_alarm_days: props.settings.waiting_aging_alarm_days || 3,
         ticket_retention_value: props.settings.ticket_retention_value || 6,
         ticket_retention_unit: props.settings.ticket_retention_unit || 'months',
+        account_retention_value: props.settings.account_retention_value || 6,
+        account_retention_unit: props.settings.account_retention_unit || 'months',
         sidebar_layout: props.settings.sidebar_layout || null,
     };
 
@@ -1215,6 +1218,57 @@ const syncEmails = () => {
                                                 <InputError class="mt-2" :message="form.errors.ticket_retention_unit" />
                                             </div>
                                         </div>
+                                    </div>
+                                </section>
+                            </div>
+
+                            <!-- Account Retention Tab -->
+                            <div v-if="activeTab === 'account_retention'" class="space-y-8">
+                                <section>
+                                    <h3 class="text-xs font-black text-red-600 uppercase tracking-widest mb-6 flex items-center">
+                                        <ArchiveBoxIcon class="w-4 h-4 mr-2" />
+                                        Archived Account Purge Eligibility
+                                    </h3>
+
+                                    <div class="max-w-xl space-y-6">
+                                        <div class="p-4 bg-red-50 rounded-xl border border-red-100">
+                                            <p class="text-sm font-black text-red-900">Manual purge retention</p>
+                                            <p class="mt-1 text-xs text-red-700 leading-relaxed">
+                                                Deleting a user or a loyalty customer archives them instead of removing the record, and archives the linked account on the other page too. They stay restorable until they are older than this window. Purging is always manual and confirmed from the Account Archive page.
+                                            </p>
+                                        </div>
+
+                                        <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_180px] gap-4">
+                                            <div>
+                                                <InputLabel for="account_retention_value" value="Retention Length" />
+                                                <TextInput
+                                                    id="account_retention_value"
+                                                    type="number"
+                                                    min="1"
+                                                    class="mt-1 block w-full"
+                                                    v-model="form.account_retention_value"
+                                                />
+                                                <InputError class="mt-2" :message="form.errors.account_retention_value" />
+                                            </div>
+                                            <div>
+                                                <InputLabel for="account_retention_unit" value="Unit" />
+                                                <Autocomplete
+                                                    id="account_retention_unit"
+                                                    class="mt-1"
+                                                    v-model="form.account_retention_unit"
+                                                    :options="[{ label: 'Months', value: 'months' }, { label: 'Years', value: 'years' }]"
+                                                    placeholder="Select unit..."
+                                                />
+                                                <InputError class="mt-2" :message="form.errors.account_retention_unit" />
+                                            </div>
+                                        </div>
+
+                                        <Link
+                                            :href="route('account-archive.index')"
+                                            class="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 transition-colors hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+                                        >
+                                            Open Account Archive
+                                        </Link>
                                     </div>
                                 </section>
                             </div>

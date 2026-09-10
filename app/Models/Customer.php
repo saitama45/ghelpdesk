@@ -4,10 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Customer extends Model
 {
-    use HasFactory;
+    // Deleting a customer archives the row (Settings → Account Archive), and
+    // takes their linked mobile-app login with it — see AccountArchiveService.
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'name',
@@ -16,12 +19,15 @@ class Customer extends Model
         'is_active',
         'created_by',
         'updated_by',
+        'deleted_by',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'created_by' => 'integer',
         'updated_by' => 'integer',
+        'deleted_by' => 'integer',
+        'deleted_at' => 'datetime',
     ];
 
     public function stampCards()

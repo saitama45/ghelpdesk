@@ -146,13 +146,13 @@ const submitCustomer = () => {
         : customerForm.post(route('stamps.customers.store'), opts)
 }
 const deleteCustomer = async (c) => {
-    if (!await confirm({ title: 'Delete customer', message: `Delete ${c.name}? This cannot be undone.`, confirmLabel: 'Delete' })) return
+    if (!await confirm({ title: 'Delete customer', message: `Delete ${c.name}? The record is archived, not erased — restore it any time from Settings → Account Archive. If they registered in the mobile app, their login is archived with them.`, confirmLabel: 'Delete' })) return
     router.delete(route('stamps.customers.destroy', c.id), { preserveScroll: true, preserveState: true })
 }
 const deleteCustomerInline = async () => {
     const c = props.customers.find(x => x.id === cardForm.customer_id)
     if (!c) return
-    if (!await confirm({ title: 'Delete customer', message: `Delete ${c.name}? This cannot be undone.`, confirmLabel: 'Delete' })) return
+    if (!await confirm({ title: 'Delete customer', message: `Delete ${c.name}? The record is archived, not erased — restore it any time from Settings → Account Archive.`, confirmLabel: 'Delete' })) return
     router.delete(route('stamps.customers.destroy', c.id), {
         preserveScroll: true,
         preserveState: true,

@@ -342,7 +342,7 @@ const updateUser = () => {
 const deleteUser = async (user) => {
     const confirmed = await confirm({
         title: 'Delete User',
-        message: `Are you sure you want to delete "${user.name}"? This will permanently remove their account and all associated data.`
+        message: `Delete "${user.name}"? Their account is archived, not erased — restore it any time from Settings → Account Archive. If they are a loyalty app member, their customer record is archived with them.`
     })
     
     if (confirmed) {

@@ -592,6 +592,15 @@ export const MODULE_REGISTRY = [
                 permission: 'settings.view',
             },
             {
+                id: 'account-archive',
+                label: 'Account Archive',
+                description: 'Restore or purge deleted users and loyalty customers',
+                icon: ArchiveBoxArrowDownIcon,
+                routeName: 'account-archive.index',
+                activeMatch: ['account-archive.*'],
+                permission: 'settings.view',
+            },
+            {
                 id: 'canned-messages',
                 label: 'Canned Messages',
                 description: 'Reusable ticket reply templates',

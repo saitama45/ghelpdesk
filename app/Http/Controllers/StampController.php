@@ -14,6 +14,7 @@ use App\Models\StampRedemption;
 use App\Models\StampRedemptionUnit;
 use App\Models\StockIn;
 use App\Models\Store;
+use App\Services\AccountArchiveService;
 use App\Services\LoyaltyQrService;
 use App\Services\LoyaltyRedeemQrService;
 use Illuminate\Http\Request;
@@ -151,15 +152,26 @@ class StampController extends Controller implements HasMiddleware
         return back()->with('success', 'Customer updated.');
     }
 
-    public function destroyCustomer(Customer $customer)
+    /**
+     * Archive, not destroy — the mirror image of UserController@destroy.
+     *
+     * Stamp cards no longer block this: the row is soft-deleted and fully
+     * recoverable from Settings → Account Archive, so there is nothing to lose
+     * by archiving a customer mid-card. Cards still block the permanent purge.
+     *
+     * A customer who registered in the mobile app is one half of a pair; their
+     * login is archived in the same transaction so they cannot keep signing in
+     * to an account that no longer appears in Stamps.
+     */
+    public function destroyCustomer(Customer $customer, AccountArchiveService $archive)
     {
-        if ($customer->stampCards()->exists()) {
-            return back()->with('error', 'Cannot delete a customer that already has stamp cards.');
-        }
+        $archived = $archive->archiveCustomer($customer, auth()->id());
 
-        $customer->delete();
+        $message = $archived['user']
+            ? "Customer archived. Their app login \"{$archived['user']}\" was archived too."
+            : 'Customer archived. Restore it from Settings → Account Archive.';
 
-        return back()->with('success', 'Customer deleted.');
+        return back()->with('success', $message);
     }
 
     /* ----------------------------------------------------------------------

@@ -69,6 +69,10 @@ class ProfileController extends Controller
 
         auth()->logout();
 
+        // Archives rather than erases, now that `users` soft-deletes: the account
+        // stops working immediately (the SoftDeletes scope hides it from the auth
+        // provider) and an admin can still restore or purge it from
+        // Settings → Account Archive.
         $user->delete();
 
         $request->session()->invalidate();
