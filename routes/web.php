@@ -559,6 +559,7 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::put('profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
+    Route::patch('profile/timezone', [ProfileController::class, 'updateTimezone'])->name('profile.timezone');
 
     Route::middleware([\App\Http\Middleware\UpdateUserPresence::class])->group(function () {
         Route::get('/presence', function () {

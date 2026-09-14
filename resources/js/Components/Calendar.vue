@@ -1,8 +1,15 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline';
+import { APP_TIMEZONE, addDaysToKey, dateKeyIn, formatIn, localDateKey, minutesOfDayIn } from '@/lib/timezone';
 
 const props = defineProps({
+    // Zone events are laid out and labelled in. Cells are plain calendar dates
+    // (built with local getters), never shifted by the device zone.
+    timezone: {
+        type: String,
+        default: APP_TIMEZONE
+    },
     events: {
         type: Array,
         default: () => []
@@ -176,12 +183,17 @@ const dayHeaderLabel = computed(() =>
     }).format(currentDayDate.value)
 );
 
+const todayKey = computed(() => dateKeyIn(nowDate.value, props.timezone));
+
+/** A calendar cell Date for "today" in the viewing zone. */
+const todayCellDate = () => parseDateKey(dateKeyIn(new Date(), props.timezone));
+
 const isViewingToday = computed(() =>
-    currentDayDate.value.toDateString() === nowDate.value.toDateString()
+    localDateKey(currentDayDate.value) === todayKey.value
 );
 
 const currentTimeTop = computed(() => {
-    const mins = nowDate.value.getHours() * 60 + nowDate.value.getMinutes();
+    const mins = minutesOfDayIn(nowDate.value, props.timezone);
     return (mins / 60) * HOUR_HEIGHT;
 });
 
@@ -206,7 +218,7 @@ const nextDay = () => {
 
 const scrollDayToTime = () => {
     if (!dayScrollRef.value) return;
-    const mins = nowDate.value.getHours() * 60 + nowDate.value.getMinutes();
+    const mins = minutesOfDayIn(nowDate.value, props.timezone);
     dayScrollRef.value.scrollTop = Math.max(0, (mins / 60) * HOUR_HEIGHT - 200);
 };
 
@@ -248,10 +260,8 @@ const dailyEventsLayout = computed(() => {
 
     const totalCols = Math.max(1, colEnds.length);
     return assignments.map(({ event, col }) => {
-        const start = new Date(event.start_time);
-        const end   = new Date(event.end_time);
-        const startMins = start.getHours() * 60 + start.getMinutes();
-        let   endMins   = end.getHours()   * 60 + end.getMinutes();
+        const startMins = minutesOfDayIn(event.start_time, props.timezone);
+        let   endMins   = minutesOfDayIn(event.end_time, props.timezone);
         if (endMins <= startMins) endMins = startMins + 60;
         const top      = (startMins / 60) * HOUR_HEIGHT;
         const height   = Math.max(((endMins - startMins) / 60) * HOUR_HEIGHT, 28);
@@ -265,8 +275,12 @@ const dailyEventsLayout = computed(() => {
 const currentMonth = computed(() => currentDate.value.getMonth());
 const currentYear = computed(() => currentDate.value.getFullYear());
 
+// A cell Date is a calendar date (local getters); anything else is an instant
+// read in the viewing zone.
 const toDateKey = (value) => {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(value));
+    if (value instanceof Date) return localDateKey(value);
+
+    return dateKeyIn(value, props.timezone);
 };
 
 const parseDateKey = (key) => {
@@ -280,12 +294,10 @@ const getEventDateKeys = (event) => {
     }
 
     const keys = [];
-    let cursor = parseDateKey(toDateKey(event.start_time));
-    const end = parseDateKey(toDateKey(event.end_time));
+    const endKey = toDateKey(event.end_time);
 
-    while (cursor <= end) {
-        keys.push(toDateKey(cursor));
-        cursor.setDate(cursor.getDate() + 1);
+    for (let key = toDateKey(event.start_time); key && key <= endKey; key = addDaysToKey(key, 1)) {
+        keys.push(key);
     }
 
     return keys;
@@ -387,8 +399,17 @@ const getActualTimesForDate = (event, date) => {
 
     const dateKey = toDateKey(date);
 
-    if (event.actual_times_by_date?.[dateKey]) {
+    if (event.actual_times_by_date?.[dateKey] && (props.timezone === APP_TIMEZONE || event.calendar_date_key === dateKey)) {
         return event.actual_times_by_date[dateKey];
+    }
+
+    // The server keys actual times by MANILA date; elsewhere match them by the
+    // day they fall on in the viewing zone.
+    if (props.timezone !== APP_TIMEZONE) {
+        const match = Object.values(event.actual_times_by_date ?? {}).find(times =>
+            [times?.actual_time_in, times?.actual_time_out].some(value => value && toDateKey(value) === dateKey)
+        );
+        if (match) return match;
     }
 
     return {
@@ -398,16 +419,14 @@ const getActualTimesForDate = (event, date) => {
 };
 
 const getEventStatus = (event, date) => {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    const start = new Date(event.start_time);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(event.end_time);
-    end.setHours(0, 0, 0, 0);
+    // Date keys ("YYYY-MM-DD") compare correctly as strings.
+    const d = toDateKey(date);
+    const start = toDateKey(event.start_time);
+    const end = toDateKey(event.end_time);
 
     return {
-        isStart: d.getTime() === start.getTime(),
-        isEnd: d.getTime() === end.getTime(),
+        isStart: d === start,
+        isEnd: d === end,
         isMiddle: d > start && d < end
     };
 };
@@ -448,7 +467,7 @@ const isUrgentTicket = (event) => {
 };
 
 const formatTime = (dateString) => {
-    return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return formatIn(dateString, props.timezone, { hour: '2-digit', minute: '2-digit' });
 };
 
 const nextMonth = () => {
@@ -461,10 +480,10 @@ const prevMonth = () => {
 
 const goToToday = () => {
     if (calendarView.value === 'day') {
-        currentDayDate.value = new Date();
+        currentDayDate.value = todayCellDate();
         nextTick(() => scrollDayToTime());
     } else {
-        currentDate.value = new Date();
+        currentDate.value = todayCellDate();
     }
 };
 
@@ -502,9 +521,13 @@ onUnmounted(() => {
 });
 
 const emitVisibleRange = () => {
+    // The server filters by Manila days; outside Manila a visible day can start
+    // or end on a neighbouring Manila date, so widen the fetch by one day.
+    const pad = props.timezone === APP_TIMEZONE ? 0 : 1;
+
     if (calendarView.value === 'day') {
         const dayKey = toDateKey(currentDayDate.value);
-        emit('visible-range-change', { start: dayKey, end: dayKey });
+        emit('visible-range-change', { start: addDaysToKey(dayKey, -pad), end: addDaysToKey(dayKey, pad) });
         return;
     }
 
@@ -512,8 +535,8 @@ const emitVisibleRange = () => {
     const end = new Date(currentYear.value, currentMonth.value + 1, 0);
 
     emit('visible-range-change', {
-        start: toDateKey(start),
-        end: toDateKey(end),
+        start: addDaysToKey(toDateKey(start), -pad),
+        end: addDaysToKey(toDateKey(end), pad),
     });
 };
 
@@ -522,7 +545,7 @@ watch([calendarView, currentDate, currentDayDate], () => {
 }, { deep: false });
 
 const isToday = (date) => {
-    return date.toDateString() === new Date().toDateString();
+    return localDateKey(date) === todayKey.value;
 };
 
 const showDayModal = ref(false);

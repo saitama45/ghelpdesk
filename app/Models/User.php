@@ -44,6 +44,7 @@ class User extends Authenticatable
         'company_id',
         'customer_id',
         'date_hired',
+        'timezone',
         'created_by',
         'updated_by',
         'deleted_by',

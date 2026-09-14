@@ -96,6 +96,88 @@ class ScheduleSameDayGuardTest extends TestCase
         $this->assertSame('WFH', $schedule->fresh()->status);
     }
 
+    /**
+     * A Paris 9-to-6 in winter is 16:00 → 01:00 in Manila, crossing Manila midnight.
+     * Counted in Manila days, two consecutive workdays would clash; counted in the
+     * owner's own zone they are two separate days. Payloads are Manila wall time,
+     * exactly what the page sends after converting the user's typed times.
+     */
+    public function test_consecutive_workdays_abroad_do_not_clash_in_the_owners_timezone(): void
+    {
+        [$actor, $store] = $this->fixture();
+        $actor->update(['timezone' => 'Europe/Paris']);
+
+        $this->actingAs($actor)
+            ->post('/schedules', $this->payload($actor, 'On-site', $store, '2026-12-01T16:00', '2026-12-02T01:00'))
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($actor)
+            ->post('/schedules', $this->payload($actor, 'On-site', $store, '2026-12-02T16:00', '2026-12-03T01:00'))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(2, Schedule::where('user_id', $actor->id)->count());
+
+        // A second schedule on the same Paris day is still refused.
+        $this->actingAs($actor)
+            ->post('/schedules', $this->payload($actor, 'On-site', $store, '2026-12-02T20:00', '2026-12-02T23:00'))
+            ->assertSessionHasErrors('stores');
+    }
+
+    /** Without a saved timezone the original Manila-day rule is unchanged. */
+    public function test_the_same_hours_still_clash_for_a_manila_user(): void
+    {
+        [$actor, $store] = $this->fixture();
+
+        $this->actingAs($actor)
+            ->post('/schedules', $this->payload($actor, 'On-site', $store, '2026-12-01T16:00', '2026-12-02T01:00'))
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($actor)
+            ->post('/schedules', $this->payload($actor, 'On-site', $store, '2026-12-02T16:00', '2026-12-03T01:00'))
+            ->assertSessionHasErrors('stores');
+    }
+
+    /** A multi-day range typed abroad becomes one row per day of the owner's zone. */
+    public function test_multi_day_entry_is_split_on_the_owners_days(): void
+    {
+        [$actor, $store] = $this->fixture();
+        $actor->update(['timezone' => 'Europe/Paris']);
+
+        // Paris Dec 1–3, 09:00–18:00 = Manila Dec 1 16:00 → Dec 4 01:00.
+        $this->actingAs($actor)
+            ->post('/schedules', $this->payload($actor, 'On-site', $store, '2026-12-01T16:00', '2026-12-04T01:00'))
+            ->assertSessionHasNoErrors();
+
+        $rows = \App\Models\ScheduleStore::orderBy('start_time')->get();
+
+        $this->assertCount(3, $rows);
+        $this->assertSame('2026-12-01 16:00', $rows[0]->start_time->format('Y-m-d H:i'));
+        $this->assertSame('2026-12-02 01:00', $rows[0]->end_time->format('Y-m-d H:i'));
+        $this->assertSame('2026-12-03 16:00', $rows[2]->start_time->format('Y-m-d H:i'));
+        $this->assertSame('2026-12-04 01:00', $rows[2]->end_time->format('Y-m-d H:i'));
+    }
+
+    public function test_user_can_save_and_reset_their_timezone(): void
+    {
+        [$actor] = $this->fixture();
+
+        $this->actingAs($actor)
+            ->patch('/profile/timezone', ['timezone' => 'America/Los_Angeles'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame('America/Los_Angeles', $actor->fresh()->timezone);
+
+        $this->actingAs($actor)
+            ->patch('/profile/timezone', ['timezone' => 'Mars/Olympus_Mons'])
+            ->assertSessionHasErrors('timezone');
+        $this->assertSame('America/Los_Angeles', $actor->fresh()->timezone);
+
+        // Choosing Manila stores NULL — the company default.
+        $this->actingAs($actor)
+            ->patch('/profile/timezone', ['timezone' => 'Asia/Manila'])
+            ->assertSessionHasNoErrors();
+        $this->assertNull($actor->fresh()->timezone);
+    }
+
     /** @return array{0: User, 1: Store, 2: Store} */
     private function fixture(): array
     {

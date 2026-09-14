@@ -2,6 +2,7 @@
     <AppLayout title="Scheduling">
         <div :class="currentView === 'calendar' ? 'py-3 sm:py-4' : 'py-12'">
             <div class="max-w-[1600px] mx-auto sm:px-6 lg:px-8">
+                <TimezoneBanner />
                 
                 <!-- View Toggle & Actions Header -->
                 <div :class="currentView === 'calendar' ? 'mb-3 space-y-3' : 'mb-8 space-y-4'">
@@ -314,6 +315,7 @@
                 <!-- Calendar View -->
                 <div v-if="currentView === 'calendar'">
                     <Calendar
+                        :timezone="viewerTimezone"
                         :events="calendarSchedules"
                         :users="calendarUsers"
                         :department-nodes="departmentNodes || []"
@@ -1256,7 +1258,10 @@
                         <!-- Store Entries Repeater -->
                         <div class="space-y-4">
                             <div class="flex items-center justify-between px-1">
-                                <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Deployment Plan</label>
+                                <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">
+                                    Deployment Plan
+                                    <span v-if="!isViewingManilaTime" class="ml-2 rounded bg-amber-100 px-1.5 py-0.5 normal-case tracking-normal text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Times in {{ viewerTimezoneLabel }}</span>
+                                </label>
                                 <button v-if="!isViewingOnly" type="button" @click="addStore"
                                         class="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
@@ -1291,11 +1296,13 @@
                                             <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1 dark:text-gray-400">Start Time</label>
                                             <input v-model="entry.start_time" type="datetime-local" required :disabled="isViewingOnly"
                                                    class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500 transition-all disabled:bg-gray-50/50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
+                                            <p v-if="manilaEquivalent(entry.start_time)" class="mt-1 ml-1 text-[10px] font-semibold text-gray-400 dark:text-gray-400">{{ manilaEquivalent(entry.start_time) }}</p>
                                         </div>
                                         <div>
                                             <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1 dark:text-gray-400">End Time</label>
                                             <input v-model="entry.end_time" type="datetime-local" required :disabled="isViewingOnly"
                                                    class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:ring-blue-500 transition-all disabled:bg-gray-50/50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
+                                            <p v-if="manilaEquivalent(entry.end_time)" class="mt-1 ml-1 text-[10px] font-semibold text-gray-400 dark:text-gray-400">{{ manilaEquivalent(entry.end_time) }}</p>
                                         </div>
                                     </div>
 
@@ -1499,6 +1506,19 @@ import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
 import { usePermission } from '@/Composables/usePermission'
+import { useTimezone } from '@/Composables/useTimezone'
+import TimezoneBanner from '@/Components/TimezoneBanner.vue'
+import {
+    APP_TIMEZONE,
+    convertInputValue,
+    dateKeyIn,
+    dateKeysBetweenIn,
+    formatIn,
+    inputValueIn,
+    isValidTimezone,
+    localDateKey,
+    timezoneLabel,
+} from '@/lib/timezone'
 
 const props = defineProps({
     schedules: Array,
@@ -1535,34 +1555,53 @@ const getMonthRange = (date = new Date()) => {
     }
 }
 
-const getScheduleDateKey = (value) => {
-    if (!value) return null
+/*
+ * Times on this page are SHOWN and TYPED in the viewer's "My timezone"
+ * (viewerTimezone, default Manila) but the server stores, validates and keys
+ * everything (actual_times_by_date, scope_date, schedule_date) in Manila.
+ *   - server values: ISO with offset, or zone-less Manila wall time
+ *   - form inputs:   zone-less wall time in viewerTimezone
+ * Convert at the boundary; never let `new Date()` guess the zone.
+ */
+const { timezone: viewerTimezone, isAppTimezone: isViewingManilaTime } = useTimezone()
 
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(value))
-}
+/** Manila date key of a server value. */
+const getScheduleDateKey = (value) => dateKeyIn(value, APP_TIMEZONE, APP_TIMEZONE)
+
+/** Date key of a server value as the viewer sees it. */
+const getViewerDateKey = (value) => dateKeyIn(value, viewerTimezone.value, APP_TIMEZONE)
+
+/** Manila date key of a datetime-local value the viewer typed. */
+const getInputManilaDateKey = (value) => dateKeyIn(value, APP_TIMEZONE, viewerTimezone.value)
 
 const parseScheduleDateKey = (key) => {
     const [year, month, day] = key.split('-').map(Number)
     return new Date(year, month - 1, day)
 }
 
-const getScheduleDateKeysBetween = (startValue, endValue) => {
-    const startKey = getScheduleDateKey(startValue)
-    const endKey = getScheduleDateKey(endValue)
+/** Viewer-zone days a server interval covers — the calendar board's days. */
+const getScheduleDateKeysBetween = (startValue, endValue) =>
+    dateKeysBetweenIn(startValue, endValue, viewerTimezone.value, APP_TIMEZONE)
 
-    if (!startKey || !endKey) return []
+/** The zone a user's "one schedule per day" is counted in (mirrors the server). */
+const scheduleOwnerTimezone = (userId) => {
+    const saved = (props.users ?? []).find(user => Number(user.id) === Number(userId))?.timezone
 
-    const keys = []
-    const cursor = parseScheduleDateKey(startKey)
-    const end = parseScheduleDateKey(endKey)
-
-    while (cursor <= end) {
-        keys.push(formatDateParam(cursor))
-        cursor.setDate(cursor.getDate() + 1)
-    }
-
-    return keys
+    return isValidTimezone(saved) ? saved : APP_TIMEZONE
 }
+
+/** Datetime-local value typed in the viewer's zone → Manila wall time for the server. */
+const toServerDateTime = (value) => convertInputValue(value, viewerTimezone.value, APP_TIMEZONE)
+
+/** "= Sep 14, 12:00 AM Manila" hint under a time input when the viewer is not on Manila time. */
+const manilaEquivalent = (value) => {
+    if (isViewingManilaTime.value || !value) return ''
+
+    const text = formatIn(value, APP_TIMEZONE, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }, viewerTimezone.value)
+    return text ? `= ${text} Manila` : ''
+}
+
+const viewerTimezoneLabel = computed(() => timezoneLabel(viewerTimezone.value))
 
 /** "2026-08-10" → "Aug 10, 2026" for the duplicate-schedule warning. */
 const formatConflictDate = (dateKey) => {
@@ -1589,12 +1628,22 @@ const getTopPriorityTicket = (segments, fallbackTicket = null) => {
     })[0]
 }
 
-const getActualTimesForScheduleDate = (source, dateKey) => {
+/**
+ * Actual times for one day. `dateKey` is read in `timezone`: Manila keys hit the
+ * server's actual_times_by_date directly; a viewer-zone key is matched by the day
+ * each time falls on there.
+ */
+const getActualTimesForScheduleDate = (source, dateKey, timezone = APP_TIMEZONE) => {
     if (!source || !dateKey) {
         return { actual_time_in: null, actual_time_out: null }
     }
 
-    const dateActualTimes = source.actual_times_by_date?.[dateKey]
+    const keyOf = (value) => dateKeyIn(value, timezone, APP_TIMEZONE)
+    const dateActualTimes = timezone === APP_TIMEZONE
+        ? source.actual_times_by_date?.[dateKey]
+        : Object.values(source.actual_times_by_date ?? {}).find(times =>
+            [times?.actual_time_in, times?.actual_time_out].some(value => value && keyOf(value) === dateKey)
+        )
 
     if (dateActualTimes) {
         return {
@@ -1604,21 +1653,21 @@ const getActualTimesForScheduleDate = (source, dateKey) => {
     }
 
     return {
-        actual_time_in: source.actual_time_in && getScheduleDateKey(source.actual_time_in) === dateKey ? source.actual_time_in : null,
-        actual_time_out: source.actual_time_out && getScheduleDateKey(source.actual_time_out) === dateKey ? source.actual_time_out : null,
+        actual_time_in: source.actual_time_in && keyOf(source.actual_time_in) === dateKey ? source.actual_time_in : null,
+        actual_time_out: source.actual_time_out && keyOf(source.actual_time_out) === dateKey ? source.actual_time_out : null,
     }
 }
 
-const getActualTimesForSegmentDate = (segments, dateKey, fallback = null) => {
+const getActualTimesForSegmentDate = (segments, dateKey, fallback = null, timezone = APP_TIMEZONE) => {
     const dailyTimes = { actual_time_in: null, actual_time_out: null }
 
     for (const segment of segments) {
-        const segmentTimes = getActualTimesForScheduleDate(segment, dateKey)
+        const segmentTimes = getActualTimesForScheduleDate(segment, dateKey, timezone)
         dailyTimes.actual_time_in = dailyTimes.actual_time_in || segmentTimes.actual_time_in
         dailyTimes.actual_time_out = segmentTimes.actual_time_out || dailyTimes.actual_time_out
     }
 
-    const fallbackTimes = getActualTimesForScheduleDate(fallback, dateKey)
+    const fallbackTimes = getActualTimesForScheduleDate(fallback, dateKey, timezone)
     const exactTimes = {
         actual_time_in: dailyTimes.actual_time_in || fallbackTimes.actual_time_in,
         actual_time_out: dailyTimes.actual_time_out || fallbackTimes.actual_time_out,
@@ -1873,7 +1922,7 @@ const calendarSchedules = computed(() => {
             const lastSegment = sortedSegments.reduce((latest, segment) => (
                 new Date(segment.end_time) > new Date(latest.end_time) ? segment : latest
             ), sortedSegments[0])
-            const actualTimes = getActualTimesForSegmentDate(sortedSegments, dateKey, schedule)
+            const actualTimes = getActualTimesForSegmentDate(sortedSegments, dateKey, schedule, viewerTimezone.value)
 
             return {
                 ...schedule,
@@ -2654,21 +2703,15 @@ const form = reactive({
 const formatAuditDateTime = (value) => {
     if (!value) return '-'
 
-    const normalizedValue = typeof value === 'string' && value.includes(' ') ? value.replace(' ', 'T') : value
-    const date = new Date(normalizedValue)
-
-    if (Number.isNaN(date.getTime())) {
-        return '-'
-    }
-
-    return date.toLocaleString('en-US', {
+    // Zone-less values (saved request payloads) are Manila wall time.
+    return formatIn(value, viewerTimezone.value, {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
         hour12: true,
-    })
+    }) || '-'
 }
 
 const modalAudit = computed(() => {
@@ -2728,12 +2771,12 @@ const isRequestingActualTimeAdjustment = computed(() => {
 
 const formatTime = (isoString) => {
     if (!isoString) return '-'
-    return new Date(isoString).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+    return formatIn(isoString, viewerTimezone.value, { hour: '2-digit', minute: '2-digit', hour12: true }) || '-'
 }
 
 const formatDateTime = (isoString) => {
     if (!isoString) return '-'
-    return new Date(isoString).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
+    return formatIn(isoString, viewerTimezone.value, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }) || '-'
 }
 
 const formatSubUnitDisplay = (value) => {
@@ -2748,16 +2791,20 @@ const formatSubUnitDisplay = (value) => {
     return segments.at(-1) || normalized
 }
 
-const formatDateForInput = (date) => {
-    const d = new Date(date);
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().slice(0, 16);
-}
+/** Server value → datetime-local value in the viewer's zone. */
+const formatDateForInput = (value) => inputValueIn(value, viewerTimezone.value, APP_TIMEZONE)
 
-const getManilaDateKey = (value) => {
-    if (!value) return null
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date(value))
-}
+/** Default 7 AM–5 PM entry on a viewer-zone calendar day. */
+const defaultEntryForDateKey = (dateKey) => ({
+    store_id: null,
+    ticket_id: null,
+    start_time: `${dateKey}T07:00`,
+    end_time: `${dateKey}T17:00`,
+    grace_period_minutes: 30,
+    remarks: '',
+})
+
+const getManilaDateKey = (value) => getScheduleDateKey(value)
 
 const getCalendarDateKey = (value) => {
     if (!value) return null
@@ -2804,11 +2851,11 @@ const actualTimeFieldsForEntry = (actualTimes, dateKey, pendingRequest = null, s
     const pendingPayload = pendingRequest?.requested_payload ?? {}
     const usePendingValues = actualTimeRequestMatchesEntry(pendingRequest, scheduleStoreId, dateKey)
     const actualTimeInInput = usePendingValues
-        ? (pendingPayload.clear_time_in ? '' : (pendingPayload.actual_time_in ? formatDateForInput(new Date(pendingPayload.actual_time_in)) : ''))
-        : (actualTimes.actual_time_in ? formatDateForInput(new Date(actualTimes.actual_time_in)) : '')
+        ? (pendingPayload.clear_time_in ? '' : (pendingPayload.actual_time_in ? formatDateForInput(pendingPayload.actual_time_in) : ''))
+        : (actualTimes.actual_time_in ? formatDateForInput(actualTimes.actual_time_in) : '')
     const actualTimeOutInput = usePendingValues
-        ? (pendingPayload.clear_time_out ? '' : (pendingPayload.actual_time_out ? formatDateForInput(new Date(pendingPayload.actual_time_out)) : ''))
-        : (actualTimes.actual_time_out ? formatDateForInput(new Date(actualTimes.actual_time_out)) : '')
+        ? (pendingPayload.clear_time_out ? '' : (pendingPayload.actual_time_out ? formatDateForInput(pendingPayload.actual_time_out) : ''))
+        : (actualTimes.actual_time_out ? formatDateForInput(actualTimes.actual_time_out) : '')
 
     return {
         schedule_date: dateKey,
@@ -2825,11 +2872,12 @@ const actualTimeFieldsForEntry = (actualTimes, dateKey, pendingRequest = null, s
     }
 }
 
-const isEntryOnDate = (entry, dateKey) => {
+/** Whether a server entry starts or ends on `dateKey` as read in `timezone`. */
+const isEntryOnDate = (entry, dateKey, timezone = APP_TIMEZONE) => {
     if (!entry || !dateKey) return false
 
-    const startKey = getManilaDateKey(entry.start_time)
-    const endKey = getManilaDateKey(entry.end_time)
+    const startKey = dateKeyIn(entry.start_time, timezone, APP_TIMEZONE)
+    const endKey = dateKeyIn(entry.end_time, timezone, APP_TIMEZONE)
 
     return startKey === dateKey || endKey === dateKey
 }
@@ -2870,25 +2918,18 @@ const openCreateModal = () => {
     form.backlogs_end = ''
     form.requester_remarks = ''
 
-    const now = new Date()
-    const start = new Date(now)
-    start.setHours(7, 0, 0, 0)
-    const end = new Date(now)
-    end.setHours(17, 0, 0, 0)
-    form.stores = [{ store_id: null, ticket_id: null, start_time: formatDateForInput(start), end_time: formatDateForInput(end), grace_period_minutes: 30, remarks: '' }]
+    // "Today" in the viewer's zone; the times are typed in that zone too.
+    form.stores = [defaultEntryForDateKey(dateKeyIn(new Date(), viewerTimezone.value))]
 
     showModal.value = true
 }
 
+// Calendar cells are plain calendar dates (local getters), already the viewer's day.
 const handleDateClick = (date) => {
     if (!hasPermission('schedules.create')) return
 
     openCreateModal()
-    const start = new Date(date)
-    start.setHours(7, 0, 0, 0)
-    const end = new Date(date)
-    end.setHours(17, 0, 0, 0)
-    form.stores = [{ store_id: null, ticket_id: null, start_time: formatDateForInput(start), end_time: formatDateForInput(end), grace_period_minutes: 30, remarks: '' }]
+    form.stores = [defaultEntryForDateKey(localDateKey(date))]
 }
 
 const handleAddScheduleForUser = ({ user, date }) => {
@@ -2896,16 +2937,19 @@ const handleAddScheduleForUser = ({ user, date }) => {
 
     openCreateModal()
     form.user_id = user.id
-    const start = new Date(date)
-    start.setHours(7, 0, 0, 0)
-    const end = new Date(date)
-    end.setHours(17, 0, 0, 0)
-    form.stores = [{ store_id: null, ticket_id: null, start_time: formatDateForInput(start), end_time: formatDateForInput(end), grace_period_minutes: 30, remarks: '' }]
+    form.stores = [defaultEntryForDateKey(localDateKey(date))]
 }
 
 const handleEventClick = (payload) => {
     const event = payload?.event ?? payload
-    const clickedDateKey = getCalendarDateKey(payload?.date) ?? getManilaDateKey(event?.start_time)
+    // The day clicked on the board, in the viewer's zone…
+    const viewerDateKey = getCalendarDateKey(payload?.date) ?? getViewerDateKey(event?.start_time)
+    const viewerDayStores = (event.schedule_stores ?? []).filter(ss => isEntryOnDate(ss, viewerDateKey, viewerTimezone.value))
+    // …and the Manila day the server scopes edits and keys actual times by.
+    // On Manila time these are the same key, exactly as before.
+    const clickedDateKey = isViewingManilaTime.value
+        ? viewerDateKey
+        : (viewerDayStores.length ? getManilaDateKey(viewerDayStores[0].start_time) : getManilaDateKey(event?.start_time))
 
     if (!hasPermission('schedules.view') && !hasPermission('schedules.edit')) return;
 
@@ -2916,7 +2960,10 @@ const handleEventClick = (payload) => {
     selectedScheduleCanEditActualTime.value = Boolean(event.can_edit_actual_time);
     selectedScheduleCanRequestActualTime.value = Boolean(event.can_request_actual_time);
     currentScheduleId.value    = event.id
-    const eventActualTimes = getActualTimesForDate(event, clickedDateKey)
+    const actualTimesOnClickedDay = (source) => isViewingManilaTime.value
+        ? getActualTimesForDate(source, clickedDateKey)
+        : getActualTimesForScheduleDate(source, viewerDateKey, viewerTimezone.value)
+    const eventActualTimes = actualTimesOnClickedDay(event)
     currentActualTimeIn.value  = eventActualTimes.actual_time_in
     currentActualTimeOut.value = eventActualTimes.actual_time_out
     currentCreatedBy.value = event.created_by_name || null
@@ -2936,7 +2983,9 @@ const handleEventClick = (payload) => {
 
     // Populate store entries from schedule_stores; fall back to legacy single store+time
     if (event.schedule_stores && event.schedule_stores.length > 0) {
-        const dayStores = event.schedule_stores.filter(ss => isEntryOnDate(ss, clickedDateKey))
+        const dayStores = isViewingManilaTime.value
+            ? event.schedule_stores.filter(ss => isEntryOnDate(ss, clickedDateKey))
+            : viewerDayStores
         const storesToDisplay = dayStores.length > 0 ? dayStores : event.schedule_stores
         form.scope_date = dayStores.length > 0 ? clickedDateKey : null
         const eventActualTimesFallback = storesToDisplay.length === 1
@@ -2944,13 +2993,13 @@ const handleEventClick = (payload) => {
             : { actual_time_in: null, actual_time_out: null }
 
         form.stores = storesToDisplay.map(ss => {
-            const segmentActualTimes = getActualTimesForDate(ss, clickedDateKey)
+            const segmentActualTimes = actualTimesOnClickedDay(ss)
             return {
                 id: ss.id || null,
                 store_id: ss.store_id,
                 ticket_id: ss.ticket_id || ss.ticket?.id || null,
-                start_time: formatDateForInput(new Date(ss.start_time)),
-                end_time: formatDateForInput(new Date(ss.end_time)),
+                start_time: formatDateForInput(ss.start_time),
+                end_time: formatDateForInput(ss.end_time),
                 grace_period_minutes: ss.grace_period_minutes ?? 30,
                 remarks: ss.remarks || '',
                 ...actualTimeFieldsForEntry({
@@ -2962,13 +3011,13 @@ const handleEventClick = (payload) => {
         })
     } else {
         form.scope_date = null
-        const scheduleActualTimes = getActualTimesForDate(event, clickedDateKey)
+        const scheduleActualTimes = actualTimesOnClickedDay(event)
         form.stores = [{
             id: null,
             store_id: event.store_id || null,
             ticket_id: event.ticket_id || event.ticket?.id || null,
-            start_time: formatDateForInput(new Date(event.start_time)),
-            end_time: formatDateForInput(new Date(event.end_time)),
+            start_time: formatDateForInput(event.start_time),
+            end_time: formatDateForInput(event.end_time),
             grace_period_minutes: 30,
             remarks: event.remarks || '',
             ...actualTimeFieldsForEntry(scheduleActualTimes, clickedDateKey, pendingActualTimeRequest, null),
@@ -2999,7 +3048,7 @@ const addStore = () => {
         end_time: first?.end_time || '',
         grace_period_minutes: 30,
         remarks: '',
-        ...actualTimeFieldsForEntry({ actual_time_in: null, actual_time_out: null }, getManilaDateKey(last?.end_time || first?.end_time)),
+        ...actualTimeFieldsForEntry({ actual_time_in: null, actual_time_out: null }, getInputManilaDateKey(last?.end_time || first?.end_time)),
     })
 }
 
@@ -3028,8 +3077,12 @@ const validateScheduleStores = () => {
  * a second save.
  */
 const findScheduleDateConflict = (excludeScheduleId = null) => {
+    // Days are the schedule OWNER's calendar days, like the server's check: a
+    // 9-to-6 worked abroad must not collide with tomorrow's schedule just
+    // because it crosses midnight in Manila. Typed values are in the viewer's zone.
+    const ownerTimezone = scheduleOwnerTimezone(form.user_id)
     const submittedDates = new Set(
-        form.stores.flatMap(entry => getScheduleDateKeysBetween(entry.start_time, entry.end_time))
+        form.stores.flatMap(entry => dateKeysBetweenIn(entry.start_time, entry.end_time, ownerTimezone, viewerTimezone.value))
     )
 
     if (!submittedDates.size) return null
@@ -3043,7 +3096,7 @@ const findScheduleDateConflict = (excludeScheduleId = null) => {
             : [schedule]
 
         for (const segment of segments) {
-            for (const dateKey of getScheduleDateKeysBetween(segment.start_time, segment.end_time)) {
+            for (const dateKey of dateKeysBetweenIn(segment.start_time, segment.end_time, ownerTimezone, APP_TIMEZONE)) {
                 if (submittedDates.has(dateKey)) {
                     return { dateKey, schedule }
                 }
@@ -3083,8 +3136,18 @@ const submitForm = () => {
     }
     const url = isChangeRequest ? `/schedules/${editingScheduleId}/change-requests` : (isUpdatingSchedule ? `/schedules/${editingScheduleId}` : '/schedules')
     const requestMethod = isChangeRequest ? post : (isUpdatingSchedule ? put : post)
-    
-    requestMethod(url, form, {
+
+    // The form holds the viewer's wall time; the server reads Manila wall time.
+    const payload = {
+        ...form,
+        stores: form.stores.map(entry => ({
+            ...entry,
+            start_time: toServerDateTime(entry.start_time),
+            end_time: toServerDateTime(entry.end_time),
+        })),
+    }
+
+    requestMethod(url, payload, {
         onSuccess: () => {
             closeModal()
         },
@@ -3109,9 +3172,9 @@ const submitActualTimeAdjustment = (entry) => {
 
     const payload = {
         schedule_store_id: entry.id || null,
-        schedule_date: entry.schedule_date || form.scope_date || getManilaDateKey(entry.start_time),
-        actual_time_in: entry.clear_time_in || !timeInChanged ? null : (entry.actual_time_in_input || null),
-        actual_time_out: entry.clear_time_out || !timeOutChanged ? null : (entry.actual_time_out_input || null),
+        schedule_date: entry.schedule_date || form.scope_date || getInputManilaDateKey(entry.start_time),
+        actual_time_in: entry.clear_time_in || !timeInChanged ? null : (toServerDateTime(entry.actual_time_in_input) || null),
+        actual_time_out: entry.clear_time_out || !timeOutChanged ? null : (toServerDateTime(entry.actual_time_out_input) || null),
         clear_time_in: Boolean(entry.clear_time_in),
         clear_time_out: Boolean(entry.clear_time_out),
         requester_remarks: form.requester_remarks,

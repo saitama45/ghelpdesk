@@ -50,7 +50,9 @@ return new class extends Migration
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
         foreach (self::GRANTEE_EMAILS as $email) {
-            $user = User::where('email', $email)->first();
+            // withTrashed: `users.deleted_at` only arrives in a later migration, and
+            // the model's SoftDeletes scope would query it on a fresh database.
+            $user = User::withTrashed()->where('email', $email)->first();
 
             if (! $user) {
                 // A missing account is not a deployment failure — the grant can be

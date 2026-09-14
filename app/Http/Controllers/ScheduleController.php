@@ -236,7 +236,7 @@ class ScheduleController extends Controller implements HasMiddleware
             ];
         });
         
-        $users = User::active()->with(['managers:id', 'departmentReference:id,code,name'])->orderBy('name')->get(['id', 'name', 'is_vacant', 'department_id', 'department_node_id', 'is_manager', 'date_hired']);
+        $users = User::active()->with(['managers:id', 'departmentReference:id,code,name'])->orderBy('name')->get(['id', 'name', 'is_vacant', 'department_id', 'department_node_id', 'is_manager', 'date_hired', 'timezone']);
         $stores = Store::where('is_active', true)->orderBy('name')->get();
         $departmentNodes = \App\Models\DepartmentNode::select('id', 'parent_id', 'department_id', 'name', 'code')->get();
         $departments = Department::orderBy('name')->get(['id', 'name', 'is_active']);
@@ -322,7 +322,7 @@ class ScheduleController extends Controller implements HasMiddleware
         );
 
         $storeEntries = $request->input('stores');
-        $expandedStoreEntries = $this->expandStoreEntries($storeEntries);
+        $expandedStoreEntries = $this->expandStoreEntries($storeEntries, $this->scheduleTimezoneFor((int) $request->user_id));
         $startTime = Carbon::parse(collect($storeEntries)->min('start_time'));
         $endTime   = Carbon::parse(collect($storeEntries)->max('end_time'));
 
@@ -867,7 +867,7 @@ class ScheduleController extends Controller implements HasMiddleware
     {
         $payload = $this->validateScheduleUpdatePayload($payload);
         $storeEntries = $payload['stores'];
-        $expandedStoreEntries = $this->expandStoreEntries($storeEntries);
+        $expandedStoreEntries = $this->expandStoreEntries($storeEntries, $this->scheduleTimezoneFor((int) $payload['user_id']));
         $startTime = Carbon::parse(collect($storeEntries)->min('start_time'));
         $endTime = Carbon::parse(collect($storeEntries)->max('end_time'));
         $scopeDate = !empty($payload['scope_date']) ? Carbon::parse($payload['scope_date'])->toDateString() : null;
@@ -1314,10 +1314,16 @@ class ScheduleController extends Controller implements HasMiddleware
             return null;
         }
 
+        // "A day" is the owner's calendar day. A 9-to-6 worked from Europe or the US
+        // crosses midnight in Manila; counting Manila days would clash it with the
+        // next day's schedule every single day.
+        $zone = $this->scheduleTimezoneFor($userId);
+        $appZone = config('app.timezone');
+
         $candidateDates = collect($newEntries)
-            ->flatMap(function ($entry) {
-                $day = Carbon::parse($entry['start_time'])->startOfDay();
-                $lastDay = Carbon::parse($entry['end_time'])->startOfDay();
+            ->flatMap(function ($entry) use ($zone) {
+                $day = Carbon::parse($entry['start_time'])->timezone($zone)->startOfDay();
+                $lastDay = Carbon::parse($entry['end_time'])->timezone($zone)->startOfDay();
                 $dates = [];
 
                 // A shift that runs past midnight occupies both calendar days.
@@ -1332,8 +1338,9 @@ class ScheduleController extends Controller implements HasMiddleware
             ->sort()
             ->values();
 
-        $rangeStart = Carbon::parse($candidateDates->first())->startOfDay();
-        $rangeEnd = Carbon::parse($candidateDates->last())->endOfDay();
+        // Query bounds go back to the app zone — the columns hold Manila wall time.
+        $rangeStart = Carbon::parse($candidateDates->first(), $zone)->startOfDay()->timezone($appZone);
+        $rangeEnd = Carbon::parse($candidateDates->last(), $zone)->endOfDay()->timezone($appZone);
         $taken = $candidateDates->flip();
 
         $segmentQuery = ScheduleStore::query()
@@ -1368,8 +1375,8 @@ class ScheduleController extends Controller implements HasMiddleware
             ->concat($scheduleQuery->get(['id', 'start_time', 'end_time']));
 
         foreach ($existingWindows as $window) {
-            $day = Carbon::parse($window->start_time)->startOfDay();
-            $lastDay = Carbon::parse($window->end_time)->startOfDay();
+            $day = Carbon::parse($window->start_time)->timezone($zone)->startOfDay();
+            $lastDay = Carbon::parse($window->end_time)->timezone($zone)->startOfDay();
 
             while ($day->lte($lastDay)) {
                 if ($taken->has($day->toDateString())) {
@@ -1381,6 +1388,19 @@ class ScheduleController extends Controller implements HasMiddleware
         }
 
         return null;
+    }
+
+    /**
+     * The zone a user's schedule days are counted in: their "My timezone", else
+     * the app zone (Asia/Manila). Reports and exports still use Manila days.
+     */
+    private function scheduleTimezoneFor(int $userId): string
+    {
+        $timezone = User::whereKey($userId)->value('timezone');
+
+        return $timezone && in_array($timezone, \DateTimeZone::listIdentifiers(\DateTimeZone::ALL_WITH_BC), true)
+            ? $timezone
+            : config('app.timezone');
     }
 
     /** The message shown when a second schedule is attempted on an occupied day. */
@@ -1665,15 +1685,20 @@ class ScheduleController extends Controller implements HasMiddleware
      * A single entry with start=2026-04-15 08:00 / end=2026-04-20 17:00
      * becomes six rows, each covering one day at the same start/end times.
      */
-    private function expandStoreEntries(array $storeEntries): array
+    private function expandStoreEntries(array $storeEntries, ?string $timezone = null): array
     {
         $expanded = [];
+        $appZone = config('app.timezone');
+        // Days are counted in the schedule owner's own zone (see scheduleTimezoneFor),
+        // so "Sep 13–17, 9 AM–6 PM" typed abroad becomes five of THEIR days even when
+        // those hours cross midnight in Manila. For Manila users this is unchanged.
+        $zone = $timezone ?: $appZone;
 
         foreach ($storeEntries as $entry) {
             $start     = Carbon::parse($entry['start_time']);
             $end       = Carbon::parse($entry['end_time']);
-            $startDate = $start->copy()->startOfDay();
-            $endDate   = $end->copy()->startOfDay();
+            $startDate = $start->copy()->timezone($zone)->startOfDay();
+            $endDate   = $end->copy()->timezone($zone)->startOfDay();
 
             // Single-day and overnight shifts are one schedule segment.
             if ($startDate->eq($endDate) || ($start->lt($end) && $start->diffInSeconds($end) <= 86400)) {
@@ -1690,16 +1715,17 @@ class ScheduleController extends Controller implements HasMiddleware
             }
 
             // Multi-day — one row per day using the same time-of-day
-            $startTimeStr = $start->format('H:i:s');
-            $endTimeStr   = $end->format('H:i:s');
+            $startTimeStr = $start->copy()->timezone($zone)->format('H:i:s');
+            $endTimeStr   = $end->copy()->timezone($zone)->format('H:i:s');
             $current      = $startDate->copy();
 
             while ($current->lte($endDate)) {
                 $expanded[] = [
                     'store_id'             => $entry['store_id'] ?? null,
                     'ticket_id'            => $entry['ticket_id'] ?? null,
-                    'start_time'           => $current->copy()->setTimeFromTimeString($startTimeStr),
-                    'end_time'             => $current->copy()->setTimeFromTimeString($endTimeStr),
+                    // Back to the app zone: Eloquent writes a Carbon's wall clock as-is.
+                    'start_time'           => $current->copy()->setTimeFromTimeString($startTimeStr)->timezone($appZone),
+                    'end_time'             => $current->copy()->setTimeFromTimeString($endTimeStr)->timezone($appZone),
                     'grace_period_minutes' => $entry['grace_period_minutes'] ?? 30,
                     'remarks'              => $entry['remarks'] ?? null,
                 ];

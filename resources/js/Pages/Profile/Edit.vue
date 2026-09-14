@@ -1,15 +1,52 @@
 <script setup>
 import { Head, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import Autocomplete from '@/Components/Autocomplete.vue';
 import { useToast } from '@/Composables/useToast';
+import { APP_TIMEZONE, deviceTimezone, formatIn, timezoneLabel, timezoneOptions } from '@/lib/timezone';
 
 const props = defineProps({
     user: Object,
 });
 
-const activeTab = ref('profile');
+const TABS = ['profile', 'password', 'timezone'];
+const initialTab = new URLSearchParams(window.location.search).get('tab');
+const activeTab = ref(TABS.includes(initialTab) ? initialTab : 'profile');
 const { showError } = useToast();
+
+// Keep the tab in the URL so a save (or the schedules banner's "Change" link)
+// lands on the same tab.
+watch(activeTab, (tab) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab);
+    window.history.replaceState(window.history.state, '', url);
+});
+
+/* ------------------------------------------------------------ My timezone */
+const zoneOptions = timezoneOptions();
+const device = deviceTimezone();
+const timezoneForm = useForm({
+    timezone: props.user.timezone || APP_TIMEZONE,
+});
+
+watch(() => props.user.timezone, (value) => {
+    timezoneForm.timezone = value || APP_TIMEZONE;
+});
+
+const now = new Date();
+const previewTime = (zone) => formatIn(now, zone, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+const selectedPreview = computed(() => timezoneForm.timezone ? previewTime(timezoneForm.timezone) : '');
+
+const updateTimezone = () => {
+    timezoneForm.patch(route('profile.timezone'), {
+        preserveScroll: true,
+        preserveState: true,
+        onError: (errors) => {
+            showError(Object.values(errors).flat().join(', ') || 'Failed to update timezone');
+        },
+    });
+};
 
 const profileForm = useForm({
     name: props.user.name,
@@ -152,6 +189,17 @@ const updatePassword = () => {
                         >
                             Change Password
                         </button>
+                        <button
+                            @click="activeTab = 'timezone'"
+                            :class="[
+                                activeTab === 'timezone'
+                                    ? 'border-blue-500 text-blue-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300',
+                                'whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm'
+                            ]"
+                        >
+                            Timezone
+                        </button>
                     </nav>
                 </div>
 
@@ -261,6 +309,61 @@ const updatePassword = () => {
                                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
                                 <span>{{ passwordForm.processing ? 'Updating...' : 'Change Password' }}</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Timezone Tab -->
+                <div v-show="activeTab === 'timezone'" class="p-6">
+                    <form @submit.prevent="updateTimezone" class="space-y-5 max-w-xl">
+                        <div>
+                            <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">My timezone</h3>
+                            <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                                Scheduling and DTR show and accept times in this timezone, which helps while you work abroad.
+                                Company reports and payroll always stay on Manila time.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2 dark:text-gray-300">Timezone</label>
+                            <Autocomplete
+                                v-model="timezoneForm.timezone"
+                                :options="zoneOptions"
+                                placeholder="Search a city or region..."
+                            />
+                            <p v-if="selectedPreview" class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                                It is now <strong class="text-gray-800 dark:text-gray-200">{{ selectedPreview }}</strong> there.
+                            </p>
+                            <div v-if="timezoneForm.errors.timezone" class="text-red-600 text-sm mt-1">{{ timezoneForm.errors.timezone }}</div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                v-if="device !== timezoneForm.timezone"
+                                type="button"
+                                class="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                @click="timezoneForm.timezone = device"
+                            >
+                                Use this device's timezone ({{ timezoneLabel(device) }})
+                            </button>
+                            <button
+                                v-if="timezoneForm.timezone !== APP_TIMEZONE"
+                                type="button"
+                                class="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                @click="timezoneForm.timezone = APP_TIMEZONE"
+                            >
+                                Reset to Manila
+                            </button>
+                        </div>
+
+                        <div class="flex justify-end">
+                            <button
+                                type="submit"
+                                :disabled="timezoneForm.processing || !timezoneForm.timezone"
+                                class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+                            >
+                                {{ timezoneForm.processing ? 'Saving...' : 'Save Timezone' }}
                             </button>
                         </div>
                     </form>

@@ -14,6 +14,9 @@ import {
 } from '@heroicons/vue/24/outline';
 import { useConfirm } from '@/Composables/useConfirm';
 import { usePermission } from '@/Composables/usePermission';
+import { useTimezone } from '@/Composables/useTimezone';
+import TimezoneBanner from '@/Components/TimezoneBanner.vue';
+import { APP_TIMEZONE, formatIn, timezoneLabel } from '@/lib/timezone';
 import {
     getCurrentLocation,
     getLocationClient,
@@ -115,14 +118,18 @@ const presenceState = computed(() => {
     return props.lastLog.type === 'time_in' ? 'in' : 'out';
 });
 
-const currentTime = ref(
-    new Date().toLocaleTimeString('en-US', {
-        timeZone: 'Asia/Manila',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-    })
-);
+// The clock and schedule times follow "My timezone" (default Manila). Logging
+// itself is unaffected: the server stamps every log with the real instant.
+const { timezone: viewerTimezone, isAppTimezone: isViewingManilaTime } = useTimezone();
+const clockOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+const formatClockTime = (date, zone = viewerTimezone.value) => formatIn(date, zone, clockOptions);
+const formatScheduleClock = (value) => formatIn(value, viewerTimezone.value, { hour: '2-digit', minute: '2-digit' });
+const clockLabel = computed(() => isViewingManilaTime.value
+    ? 'Current Manila Time'
+    : `Current Time · ${timezoneLabel(viewerTimezone.value)}`);
+
+const currentTime = ref(formatClockTime(new Date()));
+const currentManilaTime = ref(formatClockTime(new Date(), APP_TIMEZONE));
 const nowMs = ref(Date.now());
 let clockInterval = null;
 let mapsPromise = null;
@@ -165,11 +172,7 @@ const scheduleWindowMessage = computed(() => {
     if (isTimeOutFlow.value && props.todaySchedule && props.lastLog?.type === 'time_in') return '';
 
     if (nowMs.value < scheduleWindow.value.graceStart.getTime()) {
-        return `Time In will be available at ${scheduleWindow.value.graceStart.toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            timeZone: 'Asia/Manila',
-        })}.`;
+        return `Time In will be available at ${formatScheduleClock(scheduleWindow.value.graceStart)}.`;
     }
 
     if (nowMs.value > scheduleWindow.value.end.getTime()) {
@@ -412,12 +415,8 @@ const updateClock = () => {
     if (!isMounted.value) return;
 
     const now = new Date();
-    currentTime.value = now.toLocaleTimeString('en-US', {
-        timeZone: 'Asia/Manila',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-    });
+    currentTime.value = formatClockTime(now);
+    currentManilaTime.value = formatClockTime(now, APP_TIMEZONE);
     nowMs.value = now.getTime();
 };
 
@@ -1071,6 +1070,8 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
             Daily Time Record (DTR)
         </template>
 
+        <TimezoneBanner />
+
         <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
             <div v-if="isMissingActiveGeofence" class="p-8 text-center bg-red-50">
                 <ExclamationCircleIcon class="w-12 h-12 text-red-500 mx-auto mb-4" />
@@ -1101,9 +1102,9 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
                             </span>
                             {{ todaySchedule.store?.name ?? 'WFH' }}
                             ·
-                            {{ new Date(todaySchedule.start_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Manila' }) }}
+                            {{ formatScheduleClock(todaySchedule.start_time) }}
                             -
-                            {{ new Date(todaySchedule.end_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Manila' }) }}
+                            {{ formatScheduleClock(todaySchedule.end_time) }}
                         </p>
                     </div>
                 </div>
@@ -1204,8 +1205,9 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
                             <!-- Time In / Out box -->
                             <div class="bg-gray-50 rounded-xl p-4 sm:p-6 flex flex-col items-center gap-3 border border-gray-100 shadow-inner dark:bg-gray-900/50 dark:border-gray-700">
                                 <div class="text-center">
-                                    <p class="text-[10px] sm:text-xs text-gray-500 uppercase tracking-widest font-black dark:text-gray-300">Current Manila Time</p>
+                                    <p class="text-[10px] sm:text-xs text-gray-500 uppercase tracking-widest font-black dark:text-gray-300">{{ clockLabel }}</p>
                                     <p class="text-3xl sm:text-4xl font-black text-gray-900 tabular-nums dark:text-gray-100">{{ currentTime }}</p>
+                                    <p v-if="!isViewingManilaTime" class="text-[11px] font-semibold text-gray-500 tabular-nums dark:text-gray-400">Manila: {{ currentManilaTime }}</p>
                                     <div class="flex items-center gap-2 mt-1 justify-center">
                                         <div :class="['w-2 h-2 rounded-full animate-pulse', presenceState === 'in' ? 'bg-green-500' : presenceState === 'out' ? 'bg-red-500' : 'bg-gray-400']"></div>
                                         <p class="text-xs sm:text-sm font-bold" :class="presenceState === 'in' ? 'text-green-600' : presenceState === 'out' ? 'text-red-600' : 'text-gray-500'">

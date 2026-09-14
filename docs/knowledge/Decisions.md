@@ -32,6 +32,17 @@
 
 **D15 — Dashboard has no department filter** (removed 2026-07-14). Don't re-add without confirming.
 
+**D16 — "My timezone" is display/entry only; Manila stays the system of record** (2026-09-14).
+`users.timezone` (NULL = Asia/Manila) makes `/schedules` and `/dtr` show and accept times in that
+zone. The server contract is unchanged: the page converts typed times to Manila wall time before
+sending, and `actual_times_by_date` / `scope_date` / `schedule_date` stay Manila keys. Two server
+rules count days in the schedule OWNER's zone (`ScheduleController::scheduleTimezoneFor`): the
+one-schedule-per-day check and multi-day entry expansion — otherwise a 9-to-6 worked abroad crosses
+Manila midnight and clashes with the next day. Reports, exports, recurring planner, import and the
+mobile API remain Manila. Frontend: never `new Date()` a zone-less schedule string — use
+`resources/js/lib/timezone.js` (`toInstant`, `inputValueIn`, `convertInputValue`, `dateKeyIn`) and
+`useTimezone()`. The device zone is never applied silently; `TimezoneBanner.vue` offers the switch.
+
 ## Pitfalls (non-obvious behavior)
 
 **P1 — SQL Server returns FKs as strings.** `$child->parent_id === $parent->id` is false. Cast every id in `$casts`.

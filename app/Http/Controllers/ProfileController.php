@@ -41,6 +41,27 @@ class ProfileController extends Controller
         return redirect()->back()->with('success', 'Profile updated successfully.');
     }
 
+    /**
+     * "My timezone": the zone /schedules and /dtr show and accept times in.
+     * Null resets to the company zone (Asia/Manila). Saved from the profile page
+     * and from the travel banner, so it answers JSON as well as redirects.
+     */
+    public function updateTimezone(Request $request)
+    {
+        $validated = $request->validate([
+            'timezone' => ['nullable', 'string', 'max:64', 'timezone:all'],
+        ]);
+
+        $timezone = $validated['timezone'] ?? null;
+        if ($timezone === config('app.timezone')) {
+            $timezone = null;
+        }
+
+        $request->user()->update(['timezone' => $timezone]);
+
+        return redirect()->back()->with('success', 'Timezone updated.');
+    }
+
     public function updatePassword(Request $request)
     {
         $request->validate([
