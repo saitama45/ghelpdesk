@@ -15,11 +15,6 @@ on:
 permissions:
   contents: read
 
-# Never let two production deployments modify the same databases at once.
-concurrency:
-  group: production-deployment
-  cancel-in-progress: false
-
 jobs:
   build:
     name: Build package
@@ -37,7 +32,10 @@ jobs:
           ini-values: post_max_size=256M, max_execution_time=180
 
       - name: Install Composer Dependencies
-        run: composer install --optimize-autoloader
+        # --no-dev keeps phpunit, pint, sail, faker, etc. out of the package:
+        # nothing in production uses them, and fewer files make the Azure zip
+        # smaller and any FTP sync quicker.
+        run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
       - name: Install NPM Dependencies & Build
         run: |
@@ -75,6 +73,12 @@ jobs:
     name: Deploy to Azure
     needs: build
     runs-on: ubuntu-latest
+    # Locks are per target, never workflow-wide: a slow FTP sync must not hold
+    # back the next Azure deploy. Each target still deploys (and migrates its
+    # own database) one run at a time.
+    concurrency:
+      group: deploy-azure
+      cancel-in-progress: false
 
     steps:
       - name: Download Artifact
@@ -94,6 +98,9 @@ jobs:
     name: Deploy to ${{ matrix.display_name }}
     needs: build
     runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-${{ matrix.ftp_server_secret }}
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -103,13 +110,11 @@ jobs:
             ftp_username_secret: FTP_USERNAME
             ftp_password_secret: FTP_PASSWORD
             env_file_secret: MONSTERASP_ENV_FILE
-            state_name: .ftp-deploy-sync-state-monsterasp.json
           - display_name: MonsterASP GALGATIX
             ftp_server_secret: FTP_SERVER_GALGATIX
             ftp_username_secret: FTP_USERNAME_GALGATIX
             ftp_password_secret: FTP_PASSWORD_GALGATIX
             env_file_secret: GALGATIX_ENV_FILE
-            state_name: .ftp-deploy-sync-state-galgatix.json
 
     steps:
       - name: Download Artifact
@@ -148,7 +153,11 @@ jobs:
           protocol: ftp
           port: 21
           timeout: 120000
-          state-name: ${{ matrix.state_name }}
+          # Keep the action's DEFAULT state file (.ftp-deploy-sync-state.json).
+          # It already lives on both servers and lists what is uploaded, so only
+          # changed files are sent. Renaming it makes the action treat the server
+          # as empty and re-upload the whole app (vendor included) file by file —
+          # over an hour. Each server is its own FTP account, so they never clash.
           exclude: |
             **/.git*
             **/.git*/**
