@@ -1327,6 +1327,60 @@ class ProjectTaskController extends Controller
      * everything inside it — see App\Support\ProjectPlanAccess. Only the project
      * manager or the milestone's current owner may hand it over.
      */
+    /** Blank workbook for the milestone header's Import button. */
+    public function milestoneImportTemplate(Request $request, Project $project, \App\Services\MilestoneActivityImportService $importer)
+    {
+        $milestone = ProjectMilestone::normaliseCategory($request->query('category'));
+        $spreadsheet = $importer->buildTemplate($milestone);
+
+        return response()->streamDownload(
+            fn () => (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet))->save('php://output'),
+            'milestone-import-'.\Illuminate\Support\Str::slug($milestone).'.xlsx',
+            ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
+        );
+    }
+
+    /**
+     * Import activities/sub-tasks from Excel into ONE existing milestone. The
+     * workbook rules live in MilestoneActivityImportService; any invalid row
+     * rejects the whole file untouched.
+     */
+    public function importMilestone(Request $request, Project $project, \App\Services\MilestoneActivityImportService $importer)
+    {
+        $validated = $request->validate([
+            'category' => 'required|string|max:255',
+            'file' => 'required|file|mimes:xlsx|max:5120',
+        ]);
+
+        $category = ProjectMilestone::normaliseCategory($validated['category']);
+
+        if (! $this->milestoneExists($project, $category)) {
+            throw ValidationException::withMessages([
+                'category' => "The milestone \"{$category}\" does not exist in this project.",
+            ]);
+        }
+
+        abort_unless(
+            ProjectPlanAccess::canAddActivity($project, $request->user(), $category),
+            403,
+            'You can only import into a milestone you own.'
+        );
+
+        $result = $importer->import($project, $category, $request->file('file')->getRealPath(), $request->user());
+
+        if (! $result['ok']) {
+            return response()->json([
+                'message' => 'Nothing was imported. Fix the rows below and upload again.',
+                'errors' => ['file' => $result['errors']],
+            ], 422);
+        }
+
+        return $this->ganttSaveResponse(
+            $project,
+            "Imported into {$category}: {$result['added']} added, {$result['updated']} updated."
+        );
+    }
+
     public function updateMilestoneOwner(Request $request, Project $project)
     {
         $validated = $request->validate([

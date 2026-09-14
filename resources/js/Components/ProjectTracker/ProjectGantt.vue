@@ -20,7 +20,9 @@ import {
     DocumentChartBarIcon,
     TicketIcon,
     Squares2X2Icon,
-    ArrowTopRightOnSquareIcon
+    ArrowTopRightOnSquareIcon,
+    ArrowUpTrayIcon,
+    ArrowDownTrayIcon
 } from '@heroicons/vue/24/outline';
 
 import { useToast } from '@/Composables/useToast.js';
@@ -792,6 +794,60 @@ const deleteMilestone = async (category, tasks = []) => {
                 success('Milestone deleted successfully.');
             }
         });
+    }
+};
+
+/* ---------------------------------------------------------- milestone import
+ *
+ * Excel import into ONE milestone — see App\Services\MilestoneActivityImportService.
+ * A rejected file comes back as a 422 listing every bad row; nothing is saved.
+ */
+
+const showImportModal = ref(false);
+const importCategory = ref('');
+const importFile = ref(null);
+const importFileInput = ref(null);
+const importErrors = ref([]);
+const isImporting = ref(false);
+
+const openImportModal = (category) => {
+    if (!canAddActivityIn(category)) return;
+    importCategory.value = normaliseCategory(category);
+    importFile.value = null;
+    importErrors.value = [];
+    showImportModal.value = true;
+};
+
+const closeImportModal = () => {
+    if (isImporting.value) return;
+    showImportModal.value = false;
+    if (importFileInput.value) importFileInput.value.value = '';
+};
+
+const submitImport = async () => {
+    if (!importFile.value || isImporting.value) return;
+    isImporting.value = true;
+    importErrors.value = [];
+
+    const data = new FormData();
+    data.append('category', importCategory.value);
+    data.append('file', importFile.value);
+
+    try {
+        const response = await window.axios.post(route('projects.milestones.import', props.project.id), data, {
+            headers: { Accept: 'application/json' },
+        });
+        onTaskSaved(response.data);
+        isImporting.value = false;
+        closeImportModal();
+        success(response.data.message || 'Activities imported.');
+    } catch (err) {
+        const errors = err.response?.data?.errors;
+        importErrors.value = errors
+            ? Object.values(errors).flat()
+            : [err.response?.data?.message || 'The import failed. Please try again.'];
+    } finally {
+        isImporting.value = false;
     }
 };
 
@@ -2030,6 +2086,13 @@ const isWeekend = (date) => {
                                         Activity
                                     </button>
                                     <button type="button"
+                                            @click.stop="openImportModal(category)"
+                                            class="inline-flex items-center px-2 py-0.5 bg-white border border-emerald-200 text-[10px] font-bold text-emerald-700 uppercase tracking-wider rounded hover:bg-emerald-50 transition-colors dark:border-emerald-400/30 dark:bg-slate-900 dark:text-emerald-200 dark:hover:bg-emerald-500/15"
+                                            title="Import activities and sub-tasks from Excel into this milestone">
+                                        <ArrowUpTrayIcon class="w-3 h-3 mr-0.5" />
+                                        Import
+                                    </button>
+                                    <button type="button"
                                             @click.stop="deleteMilestone(category, tasks)"
                                             class="p-1 bg-white border border-red-100 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors dark:border-red-400/30 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-red-500/15"
                                             title="Delete Milestone">
@@ -2552,6 +2615,48 @@ const isWeekend = (date) => {
                     <SecondaryButton @click="showOwnerModal = false">Cancel</SecondaryButton>
                     <PrimaryButton @click="saveMilestoneOwner" :disabled="isSavingOwner" class="bg-indigo-600 hover:bg-indigo-700">
                         {{ isSavingOwner ? 'Saving...' : 'Save Owner' }}
+                    </PrimaryButton>
+                </div>
+            </div>
+        </Modal>
+
+        <Modal :show="showImportModal" @close="closeImportModal" maxWidth="lg">
+            <div class="p-6 dark:bg-slate-900">
+                <div class="flex items-start justify-between mb-1">
+                    <h3 class="text-base font-black text-slate-900 dark:text-slate-100">Import Activities</h3>
+                    <button type="button" @click="closeImportModal" class="text-slate-400 hover:text-slate-600 transition-colors dark:text-slate-400 dark:hover:text-slate-200">
+                        <XMarkIcon class="w-5 h-5" />
+                    </button>
+                </div>
+                <p class="mb-4 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    Rows are imported into <strong class="text-slate-700 dark:text-slate-200">{{ importCategory }}</strong> only.
+                    Same names update existing rows; nothing is deleted. Dates are computed from Lead Time and Depends On.
+                </p>
+
+                <a :href="route('projects.milestones.import-template', { project: project.id, category: importCategory })"
+                   class="mb-4 inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-300 dark:hover:text-indigo-200">
+                    <ArrowDownTrayIcon class="h-4 w-4" />
+                    Download template
+                </a>
+
+                <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Excel file (.xlsx)</label>
+                <input ref="importFileInput"
+                       type="file"
+                       accept=".xlsx"
+                       @change="event => { importFile = event.target.files?.[0] || null; importErrors = []; }"
+                       class="block w-full text-xs text-slate-600 file:mr-3 file:rounded file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-indigo-700 hover:file:bg-indigo-100 dark:text-slate-300 dark:file:bg-indigo-500/20 dark:file:text-indigo-200" />
+
+                <div v-if="importErrors.length" class="mt-4 max-h-56 overflow-y-auto rounded border border-red-200 bg-red-50 p-3 dark:border-red-400/30 dark:bg-red-500/10">
+                    <p class="mb-1 text-xs font-black text-red-700 dark:text-red-300">Nothing was imported. Fix these and upload again:</p>
+                    <ul class="list-disc space-y-0.5 pl-4 text-[11px] font-semibold text-red-700 dark:text-red-300">
+                        <li v-for="(message, index) in importErrors" :key="index">{{ message }}</li>
+                    </ul>
+                </div>
+
+                <div class="flex justify-end space-x-3 pt-6 mt-6 border-t dark:border-slate-700">
+                    <SecondaryButton @click="closeImportModal">Cancel</SecondaryButton>
+                    <PrimaryButton @click="submitImport" :disabled="!importFile || isImporting" class="bg-indigo-600 hover:bg-indigo-700">
+                        {{ isImporting ? 'Importing...' : 'Import' }}
                     </PrimaryButton>
                 </div>
             </div>
