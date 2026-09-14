@@ -76,13 +76,17 @@ class ProjectMilestoneImportTest extends TestCase
         $this->milestone($project, 'UAT');
         $this->milestone($project, 'OTHER');
 
+        // The reference workbook is user-editable, so count its rows rather than pin a number.
+        $expected = collect(\PhpOffice\PhpSpreadsheet\IOFactory::load($this->referenceFile()->getRealPath())
+            ->getSheetByName('Import')->toArray())->skip(1)->filter(fn ($row) => filled($row[0] ?? null))->count();
+
         $this->actingAs($manager)
             ->postJson(route('projects.milestones.import', $project), ['category' => 'UAT', 'file' => $this->referenceFile()])
             ->assertOk()
-            ->assertJsonPath('message', 'Imported into UAT: 18 added, 0 updated.');
+            ->assertJsonPath('message', "Imported into UAT: {$expected} added, 0 updated.");
 
         $tasks = ProjectTask::where('project_id', $project->id)->get()->keyBy('name');
-        $this->assertCount(18, $tasks);
+        $this->assertCount($expected, $tasks);
         $this->assertTrue($tasks->every(fn ($task) => $task->category === 'UAT'));
 
         $parent = $tasks['Confirm stakeholder and decision-maker list'];
@@ -91,14 +95,14 @@ class ProjectMilestoneImportTest extends TestCase
         $this->assertSame($tasks['Select cashier and barista representatives']->id, $sibling->depends_on_task_id);
         $this->assertTrue($sibling->can_run_parallel);
         $this->assertSame(2, $parent->lead_time_days);
-        $this->assertNotNull($tasks['Obtain formal UAT sign-off']->start_date);
+        $this->assertTrue($tasks->every(fn ($task) => $task->start_date !== null));
 
         $this->actingAs($manager)
             ->postJson(route('projects.milestones.import', $project), ['category' => 'UAT', 'file' => $this->referenceFile()])
             ->assertOk()
-            ->assertJsonPath('message', 'Imported into UAT: 0 added, 18 updated.');
+            ->assertJsonPath('message', "Imported into UAT: 0 added, {$expected} updated.");
 
-        $this->assertSame(18, ProjectTask::where('project_id', $project->id)->count());
+        $this->assertSame($expected, ProjectTask::where('project_id', $project->id)->count());
     }
 
     public function test_an_invalid_row_rejects_the_whole_file(): void

@@ -141,7 +141,9 @@ const canEditTask = (task) => {
 };
 
 // Deleting a row follows exactly the same branch rule as editing it.
-const canDeleteTask = (task) => canEditTask(task);
+// The delete routes also sit behind the projects.manage_tasks role permission, so
+// without it the trash icon and the red selection boxes would only ever 403.
+const canDeleteTask = (task) => hasPermission('projects.manage_tasks') && canEditTask(task);
 
 // Adding an activity is the milestone owner's call.
 const canAddActivityIn = (category) => ownsMilestone(category);
@@ -797,6 +799,118 @@ const deleteMilestone = async (category, tasks = []) => {
     }
 };
 
+/* ------------------------------------------------------- bulk row selection
+ *
+ * Tick rows inside a milestone and delete only those — the milestone header is
+ * never deleted. Three kinds of box:
+ *  - milestone header: every activity and sub-task under it;
+ *  - activity with sub-tasks: all of ITS sub-tasks (the activity itself stays);
+ *  - any other row: just that row.
+ * An activity id is only in the set while all its sub-tasks are too (the header
+ * box puts it there), because deleting an activity always takes its sub-tasks.
+ */
+
+const selectedTaskIds = ref(new Set());
+const isBulkDeleting = ref(false);
+
+const isSelected = (task) => selectedTaskIds.value.has(Number(task.id));
+
+const setSelection = (ids, on) => {
+    const next = new Set(selectedTaskIds.value);
+    ids.forEach(id => (on ? next.add(Number(id)) : next.delete(Number(id))));
+    selectedTaskIds.value = next;
+};
+
+const deletableRowsOf = (tasks = []) => tasks
+    .flatMap(task => [task, ...(task.subTasks || [])])
+    .filter(canDeleteTask);
+
+const milestoneSelectionState = (tasks = []) => {
+    const rows = deletableRowsOf(tasks);
+    const count = rows.filter(isSelected).length;
+    return { all: rows.length > 0 && count === rows.length, some: count > 0 && count < rows.length, count, total: rows.length };
+};
+
+const toggleMilestoneSelection = (tasks = []) => {
+    const state = milestoneSelectionState(tasks);
+    setSelection(deletableRowsOf(tasks).map(row => row.id), !state.all);
+};
+
+const subTaskSelectionState = (task) => {
+    const subTasks = (task.subTasks || []).filter(canDeleteTask);
+    const count = subTasks.filter(isSelected).length;
+    return { all: subTasks.length > 0 && count === subTasks.length, some: count > 0 && count < subTasks.length };
+};
+
+const toggleRowSelection = (row) => {
+    if (!canDeleteTask(row.task)) return;
+
+    if (!row.isSubTask && hasSubTasks(row.task)) {
+        const activity = row.task;
+        const on = !subTaskSelectionState(activity).all;
+        const ids = (activity.subTasks || []).filter(canDeleteTask).map(sub => sub.id);
+        // The activity row itself is never deleted from its own box.
+        setSelection(on ? ids : [...ids, activity.id], on);
+        return;
+    }
+
+    const on = !isSelected(row.task);
+    setSelection([row.task.id], on);
+
+    // Unticking a sub-task means its activity must survive.
+    if (!on && row.isSubTask && row.parent) setSelection([row.parent.id], false);
+};
+
+const clearSelection = (tasks = null) => {
+    if (!tasks) {
+        selectedTaskIds.value = new Set();
+        return;
+    }
+    setSelection(tasks.flatMap(task => [task, ...(task.subTasks || [])]).map(row => row.id), false);
+};
+
+const deleteSelectedInMilestone = async (category, tasks = []) => {
+    const ticked = new Set(tasks.flatMap(task => [task, ...(task.subTasks || [])]).filter(isSelected).map(row => Number(row.id)));
+    if (!ticked.size || isBulkDeleting.value) return;
+
+    // Deleting an activity takes ALL its sub-tasks, including ones a filter is
+    // hiding — so only send it when every one of them is ticked too.
+    const selectedIds = new Set([...ticked].filter((id) => {
+        const task = taskLookup.value.get(id);
+        if (!task || task.parent_task_id) return true;
+        return localTasks.value
+            .filter(candidate => Number(candidate.parent_task_id) === id)
+            .every(sub => ticked.has(Number(sub.id)));
+    }));
+    if (!selectedIds.size) return;
+    const total = selectedIds.size;
+
+    const ok = await confirmAction({
+        title: 'Delete Selected Rows',
+        message: `Delete ${total} selected row${total === 1 ? '' : 's'} under "${category}"? The milestone itself stays. This cannot be undone.`,
+        confirmLabel: 'Delete',
+        variant: 'danger',
+    });
+    if (!ok) return;
+
+    isBulkDeleting.value = true;
+    try {
+        const response = await window.axios.post(
+            route('projects.milestones.tasks.bulk-destroy', props.project.id),
+            { category: normaliseCategory(category), task_ids: [...selectedIds] },
+            { headers: { Accept: 'application/json' } }
+        );
+        onTaskSaved(response.data);
+        clearSelection(tasks);
+        success(response.data.message || 'Selected rows deleted.');
+    } catch (err) {
+        const errors = err.response?.data?.errors;
+        error(errors ? Object.values(errors).flat()[0] : (err.response?.data?.message || 'Unable to delete the selected rows.'));
+    } finally {
+        isBulkDeleting.value = false;
+    }
+};
+
 /* ---------------------------------------------------------- milestone import
  *
  * Excel import into ONE milestone — see App\Services\MilestoneActivityImportService.
@@ -1103,7 +1217,7 @@ const taskLookup = computed(() => {
 });
 
 const groupedTasks = computed(() => {
-    if (!localTasks.value.length) return {};
+    if (!localTasks.value.length && !localMilestones.value.length) return {};
 
     const childrenByParent = new Map();
 
@@ -1134,6 +1248,14 @@ const groupedTasks = computed(() => {
         });
         return groups;
     }, {});
+
+    // A milestone whose rows were all deleted (bulk delete keeps the milestone)
+    // still exists — render it empty so + Activity / Import stay reachable. It
+    // has no orders, so the sort below places it last.
+    localMilestones.value.forEach(milestone => {
+        const category = normaliseCategory(milestone.category);
+        if (!groups[category]) groups[category] = [];
+    });
 
     // Sort the parent tasks within each category explicitly by their order
     Object.keys(groups).forEach(category => {
@@ -2026,6 +2148,15 @@ const isWeekend = (date) => {
                              :class="dragOverMilestone === normaliseCategory(category) ? 'ring-1 ring-inset ring-indigo-300 dark:ring-indigo-400' : ''">
                             <div class="sticky left-0 z-40 w-[760px] h-9 bg-slate-100/95 flex items-center justify-between px-3 border-b border-slate-200 border-r shadow-[8px_0_15px_-10px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/20">
                                 <div class="flex items-center space-x-2 min-w-0 mr-2">
+                                    <input v-if="canManageMilestone(category) && milestoneSelectionState(tasks).total"
+                                           type="checkbox"
+                                           :checked="milestoneSelectionState(tasks).all"
+                                           :indeterminate="milestoneSelectionState(tasks).some"
+                                           @click.stop
+                                           @change="toggleMilestoneSelection(tasks)"
+                                           :title="`Select every activity and sub-task under ${category} (the milestone itself is not deleted)`"
+                                           :aria-label="`Select all rows under ${category}`"
+                                           class="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-slate-400 text-red-600 focus:ring-1 focus:ring-red-500 focus:ring-offset-0 dark:border-slate-500 dark:bg-slate-900">
                                     <button v-if="canManage"
                                             type="button"
                                             :draggable="!isSavingTaskOrder"
@@ -2085,6 +2216,15 @@ const isWeekend = (date) => {
                                         <PlusIcon class="w-3 h-3 mr-0.5" />
                                         Activity
                                     </button>
+                                    <button v-if="milestoneSelectionState(tasks).count"
+                                            type="button"
+                                            @click.stop="deleteSelectedInMilestone(category, tasks)"
+                                            :disabled="isBulkDeleting"
+                                            class="inline-flex items-center px-2 py-0.5 bg-red-600 border border-red-600 text-[10px] font-bold text-white uppercase tracking-wider rounded hover:bg-red-700 transition-colors disabled:opacity-50"
+                                            title="Delete the ticked rows under this milestone — the milestone itself stays">
+                                        <TrashIcon class="w-3 h-3 mr-0.5" />
+                                        Delete {{ milestoneSelectionState(tasks).count }}
+                                    </button>
                                     <button type="button"
                                             @click.stop="openImportModal(category)"
                                             class="inline-flex items-center px-2 py-0.5 bg-white border border-emerald-200 text-[10px] font-bold text-emerald-700 uppercase tracking-wider rounded hover:bg-emerald-50 transition-colors dark:border-emerald-400/30 dark:bg-slate-900 dark:text-emerald-200 dark:hover:bg-emerald-500/15"
@@ -2092,7 +2232,8 @@ const isWeekend = (date) => {
                                         <ArrowUpTrayIcon class="w-3 h-3 mr-0.5" />
                                         Import
                                     </button>
-                                    <button type="button"
+                                    <button v-if="hasPermission('projects.manage_tasks')"
+                                            type="button"
                                             @click.stop="deleteMilestone(category, tasks)"
                                             class="p-1 bg-white border border-red-100 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors dark:border-red-400/30 dark:bg-slate-900 dark:text-red-300 dark:hover:bg-red-500/15"
                                             title="Delete Milestone">
@@ -2122,6 +2263,17 @@ const isWeekend = (date) => {
                                     
                                     <!-- Activity / Sub-task Column -->
                                     <div class="w-[480px] flex items-center gap-2 py-1.5" :class="row.isSubTask ? 'pl-9 pr-3' : 'pl-5 pr-3'">
+                                        <!-- Delete selection (red) — separate from the green "done" box. On an
+                                             activity with sub-tasks it ticks all of ITS sub-tasks only. -->
+                                        <input v-if="canManageMilestone(category) && canDeleteTask(row.task)"
+                                               type="checkbox"
+                                               :checked="!row.isSubTask && hasSubTasks(row.task) ? subTaskSelectionState(row.task).all : isSelected(row.task)"
+                                               :indeterminate="!row.isSubTask && hasSubTasks(row.task) ? subTaskSelectionState(row.task).some : false"
+                                               @click.stop
+                                               @change="toggleRowSelection(row)"
+                                               :title="!row.isSubTask && hasSubTasks(row.task) ? 'Select all sub-tasks under this activity (the activity itself is not deleted)' : 'Select for delete'"
+                                               :aria-label="!row.isSubTask && hasSubTasks(row.task) ? `Select all sub-tasks under ${row.task.name}` : `Select ${row.task.name} for delete`"
+                                               class="h-3.5 w-3.5 shrink-0 cursor-pointer rounded border-slate-300 text-red-600 focus:ring-1 focus:ring-red-500 focus:ring-offset-0 dark:border-slate-600 dark:bg-slate-900">
                                         <div class="relative flex-shrink-0" @click.stop>
                                             <input v-if="!hasSubTasks(row.task)"
                                                    type="checkbox"

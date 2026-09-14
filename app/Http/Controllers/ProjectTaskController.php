@@ -1327,6 +1327,84 @@ class ProjectTaskController extends Controller
      * everything inside it — see App\Support\ProjectPlanAccess. Only the project
      * manager or the milestone's current owner may hand it over.
      */
+    /**
+     * Delete the rows ticked inside ONE milestone (header "select all", an
+     * activity's "all sub-tasks", or single rows). The milestone itself always
+     * stays — its ownership record is kept so an emptied milestone still renders.
+     * A ticked activity takes its sub-tasks with it, exactly like its trash icon.
+     */
+    public function bulkDestroyMilestoneTasks(Request $request, Project $project)
+    {
+        $validated = $request->validate([
+            'category' => 'required|string|max:255',
+            'task_ids' => 'required|array|min:1',
+            'task_ids.*' => 'integer|distinct',
+        ]);
+
+        $category = ProjectMilestone::normaliseCategory($validated['category']);
+
+        $tasks = ProjectTask::query()
+            ->where('project_id', $project->id)
+            ->whereIn('id', $validated['task_ids'])
+            ->with('parentTask:id,category')
+            ->get();
+
+        if ($tasks->count() !== count($validated['task_ids'])) {
+            throw ValidationException::withMessages([
+                'task_ids' => 'Some selected rows no longer exist in this project. Refresh and try again.',
+            ]);
+        }
+
+        $outside = $tasks->first(fn (ProjectTask $task) => ProjectMilestone::normaliseCategory(
+            $task->parent_task_id ? ($task->parentTask?->category ?? $task->category) : $task->category
+        ) !== $category);
+
+        if ($outside) {
+            throw ValidationException::withMessages([
+                'task_ids' => "\"{$outside->name}\" is not under the milestone \"{$category}\".",
+            ]);
+        }
+
+        $actor = $request->user();
+        $denied = $tasks->first(fn (ProjectTask $task) => ! ProjectPlanAccess::canDeleteTask($task, $actor));
+
+        if ($denied) {
+            abort(403, "You do not have permission to delete \"{$denied->name}\".");
+        }
+
+        $milestone = ProjectMilestone::where('project_id', $project->id)->where('category', $category)->first();
+
+        $deletedCount = DB::transaction(function () use ($tasks, $actor, $project, $category, $milestone) {
+            $activityIds = $tasks->whereNull('parent_task_id')->pluck('id');
+            $taskIds = ProjectTask::whereIn('parent_task_id', $activityIds)->pluck('id')
+                ->merge($tasks->pluck('id'))
+                ->unique()
+                ->values();
+
+            $this->projectTaskBoards->archiveProjectTaskCards($taskIds, $actor);
+            $this->projectTaskBoards->removeBoardItemsForProjectTasks($taskIds);
+            $this->releaseRequisitePointers($taskIds);
+
+            ProjectTask::whereIn('parent_task_id', $activityIds)->delete();
+            ProjectTask::whereIn('id', $tasks->pluck('id'))->delete();
+
+            // Keep the milestone (and its owner) even when nothing is left under it.
+            if (! $milestone) {
+                $this->ensureMilestoneRecord($project, $category, null, $actor);
+            }
+
+            return $taskIds->count();
+        });
+
+        $this->rescheduleProjectTasks($project);
+        $this->projectTaskBoards->syncProject($project->fresh(['teamMembers.user', 'tasks']), $actor, null, false);
+
+        return $this->ganttSaveResponse(
+            $project,
+            "Deleted {$deletedCount} row".($deletedCount === 1 ? '' : 's')." from {$category}."
+        );
+    }
+
     /** Blank workbook for the milestone header's Import button. */
     public function milestoneImportTemplate(Request $request, Project $project, \App\Services\MilestoneActivityImportService $importer)
     {

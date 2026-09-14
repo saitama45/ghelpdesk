@@ -32,6 +32,38 @@ class ProjectMilestone extends Model
         'updated_by' => 'integer',
     ];
 
+    /** The role permission every Gantt write route sits behind. */
+    public const OWNER_PERMISSION = 'projects.manage_tasks';
+
+    /**
+     * Whoever is made a milestone's owner is granted projects.manage_tasks as a
+     * direct permission, so they can actually add, edit, import and delete inside
+     * it — without it every one of those routes 403s before ProjectPlanAccess is
+     * consulted. Safe to grant globally: every route behind that permission still
+     * checks plan ownership (their milestone, rows assigned to them, or projects
+     * they manage). Grant-only: clearing the owner does not revoke it.
+     */
+    protected static function booted(): void
+    {
+        static::saved(function (ProjectMilestone $milestone): void {
+            if (! $milestone->assigned_to || ! ($milestone->wasRecentlyCreated || $milestone->wasChanged('assigned_to'))) {
+                return;
+            }
+
+            $owner = User::find($milestone->assigned_to);
+
+            if (! $owner) {
+                return;
+            }
+
+            \Spatie\Permission\Models\Permission::findOrCreate(self::OWNER_PERMISSION, 'web');
+
+            if (! $owner->hasPermissionTo(self::OWNER_PERMISSION)) {
+                $owner->givePermissionTo(self::OWNER_PERMISSION);
+            }
+        });
+    }
+
     /**
      * How a milestone name is stored and compared. `project_tasks.category` is
      * nullable and the Gantt renders a blank category as "General", so an owner

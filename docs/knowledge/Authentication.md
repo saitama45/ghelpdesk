@@ -60,3 +60,13 @@ User Management itself was open until 2026-08-20 — `/users` and `/roles` (inde
 3. Route group behind `permission:{slug}.view`.
 4. Entry in `resources/js/Composables/useModuleRegistry.js` (drives sidebar, hub pages and layout settings).
 5. Role-edit UI + `useSidebarOrder.js` defaults follow automatically from (2) and (4).
+
+## Milestone owners get `projects.manage_tasks` automatically
+`ProjectMilestone::booted()` grants `projects.manage_tasks` as a **direct permission** whenever a milestone's
+`assigned_to` is set or changed (owner modal, starting a milestone, rename carry-over). Without it every Gantt
+write route 403s before `ProjectPlanAccess` runs. Granting it globally is safe because every route behind it
+still checks plan ownership (`isEditableBy`, `canDeleteTask`, `canManageMilestone`, or `isManagedBy` for
+templates/reorder/bulk-assign). **Grant-only** — clearing or changing the owner never revokes it (a hand-made
+direct grant can't be told apart). Existing owners were backfilled by migration
+`2026_09_14_100000_grant_manage_tasks_to_existing_milestone_owners`. `projects.view` is NOT granted: it lists
+every project, so it stays a role decision.
