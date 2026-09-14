@@ -760,7 +760,7 @@ Route::post('/public/uat/{token}/finding', [App\Http\Controllers\PublicUatContro
 Route::post('/public/uat/{token}/signoff', [App\Http\Controllers\PublicUatController::class, 'storeSignoff'])->middleware('throttle:10,1')->name('public.uat.signoff');
 
 // Google Play data-safety requirement for the mobile loyalty app
-// ("The Coffee Bean & Tea Leaf Rewards"): a publicly reachable, login-free page
+// ("Coffee Bean & Tea Leaf Rewards"): a publicly reachable, login-free page
 // describing how a member requests deletion of their account and data.
 // Deliberately a plain Blade view, not an Inertia page — Google's reviewer and
 // crawlers must be able to read it with no JS and no built assets.
@@ -772,12 +772,25 @@ Route::get('/account-deletion', function () {
         ?: config('mail.from.address')
         ?: 'tgiservices@tablegroup.com';
 
+    // Quotes the same window AccountArchiveController::retention() enforces: an
+    // archived account can't be purged before it passes, so the page must state
+    // the live value. A settings failure must not take this public page down.
+    try {
+        $retentionValue = max(1, (int) \App\Models\Setting::get('account_retention_value', 6));
+        $retentionUnit = \App\Models\Setting::get('account_retention_unit', 'months');
+    } catch (\Throwable $e) {
+        [$retentionValue, $retentionUnit] = [6, 'months'];
+    }
+    $retentionUnit = in_array($retentionUnit, ['months', 'years'], true) ? $retentionUnit : 'months';
+    $retention = $retentionValue.' '.($retentionValue === 1 ? rtrim($retentionUnit, 's') : $retentionUnit);
+
     $view = resource_path('views/public/account-deletion.blade.php');
 
     return response()
         ->view('public.account-deletion', [
             'supportEmail' => $supportEmail,
             'developer' => 'Table Group Inc.',
+            'retention' => $retention,
             'updatedAt' => date('F j, Y', is_file($view) ? filemtime($view) : time()),
         ])
         ->header('Cache-Control', 'public, max-age=3600');

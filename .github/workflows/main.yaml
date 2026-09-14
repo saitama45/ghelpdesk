@@ -1,4 +1,4 @@
-name: Deploy Laravel to Azure App Service
+name: Deploy Laravel to Azure and MonsterASP
 
 on:
   push:
@@ -14,6 +14,11 @@ on:
 
 permissions:
   contents: read
+
+# Never let two production deployments modify the same databases at once.
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -47,10 +52,10 @@ jobs:
       - name: Prepare Deployment Artifact
         run: |
           mkdir -p build_output
-          # Use rsync to copy everything except the build folder itself and unnecessary heavy folders
+          # Use rsync to copy everything except the build folder itself and unnecessary heavy folders.
           rsync -ar . build_output/ --exclude build_output --exclude node_modules --exclude .git --exclude tests --exclude android
-          
-          # Ensure storage framework directories exist and contain a dummy file so FTP uploads them
+
+          # Ensure storage framework directories exist and contain a dummy file so FTP uploads them.
           mkdir -p build_output/storage/framework/cache/data
           mkdir -p build_output/storage/framework/sessions
           mkdir -p build_output/storage/framework/views
@@ -59,18 +64,18 @@ jobs:
           touch build_output/storage/framework/sessions/index.html
           touch build_output/storage/framework/views/index.html
           touch build_output/storage/logs/index.html
-          
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: laravel-app
           path: build_output/
 
-  deploy:
+  deploy-azure:
     name: Deploy to Azure
     needs: build
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Download Artifact
         uses: actions/download-artifact@v4
@@ -78,39 +83,79 @@ jobs:
           name: laravel-app
           path: .
 
-      - name: 'Deploy to Azure Web App'
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'TASTicketing'
+          app-name: TASTicketing
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: .
 
-      - name: Deploy to FTP (Optional Legacy)
+  deploy-monsterasp:
+    name: Deploy to ${{ matrix.display_name }}
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - display_name: MonsterASP primary
+            ftp_server_secret: FTP_SERVER
+            ftp_username_secret: FTP_USERNAME
+            ftp_password_secret: FTP_PASSWORD
+            env_file_secret: MONSTERASP_ENV_FILE
+            state_name: .ftp-deploy-sync-state-monsterasp.json
+          - display_name: MonsterASP GALGATIX
+            ftp_server_secret: FTP_SERVER_GALGATIX
+            ftp_username_secret: FTP_USERNAME_GALGATIX
+            ftp_password_secret: FTP_PASSWORD_GALGATIX
+            env_file_secret: GALGATIX_ENV_FILE
+            state_name: .ftp-deploy-sync-state-galgatix.json
+
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: laravel-app
+          path: .
+
+      - name: Create server-specific Laravel environment
+        shell: bash
+        env:
+          DEPLOY_ENV_FILE: ${{ secrets[matrix.env_file_secret] }}
+        run: |
+          if [ -z "$DEPLOY_ENV_FILE" ]; then
+            echo "::error::The ${{ matrix.env_file_secret }} GitHub secret is missing or empty."
+            exit 1
+          fi
+
+          # Keep each server's complete production configuration in its own
+          # encrypted GitHub secret; never commit or print it in the workflow.
+          printf '%s\n' "$DEPLOY_ENV_FILE" > .env
+          chmod 600 .env
+
+      - name: Run database migrations for ${{ matrix.display_name }}
+        shell: bash
+        run: |
+          php artisan config:clear
+          php artisan migrate --force --no-interaction
+
+      - name: Deploy to ${{ matrix.display_name }} by FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
+          server: ${{ secrets[matrix.ftp_server_secret] }}
+          username: ${{ secrets[matrix.ftp_username_secret] }}
+          password: ${{ secrets[matrix.ftp_password_secret] }}
           protocol: ftp
           port: 21
           timeout: 120000
+          state-name: ${{ matrix.state_name }}
           exclude: |
             **/.git*
             **/.git*/**
             **/node_modules/**
             README.md
 
-      - name: Deploy to FTP (GALGATIX)
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
-        with:
-          server: ${{ secrets.FTP_SERVER_GALGATIX }}
-          username: ${{ secrets.FTP_USERNAME_GALGATIX }}
-          password: ${{ secrets.FTP_PASSWORD_GALGATIX }}
-          protocol: ftp
-          port: 21
-          timeout: 120000
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-            README.md
+      - name: Remove local environment file
+        if: always()
+        shell: bash
+        run: rm -f .env

@@ -205,8 +205,18 @@ const syncEndDateFromLeadTime = (value = form.lead_time_days) => {
     form.end_date = toDateInput(endOfSpan(start, leadTime));
 };
 
+// A native date input fires `change` on every keystroke of the year segment
+// ("2" → 0002, "20" → 0020). Normalising those partial years writes a new value
+// back and resets the browser's typing buffer, so wait for a real 4-digit year.
+const isCompleteDate = (value) => {
+    const match = /^(\d{4})-\d{2}-\d{2}$/.exec(value || '');
+    return Boolean(match) && Number(match[1]) >= 1900;
+};
+
 const syncLeadTimeFromTimeline = (changedField) => {
     if (!isOpen.value || isRolledUpActivity.value || !form.start_date) return;
+    if (!isCompleteDate(form.start_date)) return;
+    if (form.end_date && !isCompleteDate(form.end_date)) return;
 
     const start = toWorkingDay(parseLocalDate(form.start_date));
     form.start_date = toDateInput(start);

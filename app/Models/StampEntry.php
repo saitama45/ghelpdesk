@@ -15,6 +15,7 @@ class StampEntry extends Model
         'quantity',
         'source',
         'purchase_amount',
+        'receipt_number',
         'note',
         'created_by',
         'cashier_vendor_id',

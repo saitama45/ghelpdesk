@@ -4,8 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="index, follow">
-    <title>Delete Your Account — The Coffee Bean &amp; Tea Leaf Rewards</title>
-    <meta name="description" content="How to request deletion of your The Coffee Bean &amp; Tea Leaf Rewards account and associated data.">
+    <title>Delete Your Account — Coffee Bean &amp; Tea Leaf Rewards</title>
+    <meta name="description" content="How to request deletion of your Coffee Bean &amp; Tea Leaf Rewards account and associated data.">
     <style>
         :root {
             --espresso: #3b2416;
@@ -123,14 +123,14 @@
         <div class="wrap">
             <span class="badge">Account &amp; Data Deletion</span>
             <h1>Delete your account and associated data</h1>
-            <p>App: <strong>The Coffee Bean &amp; Tea Leaf Rewards</strong> &middot; Developer: <strong>{{ $developer }}</strong></p>
+            <p>App: <strong>Coffee Bean &amp; Tea Leaf Rewards</strong> (shown on your phone as <strong>CBTL</strong>) &middot; Developer: <strong>{{ $developer }}</strong></p>
         </div>
     </header>
 
     <div class="wrap">
         <div class="card accent">
-            <p style="margin:0 0 6px"><strong>You can ask us to delete your account and all data associated with it at any time.</strong></p>
-            <p style="margin:0">Send a deletion request to the address below. There is no charge, and you do not need to give a reason.</p>
+            <p style="margin:0 0 6px"><strong>You can ask us to delete your account at any time.</strong></p>
+            <p style="margin:0">Send a deletion request to the address below. There is no charge, and you do not need to give a reason. Deletion happens in two stages, explained below: your account is closed first, then permanently deleted.</p>
         </div>
 
         <h2>How to request deletion</h2>
@@ -158,38 +158,59 @@
             </li>
             <li>
                 <h3>Wait for confirmation</h3>
-                <p style="margin:0">Your request is logged as a support ticket and acknowledged within <strong>3 business days</strong>. We may reply once to verify your identity. Deletion is completed within <strong>30 days</strong> of verification, and we email you when it is done.</p>
+                <p style="margin:0">Your request is logged as a support ticket and acknowledged within <strong>3 business days</strong>. We may reply once to verify your identity. Your account is closed within <strong>30 days</strong> of verification, and we email you when that is done.</p>
             </li>
         </ol>
 
+        <h2>What happens after you ask</h2>
+
+        <h3>Stage 1 &mdash; your account is closed (within 30 days of verification)</h3>
+        <ul class="plain">
+            <li>You can no longer sign in to the app, on any device, and every existing app session stops working.</li>
+            <li>Your member QR code stops working in stores.</li>
+            <li>Your account is removed from our active member records and moved to a restricted archive that only authorised administrators can access.</li>
+        </ul>
+
+        <h3>Stage 2 &mdash; your account is permanently deleted (after {{ $retention }})</h3>
+        <p style="margin:0 0 8px">Once your account has been closed for <strong>{{ $retention }}</strong>, our team permanently deletes it and the data listed below, unless one of the exceptions further down applies. The waiting period protects you against a mistaken or fraudulent request: if you change your mind before then, contact us and we can reopen your account with your stamps intact.</p>
+
         <div class="card">
-            <p style="margin:0"><strong>Important:</strong> deleting your account permanently forfeits any unredeemed stamps and any reward on a partially filled card. This cannot be undone or restored, and a new account starts from zero.</p>
+            <p style="margin:0"><strong>Important:</strong> once your account is permanently deleted, any unredeemed stamps and any reward on a partially filled card are lost. They cannot be restored, and a new account starts from zero.</p>
         </div>
 
         <h2>What is deleted, and what is kept</h2>
 
-        <h3>Deleted permanently</h3>
+        <h3>Deleted permanently at Stage 2</h3>
         <table>
             <thead><tr><th>Data</th><th>Details</th></tr></thead>
             <tbody>
-                <tr><td>Account profile</td><td>Your name, email address, mobile number and profile photo.</td></tr>
+                <tr><td>Account profile</td><td>Your name, email address and mobile number.</td></tr>
                 <tr><td>Login credentials</td><td>Your password (stored only as a one-way hash) and your member record.</td></tr>
-                <tr><td>Device sessions</td><td>All app access tokens for every device you signed in on.</td></tr>
                 <tr><td>Verification codes</td><td>One-time email codes issued for sign-in verification.</td></tr>
-                <tr><td>Loyalty stamp cards</td><td>Your stamp cards, their progress, and the campaigns you joined.</td></tr>
-                <tr><td>Stamp and reward history</td><td>Each stamp you earned and each reward you redeemed, as records identifying you.</td></tr>
-                <tr><td>Member QR code</td><td>The scannable code that links in-store scans to you.</td></tr>
-                <tr><td>Data on your phone</td><td>The app keeps a copy of your cards and ledger on the device itself. Uninstalling the app removes it. You can also clear it from Android Settings &rarr; Apps &rarr; The Coffee Bean &amp; Tea Leaf Rewards &rarr; Storage &rarr; Clear data.</td></tr>
+                <tr><td>Loyalty stamp cards</td><td>Your stamp cards, their progress, and every stamp recorded on them.</td></tr>
+                <tr><td>Member QR code</td><td>The scannable code that links in-store scans to you. It already stops working at Stage 1.</td></tr>
+                <tr><td>Data on your phone</td><td>The app keeps a copy of your cards and history on your phone so it works offline. Deleting the app from your phone removes it. On iPhone, a few sign-in items held in the phone&rsquo;s secure keychain can remain after the app is deleted; they stop working once your account is closed at Stage 1.</td></tr>
             </tbody>
         </table>
+
+        <h3>Exception: accounts that have redeemed a reward</h3>
+        <p>A redeemed reward, or a voucher used as payment, is a settled financial transaction &mdash; an item left a store's inventory &mdash; and we keep it as a financial record. If your account has any, it is still <strong>closed</strong> exactly as described in Stage 1: you cannot sign in and your member QR code stops working. But it is <strong>not permanently deleted</strong>. The archived account, including your name, email address, mobile number and redemption history, stays in the restricted archive and is not erased.</p>
 
         <h3>Kept, and for how long</h3>
         <table>
             <thead><tr><th>Data</th><th>Retention period</th></tr></thead>
             <tbody>
                 <tr>
-                    <td>Anonymised transaction records &mdash; that a stamp was issued or a reward was redeemed at a store, with your identity removed so the record can no longer be traced back to you</td>
-                    <td>Retained for financial, tax and audit purposes for the period required by Philippine law. These records hold no personal identifiers once deletion is complete.</td>
+                    <td>Your closed account, while it waits for permanent deletion</td>
+                    <td>{{ ucfirst($retention) }} from the date it was closed, in the restricted archive. Then permanently deleted.</td>
+                </tr>
+                <tr>
+                    <td>Accounts with reward redemptions or voucher payments, including the member&rsquo;s name, email address, mobile number and redemption history</td>
+                    <td>Kept in the restricted archive as financial records. They are not erased.</td>
+                </tr>
+                <tr>
+                    <td>A server log entry recording that your account was permanently deleted, including the email address it was registered with</td>
+                    <td>Kept with our server logs as a record that the deletion was carried out.</td>
                 </tr>
                 <tr>
                     <td>Your deletion request itself and our correspondence about it</td>
@@ -201,7 +222,7 @@
                 </tr>
                 <tr>
                     <td>Encrypted system backups</td>
-                    <td>Backups rotate on a rolling cycle, and any residual copy is overwritten within <strong>90 days</strong> of deletion. Backups are never used to restore a deleted account.</td>
+                    <td>Backups rotate on a rolling cycle, and any residual copy is overwritten within <strong>90 days</strong> of permanent deletion. Backups are never used to restore a deleted account.</td>
                 </tr>
             </tbody>
         </table>
@@ -210,7 +231,7 @@
         <p>For anything about this process, or to follow up on a request you already sent, email <a href="mailto:{{ $supportEmail }}">{{ $supportEmail }}</a>.</p>
 
         <footer>
-            <p style="margin:0 0 4px">The Coffee Bean &amp; Tea Leaf Rewards is operated by {{ $developer }}</p>
+            <p style="margin:0 0 4px">Coffee Bean &amp; Tea Leaf Rewards is operated by {{ $developer }}</p>
             <p style="margin:0">Last updated {{ $updatedAt }}.</p>
         </footer>
     </div>
