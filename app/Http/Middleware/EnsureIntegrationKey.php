@@ -29,9 +29,22 @@ class EnsureIntegrationKey
         }
 
         if ($given === '' || ! hash_equals($expected, $given)) {
-            return response()->json(['message' => 'Integration key does not match Helpdesk.'], 401);
+            // Short SHA-256 fingerprints let an admin see WHICH side holds the
+            // wrong value (compare against the fingerprint of the intended key)
+            // without either key ever appearing in a response or a log.
+            return response()->json([
+                'message' => 'Integration key does not match Helpdesk.',
+                'helpdesk_key_fingerprint' => self::fingerprint($expected),
+                'received_key_fingerprint' => $given === '' ? null : self::fingerprint($given),
+            ], 401);
         }
 
         return $next($request);
+    }
+
+    /** First 8 hex chars of SHA-256 plus the length, e.g. "3f9a1c07 (64 chars)". */
+    public static function fingerprint(string $key): string
+    {
+        return substr(hash('sha256', $key), 0, 8).' ('.strlen($key).' chars)';
     }
 }

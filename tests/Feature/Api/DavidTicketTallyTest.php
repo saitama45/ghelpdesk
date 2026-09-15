@@ -25,7 +25,13 @@ class DavidTicketTallyTest extends TestCase
     public function test_it_rejects_a_missing_or_wrong_key(): void
     {
         $this->getJson($this->url())->assertStatus(401);
-        $this->withHeader('X-Integration-Key', 'nope')->getJson($this->url())->assertStatus(401);
+        $this->withHeader('X-Integration-Key', 'nope')->getJson($this->url())
+            ->assertStatus(401)
+            ->assertJsonPath('helpdesk_key_fingerprint', substr(hash('sha256', self::KEY), 0, 8).' (14 chars)')
+            ->assertJsonPath('received_key_fingerprint', substr(hash('sha256', 'nope'), 0, 8).' (4 chars)');
+        $this->assertStringNotContainsString(self::KEY, $this->withHeader('X-Integration-Key', 'nope')->getJson($this->url())->getContent());
+        // Surrounding whitespace is tolerated: the key check passes (422 = no such entity in this test).
+        $this->withHeader('X-Integration-Key', ' '.self::KEY."\n")->getJson($this->url())->assertStatus(422);
 
         config(['services.integrations.david.key' => '']);
         $this->withHeader('X-Integration-Key', '')->getJson($this->url())->assertStatus(401);
