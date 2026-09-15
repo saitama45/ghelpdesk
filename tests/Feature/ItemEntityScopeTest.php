@@ -41,6 +41,32 @@ class ItemEntityScopeTest extends TestCase
         $this->assertSame(['Nonos Orders'], $this->listedNames($user, $this->nonos));
     }
 
+    public function test_a_brand_also_lists_its_tagged_entities_items_but_cannot_edit_them(): void
+    {
+        $gsi = Company::create(['name' => 'GSI', 'code' => 'GSI', 'is_active' => true]);
+        // NONOS is tagged to TGI on /companies, not to GSI.
+        $this->nonos->entities()->sync([$this->tgi->id]);
+
+        $tgiItem = $this->item('TGI Laptop', $this->tgi);
+        $this->item('Nonos Orders', $this->nonos);
+        $this->item('GSI Printer', $gsi);
+
+        $user = $this->userWithAccessToBoth(['items.view', 'items.edit']);
+
+        $listed = $this->listedNames($user, $this->nonos);
+        sort($listed);
+        $this->assertSame(['Nonos Orders', 'TGI Laptop'], $listed);
+        // The entity itself does not inherit its brands' items.
+        $this->assertSame(['TGI Laptop'], $this->listedNames($user, $this->tgi));
+
+        // Inherited rows are managed from their own entity.
+        CompanyContext::flushMemo();
+        $this->actingAs($user)->withSession([CompanyContext::SESSION_KEY => $this->nonos->id])
+            ->put(route('items.update', $tgiItem), ['name' => 'Renamed', 'priority' => 'Low', 'concern_type' => 'Incident'])
+            ->assertNotFound();
+        $this->assertSame('TGI Laptop', $tgiItem->fresh()->name);
+    }
+
     public function test_a_new_item_is_stamped_with_the_active_entity_and_unique_only_within_it(): void
     {
         $this->item('Orders', $this->tgi);
@@ -89,6 +115,7 @@ class ItemEntityScopeTest extends TestCase
             ->get(route('items.index'));
 
         $response->assertOk();
+        $this->assertSame($active->id, $response->json('props.activeCompanyId'));
 
         return collect($response->json('props.items.data'))->pluck('name')->all();
     }

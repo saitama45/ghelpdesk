@@ -126,6 +126,14 @@
                                             Sub: {{ item.sub_category?.name || 'N/A' }}
                                         </span>
                                     </div>
+                                    <div v-if="isInherited(item)" class="flex items-center">
+                                        <span
+                                            class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 uppercase tracking-wider"
+                                            :title="`Shared from ${item.company?.name || 'another entity'}; manage it by switching to that entity`"
+                                        >
+                                            From: {{ item.company?.code || item.company?.name || 'Entity' }}
+                                        </span>
+                                    </div>
                                 </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
@@ -142,9 +150,18 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end space-x-1">
-                                    <button 
-                                        v-if="hasPermission('items.edit')"
-                                        @click="editItem(item)" 
+                                    <span
+                                        v-if="isInherited(item)"
+                                        class="p-2 text-gray-400 dark:text-gray-500"
+                                        :title="`Read-only: managed under ${item.company?.name || 'its entity'}`"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                        </svg>
+                                    </span>
+                                    <button
+                                        v-if="hasPermission('items.edit') && !isInherited(item)"
+                                        @click="editItem(item)"
                                         class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors"
                                         title="Edit Item"
                                     >
@@ -153,8 +170,8 @@
                                         </svg>
                                     </button>
                                     <button 
-                                        v-if="hasPermission('items.delete')"
-                                        @click="deleteItem(item)" 
+                                        v-if="hasPermission('items.delete') && !isInherited(item)"
+                                        @click="deleteItem(item)"
                                         class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors"
                                         title="Delete Item"
                                     >
@@ -389,8 +406,14 @@ const props = defineProps({
     categories: Array,
     subCategories: Array,
     settings: Object,
-    filters: { type: Object, default: () => ({}) }
+    filters: { type: Object, default: () => ({}) },
+    activeCompanyId: { type: Number, default: null },
 })
+
+// A brand also lists the items of the entities it is tagged to on /companies.
+// Those rows are managed from their own entity, so they are read-only here.
+const isInherited = (item) =>
+    !!props.activeCompanyId && item.company_id != null && Number(item.company_id) !== Number(props.activeCompanyId)
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()

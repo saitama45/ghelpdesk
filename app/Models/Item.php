@@ -33,4 +33,10 @@ class Item extends Model
     {
         return $this->belongsTo(SubCategory::class);
     }
+
+    /** The entity that owns (and manages) this item on /items. */
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
 }

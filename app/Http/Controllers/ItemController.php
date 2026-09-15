@@ -47,11 +47,13 @@ class ItemController extends Controller implements HasMiddleware
             'subCategories' => $subCategories,
             'settings' => $settings,
             'filters' => $request->only(['category_id', 'sub_category_id', 'concern_type', 'priority']),
+            // Rows from another company (a tagged entity) render read-only.
+            'activeCompanyId' => CompanyContext::activeCompanyId(),
         ]);
     }
 
     /**
-     * The /items catalogue is managed per active entity (sidebar switcher).
+     * The /items catalogue follows the active entity (sidebar switcher).
      *
      * Deliberately a controller-level filter, NOT a global scope: ticket forms,
      * email intake and dashboards still resolve items across every entity (see
@@ -66,6 +68,22 @@ class ItemController extends Controller implements HasMiddleware
         return $companyId ? $query->where('items.company_id', $companyId) : $query;
     }
 
+    /**
+     * What the list SHOWS: the active company's own items plus those of every
+     * Entity it is tagged to on /companies (a brand inherits its entities'
+     * catalogue, as the ticket item pickers do). Inherited rows are read-only here
+     * - they are managed from their own entity - so create/import/uniqueness and
+     * the edit/delete guard keep using forActiveEntity().
+     */
+    private function visibleToActiveEntity($query)
+    {
+        $companyId = CompanyContext::activeCompanyId();
+
+        return $companyId
+            ? $query->whereIn('items.company_id', \App\Models\Company::itemSourceIds($companyId))
+            : $query;
+    }
+
     /** URL guard: an item from another entity behaves as if it does not exist. */
     private function ensureInActiveEntity(Item $item): void
     {
@@ -76,7 +94,7 @@ class ItemController extends Controller implements HasMiddleware
 
     private function filteredQuery(Request $request)
     {
-        $query = $this->forActiveEntity(Item::with(['category', 'subCategory']));
+        $query = $this->visibleToActiveEntity(Item::with(['category', 'subCategory', 'company:id,name,code']));
 
         if ($request->filled('search')) {
             $search = $request->search;
