@@ -15,4 +15,10 @@ class SubCategory extends Model
     protected $casts = [
         'is_active' => 'boolean',
     ];
+
+    /** Owning entity; drives entity switching on the reference pages (EntityReferenceScope). */
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
 }

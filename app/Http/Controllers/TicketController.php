@@ -574,13 +574,15 @@ class TicketController extends Controller
             $q->where('is_assignable', true);
         })->select('id', 'name', 'email', 'org_path')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
-        $stores = Store::where('is_active', true)->orderBy('name')->get();
+        // Store pickers (create/accept/bulk/filters) follow the entities being viewed:
+        // each one's own stores plus those of the entities it is tagged to on /companies.
+        $stores = $this->storesForCompanies($effectiveCompanyIds);
         $subCategories = \App\Models\SubCategory::where('is_active', true)->orderBy('name')->get(['id', 'name']);
         $cannedMessages = \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get();
         $departments = User::whereNotNull('department')->distinct()->orderBy('department')->pluck('department');
 
         $vendors = collect([['id' => null, 'name' => 'None']])
-            ->concat(Vendor::active()->orderBy('name')->get(['id', 'name']));
+            ->concat($this->vendorsWithUsableCompanies(['id', 'name', 'company_id']));
 
         return Inertia::render('Tickets/Index', [
             'tickets' => $tickets,
@@ -908,6 +910,8 @@ class TicketController extends Controller
             $data['severity'] = $data['severity'] ?? 'minor';
 
             // Set priority, category, and sub_category from item
+            $this->assertVendorMatchesStoreEntity($data['vendor_id'] ?? null, $data['store_id'] ?? null, $data['company_id'] ?? null);
+
             if (isset($data['item_id'])) {
                 $this->assertItemMatchesStoreEntity($data['item_id'], $data['store_id'] ?? null, $data['company_id'] ?? null);
 
@@ -1134,10 +1138,16 @@ class TicketController extends Controller
         })->select('id', 'name', 'email', 'org_path')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         $users = User::active()->orderBy('name')->get();
-        $stores = Store::where('is_active', true)->orderBy('name')->get();
+        // The active entity's stores plus the ticket's own company's (a ticket opened
+        // through the Entity filter), each with its tagged entities; the saved store
+        // always stays listed so an older ticket keeps showing it.
+        $stores = $this->storesForCompanies(
+            [\App\Support\CompanyContext::activeCompanyId(), $ticket->company_id],
+            $ticket->store_id
+        );
         $cannedMessages = \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get();
         $vendors = collect([['id' => null, 'name' => 'None', 'email' => null, 'contact_person' => null]])
-            ->concat(Vendor::active()->orderBy('name')->get(['id', 'name', 'email', 'contact_person']));
+            ->concat($this->vendorsWithUsableCompanies(['id', 'name', 'email', 'contact_person', 'company_id']));
 
         $assignee = $ticket->assignee;
         $subUnit = $assignee?->org_path;
@@ -1289,6 +1299,14 @@ class TicketController extends Controller
             }
         } elseif (! $customerResolve && $request->has('department')) {
             $validated['department'] = $request->input('department');
+        }
+
+        if (! empty($validated['vendor_id']) && $validated['vendor_id'] != $ticket->vendor_id) {
+            $this->assertVendorMatchesStoreEntity(
+                $validated['vendor_id'],
+                array_key_exists('store_id', $validated) ? $validated['store_id'] : $ticket->store_id,
+                $validated['company_id'] ?? $ticket->company_id
+            );
         }
 
         // Auto-update priority, category, and sub_category if item_id changed
@@ -1812,6 +1830,12 @@ class TicketController extends Controller
             'store_id' => 'nullable|exists:stores,id',
             'attach_parent_files' => 'sometimes|boolean',
         ]);
+
+        $this->assertVendorMatchesStoreEntity(
+            $validated['vendor_id'],
+            $validated['store_id'] ?? $ticket->store_id,
+            $ticket->company_id
+        );
 
         $vendor = Vendor::find($validated['vendor_id']);
         if (!$vendor || !$vendor->is_active) {
@@ -2544,13 +2568,70 @@ class TicketController extends Controller
         }
 
         $itemCompanyId = \App\Models\Item::whereKey($itemId)->value('company_id');
-        $entityId = ($storeId ? Store::whereKey($storeId)->value('company_id') : null) ?: $fallbackCompanyId;
 
-        if ($itemCompanyId && $entityId && ! in_array((int) $itemCompanyId, Company::itemSourceIds((int) $entityId), true)) {
+        if (! \App\Support\EntityReferenceScope::fitsCompany($itemCompanyId, $this->storeCompanyId($storeId, $fallbackCompanyId))) {
             throw ValidationException::withMessages([
                 $field => 'This item belongs to a different entity than the selected store. Pick an item from the store\'s entity.',
             ]);
         }
+    }
+
+    /**
+     * A ticket's partner (vendor) follows the same rule as its item: the store's
+     * company, the entities it is tagged to, or a vendor with no company (shared).
+     */
+    private function assertVendorMatchesStoreEntity($vendorId, $storeId, $fallbackCompanyId = null, string $field = 'vendor_id'): void
+    {
+        if (! $vendorId) {
+            return;
+        }
+
+        $vendorCompanyId = Vendor::whereKey($vendorId)->value('company_id');
+
+        if (! \App\Support\EntityReferenceScope::fitsCompany($vendorCompanyId, $this->storeCompanyId($storeId, $fallbackCompanyId))) {
+            throw ValidationException::withMessages([
+                $field => 'This partner belongs to a different entity than the selected store. Pick a partner from the store\'s entity.',
+            ]);
+        }
+    }
+
+    /** The company a ticket's references are checked against: its store's, else the ticket's. */
+    private function storeCompanyId($storeId, $fallbackCompanyId = null): ?int
+    {
+        $companyId = ($storeId ? Store::whereKey($storeId)->value('company_id') : null) ?: $fallbackCompanyId;
+
+        return $companyId ? (int) $companyId : null;
+    }
+
+    /**
+     * Active stores for ticket store pickers: owned by any of $companyIds or by an
+     * entity those companies are tagged to, plus shared (no company) stores.
+     * Picker filtering only - not enforced on save, because Gantt rollout tickets
+     * deliberately target brand stores from an entity's project.
+     */
+    private function storesForCompanies(array $companyIds, $keepStoreId = null)
+    {
+        $visible = \App\Support\EntityReferenceScope::visibleCompanyIdsFor($companyIds);
+
+        return Store::where('is_active', true)
+            ->when($visible !== [], fn ($query) => $query->where(fn ($q) => $q
+                ->whereIn('company_id', $visible)
+                ->orWhereNull('company_id')
+                ->when($keepStoreId, fn ($keep) => $keep->orWhere('id', $keepStoreId))))
+            ->orderBy('name')
+            ->get();
+    }
+
+    /** Active vendors carrying `usable_company_ids` for the ticket partner pickers. */
+    private function vendorsWithUsableCompanies(array $columns)
+    {
+        $brandsByEntity = \App\Support\EntityReferenceScope::brandIdsByEntity();
+
+        return Vendor::active()->orderBy('name')->get($columns)->map(function (Vendor $vendor) use ($brandsByEntity) {
+            $vendor->usable_company_ids = \App\Support\EntityReferenceScope::usableCompanyIds($vendor->company_id, $brandsByEntity);
+
+            return $vendor;
+        });
     }
 
     public function getItems(Request $request)
@@ -2570,17 +2651,13 @@ class TicketController extends Controller
 
         // Which companies may use each item: its own company plus every brand tagged
         // to that entity on /companies (entity_brand). The ticket forms filter on this.
-        $brandsByEntity = DB::table('entity_brand')->get(['entity_company_id', 'brand_company_id'])
-            ->groupBy('entity_company_id')
-            ->map(fn ($rows) => $rows->pluck('brand_company_id')->map(fn ($id) => (int) $id)->all());
+        $brandsByEntity = \App\Support\EntityReferenceScope::brandIdsByEntity();
 
         $items = $query->get()->map(function($item) use ($brandsByEntity) {
             $cat = $item->category->name ?? 'N/A';
             $sub = $item->subCategory->name ?? 'N/A';
             $item->display_name = "{$cat} | {$sub} | {$item->name}";
-            $item->usable_company_ids = $item->company_id
-                ? array_values(array_unique([(int) $item->company_id, ...($brandsByEntity[$item->company_id] ?? [])]))
-                : null;
+            $item->usable_company_ids = \App\Support\EntityReferenceScope::usableCompanyIds($item->company_id, $brandsByEntity);
             return $item;
         });
 

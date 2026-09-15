@@ -6,6 +6,7 @@ use App\Models\ReferenceOption;
 use App\Models\Store;
 use App\Models\Vendor;
 use App\Models\VendorApproval;
+use App\Support\EntityReferenceScope;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -26,7 +27,7 @@ class VendorController extends Controller implements HasMiddleware
         'id', 'code', 'name', 'vendor_type', 'store_id', 'contact_person', 'email', 'phone',
         'address', 'is_active', 'status', 'email_verified_at', 'last_login_at',
         'approved_by', 'approved_at', 'created_by', 'updated_by',
-        'created_at', 'updated_at',
+        'created_at', 'updated_at', 'company_id',
     ];
 
     /** action => the status it puts the portal account into. */
@@ -62,7 +63,10 @@ class VendorController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Vendor::query()
+        // Follows the entity switcher; a brand also lists its tagged entities'
+        // vendors, read-only (see EntityReferenceScope). The vendors table is also
+        // linkportal's login table - this only filters the list, never the logins.
+        $query = EntityReferenceScope::visible(Vendor::query(), 'vendors.company_id')
             ->select(self::LIST_COLUMNS)
             // `password` decides portal access but must not reach the client, so
             // it is resolved server-side into a boolean here.
@@ -74,6 +78,7 @@ class VendorController extends Controller implements HasMiddleware
                 // Only portal accounts ever have decisions, so this stays empty
                 // for the back-office reference vendors that make up most rows.
                 'approvals.decider:id,name,email',
+                'company:id,name,code',
             ]);
 
         if ($request->filled('search')) {
@@ -109,7 +114,7 @@ class VendorController extends Controller implements HasMiddleware
             'filters' => $request->only(['search', 'status']),
             // Surfaces the registration queue on the index so it does not have
             // to be filtered for to be noticed.
-            'pendingCount' => Vendor::withPortalAccess()->where('status', Vendor::STATUS_PENDING)->count(),
+            'pendingCount' => EntityReferenceScope::visible(Vendor::withPortalAccess(), 'vendors.company_id')->where('status', Vendor::STATUS_PENDING)->count(),
             // Managed inline from the modal, the way /activity-templates manages
             // project types.
             'vendorTypes' => ReferenceOption::ofType('vendor_type'),
@@ -155,6 +160,8 @@ class VendorController extends Controller implements HasMiddleware
 
     public function update(Request $request, Vendor $vendor)
     {
+        \App\Support\EntityReferenceScope::ensureOwned($vendor);
+
         $request->validate([
             'code'           => 'nullable|string|max:50',
             'name'           => 'required|string|max:255|unique:vendors,name,' . $vendor->id,
@@ -203,6 +210,7 @@ class VendorController extends Controller implements HasMiddleware
      */
     public function approval(Request $request, Vendor $vendor)
     {
+        \App\Support\EntityReferenceScope::ensureOwned($vendor);
         abort_unless($vendor->hasPortalAccess(), 404);
 
         $validated = $request->validate([
@@ -254,6 +262,7 @@ class VendorController extends Controller implements HasMiddleware
      */
     public function resetPassword(Request $request, Vendor $vendor)
     {
+        \App\Support\EntityReferenceScope::ensureOwned($vendor);
         // A Cashier never self-registers — the public portal registration form is
         // for suppliers — so this is also where their login is first issued. Every
         // other vendor must already have portal access for there to be a password
@@ -304,6 +313,7 @@ class VendorController extends Controller implements HasMiddleware
 
     public function destroy(Vendor $vendor)
     {
+        \App\Support\EntityReferenceScope::ensureOwned($vendor);
         // Deleting here would also destroy the vendor's portal login and orphan
         // their profile, documents and submitted invoices.
         if ($vendor->hasPortalAccess()) {

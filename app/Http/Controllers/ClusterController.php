@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Cluster;
 use App\Models\Store;
+use App\Support\EntityReferenceScope;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -23,7 +24,12 @@ class ClusterController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Cluster::with(['stores:id,code,name']);
+        // Follows the entity switcher; a brand also lists its tagged entities'
+        // clusters, read-only (see EntityReferenceScope).
+        $query = EntityReferenceScope::visible(
+            Cluster::with(['stores:id,code,name', 'company:id,name,code']),
+            'clusters.company_id'
+        );
 
         if ($request->filled('search')) {
             $query->where(function ($q) use ($request) {
@@ -56,6 +62,8 @@ class ClusterController extends Controller implements HasMiddleware
 
     public function update(Request $request, Cluster $cluster)
     {
+        EntityReferenceScope::ensureOwned($cluster);
+
         $validated = $request->validate([
             'code' => 'required|string|max:50|unique:clusters,code,' . $cluster->id,
             'name' => 'required|string|max:255|unique:clusters,name,' . $cluster->id,
@@ -68,6 +76,8 @@ class ClusterController extends Controller implements HasMiddleware
 
     public function assignStores(Request $request, Cluster $cluster)
     {
+        EntityReferenceScope::ensureOwned($cluster);
+
         $validated = $request->validate([
             'store_ids' => 'nullable|array',
             'store_ids.*' => 'exists:stores,id',
@@ -82,6 +92,8 @@ class ClusterController extends Controller implements HasMiddleware
 
     public function destroy(Cluster $cluster)
     {
+        EntityReferenceScope::ensureOwned($cluster);
+
         if ($cluster->stores()->exists()) {
             return redirect()->back()->withErrors([
                 'cluster' => 'Cannot delete cluster because it is assigned to one or more stores.',

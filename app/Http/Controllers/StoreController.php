@@ -10,6 +10,7 @@ use App\Models\StoreBlueprint;
 use App\Models\StoreOption;
 use App\Models\User;
 use App\Models\Setting;
+use App\Support\EntityReferenceScope;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -38,7 +39,11 @@ class StoreController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Store::with(['users:id,name,email', 'clusters:id,code,name', 'options', 'blueprints', 'company:id,name,code'])
+        // Follows the entity switcher. stores.company_id is the owning brand, so a
+        // brand lists its own stores plus those of the entities it is tagged to
+        // (read-only, see EntityReferenceScope); an entity lists only its own.
+        $query = EntityReferenceScope::visible(Store::query(), 'stores.company_id')
+            ->with(['users:id,name,email', 'clusters:id,code,name', 'options', 'blueprints', 'company:id,name,code'])
             ->withCount(['tickets' => function($q) {
                 $q->where('tickets.status', 'open');
             }]);
@@ -123,6 +128,7 @@ class StoreController extends Controller implements HasMiddleware
 
     public function update(Request $request, Store $store)
     {
+        EntityReferenceScope::ensureOwned($store);
         $request->merge(['opening_date' => $request->input('opening_date') ?: null]);
 
         $validated = $request->validate(
@@ -324,6 +330,7 @@ class StoreController extends Controller implements HasMiddleware
 
     public function destroy(Store $store)
     {
+        EntityReferenceScope::ensureOwned($store);
         $store->delete();
         return redirect()->back()->with('success', 'Store deleted successfully');
     }
@@ -376,6 +383,7 @@ class StoreController extends Controller implements HasMiddleware
 
     public function uploadBlueprint(Request $request, Store $store)
     {
+        EntityReferenceScope::ensureOwned($store);
         $request->validate([
             'files' => 'required|array|min:1',
             'files.*' => 'file|mimes:pdf,jpg,jpeg,png,webp|max:25600',
@@ -413,6 +421,7 @@ class StoreController extends Controller implements HasMiddleware
 
     public function destroyBlueprint(Store $store, StoreBlueprint $blueprint)
     {
+        EntityReferenceScope::ensureOwned($store);
         abort_unless($blueprint->store_id === $store->id, 404);
 
         Storage::disk('public')->delete($blueprint->file_storage_path);

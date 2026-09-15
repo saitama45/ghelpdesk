@@ -86,6 +86,64 @@ class TicketItemEntityTest extends TestCase
         $this->assertSame([$gsi->id], $usable['GSI Printer']);
     }
 
+    public function test_a_ticket_partner_must_come_from_the_store_company_or_its_tagged_entities(): void
+    {
+        $user = $this->agent();
+        $gsi = Company::create(['name' => 'GSI', 'code' => 'GSI', 'is_active' => true, 'type' => 'Entity']);
+        $this->nonos->entities()->sync([$this->tgi->id]);
+        $item = $this->item('Nonos Orders', $this->nonos);
+
+        $vendor = fn (string $name, ?Company $company) => tap(
+            \App\Models\Vendor::create(['name' => $name, 'email' => strtolower(str_replace(' ', '', $name)).'@example.com', 'is_active' => true]),
+            fn ($v) => $v->forceFill(['company_id' => $company?->id])->save()
+        );
+
+        $this->actingAs($user)
+            ->postJson(route('tickets.store'), [...$this->payload($item), 'vendor_id' => $vendor('GSI Partner', $gsi)->id])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('vendor_id');
+
+        $this->actingAs($user)
+            ->postJson(route('tickets.store'), [...$this->payload($item), 'vendor_id' => $vendor('TGI Partner', $this->tgi)->id])
+            ->assertCreated();
+
+        $this->actingAs($user)
+            ->postJson(route('tickets.store'), [...$this->payload($item), 'vendor_id' => $vendor('Shared Partner', null)->id])
+            ->assertCreated();
+    }
+
+    public function test_the_ticket_store_picker_follows_the_viewed_entity_and_its_tagged_entities(): void
+    {
+        $user = $this->agent();
+        $gsi = Company::create(['name' => 'GSI', 'code' => 'GSI', 'is_active' => true, 'type' => 'Entity']);
+        $this->nonos->entities()->sync([$this->tgi->id]);
+        $store = fn (string $name, Company $company) => Store::create([
+            'company_id' => $company->id, 'code' => strtoupper(substr(md5($name), 0, 8)), 'name' => $name,
+            'sector' => 1, 'area' => 'A', 'brand' => 'B', 'class' => 'Regular', 'is_active' => true,
+        ]);
+        $store('TGI Office', $this->tgi);
+        $store('GSI Office', $gsi);
+
+        $names = function (Company $active) use ($user) {
+            \App\Support\CompanyContext::flushMemo();
+
+            return collect($this->actingAs($user)
+                ->withSession([\App\Support\CompanyContext::SESSION_KEY => $active->id])
+                ->withHeaders([
+                    'X-Inertia' => 'true',
+                    'X-Inertia-Version' => app(\App\Http\Middleware\HandleInertiaRequests::class)->version(request()),
+                ])
+                ->get(route('tickets.index'))
+                ->assertOk()
+                ->json('props.stores'))->pluck('name')->sort()->values()->all();
+        };
+
+        // Brand: its own stores + its tagged entity's; never an untagged entity's.
+        $this->assertSame(['Nonos Store', 'TGI Office'], $names($this->nonos));
+        // Entity: its own stores only.
+        $this->assertSame(['TGI Office'], $names($this->tgi));
+    }
+
     public function test_accepting_a_ticket_rejects_an_item_from_another_entity(): void
     {
         $user = $this->agent();

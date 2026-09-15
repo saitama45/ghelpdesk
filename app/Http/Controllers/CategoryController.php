@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Models\ReferenceOption;
+use App\Support\EntityReferenceScope;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -23,11 +24,17 @@ class CategoryController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Category::query()->with('assetGroup:id,value,label');
+        // Follows the entity switcher; a brand also lists its tagged entities'
+        // categories, read-only (see EntityReferenceScope).
+        $query = EntityReferenceScope::visible(
+            Category::query()->with(['assetGroup:id,value,label', 'company:id,name,code']),
+            'categories.company_id'
+        );
 
         if ($request->filled('search')) {
-            $query->where('name', 'like', "%{$request->search}%")
-                ->orWhere('description', 'like', "%{$request->search}%");
+            // Grouped so the OR cannot escape the entity filter.
+            $query->where(fn ($q) => $q->where('name', 'like', "%{$request->search}%")
+                ->orWhere('description', 'like', "%{$request->search}%"));
         }
 
         $categories = $query->paginate($request->get('per_page', 10))->withQueryString();
@@ -65,6 +72,8 @@ class CategoryController extends Controller implements HasMiddleware
 
     public function update(Request $request, Category $category)
     {
+        EntityReferenceScope::ensureOwned($category);
+
         $request->validate([
             'name' => 'required|string|max:255|unique:categories,name,'.$category->id,
             'description' => 'nullable|string',
@@ -84,6 +93,8 @@ class CategoryController extends Controller implements HasMiddleware
 
     public function destroy(Category $category)
     {
+        EntityReferenceScope::ensureOwned($category);
+
         $category->delete();
 
         return redirect()->back()->with('success', 'Category deleted successfully');

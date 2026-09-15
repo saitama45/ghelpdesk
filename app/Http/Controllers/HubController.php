@@ -113,10 +113,11 @@ class HubController extends Controller
             'eyebrow' => 'Reference Data at a Glance',
             'kpis' => [
                 ['label' => 'Companies', 'value' => Company::count(), 'note' => 'Entities & brands', 'tone' => 'blue'],
-                ['label' => 'Stores', 'value' => Store::count(), 'note' => 'Active entity', 'tone' => 'green'],
-                ['label' => 'Vendors', 'value' => Vendor::count(), 'note' => 'Suppliers', 'tone' => 'blue'],
-                // Matches /items: the active company's items plus its tagged entities' items.
-                ['label' => 'Items', 'value' => Item::when(CompanyContext::activeCompanyId(), fn ($q, $id) => $q->whereIn('company_id', Company::itemSourceIds($id)))->count(), 'note' => 'Active entity', 'tone' => 'green'],
+                // These match /stores, /vendors and /items: the active company's rows plus
+                // its tagged entities' rows (EntityReferenceScope).
+                ['label' => 'Stores', 'value' => \App\Support\EntityReferenceScope::visible(Store::query())->count(), 'note' => 'Active entity', 'tone' => 'green'],
+                ['label' => 'Vendors', 'value' => \App\Support\EntityReferenceScope::visible(Vendor::query())->count(), 'note' => 'Suppliers', 'tone' => 'blue'],
+                ['label' => 'Items', 'value' => \App\Support\EntityReferenceScope::visible(Item::query())->count(), 'note' => 'Active entity', 'tone' => 'green'],
             ],
         ];
     }

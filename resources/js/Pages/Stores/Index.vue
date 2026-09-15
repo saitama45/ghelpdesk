@@ -79,6 +79,7 @@
                                     <div class="ml-4">
                                         <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ store.name }}</div>
                                         <div class="text-xs text-gray-500 font-mono tracking-tighter dark:text-gray-300">{{ store.code }}</div>
+                                        <InheritedEntityBadge :row="store" class="mt-1" />
                                     </div>
                                 </div>
                             </td>
@@ -135,8 +136,9 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end space-x-1">
+                                    <InheritedEntityBadge :row="store" variant="lock" />
                                     <button 
-                                        v-if="hasPermission('stores.edit')"
+                                        v-if="hasPermission('stores.edit') && !isInherited(store)"
                                         @click="editStore(store)" 
                                         class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors"
                                         title="Edit Store"
@@ -146,7 +148,7 @@
                                         </svg>
                                     </button>
                                     <button 
-                                        v-if="hasPermission('stores.delete')"
+                                        v-if="hasPermission('stores.delete') && !isInherited(store)"
                                         @click="deleteStore(store)" 
                                         class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors"
                                         title="Delete Store"
@@ -657,6 +659,8 @@
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import InheritedEntityBadge from '@/Components/InheritedEntityBadge.vue'
+import { useEntityOwnership } from '@/Composables/useEntityOwnership'
 import DataTable from '@/Components/DataTable.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
@@ -668,6 +672,9 @@ import { useErrorHandler } from '@/Composables/useErrorHandler'
 import { usePagination } from '@/Composables/usePagination'
 import { usePermission } from '@/Composables/usePermission'
 import axios from 'axios'
+
+// Rows inherited from a tagged entity are read-only here (EntityReferenceScope).
+const { isInherited } = useEntityOwnership()
 
 const props = defineProps({
     stores: Object,

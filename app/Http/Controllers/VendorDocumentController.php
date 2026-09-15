@@ -88,6 +88,8 @@ class VendorDocumentController extends Controller implements HasMiddleware
      */
     public function review(Request $request, Vendor $vendor, VendorDocument $document)
     {
+        // Inherited (tagged-entity) vendors are read-only under a brand.
+        \App\Support\EntityReferenceScope::ensureOwned($vendor);
         abort_unless((int) $document->vendor_id === (int) $vendor->id, 404);
 
         $validated = $request->validate([

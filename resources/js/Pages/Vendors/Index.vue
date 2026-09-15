@@ -81,6 +81,7 @@
                                 <div class="ml-4">
                                     <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ vendor.name }}</div>
                                     <div class="text-xs text-gray-500 dark:text-gray-300">{{ vendor.code || '-' }}</div>
+                                    <InheritedEntityBadge :row="vendor" class="mt-1" />
                                 </div>
                             </div>
                         </td>
@@ -108,8 +109,9 @@
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div class="flex justify-end space-x-1">
+                                <InheritedEntityBadge :row="vendor" variant="lock" />
                                 <button
-                                    v-if="vendor.has_portal_access && hasPermission('vendors.approve')"
+                                    v-if="vendor.has_portal_access && hasPermission('vendors.approve') && !isInherited(vendor)"
                                     @click="openApprovalModal(vendor)"
                                     class="p-2 text-amber-600 hover:text-amber-900 hover:bg-amber-50 rounded-full transition-colors"
                                     title="Review portal account"
@@ -119,7 +121,7 @@
                                     </svg>
                                 </button>
                                 <button
-                                    v-if="canIssueOrResetPassword(vendor)"
+                                    v-if="canIssueOrResetPassword(vendor) && !isInherited(vendor)"
                                     @click="openPasswordModal(vendor)"
                                     class="p-2 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded-full transition-colors"
                                     :title="vendor.has_portal_access ? 'Reset portal password' : 'Create cashier portal login'"
@@ -129,7 +131,7 @@
                                     </svg>
                                 </button>
                                 <button
-                                    v-if="hasPermission('vendors.edit')"
+                                    v-if="hasPermission('vendors.edit') && !isInherited(vendor)"
                                     @click="editVendor(vendor)"
                                     class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors"
                                     title="Edit Vendor"
@@ -139,7 +141,7 @@
                                     </svg>
                                 </button>
                                 <button
-                                    v-if="hasPermission('vendors.delete') && !vendor.has_portal_access"
+                                    v-if="hasPermission('vendors.delete') && !vendor.has_portal_access && !isInherited(vendor)"
                                     @click="deleteVendor(vendor)"
                                     class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors"
                                     title="Delete Vendor"
@@ -592,6 +594,8 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import InheritedEntityBadge from '@/Components/InheritedEntityBadge.vue'
+import { useEntityOwnership } from '@/Composables/useEntityOwnership'
 import Autocomplete from '@/Components/Autocomplete.vue'
 import ManageableAutocomplete from '@/Components/ManageableAutocomplete.vue'
 import DataTable from '@/Components/DataTable.vue'
@@ -603,6 +607,9 @@ import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
 import { usePagination } from '@/Composables/usePagination'
 import { usePermission } from '@/Composables/usePermission'
+
+// Rows inherited from a tagged entity are read-only here (EntityReferenceScope).
+const { isInherited } = useEntityOwnership()
 
 const props = defineProps({
     vendors: Object,

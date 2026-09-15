@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\SubCategory;
+use App\Support\EntityReferenceScope;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -22,11 +23,17 @@ class SubCategoryController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = SubCategory::query();
+        // Follows the entity switcher; a brand also lists its tagged entities'
+        // sub-categories, read-only (see EntityReferenceScope).
+        $query = EntityReferenceScope::visible(
+            SubCategory::query()->with('company:id,name,code'),
+            'sub_categories.company_id'
+        );
 
         if ($request->filled('search')) {
-            $query->where('name', 'like', "%{$request->search}%")
-                  ->orWhere('description', 'like', "%{$request->search}%");
+            // Grouped so the OR cannot escape the entity filter.
+            $query->where(fn ($q) => $q->where('name', 'like', "%{$request->search}%")
+                ->orWhere('description', 'like', "%{$request->search}%"));
         }
 
         $subcategories = $query->latest()->paginate($request->get('per_page', 10))->withQueryString();
@@ -51,6 +58,8 @@ class SubCategoryController extends Controller implements HasMiddleware
 
     public function update(Request $request, SubCategory $subCategory)
     {
+        EntityReferenceScope::ensureOwned($subCategory);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255|unique:sub_categories,name,' . $subCategory->id,
             'description' => 'nullable|string',
@@ -64,6 +73,8 @@ class SubCategoryController extends Controller implements HasMiddleware
 
     public function destroy(SubCategory $subCategory)
     {
+        EntityReferenceScope::ensureOwned($subCategory);
+
         $subCategory->delete();
         return redirect()->back()->with('success', 'Sub-category deleted successfully');
     }

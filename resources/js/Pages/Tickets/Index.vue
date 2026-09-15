@@ -907,7 +907,14 @@ watch(() => createForm.store_id, (storeId) => {
     if (!itemFitsEntity(items.value, createForm.item_id, createEntityId.value)) {
         createForm.item_id = '';
     }
+    if (!itemFitsEntity(props.vendors, createForm.vendor_id, createEntityId.value)) {
+        createForm.vendor_id = null;
+    }
 });
+
+// Partner Escalation follows the same store-company rule as items; "None" and
+// vendors with no company are shared.
+const createVendors = computed(() => itemsForEntity(props.vendors, createEntityId.value));
 
 watch(() => acceptForm.store_id, (storeId) => {
     const companyId = storeOwningCompanyId(storeId);
@@ -2857,7 +2864,7 @@ const requesterTabs = computed(() => {
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Partner Escalation</label>
                             <MultiAutocomplete
                                 v-model="createVendorSelection"
-                                :options="vendors"
+                                :options="createVendors"
                                 label-key="name"
                                 value-key="id"
                                 placeholder="None"

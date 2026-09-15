@@ -81,6 +81,7 @@ class VendorProfileController extends Controller implements HasMiddleware
      */
     public function reviewBankAccount(Request $request, Vendor $vendor, VendorBankAccount $bankAccount)
     {
+        \App\Support\EntityReferenceScope::ensureOwned($vendor);
         abort_unless((int) $bankAccount->vendor_id === (int) $vendor->id, 404);
 
         $validated = $request->validate([
@@ -156,6 +157,8 @@ class VendorProfileController extends Controller implements HasMiddleware
      */
     public function review(Request $request, Vendor $vendor)
     {
+        // Inherited (tagged-entity) vendors are read-only under a brand.
+        \App\Support\EntityReferenceScope::ensureOwned($vendor);
         $profile = VendorProfile::where('vendor_id', $vendor->id)->firstOrFail();
 
         $validated = $request->validate([

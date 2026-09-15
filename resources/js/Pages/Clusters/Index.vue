@@ -58,13 +58,15 @@
                                         <div class="text-sm text-gray-500 dark:text-gray-300">
                                             {{ cluster.stores?.length || 0 }} assigned store{{ (cluster.stores?.length || 0) !== 1 ? 's' : '' }}
                                         </div>
+                                        <InheritedEntityBadge :row="cluster" class="mt-1" />
                                     </div>
                                 </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end space-x-1">
+                                    <InheritedEntityBadge :row="cluster" variant="lock" />
                                     <button
-                                        v-if="hasPermission('clusters.edit')"
+                                        v-if="hasPermission('clusters.edit') && !isInherited(cluster)"
                                         @click="openAssignStoresModal(cluster)"
                                         class="p-2 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded-full transition-colors"
                                         title="Assign Stores"
@@ -74,7 +76,7 @@
                                         </svg>
                                     </button>
                                     <button
-                                        v-if="hasPermission('clusters.edit')"
+                                        v-if="hasPermission('clusters.edit') && !isInherited(cluster)"
                                         @click="editCluster(cluster)"
                                         class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors"
                                         title="Edit Cluster"
@@ -84,7 +86,7 @@
                                         </svg>
                                     </button>
                                     <button
-                                        v-if="hasPermission('clusters.delete')"
+                                        v-if="hasPermission('clusters.delete') && !isInherited(cluster)"
                                         @click="deleteCluster(cluster)"
                                         class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors"
                                         title="Delete Cluster"
@@ -214,6 +216,8 @@
 <script setup>
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import InheritedEntityBadge from '@/Components/InheritedEntityBadge.vue'
+import { useEntityOwnership } from '@/Composables/useEntityOwnership'
 import DataTable from '@/Components/DataTable.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
 import { useToast } from '@/Composables/useToast'
@@ -221,6 +225,9 @@ import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
 import { usePagination } from '@/Composables/usePagination'
 import { usePermission } from '@/Composables/usePermission'
+
+// Rows inherited from a tagged entity are read-only here (EntityReferenceScope).
+const { isInherited } = useEntityOwnership()
 
 const props = defineProps({
     clusters: Object,

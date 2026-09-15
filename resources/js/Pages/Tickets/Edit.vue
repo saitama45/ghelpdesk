@@ -14,7 +14,7 @@ import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
 import { usePermission } from '@/Composables/usePermission';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
-import { entityIdForStore, itemsForEntity } from '@/lib/entityItems';
+import { entityIdForStore, itemsForEntity, itemFitsEntity } from '@/lib/entityItems';
 import { ArrowDownTrayIcon, ChatBubbleBottomCenterTextIcon, CheckIcon, ChevronDownIcon, ClockIcon, DocumentDuplicateIcon, XMarkIcon, LockClosedIcon, AdjustmentsHorizontalIcon, PaperClipIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
@@ -291,9 +291,16 @@ const childForm = useForm({
 });
 
 // Vendors that can be escalated to (exclude the "None" placeholder + any without email).
+// Only partners of the child's store company (plus its tagged entities, plus shared).
+const escalationEntityId = computed(() => entityIdForStore(props.stores, childForm.store_id, props.ticket.company_id));
 const escalationVendors = computed(() =>
-    (props.vendors || []).filter(v => v && v.id)
+    itemsForEntity(props.vendors, escalationEntityId.value).filter(v => v && v.id)
 );
+watch(escalationEntityId, (companyId) => {
+    if (!itemFitsEntity(props.vendors, childForm.vendor_id, companyId)) {
+        childForm.vendor_id = null;
+    }
+});
 const selectedEscalationVendor = computed(() =>
     escalationVendors.value.find(v => v.id === childForm.vendor_id) || null
 );
@@ -789,6 +796,12 @@ const editItems = computed(() => itemsForEntity(
     items.value,
     entityIdForStore(props.stores, editForm.store_id, editForm.company_id),
     props.ticket.item_id,
+));
+// Partner Escalation: same store-company rule; the saved partner stays listed.
+const editVendors = computed(() => itemsForEntity(
+    props.vendors,
+    entityIdForStore(props.stores, editForm.store_id, editForm.company_id),
+    props.ticket.vendor_id,
 ));
 
 // Store details drawer
@@ -2645,7 +2658,7 @@ const linkify = (text) => {
                                     <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Partner Escalation</label>
                                     <Autocomplete
                                         v-model="editForm.vendor_id"
-                                        :options="vendors"
+                                        :options="editVendors"
                                         label-key="name"
                                         value-key="id"
                                         placeholder="None"

@@ -6,6 +6,7 @@ use App\Models\Item;
 use App\Models\Category;
 use App\Models\SubCategory;
 use App\Support\CompanyContext;
+use App\Support\EntityReferenceScope;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -63,9 +64,7 @@ class ItemController extends Controller implements HasMiddleware
      */
     private function forActiveEntity($query)
     {
-        $companyId = CompanyContext::activeCompanyId();
-
-        return $companyId ? $query->where('items.company_id', $companyId) : $query;
+        return EntityReferenceScope::owned($query, 'items.company_id');
     }
 
     /**
@@ -73,23 +72,17 @@ class ItemController extends Controller implements HasMiddleware
      * Entity it is tagged to on /companies (a brand inherits its entities'
      * catalogue, as the ticket item pickers do). Inherited rows are read-only here
      * - they are managed from their own entity - so create/import/uniqueness and
-     * the edit/delete guard keep using forActiveEntity().
+     * the edit/delete guard keep using the owned scope.
      */
     private function visibleToActiveEntity($query)
     {
-        $companyId = CompanyContext::activeCompanyId();
-
-        return $companyId
-            ? $query->whereIn('items.company_id', \App\Models\Company::itemSourceIds($companyId))
-            : $query;
+        return EntityReferenceScope::visible($query, 'items.company_id');
     }
 
     /** URL guard: an item from another entity behaves as if it does not exist. */
     private function ensureInActiveEntity(Item $item): void
     {
-        $companyId = CompanyContext::activeCompanyId();
-
-        abort_if($companyId && (int) $item->company_id !== $companyId, 404);
+        EntityReferenceScope::ensureOwned($item);
     }
 
     private function filteredQuery(Request $request)

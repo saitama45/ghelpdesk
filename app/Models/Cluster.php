@@ -16,4 +16,10 @@ class Cluster extends Model
     {
         return $this->belongsToMany(Store::class)->withTimestamps();
     }
+
+    /** Owning entity; drives entity switching on the reference pages (EntityReferenceScope). */
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
 }

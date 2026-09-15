@@ -175,4 +175,10 @@ class Vendor extends Model
     {
         return $this->hasMany(VendorDocument::class);
     }
+
+    /** Owning entity; drives entity switching on the reference pages (EntityReferenceScope). */
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
 }

@@ -57,9 +57,10 @@ class Company extends Model
 
     /** Entity companies to which this brand company is assigned. */
     /**
-     * Companies whose items a ticket for this company may use: itself plus every
+     * Companies whose items and references this company may use: itself plus every
      * Entity it is tagged to on /companies (entity_brand). A NONOS store can pick
-     * NONOS items and the items of the entities NONOS belongs to (e.g. TGI).
+     * NONOS items and the items of the entities NONOS belongs to (e.g. TGI); the
+     * reference pages list the same set (App\Support\EntityReferenceScope).
      *
      * @return int[]
      */

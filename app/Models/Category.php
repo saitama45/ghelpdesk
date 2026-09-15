@@ -31,4 +31,10 @@ class Category extends Model
     {
         return $this->belongsTo(ReferenceOption::class, 'asset_group_id');
     }
+
+    /** Owning entity; drives entity switching on the reference pages (EntityReferenceScope). */
+    public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
 }

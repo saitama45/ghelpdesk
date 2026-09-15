@@ -61,6 +61,7 @@
                                     <div class="ml-4">
                                         <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ subcategory.name }}</div>
                                         <div class="text-sm text-gray-500 dark:text-gray-300">{{ subcategory.description || 'No description' }}</div>
+                                        <InheritedEntityBadge :row="subcategory" class="mt-1" />
                                     </div>
                                 </div>
                             </td>
@@ -72,8 +73,9 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <div class="flex justify-end space-x-1">
+                                    <InheritedEntityBadge :row="subcategory" variant="lock" />
                                     <button 
-                                        v-if="hasPermission('subcategories.edit')"
+                                        v-if="hasPermission('subcategories.edit') && !isInherited(subcategory)"
                                         @click="editSubCategory(subcategory)" 
                                         class="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors"
                                         title="Edit Sub-Category"
@@ -83,7 +85,7 @@
                                         </svg>
                                     </button>
                                     <button 
-                                        v-if="hasPermission('subcategories.delete')"
+                                        v-if="hasPermission('subcategories.delete') && !isInherited(subcategory)"
                                         @click="deleteSubCategory(subcategory)" 
                                         class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors"
                                         title="Delete Sub-Category"
@@ -257,12 +259,17 @@
 import { ref, reactive, onMounted, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
+import InheritedEntityBadge from '@/Components/InheritedEntityBadge.vue'
+import { useEntityOwnership } from '@/Composables/useEntityOwnership'
 import DataTable from '@/Components/DataTable.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
 import { usePagination } from '@/Composables/usePagination'
 import { usePermission } from '@/Composables/usePermission'
+
+// Rows inherited from a tagged entity are read-only here (EntityReferenceScope).
+const { isInherited } = useEntityOwnership()
 
 const props = defineProps({
     subcategories: Object
