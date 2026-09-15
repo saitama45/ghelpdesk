@@ -17,11 +17,19 @@ class EnsureIntegrationKey
 {
     public function handle(Request $request, Closure $next, string $integration): Response
     {
-        $expected = (string) config("services.integrations.{$integration}.key");
-        $given = (string) $request->header('X-Integration-Key');
+        // Trimmed: a stray space or newline pasted into an app setting is the
+        // most common cause of a "mismatch" between two identical keys.
+        $expected = trim((string) config("services.integrations.{$integration}.key"));
+        $given = trim((string) $request->header('X-Integration-Key'));
 
-        if ($expected === '' || $given === '' || ! hash_equals($expected, $given)) {
-            return response()->json(['message' => 'Unauthenticated.'], 401);
+        // Distinct messages so the caller's UI can tell a missing server-side
+        // key apart from a mismatched one; neither reveals the key itself.
+        if ($expected === '') {
+            return response()->json(['message' => 'Integration key is not configured on Helpdesk.'], 401);
+        }
+
+        if ($given === '' || ! hash_equals($expected, $given)) {
+            return response()->json(['message' => 'Integration key does not match Helpdesk.'], 401);
         }
 
         return $next($request);
