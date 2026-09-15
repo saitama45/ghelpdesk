@@ -33,21 +33,7 @@ class ItemController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Item::with(['category', 'subCategory']);
-
-        if ($request->filled('search')) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%")
-                  ->orWhereHas('category', function($cq) use ($search) {
-                      $cq->where('name', 'like', "%{$search}%");
-                  })
-                  ->orWhereHas('subCategory', function($sq) use ($search) {
-                      $sq->where('name', 'like', "%{$search}%");
-                  });
-            });
-        }
+        $query = $this->filteredQuery($request);
 
         $items = $query->latest()->paginate($request->get('per_page', 10))->withQueryString();
         $categories = Category::where('is_active', true)->get();
@@ -59,10 +45,11 @@ class ItemController extends Controller implements HasMiddleware
             'categories' => $categories,
             'subCategories' => $subCategories,
             'settings' => $settings,
+            'filters' => $request->only(['category_id', 'sub_category_id', 'concern_type', 'priority']),
         ]);
     }
 
-    public function export(Request $request)
+    private function filteredQuery(Request $request)
     {
         $query = Item::with(['category', 'subCategory']);
 
@@ -79,6 +66,19 @@ class ItemController extends Controller implements HasMiddleware
                   });
             });
         }
+
+        foreach (['category_id', 'sub_category_id', 'concern_type', 'priority'] as $field) {
+            if ($request->filled($field)) {
+                $query->where($field, $request->input($field));
+            }
+        }
+
+        return $query;
+    }
+
+    public function export(Request $request)
+    {
+        $query = $this->filteredQuery($request);
 
         $items = $query->latest()->get();
 

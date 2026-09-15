@@ -51,6 +51,37 @@
                         </button>
                     </template>
 
+                    <template #filters>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Category</label>
+                                <Autocomplete v-model="filters.category_id" :options="categoryFilterOptions" label-key="name" value-key="id" placeholder="All categories" size="sm" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Sub-Category</label>
+                                <Autocomplete v-model="filters.sub_category_id" :options="subCategoryFilterOptions" label-key="name" value-key="id" placeholder="All sub-categories" size="sm" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Concern Type</label>
+                                <Autocomplete v-model="filters.concern_type" :options="withAll(concernTypeOptions, 'All concern types')" placeholder="All concern types" size="sm" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Priority</label>
+                                <Autocomplete v-model="filters.priority" :options="withAll(priorityOptions, 'All priorities')" placeholder="All priorities" size="sm" />
+                            </div>
+                            <div>
+                                <button
+                                    type="button"
+                                    @click="clearFilters"
+                                    :disabled="!hasActiveFilters"
+                                    class="w-full px-4 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                                >
+                                    Clear Filters
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+
                     <template #header>
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Item</th>
@@ -269,23 +300,11 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Category</label>
-                                <select v-model="form.category_id"
-                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
-                                    <option :value="null">None</option>
-                                    <option v-for="category in categories" :key="category.id" :value="category.id">
-                                        {{ category.name }}
-                                    </option>
-                                </select>
+                                <Autocomplete v-model="form.category_id" :options="categoryFormOptions" label-key="name" value-key="id" placeholder="Select category..." />
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Sub-Category</label>
-                                <select v-model="form.sub_category_id"
-                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
-                                    <option :value="null">None</option>
-                                    <option v-for="sub in subCategories" :key="sub.id" :value="sub.id">
-                                        {{ sub.name }}
-                                    </option>
-                                </select>
+                                <Autocomplete v-model="form.sub_category_id" :options="subCategoryFormOptions" label-key="name" value-key="id" placeholder="Select sub-category..." />
                             </div>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -296,24 +315,13 @@
                             </div>
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Concern Type</label>
-                                <select v-model="form.concern_type" required
-                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
-                                    <option value="Incident">Incident</option>
-                                    <option value="Service Request">Service Request</option>
-                                    <option value="Problem">Problem</option>
-                                </select>
+                                <Autocomplete v-model="form.concern_type" :options="concernTypeOptions" placeholder="Select concern type..." />
                             </div>
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Priority</label>
-                                <select v-model="form.priority" required
-                                        class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
-                                    <option value="Low">Low</option>
-                                    <option value="Medium">Medium</option>
-                                    <option value="High">High</option>
-                                    <option value="Urgent">Urgent</option>
-                                </select>
+                                <Autocomplete v-model="form.priority" :options="priorityOptions" placeholder="Select priority..." />
                             </div>
                         </div>
 
@@ -365,10 +373,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
+import Autocomplete from '@/Components/Autocomplete.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
@@ -379,13 +388,51 @@ const props = defineProps({
     items: Object,
     categories: Array,
     subCategories: Array,
-    settings: Object
+    settings: Object,
+    filters: { type: Object, default: () => ({}) }
 })
 
 const { showSuccess, showError } = useToast()
 const { confirm } = useConfirm()
 const { post, put, destroy } = useErrorHandler()
-const pagination = usePagination(props.items, 'items.index')
+const concernTypeOptions = ['Incident', 'Service Request', 'Problem']
+const priorityOptions = ['Low', 'Medium', 'High', 'Urgent']
+
+// Autocomplete compares values loosely, so '' is the "All" choice in the filter bar.
+const withAll = (options, label) => [{ label, value: '' }, ...options.map(o => ({ label: o, value: o }))]
+const sortByName = (list) => [...(list || [])].sort((a, b) => a.name.localeCompare(b.name))
+
+const categoryFilterOptions = computed(() => [{ id: '', name: 'All categories' }, ...sortByName(props.categories)])
+const subCategoryFilterOptions = computed(() => [{ id: '', name: 'All sub-categories' }, ...sortByName(props.subCategories)])
+const categoryFormOptions = computed(() => [{ id: null, name: 'None' }, ...sortByName(props.categories)])
+const subCategoryFormOptions = computed(() => [{ id: null, name: 'None' }, ...sortByName(props.subCategories)])
+
+const filters = reactive({
+    category_id: props.filters.category_id ?? '',
+    sub_category_id: props.filters.sub_category_id ?? '',
+    concern_type: props.filters.concern_type ?? '',
+    priority: props.filters.priority ?? '',
+})
+
+const activeFilterParams = () => Object.fromEntries(
+    Object.entries(filters).filter(([, value]) => value !== '' && value !== null && value !== undefined)
+)
+
+const hasActiveFilters = computed(() => Object.keys(activeFilterParams()).length > 0)
+
+const pagination = usePagination(props.items, 'items.index', activeFilterParams)
+
+watch(filters, () => {
+    pagination.currentPage.value = 1
+    pagination.performSearch()
+})
+
+const clearFilters = () => {
+    filters.category_id = ''
+    filters.sub_category_id = ''
+    filters.concern_type = ''
+    filters.priority = ''
+}
 const { hasPermission } = usePermission()
 
 const getSlaTarget = (priority, type) => {
@@ -508,7 +555,7 @@ const closeImportModal = () => {
 
 const exportToExcel = () => {
     const search = pagination.search.value;
-    const url = route('items.export', { search });
+    const url = route('items.export', { search, ...activeFilterParams() });
     window.location.href = url;
 };
 
