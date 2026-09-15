@@ -52,4 +52,12 @@ return [
         'documents_root' => env('LINKPORTAL_DOCUMENTS_ROOT'),
     ],
 
+    // Shared keys for sibling apps calling /api/integrations/* server-to-server
+    // (header X-Integration-Key). Empty = that integration is disabled.
+    'integrations' => [
+        'david' => [
+            'key' => env('DAVID_INTEGRATION_KEY'),
+        ],
+    ],
+
 ];

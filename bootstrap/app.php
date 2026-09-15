@@ -38,6 +38,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'integration.key' => \App\Http\Middleware\EnsureIntegrationKey::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -7,6 +7,7 @@
 | Google OAuth | `laravel/socialite` | `app/Http/Controllers/Auth/SocialAuthController.php`, `config/services.php` → `services.google` |
 | Google Maps | REST key | `services.google.maps_api_key` (store/trip location UI) |
 | linkportal (sister app) | Sanctum in + HTTP callback out | in: `app/Http/Controllers/Api/AccountingDocumentReviewController.php`; out: `app/Jobs/SendDecisionCallbackJob.php`; config `services.linkportal.*` |
+| DAVID app (sister app) | Shared key in (`X-Integration-Key`, `integration.key:david` middleware) | `GET /api/integrations/david/ticket-tally` → `app/Services/DavidTicketTallyService.php`; config `services.integrations.david.key` (`DAVID_INTEGRATION_KEY`). Weekly per-module Incoming (created that week) / Closed (those now `closed`) for one entity (`companies.code` = DAVID `entities.code`); items opt in via `items.report_key = david.{order,commit,receiving,wastage,mec,sales_upload,admin}`; child tickets excluded |
 | Mobile app | Capacitor 7 + Sanctum | `capacitor.config.ts`, `android/`, `ios/`, `routes/api.php` DTR endpoints, `@capacitor/geolocation` |
 | PDF export | `barryvdh/laravel-dompdf` | report/PDF controllers |
 | Excel import/export | `phpoffice/phpspreadsheet` | `app/Services/UatWorkbook.php`, activity-template import, roles/users export |

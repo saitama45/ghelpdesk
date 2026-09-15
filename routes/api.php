@@ -32,6 +32,11 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [RegisterController::class, 'register'])
     ->middleware('throttle:5,1');
 
+// Server-to-server: DAVID Success Rate tab pulls weekly ticket counts.
+Route::get('/integrations/david/ticket-tally', \App\Http\Controllers\Api\DavidTicketTallyController::class)
+    ->middleware(['integration.key:david', 'throttle:60,1'])
+    ->name('api.integrations.david.ticket-tally');
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
