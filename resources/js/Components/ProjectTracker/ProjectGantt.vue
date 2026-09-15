@@ -35,6 +35,7 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import SecondaryButton from '@/Components/SecondaryButton.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
+import { entityIdForStore, itemsForEntity } from '@/lib/entityItems';
 
 const props = defineProps({
     project: Object,
@@ -254,6 +255,13 @@ const closeTicketCreate = () => {
     activeTicketTask.value = null;
     ticketForm.clearErrors();
 };
+
+// SLA items follow the ticket store's entity; without a known store, the project's
+// brand (else its company). The server rejects a mismatch with an item_id error.
+const ticketEntityItems = computed(() => itemsForEntity(
+    ticketItems.value,
+    entityIdForStore(props.stores, ticketForm.store_id, props.project.brand_company_id || props.project.company_id),
+));
 
 watch(() => ticketForm.item_id, (itemId) => {
     const item = ticketItems.value.find(candidate => String(candidate.id) === String(itemId));
@@ -2650,7 +2658,7 @@ const isWeekend = (date) => {
                         </label>
                         <Autocomplete
                             v-model="ticketForm.item_id"
-                            :options="ticketItems"
+                            :options="ticketEntityItems"
                             label-key="display_name"
                             value-key="id"
                             :placeholder="isLoadingTicketItems ? 'Loading items...' : 'Select the item that sets the SLA'"

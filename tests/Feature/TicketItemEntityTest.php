@@ -1,0 +1,150 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Company;
+use App\Models\Item;
+use App\Models\Role;
+use App\Models\Store;
+use App\Models\Ticket;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\PermissionRegistrar;
+use Tests\TestCase;
+
+/**
+ * A ticket's item must come from the entity of its store (items.company_id).
+ */
+class TicketItemEntityTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private Company $tgi;
+
+    private Company $nonos;
+
+    private Store $nonosStore;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Queue::fake();
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        $this->tgi = Company::create(['name' => 'TGI', 'code' => 'TGI', 'is_active' => true]);
+        $this->nonos = Company::create(['name' => "NONO'S", 'code' => 'NONOS', 'is_active' => true]);
+        $this->nonosStore = Store::create([
+            'company_id' => $this->nonos->id, 'code' => 'NON-1', 'name' => 'Nonos Store', 'sector' => 1,
+            'area' => 'A', 'brand' => 'B', 'class' => 'Regular', 'is_active' => true,
+        ]);
+    }
+
+    public function test_creating_a_ticket_requires_an_item_from_the_store_entity(): void
+    {
+        $user = $this->agent();
+        $tgiItem = $this->item('TGI Laptop', $this->tgi);
+        $nonosItem = $this->item('Nonos Orders', $this->nonos);
+
+        $this->actingAs($user)
+            ->postJson(route('tickets.store'), $this->payload($tgiItem))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('item_id');
+
+        $this->actingAs($user)
+            ->postJson(route('tickets.store'), $this->payload($nonosItem))
+            ->assertCreated();
+    }
+
+    public function test_a_brand_store_can_use_items_of_the_entities_it_is_tagged_to(): void
+    {
+        $user = $this->agent();
+        $gsi = Company::create(['name' => 'GSI', 'code' => 'GSI', 'is_active' => true, 'type' => 'Entity']);
+        // NONOS is tagged to TGI on /companies, but not to GSI.
+        $this->nonos->entities()->sync([$this->tgi->id]);
+
+        $tgiItem = $this->item('TGI Laptop', $this->tgi);
+        $gsiItem = $this->item('GSI Printer', $gsi);
+
+        $this->actingAs($user)
+            ->postJson(route('tickets.store'), $this->payload($tgiItem))
+            ->assertCreated();
+
+        $this->actingAs($user)
+            ->postJson(route('tickets.store'), $this->payload($gsiItem))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('item_id');
+
+        // The picker feed says who may use each item.
+        $usable = collect($this->actingAs($user)->getJson(route('tickets.data.items'))->assertOk()->json())
+            ->keyBy('name')
+            ->map(fn ($item) => $item['usable_company_ids']);
+
+        $this->assertEqualsCanonicalizing([$this->tgi->id, $this->nonos->id], $usable['TGI Laptop']);
+        $this->assertSame([$gsi->id], $usable['GSI Printer']);
+    }
+
+    public function test_accepting_a_ticket_rejects_an_item_from_another_entity(): void
+    {
+        $user = $this->agent();
+        $ticket = Ticket::create([
+            'title' => 'Walk-in', 'description' => 'x', 'type' => 'task', 'status' => 'open',
+            'priority' => 'medium', 'severity' => 'minor', 'company_id' => $this->nonos->id,
+        ]);
+
+        $this->actingAs($user)
+            ->postJson(route('tickets.accept', $ticket), [
+                'company_id' => $this->nonos->id,
+                'store_id' => $this->nonosStore->id,
+                'item_id' => $this->item('TGI Laptop', $this->tgi)->id,
+                'department' => 'Support',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('item_id');
+
+        $this->assertNull($ticket->fresh()->assignee_id);
+    }
+
+    private function payload(Item $item): array
+    {
+        return [
+            'company_id' => $this->nonos->id,
+            'store_id' => $this->nonosStore->id,
+            'item_id' => $item->id,
+            'title' => 'Orders not syncing',
+            'description' => 'Entity check.',
+            'type' => 'task',
+            'status' => 'open',
+            'priority' => 'medium',
+            'severity' => 'minor',
+            'is_self_requester' => true,
+            'notify_requester' => false,
+        ];
+    }
+
+    private function agent(): User
+    {
+        foreach (['tickets.create', 'tickets.view', 'tickets.assign'] as $permission) {
+            Permission::findOrCreate($permission, 'web');
+        }
+
+        $role = Role::create(['name' => 'Agent', 'guard_name' => 'web', 'is_assignable' => true]);
+        $role->givePermissionTo(['tickets.create', 'tickets.view', 'tickets.assign']);
+        $role->companies()->sync([$this->tgi->id, $this->nonos->id]);
+
+        $user = User::factory()->create(['company_id' => $this->tgi->id]);
+        $user->assignRole($role);
+
+        return $user;
+    }
+
+    private function item(string $name, Company $company): Item
+    {
+        $item = Item::create(['name' => $name, 'priority' => 'High', 'concern_type' => 'Incident', 'is_active' => true]);
+        $item->forceFill(['company_id' => $company->id])->save();
+
+        return $item;
+    }
+}

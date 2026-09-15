@@ -15,6 +15,7 @@ import { useToast } from '@/Composables/useToast';
 import { usePagination } from '@/Composables/usePagination';
 import { usePermission } from '@/Composables/usePermission';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
+import { entityIdForStore, itemsForEntity, itemFitsEntity } from '@/lib/entityItems';
 
 const props = defineProps({
     tickets: Object,
@@ -892,10 +893,19 @@ const storeOwningCompanyId = (storeId) => {
     return store?.company_id ?? null;
 };
 
+// Item pickers only offer the selected store's entity catalogue (see lib/entityItems).
+const createEntityId = computed(() => entityIdForStore(props.stores, createForm.store_id, createForm.company_id));
+const acceptEntityId = computed(() => entityIdForStore(props.stores, acceptForm.store_id, acceptForm.company_id));
+const createItems = computed(() => itemsForEntity(items.value, createEntityId.value));
+const acceptItems = computed(() => itemsForEntity(items.value, acceptEntityId.value));
+
 watch(() => createForm.store_id, (storeId) => {
     const companyId = storeOwningCompanyId(storeId);
     if (companyId && availableCompanies.value.some(c => c.id === companyId)) {
         createForm.company_id = companyId;
+    }
+    if (!itemFitsEntity(items.value, createForm.item_id, createEntityId.value)) {
+        createForm.item_id = '';
     }
 });
 
@@ -903,6 +913,9 @@ watch(() => acceptForm.store_id, (storeId) => {
     const companyId = storeOwningCompanyId(storeId);
     if (companyId && availableCompanies.value.some(c => c.id === companyId)) {
         acceptForm.company_id = companyId;
+    }
+    if (!itemFitsEntity(items.value, acceptForm.item_id, acceptEntityId.value)) {
+        acceptForm.item_id = '';
     }
 });
 
@@ -961,6 +974,22 @@ const storesWithLabel = computed(() =>
 const bulkForm = reactive({
     store_id: '', item_id: '', department: '', assignee_id: '', status: ''
 })
+
+// Bulk item picker: the new store's entity when one is chosen, otherwise the
+// entity the selected tickets' stores share. Mixed entities offer no items,
+// because the server rejects an item that doesn't match every ticket's store.
+const bulkEntityId = computed(() => {
+    if (bulkForm.store_id) return entityIdForStore(props.stores, bulkForm.store_id);
+
+    const selected = displayedTickets.value.filter(t => selectedIds.value.includes(t.id));
+    const ids = new Set(selected.map(t => String(entityIdForStore(props.stores, t.store_id, t.company_id) ?? '')));
+
+    return ids.size === 1 ? ([...ids][0] || null) : (ids.size > 1 ? 'mixed' : null);
+})
+const bulkItems = computed(() => bulkEntityId.value === 'mixed'
+    ? []
+    : itemsForEntity(items.value, bulkEntityId.value))
+// The watcher that clears a stale bulk item lives after `displayedTickets` is declared.
 const isBulkSubmitting = ref(false)
 const isBulkArchiving = ref(false)
 
@@ -1378,6 +1407,10 @@ const acceptTicket = (ticket) => {
     acceptForm.company_id = ticket.company_id || '';
     acceptForm.store_id = ticket.store_id || '';
     acceptForm.item_id = ticket.item_id || '';
+    // A pre-filled item from another entity than the store can't be accepted.
+    if (!itemFitsEntity(items.value, acceptForm.item_id, acceptEntityId.value)) {
+        acceptForm.item_id = '';
+    }
     acceptForm.department = ticket.department || '';
     showAcceptModal.value = true;
 };
@@ -1658,6 +1691,14 @@ const summaryCards = computed(() => {
 // time here caused visible rows to disagree with the server total and could
 // hide valid rows because of client/server SLA timing differences.
 const displayedTickets = computed(() => accumulatedTickets.value || []);
+
+// Declared here, not beside bulkForm: a watcher reads its source immediately, and
+// bulkEntityId depends on displayedTickets (a TDZ crash if watched earlier).
+watch(bulkEntityId, (companyId) => {
+    if (companyId === 'mixed' || !itemFitsEntity(items.value, bulkForm.item_id, companyId)) {
+        bulkForm.item_id = '';
+    }
+});
 
 const getDashboardFilterLabel = (filterKey) => {
     switch (filterKey) {
@@ -2277,7 +2318,7 @@ const requesterTabs = computed(() => {
                                     <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Item</label>
                                     <Autocomplete
                                         v-model="bulkForm.item_id"
-                                        :options="items"
+                                        :options="bulkItems"
                                         label-key="display_name"
                                         value-key="id"
                                         placeholder="Unchanged..."
@@ -2804,7 +2845,7 @@ const requesterTabs = computed(() => {
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Item</label>
                             <Autocomplete
                                 v-model="createForm.item_id"
-                                :options="items"
+                                :options="createItems"
                                 label-key="display_name"
                                 value-key="id"
                                 placeholder="Select item..."
@@ -2909,7 +2950,7 @@ const requesterTabs = computed(() => {
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Item <span class="text-red-500">*</span></label>
                             <Autocomplete
                                 v-model="acceptForm.item_id"
-                                :options="items"
+                                :options="acceptItems"
                                 label-key="display_name"
                                 value-key="id"
                                 placeholder="Select item..."

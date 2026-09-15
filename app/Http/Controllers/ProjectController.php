@@ -340,7 +340,8 @@ class ProjectController extends Controller
                 ->where('is_active', true)
                 ->when($project->brand_company_id, fn ($query, $brandId) => $query->where('company_id', $brandId))
                 ->orderBy('name')
-                ->get(['id', 'code', 'name']),
+                // company_id lets the Gantt ticket form offer that store's entity items.
+                ->get(['id', 'code', 'name', 'company_id']),
             'brands'         => Company::query()
                 ->where('type', 'Brand')
                 ->whereHas('entities', fn ($query) => $query->whereKey($project->company_id))

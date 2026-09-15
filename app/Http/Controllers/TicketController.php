@@ -909,6 +909,8 @@ class TicketController extends Controller
 
             // Set priority, category, and sub_category from item
             if (isset($data['item_id'])) {
+                $this->assertItemMatchesStoreEntity($data['item_id'], $data['store_id'] ?? null, $data['company_id'] ?? null);
+
                 $item = \App\Models\Item::find($data['item_id']);
                 if ($item) {
                     $data['priority'] = strtolower($item->priority);
@@ -1291,6 +1293,12 @@ class TicketController extends Controller
 
         // Auto-update priority, category, and sub_category if item_id changed
         if (isset($validated['item_id']) && $validated['item_id'] != $ticket->item_id) {
+            // Only a CHANGED item is checked, so older tickets keep saving other fields.
+            $this->assertItemMatchesStoreEntity(
+                $validated['item_id'],
+                array_key_exists('store_id', $validated) ? $validated['store_id'] : $ticket->store_id,
+                $validated['company_id'] ?? $ticket->company_id
+            );
             $item = \App\Models\Item::find($validated['item_id']);
             if ($item) {
                 $validated['priority'] = strtolower($item->priority);
@@ -1405,6 +1413,8 @@ class TicketController extends Controller
             'item_id' => ['required', 'exists:items,id'],
             'department' => ['required', 'string', 'max:255'],
         ]);
+
+        $this->assertItemMatchesStoreEntity($validated['item_id'], $validated['store_id'], $validated['company_id']);
 
         $acceptedTicket = DB::transaction(function () use ($ticket, $validated, $request) {
             // The route binding already resolved $ticket unscoped, so it may sit outside
@@ -2520,6 +2530,29 @@ class TicketController extends Controller
         return response()->json($tickets);
     }
 
+    /**
+     * A ticket's item must come from its store's company OR an entity that company
+     * (a brand) is tagged to on /companies — see Company::itemSourceIds. Mirrors the
+     * ticket item pickers (resources/js/lib/entityItems.js). Without a store the
+     * ticket's company is used; with neither, or for an item that has no entity,
+     * nothing is enforced.
+     */
+    private function assertItemMatchesStoreEntity($itemId, $storeId, $fallbackCompanyId = null, string $field = 'item_id'): void
+    {
+        if (! $itemId) {
+            return;
+        }
+
+        $itemCompanyId = \App\Models\Item::whereKey($itemId)->value('company_id');
+        $entityId = ($storeId ? Store::whereKey($storeId)->value('company_id') : null) ?: $fallbackCompanyId;
+
+        if ($itemCompanyId && $entityId && ! in_array((int) $itemCompanyId, Company::itemSourceIds((int) $entityId), true)) {
+            throw ValidationException::withMessages([
+                $field => 'This item belongs to a different entity than the selected store. Pick an item from the store\'s entity.',
+            ]);
+        }
+    }
+
     public function getItems(Request $request)
     {
         $categoryId = $request->query('category_id') ?? $request->input('category_id');
@@ -2535,10 +2568,19 @@ class TicketController extends Controller
             $query->where('sub_category_id', $subCategoryId);
         }
 
-        $items = $query->get()->map(function($item) {
+        // Which companies may use each item: its own company plus every brand tagged
+        // to that entity on /companies (entity_brand). The ticket forms filter on this.
+        $brandsByEntity = DB::table('entity_brand')->get(['entity_company_id', 'brand_company_id'])
+            ->groupBy('entity_company_id')
+            ->map(fn ($rows) => $rows->pluck('brand_company_id')->map(fn ($id) => (int) $id)->all());
+
+        $items = $query->get()->map(function($item) use ($brandsByEntity) {
             $cat = $item->category->name ?? 'N/A';
             $sub = $item->subCategory->name ?? 'N/A';
             $item->display_name = "{$cat} | {$sub} | {$item->name}";
+            $item->usable_company_ids = $item->company_id
+                ? array_values(array_unique([(int) $item->company_id, ...($brandsByEntity[$item->company_id] ?? [])]))
+                : null;
             return $item;
         });
 
@@ -2614,6 +2656,15 @@ class TicketController extends Controller
             ->all();
 
         if (isset($updates['item_id'])) {
+            // The item must fit every selected ticket's store entity (or the new store's).
+            Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+                ->whereIn('id', $validated['ticket_ids'])
+                ->get(['id', 'store_id', 'company_id'])
+                ->each(fn (Ticket $t) => $this->assertItemMatchesStoreEntity(
+                    $updates['item_id'],
+                    $updates['store_id'] ?? $t->store_id,
+                    $t->company_id
+                ));
             $item = \App\Models\Item::find($updates['item_id']);
             if ($item) {
                 $updates['category_id'] = $item->category_id;

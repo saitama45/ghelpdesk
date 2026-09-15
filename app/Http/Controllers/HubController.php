@@ -115,7 +115,8 @@ class HubController extends Controller
                 ['label' => 'Companies', 'value' => Company::count(), 'note' => 'Entities & brands', 'tone' => 'blue'],
                 ['label' => 'Stores', 'value' => Store::count(), 'note' => 'Active entity', 'tone' => 'green'],
                 ['label' => 'Vendors', 'value' => Vendor::count(), 'note' => 'Suppliers', 'tone' => 'blue'],
-                ['label' => 'Items', 'value' => Item::count(), 'note' => 'Catalogue', 'tone' => 'green'],
+                // Matches /items, which lists the active entity's catalogue only.
+                ['label' => 'Items', 'value' => Item::when(CompanyContext::activeCompanyId(), fn ($q, $id) => $q->where('company_id', $id))->count(), 'note' => 'Active entity', 'tone' => 'green'],
             ],
         ];
     }

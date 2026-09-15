@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Item;
 use App\Models\Category;
 use App\Models\SubCategory;
+use App\Support\CompanyContext;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -49,9 +50,33 @@ class ItemController extends Controller implements HasMiddleware
         ]);
     }
 
+    /**
+     * The /items catalogue is managed per active entity (sidebar switcher).
+     *
+     * Deliberately a controller-level filter, NOT a global scope: ticket forms,
+     * email intake and dashboards still resolve items across every entity (see
+     * CompanyContext — reference models stay unscoped so dropdowns keep working).
+     * New items are stamped with the active entity by the creating listener in
+     * AppServiceProvider.
+     */
+    private function forActiveEntity($query)
+    {
+        $companyId = CompanyContext::activeCompanyId();
+
+        return $companyId ? $query->where('items.company_id', $companyId) : $query;
+    }
+
+    /** URL guard: an item from another entity behaves as if it does not exist. */
+    private function ensureInActiveEntity(Item $item): void
+    {
+        $companyId = CompanyContext::activeCompanyId();
+
+        abort_if($companyId && (int) $item->company_id !== $companyId, 404);
+    }
+
     private function filteredQuery(Request $request)
     {
-        $query = Item::with(['category', 'subCategory']);
+        $query = $this->forActiveEntity(Item::with(['category', 'subCategory']));
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -133,11 +158,12 @@ class ItemController extends Controller implements HasMiddleware
             'sub_category_id' => 'nullable|exists:sub_categories,id',
             'name' => [
                 'required', 'string', 'max:255',
-                Rule::unique('items')->where(fn ($q) => $q
+                // Unique within the active entity, so each entity can keep its own copy.
+                Rule::unique('items')->where(fn ($q) => $this->forActiveEntity($q
                     ->where('category_id', $request->category_id)
                     ->where('sub_category_id', $request->sub_category_id)
                     ->where('concern_type', $request->concern_type)
-                ),
+                )),
             ],
             'description' => 'nullable|string',
             'priority' => 'required|in:Low,Medium,High,Urgent',
@@ -153,12 +179,15 @@ class ItemController extends Controller implements HasMiddleware
 
     public function update(Request $request, Item $item)
     {
+        $this->ensureInActiveEntity($item);
+
         $validated = $request->validate([
             'category_id' => 'nullable|exists:categories,id',
             'sub_category_id' => 'nullable|exists:sub_categories,id',
             'name' => [
                 'required', 'string', 'max:255',
                 Rule::unique('items')->ignore($item->id)->where(fn ($q) => $q
+                    ->where('company_id', $item->company_id)
                     ->where('category_id', $request->category_id)
                     ->where('sub_category_id', $request->sub_category_id)
                     ->where('concern_type', $request->concern_type)
@@ -178,6 +207,8 @@ class ItemController extends Controller implements HasMiddleware
 
     public function destroy(Item $item)
     {
+        $this->ensureInActiveEntity($item);
+
         $item->delete();
         return redirect()->back()->with('success', 'Item deleted successfully');
     }
@@ -260,7 +291,8 @@ class ItemController extends Controller implements HasMiddleware
             }
 
             $concernType = $data['concern_type'] ?? 'Incident';
-            $duplicate = Item::where('name', $data['name'])
+            $duplicate = $this->forActiveEntity(Item::query())
+                ->where('name', $data['name'])
                 ->where('concern_type', $concernType)
                 ->where('category_id', $categoryId)
                 ->where('sub_category_id', $subCategoryId)

@@ -14,6 +14,7 @@ import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
 import { usePermission } from '@/Composables/usePermission';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
+import { entityIdForStore, itemsForEntity } from '@/lib/entityItems';
 import { ArrowDownTrayIcon, ChatBubbleBottomCenterTextIcon, CheckIcon, ChevronDownIcon, ClockIcon, DocumentDuplicateIcon, XMarkIcon, LockClosedIcon, AdjustmentsHorizontalIcon, PaperClipIcon } from '@heroicons/vue/24/outline';
 
 const props = defineProps({
@@ -780,6 +781,15 @@ const slaNow = ref(new Date());
 let slaTimerInterval = null;
 
 const items = ref([]);
+
+// Only the selected store's entity items are offered. The ticket's saved item stays
+// listed (even from another entity) so older tickets keep showing their value; it
+// is never cleared automatically, which would trigger an unwanted auto-save.
+const editItems = computed(() => itemsForEntity(
+    items.value,
+    entityIdForStore(props.stores, editForm.store_id, editForm.company_id),
+    props.ticket.item_id,
+));
 
 // Store details drawer
 const showStoreDetails = ref(false);
@@ -2622,7 +2632,7 @@ const linkify = (text) => {
                                     <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 dark:text-gray-300">Item</label>
                                     <Autocomplete
                                         v-model="editForm.item_id"
-                                        :options="items"
+                                        :options="editItems"
                                         label-key="display_name"
                                         value-key="id"
                                         placeholder="Select item..."
