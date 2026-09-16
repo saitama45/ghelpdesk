@@ -112,7 +112,7 @@ class TicketItemEntityTest extends TestCase
             ->assertCreated();
     }
 
-    public function test_the_ticket_store_picker_follows_the_viewed_entity_and_its_tagged_entities(): void
+    public function test_the_ticket_store_picker_covers_the_viewed_entity_its_entities_and_its_brands(): void
     {
         $user = $this->agent();
         $gsi = Company::create(['name' => 'GSI', 'code' => 'GSI', 'is_active' => true, 'type' => 'Entity']);
@@ -138,10 +138,53 @@ class TicketItemEntityTest extends TestCase
                 ->json('props.stores'))->pluck('name')->sort()->values()->all();
         };
 
-        // Brand: its own stores + its tagged entity's; never an untagged entity's.
+        // Brand: its own stores + its tagged entity's; never an untagged entity's
+        // and never a SIBLING brand's.
         $this->assertSame(['Nonos Store', 'TGI Office'], $names($this->nonos));
-        // Entity: its own stores only.
-        $this->assertSame(['TGI Office'], $names($this->tgi));
+        // Entity: its own stores + those of every brand tagged to it. An entity
+        // operates its brands' locations, so a TGI ticket must be able to name a
+        // NONO'S store; GSI is a separate entity and stays out.
+        $this->assertSame(['Nonos Store', 'TGI Office'], $names($this->tgi));
+    }
+
+    public function test_the_edit_store_picker_follows_the_active_entity_not_the_ticket_company(): void
+    {
+        $user = $this->agent();
+        $this->nonos->entities()->sync([$this->tgi->id]);
+        $cbtl = Company::create(['name' => 'CBTL', 'code' => 'CBTL', 'is_active' => true]);
+        $cbtl->entities()->sync([$this->tgi->id]);
+        Store::create([
+            'company_id' => $cbtl->id, 'code' => 'CBTL-1', 'name' => 'CBTL Store', 'sector' => 1,
+            'area' => 'A', 'brand' => 'B', 'class' => 'Regular', 'is_active' => true,
+        ]);
+
+        // A TGI ticket: its own company must NOT widen the picker, or switching the
+        // switcher to NONO'S would still list every TGI brand's stores.
+        $ticket = Ticket::create([
+            'title' => 'Entity check', 'description' => 'x', 'type' => 'task', 'status' => 'open',
+            'priority' => 'medium', 'severity' => 'minor', 'company_id' => $this->tgi->id,
+            'store_id' => $this->nonosStore->id,
+        ]);
+
+        $names = function (Company $active) use ($user, $ticket) {
+            \App\Support\CompanyContext::flushMemo();
+
+            return collect($this->actingAs($user)
+                ->withSession([\App\Support\CompanyContext::SESSION_KEY => $active->id])
+                ->withHeaders([
+                    'X-Inertia' => 'true',
+                    'X-Inertia-Version' => app(\App\Http\Middleware\HandleInertiaRequests::class)->version(request()),
+                ])
+                ->get(route('tickets.edit', $ticket))
+                ->assertOk()
+                ->json('props.stores'))->pluck('name')->sort()->values()->all();
+        };
+
+        // On NONO'S: its own store only - no sibling CBTL store, despite the ticket
+        // belonging to TGI, which owns both brands.
+        $this->assertSame(['Nonos Store'], $names($this->nonos));
+        // On TGI: the entity operates both brands' locations.
+        $this->assertSame(['CBTL Store', 'Nonos Store'], $names($this->tgi));
     }
 
     public function test_accepting_a_ticket_rejects_an_item_from_another_entity(): void

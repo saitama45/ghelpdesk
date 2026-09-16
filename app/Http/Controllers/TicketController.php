@@ -1138,11 +1138,13 @@ class TicketController extends Controller
         })->select('id', 'name', 'email', 'org_path')->get();
         $companies = Company::where('is_active', true)->select('id', 'name')->get();
         $users = User::active()->orderBy('name')->get();
-        // The active entity's stores plus the ticket's own company's (a ticket opened
-        // through the Entity filter), each with its tagged entities; the saved store
-        // always stays listed so an older ticket keeps showing it.
+        // Follows the ACTIVE ENTITY only, exactly like the switcher promises: on
+        // NONO'S you get NONO'S stores, never a sibling brand's. The ticket's own
+        // company is deliberately NOT added - on a TGI ticket that would pull in
+        // every TGI brand's stores no matter which entity you had switched to.
+        // The saved store is kept listed so an older ticket still shows its value.
         $stores = $this->storesForCompanies(
-            [\App\Support\CompanyContext::activeCompanyId(), $ticket->company_id],
+            [\App\Support\CompanyContext::activeCompanyId()],
             $ticket->store_id
         );
         $cannedMessages = \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get();
@@ -2604,14 +2606,17 @@ class TicketController extends Controller
     }
 
     /**
-     * Active stores for ticket store pickers: owned by any of $companyIds or by an
-     * entity those companies are tagged to, plus shared (no company) stores.
+     * Active stores for ticket store pickers: owned by any of $companyIds, by an
+     * entity those companies are tagged to, or by a BRAND tagged to them, plus
+     * shared (no company) stores. The brand half is what lets an entity name its
+     * brands' locations - under TGI the picker must offer the CBTL, NONO'S and
+     * DEMPSEY stores TGI operates (see EntityReferenceScope::storeCompanyIdsFor).
      * Picker filtering only - not enforced on save, because Gantt rollout tickets
      * deliberately target brand stores from an entity's project.
      */
     private function storesForCompanies(array $companyIds, $keepStoreId = null)
     {
-        $visible = \App\Support\EntityReferenceScope::visibleCompanyIdsFor($companyIds);
+        $visible = \App\Support\EntityReferenceScope::storeCompanyIdsFor($companyIds);
 
         return Store::where('is_active', true)
             ->when($visible !== [], fn ($query) => $query->where(fn ($q) => $q

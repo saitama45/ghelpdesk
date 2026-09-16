@@ -73,6 +73,36 @@ final class EntityReferenceScope
             ->all();
     }
 
+    /**
+     * Company ids whose STORES the given companies may pick from.
+     *
+     * Stores roll UP the entity_brand tag — the opposite direction to items and
+     * the other references. A brand INHERITS its entities' catalogue (that is
+     * {@see visibleCompanyIdsFor}), but an entity OWNS its brands' locations:
+     * TGI operates the CBTL, NONO'S and DEMPSEY stores, so a ticket raised under
+     * TGI must be able to name any of them.
+     *
+     * Only the companies passed in are expanded to their brands, never the
+     * entities they inherit from — otherwise CBTL, which inherits TGI, would
+     * also see its SIBLING brands' stores.
+     */
+    public static function storeCompanyIdsFor(array $companyIds): array
+    {
+        $inherited = self::visibleCompanyIdsFor($companyIds);
+
+        if ($inherited === []) {
+            return [];
+        }
+
+        $brandsByEntity = self::brandIdsByEntity();
+
+        $brands = collect($companyIds)
+            ->filter()
+            ->flatMap(fn ($id) => $brandsByEntity[(int) $id] ?? []);
+
+        return collect($inherited)->concat($brands)->unique()->values()->all();
+    }
+
     /** entity company id => ids of the brands tagged to it (one query, for per-row lists). */
     public static function brandIdsByEntity(): \Illuminate\Support\Collection
     {
