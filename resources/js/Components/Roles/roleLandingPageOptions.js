@@ -1,91 +1,61 @@
-export const roleLandingPageOptions = [
-    {
-        group: 'General',
-        options: [
-            { label: 'Dashboard', value: 'dashboard' },
-        ]
-    },
-    {
-        group: 'Services',
-        options: [
-            { label: 'Tickets', value: 'tickets.index' },
-            { label: 'Queue Monitor', value: 'queue.index' },
-            { label: 'POS Requests', value: 'pos-requests.index' },
-            { label: 'SAP Requests', value: 'sap-requests.index' },
-            { label: 'Loyalty Stamps', value: 'stamps.index' },
-        ]
-    },
-    {
-        group: 'Inventory',
-        options: [
-            { label: 'Assets', value: 'assets.index' },
-            { label: 'Stock In', value: 'stock-ins.index' },
-            { label: 'Stock Transfer', value: 'stock-transfers.index' },
-            { label: 'Receiving Stock', value: 'stock-receivings.index' },
-            { label: 'Inventory Report', value: 'reports.inventory' },
-        ]
-    },
-    {
-        group: 'Administrative',
-        options: [
-            { label: 'DTR (Attendance)', value: 'attendance.index' },
-            { label: 'Attendance Logs', value: 'attendance.logs' },
-            { label: 'Scheduling', value: 'schedules.index' },
-            { label: 'Presence', value: 'presence.index' },
-            { label: 'KB Articles', value: 'kb-articles.index' },
-            { label: 'Holidays', value: 'holidays.index' },
-            { label: 'QAT Tracker', value: 'qat.index' },
-            { label: 'UAT Tracker', value: 'uat.index' },
-            { label: 'Service Vehicle Trips', value: 'service-vehicle-trips.index' },
-        ]
-    },
-    {
-        group: 'Monitoring',
-        options: [
-            { label: 'NPC Status', value: 'npc-statuses.index' },
-            { label: 'CCTV Monitoring', value: 'cctv-monitoring.index' },
-            { label: 'ALAGA', value: 'alaga.index' },
-            { label: 'WIGS', value: 'wigs.index' },
-            { label: 'Payments & SOA', value: 'payments.index' },
-            { label: 'Accounting Documents', value: 'accounting-documents.index' },
-            { label: 'Mall Hookup', value: 'mall-hookups.index' },
-        ]
-    },
-    {
-        group: 'Reports',
-        options: [
-            { label: 'Store Health Report', value: 'reports.store-health' },
-        ]
-    },
-    {
-        group: 'References',
-        options: [
-            { label: 'Companies', value: 'companies.index' },
-            { label: 'Departments', value: 'departments.index' },
-            { label: 'Clusters', value: 'clusters.index' },
-            { label: 'Stores', value: 'stores.index' },
-            { label: 'Vendors', value: 'vendors.index' },
-            { label: 'Categories', value: 'categories.index' },
-            { label: 'Sub-Categories', value: 'sub-categories.index' },
-            { label: 'Items', value: 'items.index' },
-            { label: 'Request Types', value: 'request-types.index' },
-            { label: 'Form Builder', value: 'form-builder.index' },
-        ]
-    },
-    {
-        group: 'User Management',
-        options: [
-            { label: 'Users', value: 'users.index' },
-            { label: 'Roles & Permissions', value: 'roles.index' },
-        ]
-    },
-    {
-        group: 'Settings',
-        options: [
-            { label: 'System Settings', value: 'settings.index' },
-            { label: 'Canned Messages', value: 'canned-messages.index' },
-            { label: 'Leadership Points', value: 'leadership-points.index' },
-            { label: 'My Profile', value: 'profile.edit' },
-        ]
+import { computed } from 'vue'
+import { MODULE_REGISTRY } from '@/Composables/useModuleRegistry.js'
+import { useSidebarOrder } from '@/Composables/useSidebarOrder.js'
+
+/**
+ * Landing-page choices for a role, derived from the module registry so the
+ * dropdown always mirrors the sidebar — including sections added later and any
+ * labels/order the user customised in the layout settings.
+ *
+ * Direct sections (Dashboard, Project Tracker) have no children of their own,
+ * so they are listed together under "General". Every other section becomes an
+ * optgroup holding its modules.
+ *
+ * A landing page is stored as a bare route NAME and resolved server-side with
+ * `route($name)` (AuthenticatedSessionController), so anything needing route
+ * parameters — hub pages, dynamic forms — cannot be a landing page and is
+ * skipped here.
+ */
+const GENERAL_GROUP = 'General'
+
+export function buildRoleLandingPageOptions() {
+    const { getSectionOrder, getChildOrder, getSectionLabel, getChildLabel } = useSidebarOrder()
+
+    const sections = MODULE_REGISTRY
+        .slice()
+        .sort((a, b) => getSectionOrder(a.id) - getSectionOrder(b.id))
+
+    const general = { group: GENERAL_GROUP, options: [] }
+    const groups = []
+
+    for (const section of sections) {
+        if (section.direct) {
+            if (!section.routeName || section.routeParams) continue
+            general.options.push({
+                label: getSectionLabel(section.id),
+                value: section.routeName,
+            })
+            continue
+        }
+
+        const options = (section.children || [])
+            .filter(child => child.routeName && !child.routeParams)
+            .slice()
+            .sort((a, b) => getChildOrder(section.id, a.id) - getChildOrder(section.id, b.id))
+            .map(child => ({
+                label: getChildLabel(section.id, child.id),
+                value: child.routeName,
+            }))
+
+        if (options.length === 0) continue
+
+        groups.push({ group: getSectionLabel(section.id), options })
     }
-]
+
+    return general.options.length > 0 ? [general, ...groups] : groups
+}
+
+/** Reactive options — follows the user's saved sidebar order and labels. */
+export function useRoleLandingPageOptions() {
+    return computed(() => buildRoleLandingPageOptions())
+}

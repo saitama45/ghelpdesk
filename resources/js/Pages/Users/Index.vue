@@ -8,7 +8,7 @@ import Autocomplete from '@/Components/Autocomplete.vue';
 const HierarchySelector = defineAsyncComponent(() => import('@/Components/HierarchySelector.vue'));
 const MultiAutocomplete = defineAsyncComponent(() => import('@/Components/MultiAutocomplete.vue'));
 const RoleFormModal = defineAsyncComponent(() => import('@/Components/Roles/RoleFormModal.vue'));
-import { roleLandingPageOptions } from '@/Components/Roles/roleLandingPageOptions';
+import { useRoleLandingPageOptions } from '@/Components/Roles/roleLandingPageOptions';
 import { useConfirm } from '@/Composables/useConfirm';
 import { useErrorHandler } from '@/Composables/useErrorHandler';
 import { useToast } from '@/Composables/useToast';
@@ -84,7 +84,7 @@ const submitImport = async () => {
 
 const allStoreIds = computed(() => formOptions.stores.map(s => s.id));
 const departmentOptions = computed(() => formOptions.departmentTree);
-const landingPageOptions = roleLandingPageOptions;
+const landingPageOptions = useRoleLandingPageOptions();
 
 const flattenNodes = (nodes, level = 0) => {
     let flat = [];

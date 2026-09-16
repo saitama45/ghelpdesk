@@ -267,7 +267,7 @@ import axios from 'axios'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import RoleFormModal from '@/Components/Roles/RoleFormModal.vue'
-import { roleLandingPageOptions } from '@/Components/Roles/roleLandingPageOptions'
+import { useRoleLandingPageOptions } from '@/Components/Roles/roleLandingPageOptions'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
@@ -293,7 +293,7 @@ const isEditing = ref(false)
 const currentRole = ref(null)
 const selectedRole = ref(null)
 
-const landingPageOptions = roleLandingPageOptions
+const landingPageOptions = useRoleLandingPageOptions()
 
 // ── Export / import ──────────────────────────────────────────────────────
 const exportUrl = computed(() => {
@@ -351,7 +351,7 @@ const submitImport = async () => {
 }
 
 const getLandingPageLabel = (value) => {
-    for (const group of landingPageOptions) {
+    for (const group of landingPageOptions.value) {
         const found = group.options.find(opt => opt.value === value);
         if (found) return found.label;
     }
