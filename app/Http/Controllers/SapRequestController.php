@@ -7,7 +7,9 @@ use App\Models\SapRequestApproval;
 use App\Models\RequestType;
 use App\Models\Company;
 use App\Models\User;
+use App\Models\Scopes\ActiveEntityScope;
 use App\Services\SapRequestService;
+use App\Support\Concerns\ResolvesLinkedTicket;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +18,8 @@ use Illuminate\Routing\Controllers\Middleware;
 
 class SapRequestController extends Controller implements HasMiddleware
 {
+    use ResolvesLinkedTicket;
+
     protected SapRequestService $sapRequestService;
 
     public function __construct(SapRequestService $sapRequestService)
@@ -131,7 +135,8 @@ class SapRequestController extends Controller implements HasMiddleware
                 $query->where(function ($q) use ($status, $ticketStatus) {
                     $q->where('status', $status)
                       ->orWhereHas('ticket', function ($tq) use ($ticketStatus) {
-                          $tq->where('status', $ticketStatus);
+                          // The ticket can belong to another entity (e.g. the store's brand).
+                          $tq->withoutGlobalScope(ActiveEntityScope::class)->where('status', $ticketStatus);
                       });
                 });
             }
@@ -141,6 +146,8 @@ class SapRequestController extends Controller implements HasMiddleware
                             ->paginate($request->get('per_page', 10))
                             ->withQueryString()
                             ->appends(['status' => (string) $status]);
+
+        $this->attachLiveTickets($sapRequests->getCollection());
 
         return Inertia::render('SapRequests/Index', [
             'sapRequests' => $sapRequests,
@@ -180,6 +187,12 @@ class SapRequestController extends Controller implements HasMiddleware
     public function show(SapRequest $sapRequest)
     {
         $sapRequest->load(['company', 'requestType', 'user', 'items', 'approvals.user', 'ticket.slaMetric']);
+
+        // A live ticket in another entity loads as null through the scoped relation.
+        $resolved = $this->resolveTicket($sapRequest->ticket_id);
+        if (!$sapRequest->ticket && $resolved && !$resolved->trashed()) {
+            $sapRequest->setRelation('ticket', $resolved->load('slaMetric'));
+        }
 
         return Inertia::render('SapRequests/Show', [
             'sapRequest' => $sapRequest,
@@ -385,5 +398,22 @@ class SapRequestController extends Controller implements HasMiddleware
     private function getEffectiveApprovalLevels(RequestType $requestType, array $formData): int
     {
         return $this->sapRequestService->getEffectiveApprovalLevels($requestType, $formData);
+    }
+
+    /**
+     * The `ticket` relation is entity-scoped, so a ticket keyed to another entity
+     * (e.g. the store's brand) renders as "—". Re-attach live tickets only: the
+     * SAP pages treat any attached ticket as live, so archived ones stay hidden.
+     */
+    private function attachLiveTickets(\Illuminate\Support\Collection $records): void
+    {
+        $resolved = $this->resolveTickets($records->whereNull('ticket')->pluck('ticket_id'));
+
+        $records->each(function (SapRequest $record) use ($resolved) {
+            $ticket = $record->ticket ? null : $resolved->get($record->ticket_id);
+            if ($ticket && !$ticket->trashed()) {
+                $record->setRelation('ticket', $ticket);
+            }
+        });
     }
 }
