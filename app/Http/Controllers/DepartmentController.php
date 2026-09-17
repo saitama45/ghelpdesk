@@ -12,6 +12,7 @@ use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Unique;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
@@ -65,12 +66,15 @@ class DepartmentController extends Controller implements HasMiddleware
 
     public function store(Request $request)
     {
+        // New departments are stamped with the active entity (AppServiceProvider).
+        $companyId = CompanyContext::activeCompanyId();
+
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('departments', 'name')],
-            'code' => ['nullable', 'string', 'max:50'],
+            'name' => ['required', 'string', 'max:255', $this->uniqueNameInEntity($companyId)],
+            'code' => ['nullable', 'string', 'max:50', Rule::unique('departments', 'code')],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
-        ]);
+        ], $this->uniquenessMessages());
 
         Department::create([
             'name' => trim($validated['name']),
@@ -85,11 +89,11 @@ class DepartmentController extends Controller implements HasMiddleware
     public function update(Request $request, Department $department)
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255', Rule::unique('departments', 'name')->ignore($department->id)],
-            'code' => ['nullable', 'string', 'max:50'],
+            'name' => ['required', 'string', 'max:255', $this->uniqueNameInEntity($department->company_id)->ignore($department->id)],
+            'code' => ['nullable', 'string', 'max:50', Rule::unique('departments', 'code')->ignore($department->id)],
             'description' => ['nullable', 'string'],
             'is_active' => ['boolean'],
-        ]);
+        ], $this->uniquenessMessages());
 
         $department->update([
             'name' => trim($validated['name']),
@@ -99,6 +103,26 @@ class DepartmentController extends Controller implements HasMiddleware
         ]);
 
         return redirect()->back()->with('success', 'Department updated successfully.');
+    }
+
+    /**
+     * Names are unique per entity (departments_company_id_name_unique) — ENTECH may
+     * have its own "Business Development" alongside TGI's. Codes are NOT scoped:
+     * they stay unique across all entities (departments_code_unique).
+     */
+    private function uniqueNameInEntity($companyId): Unique
+    {
+        return Rule::unique('departments', 'name')->where(fn ($query) => $companyId
+            ? $query->where('company_id', $companyId)
+            : $query->whereNull('company_id'));
+    }
+
+    private function uniquenessMessages(): array
+    {
+        return [
+            'name.unique' => 'This entity already has a department with this name.',
+            'code.unique' => 'This code is already used by another department.',
+        ];
     }
 
     public function destroy(Department $department)

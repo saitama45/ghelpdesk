@@ -890,6 +890,7 @@ const submitNode = () => {
     const payload = nodeForm.data()
     const isCreate = nodeMode.value === 'create'
     const nodeName = nodeForm.name
+    nodeForm.clearErrors()
 
     const options = {
         preserveScroll: true,
@@ -897,7 +898,11 @@ const submitNode = () => {
             closeNodeModal()
             if (isCreate) autoSelectNewNode(nodeName)
         },
-        onError: handleErrors,
+        // Show field errors (e.g. a name/code already used in this entity) under the inputs too.
+        onError: (errors) => {
+            nodeForm.setError(errors || {})
+            handleErrors(errors)
+        },
     }
 
     if (isCreate) {

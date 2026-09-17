@@ -27,6 +27,7 @@ Session, cache and queue all use the `database` driver in dev/prod (`sessions`, 
 **Identity & ACL** — `users`, `manager_user` (reporting chain), `roles`, `permissions`, `model_has_roles`, `role_has_permissions`, `role_company`, `store_user`, `personal_access_tokens`, `sessions`, `password_reset_tokens`, `user_presence_logs`.
 
 **Org reference** — `companies`, `departments`, `department_nodes`, `department_units`, `department_sub_units`, `department_sections`, `department_services`, `clusters`, `cluster_store`, `stores`, `store_options`, `store_blueprints`, `vendors`, `categories`, `sub_categories`, `items`, `request_types`, `reference_options`, `holidays`, `settings`.
+  `departments` name is unique **per entity** (`departments_company_id_name_unique`); code is unique **across all entities** (filtered `departments_code_unique` WHERE code IS NOT NULL). Mirrored in `DepartmentController` validation.
 
 **Tickets** — `tickets` (UUID PK, soft deletes), `ticket_comments`, `ticket_attachments`, `ticket_ccs`, `ticket_histories`, `ticket_assets`, `ticket_sla_metrics`, `ticket_surveys`, `ticket_views`, `ticket_key_aliases`, `email_intake_logs`, `canned_messages`, `kb_articles`, `kb_categories`, `kb_article_views`.
 
