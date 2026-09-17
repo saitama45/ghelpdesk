@@ -5,7 +5,6 @@ import { Squares2X2Icon } from '@heroicons/vue/24/outline';
 import { usePermission } from '@/Composables/usePermission.js';
 import { useSidebarOrder } from '@/Composables/useSidebarOrder.js';
 import { MODULE_REGISTRY, MODULE_SECTIONS } from '@/Composables/useModuleRegistry.js';
-import { useDepartmentContext } from '@/Composables/useDepartmentContext.js';
 
 /**
  * GLOBAL module tab strip: self-determines the current section from the route and
@@ -16,7 +15,6 @@ const page = usePage();
 const route = window.route;
 const { hasPermission } = usePermission();
 const { getSectionLabel, getChildLabel, getChildOrder } = useSidebarOrder();
-const { formInScope } = useDepartmentContext();
 
 const permitted = (permission) => {
     if (!permission) return true;
@@ -25,12 +23,12 @@ const permitted = (permission) => {
 };
 
 /**
- * Dynamic forms behave as extra Services modules, listed by the department that
- * owns them rather than by permission — matching the Services hub catalogue.
+ * Dynamic forms behave as extra Services modules and, like every module, are
+ * listed by permission ({slug}.view) regardless of the viewed department.
  */
 const dynamicFormChildren = computed(() =>
     (page.props.dynamicForms || [])
-        .filter(formInScope)
+        .filter((f) => hasPermission(f.slug + '.view'))
         .map((f) => {
             const id = 'form-' + f.slug;
             const label = getChildLabel('services', id);
@@ -67,10 +65,7 @@ const tabs = computed(() => {
     if (!section || section.direct) return [];
     const base = section.children
         // A module's own permission (granted per-role in Roles > Edit) is the
-        // access control. ownerDepartments only scopes the DEPARTMENT-OWNED
-        // catalogue used for browsing/form routing (see formInScope below) — a
-        // module explicitly granted to a role must appear regardless of which
-        // department tab is currently being viewed.
+        // access control, regardless of which department tab is being viewed.
         .filter((c) => permitted(c.permission))
         .map((c) => {
             const label = getChildLabel(section.id, c.id);

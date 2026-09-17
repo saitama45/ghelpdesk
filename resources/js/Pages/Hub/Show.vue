@@ -45,7 +45,6 @@ const {
     homeName: myDeptName,
     isProvider: viewingOwnDepartment,
     isExecutive,
-    formInScope,
 } = useDepartmentContext();
 const { init: initSidebar, getSectionLabel, getChildLabel, getChildOrder, ensureDynamicFormChildren } = useSidebarOrder();
 
@@ -59,16 +58,13 @@ const sectionLabel = computed(() =>
 );
 
 /**
- * Dynamic forms are Services children not present in the static registry. They
- * are listed by OWNING DEPARTMENT, not by permission: requesting a service you
- * cannot administer is exactly what the internal-customer view is for. The
- * records page itself narrows to your own submissions without the {slug}.view
- * permission (see DynamicFormController::index).
+ * Dynamic forms are Services children not present in the static registry. Like
+ * every module they are listed by permission ({slug}.view).
  */
 const dynamicFormTiles = computed(() => {
     if (props.section !== 'services') return [];
     return (page.props.dynamicForms || [])
-        .filter(formInScope)
+        .filter((form) => hasPermission(form.slug + '.view'))
         .map((form) => {
             const childId = 'form-' + form.slug;
             const label = getChildLabel('services', childId);
@@ -94,9 +90,7 @@ const permitted = (permission) => {
 const tiles = computed(() => {
     if (!section.value) return [];
     // A module's own permission (granted per-role in Roles > Edit) is the access
-    // control. ownerDepartments only scopes the department-owned catalogue used
-    // for browsing/form routing (see formInScope above) — a module explicitly
-    // granted to a role must appear regardless of the currently viewed department.
+    // control, regardless of the currently viewed department.
     const registryTiles = section.value.children
         .filter((child) => permitted(child.permission))
         .map((child) => {
