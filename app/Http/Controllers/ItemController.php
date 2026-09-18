@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\SubCategory;
 use App\Support\CompanyContext;
 use App\Support\EntityReferenceScope;
+use App\Support\DepartmentReferences;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -27,7 +28,7 @@ class ItemController extends Controller implements HasMiddleware
     {
         return [
             new Middleware('can:items.view', only: ['index', 'export']),
-            new Middleware('can:items.create', only: ['store']),
+            new Middleware('can:items.create', only: ['store', 'import', 'template']),
             new Middleware('can:items.edit', only: ['update']),
             new Middleware('can:items.delete', only: ['destroy']),
         ];
@@ -38,8 +39,8 @@ class ItemController extends Controller implements HasMiddleware
         $query = $this->filteredQuery($request);
 
         $items = $query->latest()->paginate($request->get('per_page', 10))->withQueryString();
-        $categories = Category::where('is_active', true)->get();
-        $subCategories = SubCategory::where('is_active', true)->get();
+        $categories = EntityReferenceScope::visible(Category::where('is_active', true))->where('department_id', DepartmentReferences::viewedId())->get();
+        $subCategories = EntityReferenceScope::visible(SubCategory::where('is_active', true))->where('department_id', DepartmentReferences::viewedId())->get();
         $settings = \App\Models\Setting::all()->pluck('value', 'key');
 
         return Inertia::render('Items/Index', [
@@ -64,7 +65,7 @@ class ItemController extends Controller implements HasMiddleware
      */
     private function forActiveEntity($query)
     {
-        return EntityReferenceScope::owned($query, 'items.company_id');
+        return $query->where('items.company_id', CompanyContext::activeCompanyId())->where('items.department_id', DepartmentReferences::viewedId());
     }
 
     /**
@@ -199,6 +200,7 @@ class ItemController extends Controller implements HasMiddleware
                 'required', 'string', 'max:255',
                 Rule::unique('items')->ignore($item->id)->where(fn ($q) => $q
                     ->where('company_id', $item->company_id)
+                    ->where('department_id', $item->department_id)
                     ->where('category_id', $request->category_id)
                     ->where('sub_category_id', $request->sub_category_id)
                     ->where('concern_type', $request->concern_type)
@@ -234,8 +236,8 @@ class ItemController extends Controller implements HasMiddleware
 
         $header = array_map('trim', array_shift($rows));
 
-        $categoryMap    = Category::pluck('id', 'name')->toArray();
-        $subCategoryMap = SubCategory::pluck('id', 'name')->toArray();
+        $categoryMap    = Category::where('company_id', CompanyContext::activeCompanyId())->where('department_id', DepartmentReferences::viewedId())->pluck('id', 'name')->toArray();
+        $subCategoryMap = SubCategory::where('company_id', CompanyContext::activeCompanyId())->where('department_id', DepartmentReferences::viewedId())->pluck('id', 'name')->toArray();
 
         $imported = 0;
         $errors   = [];
@@ -332,8 +334,8 @@ class ItemController extends Controller implements HasMiddleware
 
     public function template()
     {
-        $categories    = Category::where('is_active', true)->orderBy('name')->get();
-        $subCategories = SubCategory::where('is_active', true)->orderBy('name')->get();
+        $categories    = EntityReferenceScope::visible(Category::where('is_active', true))->where('department_id', DepartmentReferences::viewedId())->orderBy('name')->get();
+        $subCategories = EntityReferenceScope::visible(SubCategory::where('is_active', true))->where('department_id', DepartmentReferences::viewedId())->orderBy('name')->get();
 
         $spreadsheet = new Spreadsheet();
 

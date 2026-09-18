@@ -217,7 +217,8 @@ const ticketForm = useForm({
 });
 
 const fetchTicketItems = async () => {
-    if (ticketItems.value.length || isLoadingTicketItems.value) return;
+    if (isLoadingTicketItems.value) return;
+    ticketItems.value = [];
 
     isLoadingTicketItems.value = true;
     try {

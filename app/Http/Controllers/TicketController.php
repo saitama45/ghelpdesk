@@ -23,6 +23,7 @@ use App\Models\ProjectTask;
 use App\Models\Schedule;
 use App\Services\TicketKnowledgeBaseService;
 use App\Support\DepartmentContext;
+use App\Support\DepartmentReferences;
 use App\Support\TicketAccess;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -577,7 +578,7 @@ class TicketController extends Controller
         // Store pickers (create/accept/bulk/filters) follow the entities being viewed:
         // each one's own stores plus those of the entities it is tagged to on /companies.
         $stores = $this->storesForCompanies($effectiveCompanyIds);
-        $subCategories = \App\Models\SubCategory::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        $subCategories = $this->referenceQuery(\App\Models\SubCategory::where('is_active', true), DepartmentReferences::viewedId())->orderBy('name')->get(['id', 'name']);
         $cannedMessages = \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get();
         $departments = User::whereNotNull('department')->distinct()->orderBy('department')->pluck('department');
 
@@ -590,6 +591,7 @@ class TicketController extends Controller
             'companies' => $companies,
             'stores' => $stores,
             'subCategories' => $subCategories,
+            'referenceDepartmentId' => DepartmentReferences::viewedId(),
             'vendors' => $vendors,
             'cannedMessages' => $cannedMessages,
             'departments' => $departments,
@@ -865,6 +867,7 @@ class TicketController extends Controller
     public function store(StoreTicketRequest $request)
     {
         $data = $request->validated();
+        $data['serving_department_id'] ??= DepartmentReferences::viewedId();
 
         if (! empty($data['project_task_id'])) {
             abort_unless(
@@ -910,10 +913,8 @@ class TicketController extends Controller
             $data['severity'] = $data['severity'] ?? 'minor';
 
             // Set priority, category, and sub_category from item
-            $this->assertVendorMatchesStoreEntity($data['vendor_id'] ?? null, $data['store_id'] ?? null, $data['company_id'] ?? null);
 
             if (isset($data['item_id'])) {
-                $this->assertItemMatchesStoreEntity($data['item_id'], $data['store_id'] ?? null, $data['company_id'] ?? null);
 
                 $item = \App\Models\Item::find($data['item_id']);
                 if ($item) {
@@ -949,6 +950,12 @@ class TicketController extends Controller
             if (empty($data['serving_department_id']) && !empty($data['assignee_id'])) {
                 $data['serving_department_id'] = User::where('id', $data['assignee_id'])->value('department_id');
             }
+
+            $this->assertVendorMatchesStoreEntity($data['vendor_id'] ?? null, $data['store_id'] ?? null, $data['company_id'] ?? null);
+            $this->assertItemMatchesStoreEntity($data['item_id'] ?? null, $data['store_id'] ?? null, $data['company_id'] ?? null);
+            $proposedTicket = new Ticket($data);
+            DepartmentReferences::validateTicket($proposedTicket, force: true);
+            $data = $proposedTicket->getAttributes();
 
             $ticket = Ticket::create($data);
 
@@ -1145,11 +1152,12 @@ class TicketController extends Controller
         // The saved store is kept listed so an older ticket still shows its value.
         $stores = $this->storesForCompanies(
             [\App\Support\CompanyContext::activeCompanyId()],
-            $ticket->store_id
+            $ticket->store_id,
+            TicketAccess::servingDepartmentId($ticket)
         );
         $cannedMessages = \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get();
         $vendors = collect([['id' => null, 'name' => 'None', 'email' => null, 'contact_person' => null]])
-            ->concat($this->vendorsWithUsableCompanies(['id', 'name', 'email', 'contact_person', 'company_id']));
+            ->concat($this->vendorsWithUsableCompanies(['id', 'name', 'email', 'contact_person', 'company_id'], TicketAccess::servingDepartmentId($ticket), $ticket->vendor_id));
 
         $assignee = $ticket->assignee;
         $subUnit = $assignee?->org_path;
@@ -1185,6 +1193,7 @@ class TicketController extends Controller
             // followed and replied to, never edited. Enforced server-side too —
             // see the guards on update/accept/split/schedule/CC.
             'departmentAxis' => TicketAccess::payload($ticket, auth()->user()),
+            'referenceDepartmentId' => TicketAccess::servingDepartmentId($ticket),
             'viewers' => $viewers,
             'itemLeaders' => $this->buildItemLeaders($ticket->item_id),
             'staff' => $staff,
@@ -1327,6 +1336,11 @@ class TicketController extends Controller
             }
         }
 
+        if (! $customerResolve && ! TicketAccess::servingDepartmentId($ticket)
+            && (! empty($validated['item_id']) || ! empty($validated['vendor_id']))) {
+            $validated['serving_department_id'] = DepartmentReferences::viewedId();
+        }
+
         $ticket->fill($validated);
         
         if ($ticket->isDirty()) {
@@ -1446,6 +1460,8 @@ class TicketController extends Controller
                 abort(409, 'This ticket was already accepted by another user.');
             }
 
+            TicketAccess::assertProvider($lockedTicket, $request->user());
+            $lockedTicket->serving_department_id ??= DepartmentReferences::viewedId() ?: $request->user()->department_id;
             $item = \App\Models\Item::findOrFail($validated['item_id']);
 
             $lockedTicket->fill([
@@ -2507,9 +2523,10 @@ class TicketController extends Controller
         };
     }
 
-    public function getCategories()
+    public function getCategories(Request $request)
     {
-        return response()->json(\App\Models\Category::where('is_active', true)->orderBy('name')->get());
+        [$departmentId] = $this->referenceContext($request);
+        return response()->json($this->referenceQuery(\App\Models\Category::where('is_active', true), $departmentId)->orderBy('name')->get());
     }
 
     public function getSubCategories(Request $request)
@@ -2517,12 +2534,13 @@ class TicketController extends Controller
         $categoryId = $request->query('category_id');
         if (!$categoryId) return response()->json([]);
 
-        $subCategoryIds = \App\Models\Item::where('category_id', $categoryId)
+        [$departmentId] = $this->referenceContext($request);
+        $subCategoryIds = $this->referenceQuery(\App\Models\Item::where('category_id', $categoryId), $departmentId)
             ->whereNotNull('sub_category_id')
             ->distinct()
             ->pluck('sub_category_id');
             
-        $subCategories = \App\Models\SubCategory::whereIn('id', $subCategoryIds)
+        $subCategories = $this->referenceQuery(\App\Models\SubCategory::whereIn('id', $subCategoryIds), $departmentId)
             ->where('is_active', true)
             ->orderBy('name')
             ->get();
@@ -2614,11 +2632,11 @@ class TicketController extends Controller
      * Picker filtering only - not enforced on save, because Gantt rollout tickets
      * deliberately target brand stores from an entity's project.
      */
-    private function storesForCompanies(array $companyIds, $keepStoreId = null)
+    private function storesForCompanies(array $companyIds, $keepStoreId = null, ?int $departmentId = null)
     {
         $visible = \App\Support\EntityReferenceScope::storeCompanyIdsFor($companyIds);
 
-        return Store::where('is_active', true)
+        return $this->referenceQuery(Store::where(fn ($q) => $q->where('is_active', true)->when($keepStoreId, fn ($saved) => $saved->orWhere('id', $keepStoreId)))->with(['clusters' => fn ($q) => $q->where('department_id', $departmentId ?? DepartmentReferences::viewedId())]), $departmentId ?? DepartmentReferences::viewedId(), $keepStoreId)
             ->when($visible !== [], fn ($query) => $query->where(fn ($q) => $q
                 ->whereIn('company_id', $visible)
                 ->orWhereNull('company_id')
@@ -2628,15 +2646,62 @@ class TicketController extends Controller
     }
 
     /** Active vendors carrying `usable_company_ids` for the ticket partner pickers. */
-    private function vendorsWithUsableCompanies(array $columns)
+    private function vendorsWithUsableCompanies(array $columns, ?int $departmentId = null, $keepId = null)
     {
         $brandsByEntity = \App\Support\EntityReferenceScope::brandIdsByEntity();
 
-        return Vendor::active()->orderBy('name')->get($columns)->map(function (Vendor $vendor) use ($brandsByEntity) {
+        return $this->referenceQuery(Vendor::where(fn ($q) => $q->where('is_active', true)->when($keepId, fn ($saved) => $saved->orWhere('id', $keepId))), $departmentId ?? DepartmentReferences::viewedId(), $keepId)->orderBy('name')->get($columns)->map(function (Vendor $vendor) use ($brandsByEntity) {
             $vendor->usable_company_ids = \App\Support\EntityReferenceScope::usableCompanyIds($vendor->company_id, $brandsByEntity);
 
             return $vendor;
         });
+    }
+
+    private function referenceQuery($query, ?int $departmentId, $keepId = null)
+    {
+        $activeCompanyId = \App\Support\CompanyContext::activeCompanyId();
+        if (! $departmentId && $activeCompanyId
+            && ! \App\Models\Department::whereIn('company_id', \App\Models\Company::itemSourceIds($activeCompanyId))->exists()) {
+            return in_array($query->getModel()->getTable(), DepartmentReferences::CATALOGS, true)
+                ? $query->whereNull('department_id') : $query;
+        }
+        return $query->where(function ($q) use ($departmentId, $keepId) {
+            DepartmentReferences::selectable($q, $departmentId);
+            if ($keepId) {
+                $q->orWhere($q->getModel()->getTable().'.id', $keepId);
+            }
+        });
+    }
+
+    private function referenceContext(Request $request): array
+    {
+        $request->validate(['ticket_id' => 'nullable|string', 'serving_department_id' => 'nullable|integer|exists:departments,id']);
+        $ticket = $request->filled('ticket_id')
+            ? Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)->findOrFail($request->ticket_id)
+            : null;
+        // Existing tickets use their persisted route, independent of the browser tab.
+        $departmentId = $ticket ? (TicketAccess::servingDepartmentId($ticket) ?? DepartmentReferences::viewedId())
+            : ($request->integer('serving_department_id') ?: DepartmentReferences::viewedId());
+        if (! $ticket && $departmentId) {
+            $companies = \App\Support\CompanyContext::accessibleCompanies($request->user())->pluck('id')->all();
+            $eligible = \App\Support\EntityReferenceScope::visibleCompanyIdsFor($companies);
+            abort_unless(\App\Models\Department::whereKey($departmentId)->where('is_active', true)->whereIn('company_id', $eligible)->exists(), 403);
+        }
+        return [$departmentId, $ticket];
+    }
+
+    public function getReferenceOptions(Request $request)
+    {
+        [$departmentId, $ticket] = $this->referenceContext($request);
+        $departmentId ??= DepartmentReferences::viewedId();
+        return response()->json([
+            'department_id' => $departmentId,
+            'items' => $this->getItems($request)->getData(),
+            'stores' => $this->storesForCompanies(
+                $ticket ? [$ticket->company_id] : [\App\Support\CompanyContext::activeCompanyId()],
+                $ticket?->store_id, $departmentId
+            ),
+        ]);
     }
 
     public function getItems(Request $request)
@@ -2644,7 +2709,8 @@ class TicketController extends Controller
         $categoryId = $request->query('category_id') ?? $request->input('category_id');
         $subCategoryId = $request->query('sub_category_id') ?? $request->input('sub_category_id');
 
-        $query = \App\Models\Item::with(['category', 'subCategory'])->where('is_active', true)->orderBy('name');
+        [$departmentId, $referenceTicket] = $this->referenceContext($request);
+        $query = $this->referenceQuery(\App\Models\Item::with(['category', 'subCategory'])->where(fn ($q) => $q->where('is_active', true)->when($referenceTicket?->item_id, fn ($saved) => $saved->orWhere('id', $referenceTicket->item_id))), $departmentId, $referenceTicket?->item_id)->orderBy('name');
 
         if ($categoryId) {
             $query->where('category_id', $categoryId);
@@ -2755,6 +2821,13 @@ class TicketController extends Controller
             }
         }
 
+        $referenceTickets = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->whereIn('id', $validated['ticket_ids'])->get();
+        foreach ($referenceTickets as $referenceTicket) {
+            $referenceTicket->fill($updates);
+            DepartmentReferences::validateTicket($referenceTicket);
+        }
+
         if (empty($updates)) {
             return redirect()->back()->withErrors(['bulk' => 'No fields selected for update.']);
         }
@@ -2785,8 +2858,12 @@ class TicketController extends Controller
                 $count++;
             }
         } else {
-            $count = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
-                ->whereIn('id', $validated['ticket_ids'])->update($updates);
+            $count = DB::transaction(function () use ($referenceTickets) {
+                foreach ($referenceTickets as $referenceTicket) {
+                    $referenceTicket->save();
+                }
+                return $referenceTickets->count();
+            });
         }
 
         return redirect()->back()->with('success', "{$count} ticket(s) updated successfully.");
@@ -2951,6 +3028,8 @@ class TicketController extends Controller
                     'sub_category_id' => $parentTicket->sub_category_id,
                     'item_id'         => $parentTicket->item_id,
                     'department'      => $parentTicket->department,
+                    'department_id'   => $parentTicket->department_id,
+                    'serving_department_id' => TicketAccess::servingDepartmentId($parentTicket),
                     'parent_id'       => $parentTicket->id,
                     'created_at'      => now('Asia/Manila'),
                 ]);

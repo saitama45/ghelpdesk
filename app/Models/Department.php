@@ -25,6 +25,15 @@ class Department extends Model
         // holds it. Release the references here so deleting a department leaves
         // its tickets in the shared intake pool rather than pointing at a gone row.
         static::deleting(function (Department $department) {
+            // Refuse before releasing ticket routes: the reference FKs intentionally
+            // retain ownership/history and would otherwise fail after that update.
+            foreach (\App\Support\DepartmentReferences::CATALOGS as $table) {
+                if (\Illuminate\Support\Facades\DB::table($table)->where('department_id', $department->id)->exists()) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'department' => 'This department owns ticket references or coverage. Deactivate it instead of deleting it.',
+                    ]);
+                }
+            }
             Ticket::withoutGlobalScope(ActiveEntityScope::class)
                 ->where('serving_department_id', $department->id)
                 ->update(['serving_department_id' => null]);

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SubCategory;
 use App\Support\EntityReferenceScope;
+use App\Support\DepartmentReferences;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -15,7 +16,7 @@ class SubCategoryController extends Controller implements HasMiddleware
     {
         return [
             new Middleware('can:subcategories.view', only: ['index']),
-            new Middleware('can:subcategories.create', only: ['store']),
+            new Middleware('can:subcategories.create', only: ['store', 'import', 'template']),
             new Middleware('can:subcategories.edit', only: ['update']),
             new Middleware('can:subcategories.delete', only: ['destroy']),
         ];
@@ -46,7 +47,7 @@ class SubCategoryController extends Controller implements HasMiddleware
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:sub_categories,name',
+            'name' => ['required', 'string', 'max:255', DepartmentReferences::unique('sub_categories', 'name')],
             'description' => 'nullable|string',
             'is_active' => 'boolean',
         ]);
@@ -61,7 +62,7 @@ class SubCategoryController extends Controller implements HasMiddleware
         EntityReferenceScope::ensureOwned($subCategory);
 
         $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:sub_categories,name,' . $subCategory->id,
+            'name' => ['required', 'string', 'max:255', DepartmentReferences::unique('sub_categories', 'name', $subCategory)],
             'description' => 'nullable|string',
             'is_active' => 'boolean',
         ]);
@@ -100,7 +101,7 @@ class SubCategoryController extends Controller implements HasMiddleware
             $data = array_combine($header, array_map('trim', $line));
 
             $validator = \Validator::make($data, [
-                'name' => 'required|string|max:255|unique:sub_categories,name',
+                'name' => ['required', 'string', 'max:255', DepartmentReferences::unique('sub_categories', 'name')],
                 'description' => 'nullable|string',
                 'is_active' => 'nullable|in:0,1',
             ]);

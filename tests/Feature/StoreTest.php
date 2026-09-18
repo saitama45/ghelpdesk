@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Store;
+use App\Models\Company;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -12,9 +13,13 @@ class StoreTest extends TestCase
 {
     use RefreshDatabase;
 
+    private Company $company;
+
     protected function setUp(): void
     {
         parent::setUp();
+
+        $this->company = Company::create(['name' => 'Store entity', 'code' => 'ST', 'is_active' => true]);
 
         $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class);
 
@@ -26,10 +31,11 @@ class StoreTest extends TestCase
 
     public function test_can_create_store_with_email(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['company_id' => $this->company->id]);
         $user->givePermissionTo('stores.create');
 
         $response = $this->actingAs($user)->post('/stores', [
+            'company_id' => $this->company->id,
             'code' => 'STR-001',
             'name' => 'Test Store',
             'email' => 'store@example.com',
@@ -49,10 +55,11 @@ class StoreTest extends TestCase
 
     public function test_can_update_store_with_email(): void
     {
-        $user = User::factory()->create();
+        $user = User::factory()->create(['company_id' => $this->company->id]);
         $user->givePermissionTo('stores.edit');
 
         $store = Store::create([
+            'company_id' => $this->company->id,
             'code' => 'STR-001',
             'name' => 'Test Store',
             'sector' => 1,
@@ -63,6 +70,7 @@ class StoreTest extends TestCase
         ]);
 
         $response = $this->actingAs($user)->put("/stores/{$store->id}", [
+            'company_id' => $this->company->id,
             'code' => 'STR-001',
             'name' => 'Updated Store',
             'email' => 'updated@example.com',

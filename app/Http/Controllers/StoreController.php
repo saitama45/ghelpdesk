@@ -11,6 +11,7 @@ use App\Models\StoreOption;
 use App\Models\User;
 use App\Models\Setting;
 use App\Support\EntityReferenceScope;
+use App\Support\DepartmentReferences;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -43,7 +44,7 @@ class StoreController extends Controller implements HasMiddleware
         // brand lists its own stores plus those of the entities it is tagged to
         // (read-only, see EntityReferenceScope); an entity lists only its own.
         $query = EntityReferenceScope::visible(Store::query(), 'stores.company_id')
-            ->with(['users:id,name,email', 'clusters:id,code,name', 'options', 'blueprints', 'company:id,name,code'])
+            ->with(['users:id,name,email', 'clusters' => fn ($q) => $q->where('department_id', DepartmentReferences::viewedId()), 'options', 'blueprints', 'company:id,name,code'])
             ->withCount(['tickets' => function($q) {
                 $q->where('tickets.status', 'open');
             }]);
@@ -75,7 +76,7 @@ class StoreController extends Controller implements HasMiddleware
 
         $stores = $query->latest()->paginate($request->get('per_page', 10))->withQueryString();
         $users = User::active()->orderBy('name')->get(['id', 'name']);
-        $clusters = Cluster::orderBy('name')->get(['id', 'code', 'name']);
+        $clusters = EntityReferenceScope::visible(Cluster::query())->where('department_id', DepartmentReferences::viewedId())->orderBy('name')->get(['id', 'code', 'name']);
         $settings = Setting::where('group', 'thresholds')->pluck('value', 'key');
 
         return Inertia::render('Stores/Index', [
@@ -110,7 +111,7 @@ class StoreController extends Controller implements HasMiddleware
             $attributes['brand'] = $this->brandFromCompany($validated['company_id'] ?? null, $attributes['brand'] ?? null);
 
             $store = Store::create($attributes);
-            $store->clusters()->sync($clusterIds);
+            $this->syncDepartmentClusters($store, $clusterIds);
 
             if ($request->has('user_ids')) {
                 $store->users()->sync($request->user_ids);
@@ -147,7 +148,7 @@ class StoreController extends Controller implements HasMiddleware
             $attributes['brand'] = $this->brandFromCompany($validated['company_id'] ?? null, $store->brand);
 
             $store->update($attributes);
-            $store->clusters()->sync($clusterIds);
+            $this->syncDepartmentClusters($store, $clusterIds);
 
             if ($request->has('user_ids')) {
                 $store->users()->sync($request->user_ids);
@@ -294,10 +295,25 @@ class StoreController extends Controller implements HasMiddleware
         }
     }
 
+    private function syncDepartmentClusters(Store $store, array $clusterIds): void
+    {
+        // Editing one department must not remove another department's groups.
+        $otherIds = $store->clusters()->where(function ($q) {
+            $q->where('department_id', '!=', DepartmentReferences::viewedId());
+            if (DepartmentReferences::viewedId()) $q->orWhereNull('department_id');
+        })->pluck('clusters.id')->all();
+        $store->clusters()->sync(array_unique([...$otherIds, ...$clusterIds]));
+    }
+
     private function resolveClusterIds(array $data): array
     {
         if (!empty($data['cluster_ids'])) {
-            return array_values($data['cluster_ids']);
+            $ids = array_values($data['cluster_ids']);
+            $allowed = EntityReferenceScope::visible(Cluster::query())->where('department_id', DepartmentReferences::viewedId())->whereIn('id', $ids)->count();
+            if ($allowed !== count(array_unique($ids))) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['cluster_ids' => 'Choose clusters from the current service department.']);
+            }
+            return $ids;
         }
 
         $clusterName = trim((string) ($data['cluster'] ?? ''));
@@ -306,7 +322,7 @@ class StoreController extends Controller implements HasMiddleware
         }
 
         $cluster = Cluster::firstOrCreate(
-            ['name' => $clusterName],
+            ['name' => $clusterName, 'company_id' => \App\Support\CompanyContext::activeCompanyId(), 'department_id' => DepartmentReferences::viewedId()],
             ['code' => $this->uniqueClusterCode($clusterName)]
         );
 
@@ -439,7 +455,7 @@ class StoreController extends Controller implements HasMiddleware
 
         $header = array_map('trim', array_shift($rows));
         $userMap = User::pluck('id', 'email')->toArray();
-        $clusters = Cluster::get(['id', 'code', 'name']);
+        $clusters = EntityReferenceScope::visible(Cluster::query())->where('department_id', DepartmentReferences::viewedId())->get(['id', 'code', 'name']);
         $clusterLookup = $clusters->flatMap(function (Cluster $cluster) {
             return [
                 mb_strtolower(trim($cluster->code)) => $cluster->id,
@@ -527,7 +543,7 @@ class StoreController extends Controller implements HasMiddleware
             ]);
 
             if ($clusterIds) {
-                $store->clusters()->sync($clusterIds);
+                $this->syncDepartmentClusters($store, $clusterIds);
             }
 
             // Resolve user emails → IDs and sync
@@ -556,7 +572,7 @@ class StoreController extends Controller implements HasMiddleware
     public function template()
     {
         $users = User::active()->orderBy('name')->get(['id', 'name', 'email']);
-        $clusters = Cluster::orderBy('name')->get(['code', 'name']);
+        $clusters = EntityReferenceScope::visible(Cluster::query())->where('department_id', DepartmentReferences::viewedId())->orderBy('name')->get(['code', 'name']);
 
         $spreadsheet = new Spreadsheet();
 

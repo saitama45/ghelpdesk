@@ -6,7 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class SubCategory extends Model
 {
+    use \App\Models\Concerns\HasDepartmentReference;
     protected $fillable = [
+        'department_id',
         'name',
         'description',
         'is_active',

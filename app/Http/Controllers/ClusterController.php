@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Cluster;
 use App\Models\Store;
 use App\Support\EntityReferenceScope;
+use App\Support\DepartmentReferences;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
@@ -42,7 +43,9 @@ class ClusterController extends Controller implements HasMiddleware
 
         return Inertia::render('Clusters/Index', [
             'clusters' => $clusters,
-            'stores' => Store::with('clusters:id,name')
+            // Stores belong to the entity, not to a department: every department
+            // clustering for this entity picks from the same list.
+            'stores' => EntityReferenceScope::visible(Store::with('clusters:id,name'), 'stores.company_id')
                 ->orderBy('name')
                 ->get(['id', 'code', 'name']),
         ]);
@@ -51,8 +54,8 @@ class ClusterController extends Controller implements HasMiddleware
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'code' => 'required|string|max:50|unique:clusters,code',
-            'name' => 'required|string|max:255|unique:clusters,name',
+            'code' => ['required', 'string', 'max:50', DepartmentReferences::unique('clusters', 'code')],
+            'name' => ['required', 'string', 'max:255', DepartmentReferences::unique('clusters', 'name')],
         ]);
 
         Cluster::create($validated);
@@ -65,8 +68,8 @@ class ClusterController extends Controller implements HasMiddleware
         EntityReferenceScope::ensureOwned($cluster);
 
         $validated = $request->validate([
-            'code' => 'required|string|max:50|unique:clusters,code,' . $cluster->id,
-            'name' => 'required|string|max:255|unique:clusters,name,' . $cluster->id,
+            'code' => ['required', 'string', 'max:50', DepartmentReferences::unique('clusters', 'code', $cluster)],
+            'name' => ['required', 'string', 'max:255', DepartmentReferences::unique('clusters', 'name', $cluster)],
         ]);
 
         $cluster->update($validated);
@@ -82,6 +85,12 @@ class ClusterController extends Controller implements HasMiddleware
             'store_ids' => 'nullable|array',
             'store_ids.*' => 'exists:stores,id',
         ]);
+
+        foreach ($validated['store_ids'] ?? [] as $storeId) {
+            if (! EntityReferenceScope::visible(Store::query(), 'stores.company_id')->whereKey($storeId)->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['store_ids' => 'Choose stores that belong to the current entity.']);
+            }
+        }
 
         // sync() replaces this cluster's store list (adds new, removes deselected)
         // without touching other clusters — stores can still belong to multiple clusters.

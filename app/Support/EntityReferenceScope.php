@@ -31,7 +31,15 @@ final class EntityReferenceScope
 
     public static function visible($query, string $column = 'company_id')
     {
+        if ($query instanceof \Illuminate\Database\Eloquent\Builder) {
+            DepartmentReferences::management($query);
+        }
         $ids = self::visibleCompanyIds();
+        if ($query instanceof \Illuminate\Database\Eloquent\Builder
+            && $query->getModel()->getTable() === 'stores' && DepartmentReferences::viewedId()) {
+            // Providers configure coverage for their brands without editing brand masters.
+            $ids = self::storeCompanyIdsFor([CompanyContext::activeCompanyId()]);
+        }
 
         if ($ids === []) {
             return $query;
@@ -141,5 +149,6 @@ final class EntityReferenceScope
     public static function ensureOwned(Model $model, string $column = 'company_id'): void
     {
         abort_unless(self::isOwned($model, $column), 404);
+        DepartmentReferences::ensureOwned($model);
     }
 }

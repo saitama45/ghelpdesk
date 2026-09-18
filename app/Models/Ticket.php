@@ -15,6 +15,11 @@ class Ticket extends Model
 {
     use HasUuids, SoftDeletes;
 
+    protected static function booted(): void
+    {
+        static::saving(fn (self $ticket) => \App\Support\DepartmentReferences::validateTicket($ticket));
+    }
+
     protected $fillable = [
         'ticket_key',
         'title',
@@ -469,6 +474,7 @@ class Ticket extends Model
         'assignee_id' => 'integer',
         'company_id' => 'integer',
         'department_id' => 'integer',
+        'serving_department_id' => 'integer',
         'store_id' => 'integer',
         'category_id' => 'integer',
         'sub_category_id' => 'integer',

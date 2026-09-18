@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Category;
 use App\Models\ReferenceOption;
 use App\Support\EntityReferenceScope;
+use App\Support\DepartmentReferences;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -16,7 +17,7 @@ class CategoryController extends Controller implements HasMiddleware
     {
         return [
             new Middleware('can:categories.view', only: ['index']),
-            new Middleware('can:categories.create', only: ['store']),
+            new Middleware('can:categories.create', only: ['store', 'import', 'template']),
             new Middleware('can:categories.edit', only: ['update']),
             new Middleware('can:categories.delete', only: ['destroy']),
         ];
@@ -55,7 +56,7 @@ class CategoryController extends Controller implements HasMiddleware
     public function store(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255|unique:categories,name',
+            'name' => ['required', 'string', 'max:255', DepartmentReferences::unique('categories', 'name')],
             'description' => 'nullable|string',
             'asset_group_id' => 'nullable|exists:reference_options,id',
         ]);
@@ -75,7 +76,7 @@ class CategoryController extends Controller implements HasMiddleware
         EntityReferenceScope::ensureOwned($category);
 
         $request->validate([
-            'name' => 'required|string|max:255|unique:categories,name,'.$category->id,
+            'name' => ['required', 'string', 'max:255', DepartmentReferences::unique('categories', 'name', $category)],
             'description' => 'nullable|string',
             'asset_group_id' => 'nullable|exists:reference_options,id',
             'is_active' => 'boolean',
@@ -122,7 +123,7 @@ class CategoryController extends Controller implements HasMiddleware
             $data = array_combine($header, array_map('trim', $line));
 
             $validator = \Validator::make($data, [
-                'name' => 'required|string|max:255|unique:categories,name',
+                'name' => ['required', 'string', 'max:255', DepartmentReferences::unique('categories', 'name')],
                 'description' => 'nullable|string',
                 'is_active' => 'nullable|in:0,1',
             ]);

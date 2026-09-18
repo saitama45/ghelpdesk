@@ -6,7 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class Category extends Model
 {
+    use \App\Models\Concerns\HasDepartmentReference;
     protected $fillable = [
+        'department_id',
         'name',
         'description',
         'asset_group_id',

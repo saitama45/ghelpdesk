@@ -63,6 +63,7 @@
                                         <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ category.name }}</div>
                                         <div class="text-sm text-gray-500 dark:text-gray-300">{{ category.description || 'No description' }}</div>
                                         <InheritedEntityBadge :row="category" class="mt-1" />
+                                        <DepartmentReferenceTag :row="category" type="categories" />
                                     </div>
                                 </div>
                             </td>
@@ -279,6 +280,7 @@
 </template>
 
 <script setup>
+import DepartmentReferenceTag from '@/Components/DepartmentReferenceTag.vue';
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'

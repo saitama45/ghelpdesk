@@ -533,6 +533,22 @@ class CctvMonitoringController extends Controller implements HasMiddleware
 
     private function resolveCctvTicketRefs(): array
     {
+        $departmentId = \App\Support\DepartmentReferences::viewedId();
+        if ($departmentId) {
+            // Catalog names can repeat by department. Do not pick another desk's
+            // legacy firstOrCreate result, or create master data during inspection.
+            $item = Item::where('department_id', $departmentId)
+                ->where('is_active', true)
+                ->whereHas('category', fn ($q) => $q->where('department_id', $departmentId)->where('name', 'CCTV'))
+                ->where('name', 'CCTV – General')->first();
+            if (! $item) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'item_id' => 'Tag or create the CCTV category and CCTV – General item for this service department first.',
+                ]);
+            }
+
+            return [$item->category_id, $item->id];
+        }
         $category = Category::firstOrCreate(['name' => 'CCTV'], ['is_active' => true]);
         $item = Item::firstOrCreate(
             ['name' => 'CCTV – General', 'category_id' => $category->id],

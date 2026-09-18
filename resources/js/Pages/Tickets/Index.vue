@@ -800,6 +800,7 @@ const replaceAccumulatedTicket = (updatedTicket) => {
 };
 
 const createForm = useForm({
+    serving_department_id: page.props.departmentContext?.viewed ?? null,
     company_id: '',
     store_id: '',
     item_id: '',
@@ -869,12 +870,23 @@ const items = ref([]);
 
 const fetchItems = async () => {
     try {
+        const departmentId = page.props.departmentContext?.viewed;
         const response = await axios.get(route('tickets.data.items', undefined, false));
-        items.value = response.data;
+        if (departmentId === page.props.departmentContext?.viewed) items.value = response.data;
     } catch (error) {
         console.error('Error fetching items:', error);
     }
 };
+
+watch(() => page.props.departmentContext?.viewed, (departmentId) => {
+    createForm.serving_department_id = departmentId ?? null;
+    createForm.item_id = '';
+    createForm.store_id = '';
+    createForm.vendor_id = null;
+    items.value = [];
+    exportItems.value = [];
+    fetchItems();
+});
 
 watch(() => createForm.item_id, (newVal) => {
     if (newVal) {
@@ -895,9 +907,12 @@ const storeOwningCompanyId = (storeId) => {
 
 // Item pickers only offer the selected store's entity catalogue (see lib/entityItems).
 const createEntityId = computed(() => entityIdForStore(props.stores, createForm.store_id, createForm.company_id));
-const acceptEntityId = computed(() => entityIdForStore(props.stores, acceptForm.store_id, acceptForm.company_id));
+const acceptEntityId = computed(() => entityIdForStore(acceptReferenceStores.value, acceptForm.store_id, acceptForm.company_id));
 const createItems = computed(() => itemsForEntity(items.value, createEntityId.value));
-const acceptItems = computed(() => itemsForEntity(items.value, acceptEntityId.value));
+const acceptReferenceItems = ref([]);
+const acceptReferenceStores = ref([]);
+const acceptStoreOptions = computed(() => acceptReferenceStores.value.map(s => ({ ...s, display_name: `${s.code} - ${s.name}` })));
+const acceptItems = computed(() => itemsForEntity(acceptReferenceItems.value, acceptEntityId.value));
 
 watch(() => createForm.store_id, (storeId) => {
     const companyId = storeOwningCompanyId(storeId);
@@ -917,11 +932,11 @@ watch(() => createForm.store_id, (storeId) => {
 const createVendors = computed(() => itemsForEntity(props.vendors, createEntityId.value));
 
 watch(() => acceptForm.store_id, (storeId) => {
-    const companyId = storeOwningCompanyId(storeId);
+    const companyId = acceptReferenceStores.value.find(s => String(s.id) === String(storeId))?.company_id;
     if (companyId && availableCompanies.value.some(c => c.id === companyId)) {
         acceptForm.company_id = companyId;
     }
-    if (!itemFitsEntity(items.value, acceptForm.item_id, acceptEntityId.value)) {
+    if (!itemFitsEntity(acceptReferenceItems.value, acceptForm.item_id, acceptEntityId.value)) {
         acceptForm.item_id = '';
     }
 });
@@ -1405,17 +1420,28 @@ const handleAuxClick = (event, ticket) => {
     }
 };
 
-const acceptTicket = (ticket) => {
+const acceptTicket = async (ticket) => {
     if (!hasPermission('tickets.assign')) {
         showError('You do not have permission to accept tickets.');
         return;
     }
     acceptingTicket.value = ticket;
+    acceptReferenceItems.value = [];
+    acceptReferenceStores.value = [];
+    try {
+        const response = await axios.get(route('tickets.data.references'), { params: { ticket_id: ticket.id } });
+        acceptReferenceItems.value = response.data.items;
+        acceptReferenceStores.value = response.data.stores;
+    } catch (error) {
+        showError('Could not load service department references.');
+        return;
+    }
+
     acceptForm.company_id = ticket.company_id || '';
     acceptForm.store_id = ticket.store_id || '';
     acceptForm.item_id = ticket.item_id || '';
     // A pre-filled item from another entity than the store can't be accepted.
-    if (!itemFitsEntity(items.value, acceptForm.item_id, acceptEntityId.value)) {
+    if (!itemFitsEntity(acceptReferenceItems.value, acceptForm.item_id, acceptEntityId.value)) {
         acceptForm.item_id = '';
     }
     acceptForm.department = ticket.department || '';
@@ -2829,6 +2855,7 @@ const requesterTabs = computed(() => {
                             </div>
                         </div>
 
+                        <p class="text-sm text-slate-600 dark:text-slate-300 mb-2">Service department: {{ page.props.departmentContext?.departments?.find(d => String(d.id) === String(createForm.serving_department_id))?.name || 'Select a department tab' }}</p>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Store</label>
                             <Autocomplete
@@ -2940,7 +2967,7 @@ const requesterTabs = computed(() => {
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Store <span class="text-red-500">*</span></label>
                             <Autocomplete
                                 v-model="acceptForm.store_id"
-                                :options="storesWithLabel"
+                                :options="acceptStoreOptions"
                                 label-key="display_name"
                                 value-key="id"
                                 placeholder="Select store..."

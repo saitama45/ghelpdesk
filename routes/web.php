@@ -206,6 +206,7 @@ Route::middleware('auth')->group(function () {
     Route::post('departments/users/vacant', [DepartmentController::class, 'storeVacant'])->name('departments.users.vacant.store');
     Route::put('departments/users/vacant/{user}', [DepartmentController::class, 'updateVacant'])->name('departments.users.vacant.update');
     Route::delete('departments/users/vacant/{user}', [DepartmentController::class, 'destroyVacant'])->name('departments.users.vacant.destroy');
+    Route::put('reference-departments/{type}/{id}', [\App\Http\Controllers\ReferenceDepartmentController::class, 'update'])->name('reference-departments.update');
     Route::resource('clusters', \App\Http\Controllers\ClusterController::class)->except(['show', 'create', 'edit']);
     Route::post('clusters/{cluster}/assign-stores', [\App\Http\Controllers\ClusterController::class, 'assignStores'])->name('clusters.assign-stores');
     Route::get('categories/template', [\App\Http\Controllers\CategoryController::class, 'template'])->name('categories.template');
@@ -464,6 +465,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('schedule-change-requests/{scheduleChangeRequest}', [\App\Http\Controllers\ScheduleController::class, 'cancelChangeRequest'])->name('schedule-change-requests.cancel');
     Route::resource('schedules', \App\Http\Controllers\ScheduleController::class)->except(['show', 'create', 'edit']);
     Route::get('schedules/export/pdf', [\App\Http\Controllers\ScheduleExportController::class, 'pdf'])->name('schedules.export.pdf');
+    Route::get('tickets/data/references', [\App\Http\Controllers\TicketController::class, 'getReferenceOptions'])->name('tickets.data.references');
     Route::get('tickets/data/categories', [\App\Http\Controllers\TicketController::class, 'getCategories'])->name('tickets.data.categories');
     Route::get('tickets/data/subcategories', [\App\Http\Controllers\TicketController::class, 'getSubCategories'])->name('tickets.data.subcategories');
     Route::get('tickets/data/items', [\App\Http\Controllers\TicketController::class, 'getItems'])->name('tickets.data.items');

@@ -59,6 +59,7 @@
                                             {{ cluster.stores?.length || 0 }} assigned store{{ (cluster.stores?.length || 0) !== 1 ? 's' : '' }}
                                         </div>
                                         <InheritedEntityBadge :row="cluster" class="mt-1" />
+                                        <DepartmentReferenceTag :row="cluster" type="clusters" />
                                     </div>
                                 </div>
                             </td>
@@ -214,6 +215,7 @@
 </template>
 
 <script setup>
+import DepartmentReferenceTag from '@/Components/DepartmentReferenceTag.vue';
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import InheritedEntityBadge from '@/Components/InheritedEntityBadge.vue'

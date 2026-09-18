@@ -7,7 +7,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Cluster extends Model
 {
+    use \App\Models\Concerns\HasDepartmentReference;
     protected $fillable = [
+        'department_id',
         'code',
         'name',
     ];

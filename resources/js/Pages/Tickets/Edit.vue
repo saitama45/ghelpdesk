@@ -809,7 +809,7 @@ const showStoreDetails = ref(false);
 
 const fetchItems = async () => {
     try {
-        const response = await axios.get(route('tickets.data.items', undefined, false));
+        const response = await axios.get(route('tickets.data.items', undefined, false), { params: { ticket_id: props.ticket.id } });
         items.value = response.data;
     } catch (error) {
         console.error('Error fetching items:', error);

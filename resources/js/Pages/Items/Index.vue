@@ -104,6 +104,7 @@
                                     </div>
                                     <div class="ml-4">
                                         <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ item.name }}</div>
+                                        <DepartmentReferenceTag :row="item" type="items" />
                                         <div class="text-sm text-gray-500 max-w-xs truncate dark:text-gray-300">{{ item.description || 'No description' }}</div>
                                     </div>
                                 </div>
@@ -390,6 +391,7 @@
 </template>
 
 <script setup>
+import DepartmentReferenceTag from '@/Components/DepartmentReferenceTag.vue';
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'

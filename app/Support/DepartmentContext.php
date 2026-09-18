@@ -150,7 +150,7 @@ class DepartmentContext
         return Department::query()
             ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
             ->orderBy('name')
-            ->get(['id', 'name', 'code', 'company_id']);
+            ->get(['id', 'name', 'code', 'company_id', 'is_active']);
     }
 
     /** The accessible department ids as a plain int array. */
@@ -242,6 +242,7 @@ class DepartmentContext
                 'id' => (int) $d->id,
                 'name' => $d->name,
                 'code' => $d->code,
+                'is_active' => (bool) $d->is_active,
                 'accent' => static::accentFor($d->code, $d->name)['accent'],
             ])->values()->all(),
         ];
