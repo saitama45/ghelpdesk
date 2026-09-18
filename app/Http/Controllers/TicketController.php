@@ -1140,73 +1140,75 @@ class TicketController extends Controller
             $ticket->load('slaMetric');
         }
 
-        $staff = User::whereHas('roles', function($q) {
-            $q->where('is_assignable', true);
-        })->select('id', 'name', 'email', 'org_path')->get();
-        $companies = Company::where('is_active', true)->select('id', 'name')->get();
-        $users = User::active()->orderBy('name')->get();
-        // Follows the ACTIVE ENTITY only, exactly like the switcher promises: on
-        // NONO'S you get NONO'S stores, never a sibling brand's. The ticket's own
-        // company is deliberately NOT added - on a TGI ticket that would pull in
-        // every TGI brand's stores no matter which entity you had switched to.
-        // The saved store is kept listed so an older ticket still shows its value.
-        $stores = $this->storesForCompanies(
-            [\App\Support\CompanyContext::activeCompanyId()],
-            $ticket->store_id,
-            TicketAccess::servingDepartmentId($ticket)
-        );
-        $cannedMessages = \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get();
-        $vendors = collect([['id' => null, 'name' => 'None', 'email' => null, 'contact_person' => null]])
-            ->concat($this->vendorsWithUsableCompanies(['id', 'name', 'email', 'contact_person', 'company_id'], TicketAccess::servingDepartmentId($ticket), $ticket->vendor_id));
-
-        $assignee = $ticket->assignee;
-        $subUnit = $assignee?->org_path;
-        $businessHours = [
-            'start' => \App\Models\Setting::getScoped('business_start_time', '08:00', $assignee?->department_id, $assignee?->department_node_id, $subUnit),
-            'end' => \App\Models\Setting::getScoped('business_end_time', '17:00', $assignee?->department_id, $assignee?->department_node_id, $subUnit),
-            'days' => json_decode(\App\Models\Setting::getScoped('working_days', '[1,2,3,4,5]', $assignee?->department_id, $assignee?->department_node_id, $subUnit), true),
-        ];
-
         // Record the current user's view (one row per user, refreshed to the latest
-        // visit) and build the "viewed by" list, most-recently-viewed first.
-        \App\Models\TicketView::updateOrCreate(
-            ['ticket_id' => $ticket->id, 'user_id' => auth()->id()],
-            ['viewed_at' => now()]
-        );
+        // visit). A partial reload is the SAME visit, so it is not re-recorded.
+        if (! request()->header('X-Inertia-Partial-Data')) {
+            \App\Models\TicketView::updateOrCreate(
+                ['ticket_id' => $ticket->id, 'user_id' => auth()->id()],
+                ['viewed_at' => now()]
+            );
+        }
 
-        $viewers = $ticket->views()
-            ->with('user:id,name,profile_photo')
-            ->orderByDesc('viewed_at')
-            ->get()
-            ->map(fn ($view) => [
-                'id' => $view->user_id,
-                'name' => $view->user?->name ?? 'Unknown user',
-                'profile_photo' => $view->user?->profile_photo,
-                'viewed_at' => optional($view->viewed_at)->timezone('Asia/Manila')->format('M d, Y g:i A'),
-                'viewed_at_human' => optional($view->viewed_at)->diffForHumans(),
-            ])
-            ->values();
-
+        // Every prop below the ticket itself is a CLOSURE on purpose. Inertia
+        // evaluates a closure prop only when it is actually being sent, so the
+        // partial reloads this page fires constantly (changing the department,
+        // the item, the partner) stop rebuilding the whole form. They used to
+        // re-run all of it: ~100 queries per field change, which is seconds of
+        // round trips against the remote database. Do NOT turn these back into
+        // plain values, and do NOT use Inertia::optional() either -- that would
+        // also skip them on the first full load, and the form needs them then.
         return Inertia::render('Tickets/Edit', [
             'ticket' => $ticket,
             // Provider vs customer for THIS ticket: another department's work is
-            // followed and replied to, never edited. Enforced server-side too —
+            // followed and replied to, never edited. Enforced server-side too --
             // see the guards on update/accept/split/schedule/CC.
-            'departmentAxis' => TicketAccess::payload($ticket, auth()->user()),
-            'referenceDepartmentId' => TicketAccess::servingDepartmentId($ticket),
-            'viewers' => $viewers,
+            'departmentAxis' => fn () => TicketAccess::payload($ticket, auth()->user()),
+            'referenceDepartmentId' => fn () => TicketAccess::servingDepartmentId($ticket),
+            'viewers' => fn () => $ticket->views()
+                ->with('user:id,name,profile_photo')
+                ->orderByDesc('viewed_at')
+                ->get()
+                ->map(fn ($view) => [
+                    'id' => $view->user_id,
+                    'name' => $view->user?->name ?? 'Unknown user',
+                    'profile_photo' => $view->user?->profile_photo,
+                    'viewed_at' => optional($view->viewed_at)->timezone('Asia/Manila')->format('M d, Y g:i A'),
+                    'viewed_at_human' => optional($view->viewed_at)->diffForHumans(),
+                ])
+                ->values(),
             'itemLeaders' => $this->buildItemLeaders($ticket->item_id),
-            'staff' => $staff,
-            'companies' => $companies,
-            'users' => $users,
-            'departmentReferences' => $this->organizationReferences->tree(activeOnly: true),
-            'stores' => $stores,
-            'vendors' => $vendors,
-            'cannedMessages' => $cannedMessages,
-            'businessHours' => $businessHours,
-            'existingRequesters' => Ticket::whereNotNull('sender_name')->where('sender_name', '!=', '')->distinct()->pluck('sender_name'),
-            'existingEmails' => Ticket::whereNotNull('sender_email')->where('sender_email', '!=', '')->distinct()->pluck('sender_email'),
-            'existingDepartments' => Ticket::whereNotNull('department')->where('department', '!=', '')->distinct()->pluck('department'),
+            'staff' => fn () => User::whereHas('roles', function ($q) {
+                $q->where('is_assignable', true);
+            })->select('id', 'name', 'email', 'org_path')->get(),
+            'companies' => fn () => Company::where('is_active', true)->select('id', 'name')->get(),
+            'users' => fn () => User::active()->orderBy('name')->get(),
+            'departmentReferences' => fn () => $this->organizationReferences->tree(activeOnly: true),
+            // Follows the ACTIVE ENTITY only, exactly like the switcher promises: on
+            // NONO'S you get NONO'S stores, never a sibling brand's. The ticket's own
+            // company is deliberately NOT added - on a TGI ticket that would pull in
+            // every TGI brand's stores no matter which entity you had switched to.
+            // The saved store is kept listed so an older ticket still shows its value.
+            'stores' => fn () => $this->storesForCompanies(
+                [\App\Support\CompanyContext::activeCompanyId()],
+                $ticket->store_id,
+                TicketAccess::servingDepartmentId($ticket)
+            ),
+            'vendors' => fn () => collect([['id' => null, 'name' => 'None', 'email' => null, 'contact_person' => null]])
+                ->concat($this->vendorsWithUsableCompanies(['id', 'name', 'email', 'contact_person', 'company_id'], TicketAccess::servingDepartmentId($ticket), $ticket->vendor_id)),
+            'cannedMessages' => fn () => \App\Models\CannedMessage::where('is_active', true)->orderBy('title')->get(),
+            'businessHours' => function () use ($ticket) {
+                $assignee = $ticket->assignee;
+                $subUnit = $assignee?->org_path;
+
+                return [
+                    'start' => \App\Models\Setting::getScoped('business_start_time', '08:00', $assignee?->department_id, $assignee?->department_node_id, $subUnit),
+                    'end' => \App\Models\Setting::getScoped('business_end_time', '17:00', $assignee?->department_id, $assignee?->department_node_id, $subUnit),
+                    'days' => json_decode(\App\Models\Setting::getScoped('working_days', '[1,2,3,4,5]', $assignee?->department_id, $assignee?->department_node_id, $subUnit), true),
+                ];
+            },
+            'existingRequesters' => fn () => Ticket::whereNotNull('sender_name')->where('sender_name', '!=', '')->distinct()->pluck('sender_name'),
+            'existingEmails' => fn () => Ticket::whereNotNull('sender_email')->where('sender_email', '!=', '')->distinct()->pluck('sender_email'),
+            'existingDepartments' => fn () => Ticket::whereNotNull('department')->where('department', '!=', '')->distinct()->pluck('department'),
         ]);
     }
 

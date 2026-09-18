@@ -50,23 +50,36 @@ class TicketResponseClassificationTest extends TestCase
             'company_id' => $this->company->id,
         ]);
 
-        $category = Category::create(['name' => 'Hardware', 'is_active' => true]);
-
-        $this->item = Item::create([
-            'category_id' => $category->id,
-            'name' => 'POS Terminal',
-            'description' => 'POS device issues',
-            'priority' => 'medium',
-            'concern_type' => 'Incident',
-            'is_active' => true,
-        ]);
-
         $this->serving = Department::create([
             'name' => 'Information Technology',
             'code' => 'IT',
             'is_active' => true,
             'company_id' => $this->company->id,
         ]);
+
+        // Catalogue references are owned by a service department; an untagged one
+        // is deliberately not selectable on a ticket (see DepartmentReferences).
+        // company_id is not fillable on these models - it is normally stamped from
+        // the active entity - so the fixture sets it unguarded.
+        [$category, $this->item] = \Illuminate\Database\Eloquent\Model::unguarded(function () {
+            $category = Category::create([
+                'name' => 'Hardware',
+                'is_active' => true,
+                'company_id' => $this->company->id,
+                'department_id' => $this->serving->id,
+            ]);
+
+            return [$category, Item::create([
+                'category_id' => $category->id,
+                'name' => 'POS Terminal',
+                'description' => 'POS device issues',
+                'priority' => 'medium',
+                'concern_type' => 'Incident',
+                'is_active' => true,
+                'company_id' => $this->company->id,
+                'department_id' => $this->serving->id,
+            ])];
+        });
 
         $this->agent = User::factory()->create([
             'company_id' => $this->company->id,

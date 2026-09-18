@@ -918,22 +918,29 @@ class ActivityTemplateController extends Controller implements HasMiddleware
         return [$activities, $errors];
     }
 
+    /**
+     * The three weight columns are validated as `nullable`, and the import path
+     * builds them explicitly - but a form save may simply omit them, and reading
+     * an absent key threw "Undefined array key" (a 500 on an otherwise valid
+     * save). Every read here treats a missing key exactly like a null one.
+     */
     private function validateImportWeights($activities): array
     {
         $errors = [];
-        $weightedRows = $activities->filter(fn ($row) => $row['milestone_weight'] !== null
-            || $row['activity_weight'] !== null || $row['sub_task_weight'] !== null);
+        $weightedRows = $activities->filter(fn ($row) => ($row['milestone_weight'] ?? null) !== null
+            || ($row['activity_weight'] ?? null) !== null || ($row['sub_task_weight'] ?? null) !== null);
 
         if ($weightedRows->isEmpty()) {
             return [];
         }
 
         $parents = $activities->filter(fn ($row) => empty($row['parent_client_key']));
-        $milestones = $parents->groupBy(fn ($row) => $row['milestone'] ?: 'General');
+        $milestones = $parents->groupBy(fn ($row) => ($row['milestone'] ?? null) ?: 'General');
         $milestoneTotal = 0.0;
 
         foreach ($milestones as $name => $rows) {
-            $weights = $rows->pluck('milestone_weight')->filter(fn ($value) => $value !== null)->unique()->values();
+            $weights = $rows->map(fn ($row) => $row['milestone_weight'] ?? null)
+                ->filter(fn ($value) => $value !== null)->unique()->values();
             if ($weights->count() !== 1) {
                 $errors[] = "Milestone '{$name}' must repeat one consistent Milestone Weight % on every row.";
                 continue;

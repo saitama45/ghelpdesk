@@ -19,28 +19,36 @@ class OrganizationReferenceService
             ->orderBy('name')
             ->get();
 
+        if ($departments->isEmpty()) {
+            return [];
+        }
+
+        // ONE query for every node, then the tree is assembled in memory. The
+        // recursive version issued a query per parent (40 round trips for a dozen
+        // departments), which is what made the ticket edit page crawl against the
+        // remote database.
+        $nodesByParent = DepartmentNode::query()
+            ->whereIn('department_id', $departments->pluck('id')->all())
+            ->when($activeOnly, fn ($query) => $query->where('is_active', true))
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get()
+            ->groupBy(fn (DepartmentNode $node) => $node->department_id.':'.($node->parent_id ?? ''));
+
         return $departments->map(fn (Department $department) => [
             'id' => $department->id,
             'name' => $department->name,
             'code' => $department->code,
             'description' => $department->description,
             'is_active' => $department->is_active,
-            'nodes' => $this->buildNodeTree($department->id, null, $activeOnly),
+            'nodes' => $this->buildNodeTree($nodesByParent, $department->id, null),
         ])->values()->all();
     }
 
-    /**
-     * Recursively build the node tree for a department.
-     */
-    private function buildNodeTree(int $departmentId, ?int $parentId, bool $activeOnly): array
+    /** Build one department's node tree from the pre-grouped rows. */
+    private function buildNodeTree($nodesByParent, int $departmentId, ?int $parentId): array
     {
-        return DepartmentNode::query()
-            ->where('department_id', $departmentId)
-            ->where('parent_id', $parentId)
-            ->when($activeOnly, fn ($query) => $query->where('is_active', true))
-            ->orderBy('sort_order')
-            ->orderBy('name')
-            ->get()
+        return collect($nodesByParent[$departmentId.':'.($parentId ?? '')] ?? [])
             ->map(fn (DepartmentNode $node) => [
                 'id' => $node->id,
                 'department_id' => $node->department_id,
@@ -50,7 +58,7 @@ class OrganizationReferenceService
                 'description' => $node->description,
                 'is_active' => $node->is_active,
                 'sort_order' => $node->sort_order,
-                'children' => $this->buildNodeTree($departmentId, $node->id, $activeOnly),
+                'children' => $this->buildNodeTree($nodesByParent, $departmentId, $node->id),
             ])->values()->all();
     }
 

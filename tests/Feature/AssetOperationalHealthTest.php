@@ -416,10 +416,14 @@ class AssetOperationalHealthTest extends TestCase
         $ticket = $this->ticket('waiting_service_provider', 'urgent');
         $this->tag($ticket, $unit);
 
-        TicketSlaMetric::create([
-            'ticket_id' => $ticket->id,
-            'resolution_target_at' => '2026-08-20 17:00:00',
-        ]);
+        // TicketObserver already created this ticket's SLA row. Creating a second
+        // one here left the observer's row winning the hasOne, so the assertion
+        // below was really reading a target computed from "now" - set the target
+        // on the row the report actually reads.
+        TicketSlaMetric::updateOrCreate(
+            ['ticket_id' => $ticket->id],
+            ['resolution_target_at' => '2026-08-20 17:00:00'],
+        );
 
         $store = collect($this->build()['stores'])->firstWhere('code', 'ST001');
 

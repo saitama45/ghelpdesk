@@ -23,17 +23,35 @@ class ProjectActivitySubTaskTest extends TestCase
     {
         parent::setUp();
 
+        // Only the activity-template routes use Illuminate's Authorize middleware.
+        // Every projects* route is gated by Spatie's PermissionMiddleware, which
+        // withoutMiddleware() does NOT cover - so the acting user is granted the
+        // real permissions instead (see projectUser()).
         $this->withoutMiddleware([
             \Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
             \Illuminate\Auth\Middleware\Authorize::class,
         ]);
     }
 
-    public function test_project_shows_activity_templates_from_all_store_classes(): void
+    /** A user who may open a project and manage its tasks. */
+    private function projectUser(): User
     {
         $user = User::factory()->create();
+
+        foreach (['projects.view', 'projects.manage_tasks'] as $permission) {
+            Permission::findOrCreate($permission, 'web');
+        }
+
+        return $user->givePermissionTo(['projects.view', 'projects.manage_tasks']);
+    }
+
+    public function test_project_shows_activity_templates_from_all_store_classes(): void
+    {
+        $user = $this->projectUser();
         $project = $this->createProject('Regular Store', $user);
 
+        // Every store class is offered; the project type is held constant so the
+        // assertion is about store class alone.
         $regularTemplate = ProjectTemplate::create([
             'name' => 'A Regular Template',
             'project_type' => 'NSO',
@@ -41,12 +59,12 @@ class ProjectActivitySubTaskTest extends TestCase
         ]);
         $kitchenTemplate = ProjectTemplate::create([
             'name' => 'B Kitchen Template',
-            'project_type' => 'Renovation',
+            'project_type' => 'NSO',
             'store_class' => 'Kitchen',
         ]);
         $bothTemplate = ProjectTemplate::create([
             'name' => 'C Universal Template',
-            'project_type' => 'Refresh',
+            'project_type' => 'NSO',
             'store_class' => 'Both',
         ]);
 
@@ -63,7 +81,7 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_activity_template_persists_nested_sub_tasks(): void
     {
-        $this->actingAs(User::factory()->create())
+        $this->actingAs($this->projectUser())
             ->post(route('activity-templates.store'), [
                 'name' => 'Nested NSO',
                 'project_type' => 'NSO',
@@ -114,7 +132,7 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_activity_template_order_accepts_decimals_from_one_and_applies_them_to_project_tasks(): void
     {
-        $user = User::factory()->create();
+        $user = $this->projectUser();
 
         $this->actingAs($user)
             ->post(route('activity-templates.store'), [
@@ -192,7 +210,7 @@ class ProjectActivitySubTaskTest extends TestCase
             'order' => 1,
         ]);
 
-        $this->actingAs(User::factory()->create())
+        $this->actingAs($this->projectUser())
             ->put(route('activity-templates.update', $template), [
                 'name' => 'Updated Nested NSO',
                 'project_type' => 'NSO',
@@ -251,7 +269,7 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_applying_nested_template_creates_project_parent_and_sub_task(): void
     {
-        $user = User::factory()->create();
+        $user = $this->projectUser();
         $project = $this->createProject('Test Store', $user);
         $template = ProjectTemplate::create([
             'name' => 'Nested NSO',
@@ -308,7 +326,7 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_applying_template_auto_schedules_dates_from_project_day1_date(): void
     {
-        $user = User::factory()->create();
+        $user = $this->projectUser();
         $project = $this->createProject('Test Store', $user);
         $project->update(['day1_date' => '2026-08-03']);
 
@@ -367,7 +385,7 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_applying_template_without_day1_date_leaves_dates_null(): void
     {
-        $user = User::factory()->create();
+        $user = $this->projectUser();
         $project = $this->createProject('Test Store', $user);
         $this->assertNull($project->day1_date);
 
@@ -398,7 +416,7 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_editing_lead_time_reschedules_every_task_in_the_project(): void
     {
-        $user = User::factory()->create();
+        $user = $this->projectUser();
         $project = $this->createProject('Test Store', $user);
         $project->update(['day1_date' => '2026-09-01']);
 
@@ -447,7 +465,7 @@ class ProjectActivitySubTaskTest extends TestCase
     public function test_weekly_progress_is_recorded_against_the_selected_reporting_week(): void
     {
         $this->withoutMiddleware(\Spatie\Permission\Middleware\PermissionMiddleware::class);
-        $user = User::factory()->create();
+        $user = $this->projectUser();
         $project = $this->createProject('Weekly Reporting', $user);
         $task = ProjectTask::create([
             'project_id' => $project->id,
@@ -481,7 +499,7 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_adding_a_task_reschedules_the_whole_project(): void
     {
-        $user = User::factory()->create();
+        $user = $this->projectUser();
         $project = $this->createProject('Test Store', $user);
         $project->update(['day1_date' => '2026-09-01']);
 
@@ -518,7 +536,7 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_deleting_a_task_reschedules_the_remaining_tasks(): void
     {
-        $user = User::factory()->create();
+        $user = $this->projectUser();
         $project = $this->createProject('Test Store', $user);
         $project->update(['day1_date' => '2026-09-01']);
 
@@ -567,7 +585,7 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_reapplying_template_refreshes_project_activity_sort_order(): void
     {
-        $user = User::factory()->create();
+        $user = $this->projectUser();
         $project = $this->createProject('Test Store', $user);
         $template = ProjectTemplate::create([
             'name' => 'Sorted NSO',
@@ -633,7 +651,7 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_applying_template_preserves_milestone_order_when_activity_orders_tie(): void
     {
-        $user = User::factory()->create();
+        $user = $this->projectUser();
         $project = $this->createProject('Test Store', $user);
         $template = ProjectTemplate::create([
             'name' => 'Tied Milestone Orders',
@@ -690,7 +708,7 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_deleting_project_milestone_deletes_all_category_tasks_and_sub_tasks(): void
     {
-        $user = User::factory()->create();
+        $user = $this->projectUser();
         $project = $this->createProject('Test Store', $user);
 
         $posTask = ProjectTask::create([
@@ -740,7 +758,7 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_sub_task_parent_must_belong_to_same_project(): void
     {
-        $user = User::factory()->create();
+        $user = $this->projectUser();
         $firstProject = $this->createProject('First Store', $user);
         $secondProject = $this->createProject('Second Store', $user);
 
@@ -768,7 +786,7 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_deleting_parent_project_activity_deletes_sub_tasks(): void
     {
-        $user = User::factory()->create();
+        $user = $this->projectUser();
         $project = $this->createProject('Test Store', $user);
 
         $parentTask = ProjectTask::create([
@@ -800,10 +818,7 @@ class ProjectActivitySubTaskTest extends TestCase
 
     public function test_per_store_template_uses_target_as_denominator_and_expands_in_idempotent_waves(): void
     {
-        $user = User::factory()->create();
-        Permission::findOrCreate('projects.view', 'web');
-        Permission::findOrCreate('projects.manage_tasks', 'web');
-        $user->givePermissionTo(['projects.view', 'projects.manage_tasks']);
+        $user = $this->projectUser();
         $brand = Company::create([
             'name' => 'NONOS',
             'code' => 'NONOS',
@@ -923,6 +938,9 @@ class ProjectActivitySubTaskTest extends TestCase
             'store_id' => $store->id,
             'name' => $storeName . ' Project',
             'status' => 'Planning',
+            // A template only applies to a project of its own type
+            // (ProjectTemplate::applicabilityErrorFor); the fixtures below are NSO.
+            'project_type' => 'NSO',
             // The creator owns the project and may manage its full structure.
             'created_by' => $owner?->id,
         ]);

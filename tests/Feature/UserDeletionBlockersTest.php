@@ -17,8 +17,11 @@ use Tests\TestCase;
  * foreign key. It now names the records that are in the way, and where to go and
  * deal with them.
  *
- * Note on the delete itself: `users` is NOT soft-deleting, and these run against
- * the isolated sqlite :memory: connection forced by phpunit.xml.
+ * Note on the delete itself: deleting a user from User Management now ARCHIVES it
+ * (AccountArchiveService soft-deletes the login and its paired loyalty customer),
+ * so the blocker scan and its refusal moved to the PURGE at
+ * Settings > Account Archive, which is the step that removes the row for good.
+ * These run against the isolated sqlite :memory: connection forced by phpunit.xml.
  */
 class UserDeletionBlockersTest extends TestCase
 {
@@ -30,9 +33,34 @@ class UserDeletionBlockersTest extends TestCase
         $admin->givePermissionTo(
             Permission::findOrCreate('users.view', 'web'),
             Permission::findOrCreate('users.delete', 'web'),
+            // Purging is the destructive half, so it is gated by settings.edit too.
+            Permission::findOrCreate('settings.edit', 'web'),
         );
 
         return $admin;
+    }
+
+    /**
+     * A user already sitting in the archive, past the purge retention window.
+     *
+     * The archived state is SEEDED directly rather than produced by calling the
+     * archive action, so these tests exercise the purge alone.
+     */
+    private function archivedUser(array $attributes = []): User
+    {
+        $user = User::factory()->create($attributes);
+
+        DB::table('users')->where('id', $user->id)
+            ->update(['deleted_at' => now()->subYears(5)]);
+
+        return $user->fresh() ?? User::withTrashed()->findOrFail($user->id);
+    }
+
+    private function purge(User $admin, User $user)
+    {
+        return $this->actingAs($admin)
+            ->from(route('account-archive.index'))
+            ->delete(route('account-archive.purge'), ['type' => 'users', 'ids' => [$user->id]]);
     }
 
     public function test_a_customer_created_by_the_user_is_reported_as_the_blocker(): void
@@ -52,20 +80,18 @@ class UserDeletionBlockersTest extends TestCase
         $this->assertStringContainsString('Stamps → Customers tab', $message);
     }
 
-    public function test_the_delete_request_is_refused_with_that_message_and_keeps_the_user(): void
+    public function test_the_purge_is_refused_with_that_message_and_keeps_the_user(): void
     {
         $admin = $this->admin();
-        $user = User::factory()->create(['name' => 'Ailene Estella']);
+        $user = $this->archivedUser(['name' => 'Ailene Estella']);
         Customer::create(['name' => 'Walk-in Guest', 'created_by' => $user->id]);
 
-        $response = $this->actingAs($admin)
-            ->from(route('users.index'))
-            ->delete(route('users.destroy', $user->id));
+        $response = $this->purge($admin, $user);
 
-        $response->assertSessionHasErrors('user');
+        $response->assertSessionHasErrors('purge');
         $this->assertStringContainsString(
             'Stamps → Customers tab',
-            (string) session('errors')->first('user')
+            (string) session('errors')->first('purge')
         );
 
         // The whole transaction rolls back: the account is untouched, and so is the
@@ -137,13 +163,13 @@ class UserDeletionBlockersTest extends TestCase
         $this->assertSame('customers', $found[0]['table'], 'The actionable area comes first, despite the smaller count.');
     }
 
-    public function test_references_the_delete_already_clears_do_not_block_it(): void
+    public function test_references_the_purge_already_clears_do_not_block_it(): void
     {
         // The scan runs after the cleanup, so a user whose only references are the
-        // ones `destroy()` nulls out must still delete. Guarding the wrong way round
-        // here would refuse deletions that work today.
+        // ones the purge nulls out must still be removed. Guarding the wrong way
+        // round here would refuse purges that work today.
         $admin = $this->admin();
-        $user = User::factory()->create();
+        $user = $this->archivedUser();
 
         Ticket::create([
             'title' => 'Terminal offline',
@@ -155,11 +181,9 @@ class UserDeletionBlockersTest extends TestCase
             'assignee_id' => $user->id,
         ]);
 
-        $this->actingAs($admin)
-            ->from(route('users.index'))
-            ->delete(route('users.destroy', $user->id))
-            ->assertSessionHasNoErrors();
+        $this->purge($admin, $user)->assertSessionHasNoErrors();
 
+        // Purge is the permanent step: the row is gone, not archived again.
         $this->assertDatabaseMissing('users', ['id' => $user->id]);
     }
 
