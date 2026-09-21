@@ -26,7 +26,7 @@ class CompanyController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $query = Company::with('entities:id,name,code');
+        $query = Company::with('entities:id,name,code,type');
 
         if ($request->filled('search')) {
             $query->where('name', 'like', "%{$request->search}%")

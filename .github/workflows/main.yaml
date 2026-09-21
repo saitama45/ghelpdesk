@@ -30,6 +30,9 @@ jobs:
           php-version: "8.3"
           extensions: fileinfo, mbstring, xml, gd, zip, pdo_sqlsrv, sqlsrv
           ini-values: post_max_size=256M, max_execution_time=180
+          # Ubuntu runners enable Xdebug by default; nothing here measures
+          # coverage and it only slows composer/artisan down.
+          coverage: none
 
       - name: Install Composer Dependencies
         # --no-dev keeps phpunit, pint, sail, faker, etc. out of the package:
@@ -123,6 +126,29 @@ jobs:
           name: laravel-app
           path: .
 
+      # This job RUNS PHP (artisan migrate) against each server's database, but had
+      # no PHP setup of its own - it used whatever the runner image ships, which
+      # is an unpinned PHP with Xdebug ENABLED by default.
+      #
+      # Deploys with nothing to migrate passed; the first deploy that actually ran
+      # DDL died with SIGSEGV (exit 139) on both servers. The connection itself was
+      # fine (migrate had already SELECTed the migrations table to get that far), and
+      # a bad statement would raise a SQLSTATE error rather than crash the process -
+      # so the fault is native, in the interpreter/extension, not in the SQL.
+      #
+      # Pinning the same PHP and extensions as the build job, with `coverage: none`
+      # to drop Xdebug (a well-known source of native crashes in CI), removes those
+      # variables. The report step below prints the interpreter, the PDO drivers and
+      # whether Xdebug is loaded, so if this ever fails again the log identifies it
+      # instead of leaving it to be guessed at.
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: fileinfo, mbstring, xml, gd, zip, pdo_sqlsrv, sqlsrv
+          ini-values: post_max_size=256M, max_execution_time=180
+          coverage: none
+
       - name: Create server-specific Laravel environment
         shell: bash
         env:
@@ -138,11 +164,23 @@ jobs:
           printf '%s\n' "$DEPLOY_ENV_FILE" > .env
           chmod 600 .env
 
-      - name: Run database migrations for ${{ matrix.display_name }}
+      # Names the interpreter and driver in the log, so a failure here says what
+      # it was actually running instead of leaving it to be guessed at.
+      - name: Report the migration runtime for ${{ matrix.display_name }}
         shell: bash
         run: |
+          php -v | head -n 1
+          echo "PDO drivers: $(php -r 'echo implode(", ", PDO::getAvailableDrivers());')"
+          echo "Xdebug loaded: $(php -r 'echo extension_loaded("xdebug") ? "yes" : "no";')"
           php artisan config:clear
-          php artisan migrate --force --no-interaction
+          php artisan about --only=drivers
+
+      # `-d xdebug.mode=off` belt-and-braces: `coverage: none` above already removes
+      # Xdebug, and this makes the run inert even if the image reinstates it. An
+      # unknown ini key is simply ignored when the extension is absent.
+      - name: Run database migrations for ${{ matrix.display_name }}
+        shell: bash
+        run: php -d xdebug.mode=off artisan migrate --force --no-interaction
 
       - name: Deploy to ${{ matrix.display_name }} by FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.4

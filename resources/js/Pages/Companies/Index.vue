@@ -309,7 +309,11 @@ const editCompany = (company) => {
     form.type = company.type || 'Entity'
     form.description = company.description || ''
     form.is_active = company.is_active
-    form.entity_company_ids = (company.entities || []).map(entity => entity.id)
+    // Drop stale links to companies no longer typed Entity: they have no checkbox, and
+    // resubmitting them fails the entity_company_ids.* rule on save.
+    form.entity_company_ids = (company.entities || [])
+        .filter(entity => entity.type === 'Entity')
+        .map(entity => entity.id)
     resetLogoState()
     logoPreview.value = company.logo ? `/serve-storage/${company.logo}` : null
     showModal.value = true
