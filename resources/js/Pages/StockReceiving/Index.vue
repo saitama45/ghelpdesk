@@ -365,6 +365,46 @@
                         </div>
                     </template>
 
+                    <!-- DR photo: a visual guide only, optional -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            DR Image <span class="font-normal text-gray-400 dark:text-gray-500">(optional guide)</span>
+                        </label>
+
+                        <div v-if="drImagePreview" class="mt-1 flex flex-col sm:flex-row sm:items-start gap-3 rounded-md border border-gray-200 p-3 dark:border-gray-700">
+                            <a :href="drImagePreview" target="_blank" rel="noopener" class="block shrink-0" title="Open full size">
+                                <img :src="drImagePreview" alt="Delivery receipt" class="h-40 w-auto max-w-full rounded border border-gray-200 object-contain bg-gray-50 dark:border-gray-700 dark:bg-gray-900">
+                            </a>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 space-y-2">
+                                <p v-if="drImage.note">{{ drImage.note }}</p>
+                                <p v-else-if="!drImage.file">Tap the image to view it full size.</p>
+                                <div v-if="!readOnly" class="flex flex-wrap gap-2">
+                                    <button type="button" @click="drImageInput?.click()" :disabled="drImage.compressing"
+                                        class="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">
+                                        Replace
+                                    </button>
+                                    <button type="button" @click="removeDrImage"
+                                        class="px-3 py-1.5 text-xs font-medium text-red-600 bg-white border border-red-200 rounded-md hover:bg-red-50 dark:bg-gray-800 dark:border-red-500/40 dark:hover:bg-red-500/10">
+                                        Remove
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button v-else-if="!readOnly" type="button" @click="drImageInput?.click()" :disabled="drImage.compressing"
+                            class="mt-1 flex w-full flex-col items-center justify-center rounded-md border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-center hover:border-blue-300 hover:bg-gray-100 disabled:opacity-60 dark:border-gray-600 dark:bg-gray-900/50 dark:hover:bg-gray-800">
+                            <PhotoIcon class="h-7 w-7 text-gray-400" />
+                            <span class="mt-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+                                {{ drImage.compressing ? 'Optimizing image…' : 'Upload or take a photo of the DR' }}
+                            </span>
+                            <span class="text-xs text-gray-500 dark:text-gray-400">Large phone photos are reduced automatically.</span>
+                        </button>
+
+                        <p v-else class="mt-1 text-sm text-gray-400 dark:text-gray-500">No DR image attached.</p>
+
+                        <input ref="drImageInput" type="file" accept="image/*" class="hidden" @change="onDrImagePicked">
+                    </div>
+
                     <div>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Remarks</label>
                         <textarea v-model="form.remarks" :disabled="readOnly" rows="2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm resize-none disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-gray-800"></textarea>
@@ -445,7 +485,14 @@ import { usePagination } from '@/Composables/usePagination'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { usePermission } from '@/Composables/usePermission'
+import { compressImage, formatBytes } from '@/Composables/useImageCompressor'
+import { PhotoIcon } from '@heroicons/vue/24/outline'
 import axios from 'axios'
+
+// Keep in step with DR_IMAGE_MAX_KB in StockReceivingController. Photos are shrunk to
+// well under the cap; 2400px on the long edge keeps DR print legible.
+const DR_IMAGE_MAX_MB = 5
+const DR_IMAGE_TARGET = { maxMb: 2, maxDimension: 2400 }
 
 const props = defineProps({
     stockReceivings: Object,
@@ -526,6 +573,64 @@ const form = reactive({
 })
 const itemRows = ref([]) // flat list of receiving rows
 
+// DR image: `existingUrl` is the saved photo, `file`/`previewUrl` a newly picked one.
+const drImageInput = ref(null)
+const drImage = reactive({
+    existingUrl: null,
+    file: null,
+    previewUrl: null,
+    remove: false,
+    compressing: false,
+    note: null,
+})
+const drImagePreview = computed(() => drImage.previewUrl || (drImage.remove ? null : drImage.existingUrl))
+
+const clearPickedDrImage = () => {
+    if (drImage.previewUrl) URL.revokeObjectURL(drImage.previewUrl)
+    Object.assign(drImage, { file: null, previewUrl: null, note: null })
+}
+
+const resetDrImage = (existingUrl = null) => {
+    clearPickedDrImage()
+    Object.assign(drImage, { existingUrl, remove: false, compressing: false })
+    if (drImageInput.value) drImageInput.value.value = ''
+}
+
+const onDrImagePicked = async (event) => {
+    const picked = event.target.files?.[0]
+    event.target.value = ''
+    if (!picked) return
+    if (!picked.type?.startsWith('image/')) {
+        showError('Please choose an image file.')
+        return
+    }
+
+    drImage.compressing = true
+    try {
+        const result = await compressImage(picked, DR_IMAGE_TARGET)
+        if (result.file.size > DR_IMAGE_MAX_MB * 1024 * 1024) {
+            showError(result.note || `The image could not be reduced below ${DR_IMAGE_MAX_MB} MB.`)
+            return
+        }
+        clearPickedDrImage()
+        Object.assign(drImage, {
+            file: result.file,
+            previewUrl: URL.createObjectURL(result.file),
+            remove: false,
+            note: result.compressed
+                ? `Optimized ${formatBytes(result.originalSize)} → ${formatBytes(result.finalSize)}. Saved when you click Save Changes.`
+                : `${formatBytes(result.finalSize)}. Saved when you click Save Changes.`,
+        })
+    } finally {
+        drImage.compressing = false
+    }
+}
+
+const removeDrImage = () => {
+    clearPickedDrImage()
+    drImage.remove = true
+}
+
 const getStatusBadgeClass = (status) => {
     if (status === 'Received') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
     if (status === 'Declined') return 'bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-300'
@@ -599,6 +704,11 @@ const loadIntoModal = async (item, options = {}) => {
             status: first.status,
         })
         form.remarks = first.remarks || ''
+        const withImage = rows.find(r => r.dr_image_path)
+        // The path in the query busts the browser cache after a replacement.
+        resetDrImage(withImage
+            ? `${route('stock-receivings.dr-image', withImage.id)}?v=${encodeURIComponent(withImage.dr_image_path)}`
+            : null)
         itemRows.value = rows.map(r => ({
             id: r.id,
             asset_id: r.asset_id,
@@ -625,6 +735,7 @@ const closeModal = () => {
     showModal.value = false
     readOnly.value = false
     itemRows.value = []
+    resetDrImage()
     verifiedIds.value = new Set()
     scanInput.value = ''
     scanFeedback.value = null
@@ -652,10 +763,17 @@ const submitForm = () => {
     const asset_transfers = Array.from(byAsset.entries()).map(([asset_id, entries]) => ({ asset_id, entries }))
 
     processing.value = true
-    router.put(route('stock-receivings.update', currentId.value), {
+    // Multipart needs POST + _method spoofing; "indices" keeps asset_transfers[i][entries][j]
+    // nested (Inertia's default "brackets" would flatten it).
+    router.post(route('stock-receivings.update', currentId.value), {
+        _method: 'put',
         remarks: form.remarks,
         asset_transfers,
+        dr_image: drImage.file,
+        remove_dr_image: drImage.remove,
     }, {
+        forceFormData: true,
+        queryStringArrayFormat: 'indices',
         onSuccess: () => closeModal(),
         onError: (errors) => showError(Object.values(errors)[0]),
         onFinish: () => { processing.value = false },

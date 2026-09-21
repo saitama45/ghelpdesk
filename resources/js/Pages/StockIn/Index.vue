@@ -1,7 +1,7 @@
 <template>
-    <AppLayout title="Stock Transaction">
-        <div class="py-12">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <AppLayout title="Stock Transaction" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
+        <div class="py-6">
+            <div class="space-y-6">
 
                 <!-- Summary Cards -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">

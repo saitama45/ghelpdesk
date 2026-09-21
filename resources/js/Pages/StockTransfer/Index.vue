@@ -535,6 +535,16 @@
                     </fieldset>
 
                     <div class="flex justify-end space-x-3 mt-6">
+                        <a
+                            v-if="readOnlyMode && currentId"
+                            :href="route('stock-transfers.print-dr', currentId)"
+                            target="_blank"
+                            rel="noopener"
+                            class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 border border-transparent rounded-md shadow-sm hover:bg-slate-800 dark:bg-slate-600 dark:hover:bg-slate-500"
+                        >
+                            <PrinterIcon class="w-4 h-4" />
+                            Print DR
+                        </a>
                         <button type="button" @click="closeModal" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700">{{ readOnlyMode ? 'Close' : 'Cancel' }}</button>
                         <button v-if="!readOnlyMode" type="submit" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700" :disabled="form.processing || assetSelections.length === 0">
                             {{ isEditing ? 'Update Transfer' : 'Save Transfer' }}
@@ -554,7 +564,7 @@ import DataTable from '@/Components/DataTable.vue'
 import Modal from '@/Components/Modal.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
-import { PlusIcon, EyeIcon } from '@heroicons/vue/24/outline'
+import { PlusIcon, EyeIcon, PrinterIcon } from '@heroicons/vue/24/outline'
 import { usePagination } from '@/Composables/usePagination'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'

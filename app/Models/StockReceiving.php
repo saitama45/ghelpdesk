@@ -34,6 +34,7 @@ class StockReceiving extends Model
         'received_by',
         'received_at',
         'remarks',
+        'dr_image_path',
         'created_by',
         'updated_by',
     ];

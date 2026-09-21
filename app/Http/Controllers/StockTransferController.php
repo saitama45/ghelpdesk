@@ -10,6 +10,7 @@ use App\Models\StockIn;
 use App\Models\StockReceiving;
 use App\Models\StockTransfer;
 use App\Models\Store;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -455,6 +456,65 @@ class StockTransferController extends Controller
         });
 
         return redirect()->back()->with('success', 'Transfer posted. Origin inventory deducted and pending receiving created at destination.');
+    }
+
+    /**
+     * Delivery Receipt (DR) for one transfer, streamed inline so the browser opens it in a new tab.
+     */
+    public function printDr(StockTransfer $stockTransfer)
+    {
+        $rows = $this->groupedTransferRows($stockTransfer)->get();
+
+        $findStore = fn (?string $location) => $location
+            ? Store::query()->with('company:id,name,code,logo')
+                ->where('code', $location)->orWhere('name', $location)
+                ->first(['id', 'code', 'name', 'address', 'company_id'])
+            : null;
+
+        $origin      = $findStore($stockTransfer->origin_location);
+        $destination = $findStore($stockTransfer->destination_location);
+        $company     = $origin?->company ?? $destination?->company;
+
+        $logo = null;
+        if ($company?->logo && is_file($path = storage_path('app/public/'.$company->logo))) {
+            $logo = 'data:'.(mime_content_type($path) ?: 'image/png').';base64,'.base64_encode(file_get_contents($path));
+        }
+
+        // Brand/model/description often repeat one another; print each distinct part once.
+        $describe = function (?Asset $asset): string {
+            $parts = [];
+            foreach ([$asset?->brand, $asset?->model, $asset?->description] as $part) {
+                $part = trim((string) $part);
+                if ($part !== '' && ! str_contains(strtolower(implode(' ', $parts)), strtolower($part))) {
+                    $parts[] = $part;
+                }
+            }
+
+            return implode(' ', $parts);
+        };
+
+        $lines = $rows->map(fn (StockTransfer $row) => [
+            'item_code'   => $row->asset?->item_code,
+            'description' => $describe($row->asset),
+            'serial_no'   => $row->serial_no,
+            'barcode'     => $row->barcode,
+            'condition'   => $row->asset_type,
+            'quantity'    => (int) $row->quantity,
+        ])->sortBy('item_code')->values();
+
+        $drNo = $stockTransfer->transfer_no ?: 'TRF-'.$stockTransfer->id;
+
+        return Pdf::loadView('pdf.stock-transfer-dr', [
+            'transfer'    => $stockTransfer->loadMissing('creator:id,name'),
+            'drNo'        => $drNo,
+            'origin'      => $origin,
+            'destination' => $destination,
+            'company'     => $company,
+            'logo'        => $logo,
+            'lines'       => $lines,
+            'totalQty'    => $lines->sum('quantity'),
+            'generatedAt' => now(),
+        ])->setPaper('a4', 'portrait')->stream('DR-'.Str::slug($drNo).'.pdf');
     }
 
     protected function groupedTransferRows(StockTransfer $stockTransfer)

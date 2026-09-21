@@ -260,10 +260,12 @@ Route::middleware('auth')->group(function () {
 
     Route::get('stock-transfers/available-stock', [\App\Http\Controllers\StockTransferController::class, 'availableStock'])->name('stock-transfers.available-stock');
     Route::get('stock-transfers/assets-with-stock', [\App\Http\Controllers\StockTransferController::class, 'assetsWithStock'])->name('stock-transfers.assets-with-stock');
-    Route::post('stock-transfers/{stock_transfer}/post', [\App\Http\Controllers\StockTransferController::class, 'post'])->name('stock-transfers.post');
+    Route::get('stock-transfers/{stock_transfer}/print-dr', [\App\Http\Controllers\StockTransferController::class, 'printDr'])->middleware('can:stock_transfers.view')->name('stock-transfers.print-dr');
+    Route::post('stock-transfers/{stock_transfer}/post',[\App\Http\Controllers\StockTransferController::class, 'post'])->name('stock-transfers.post');
     Route::resource('stock-transfers', \App\Http\Controllers\StockTransferController::class);
 
-    Route::post('stock-receivings/{stock_receiving}/post', [\App\Http\Controllers\StockReceivingController::class, 'post'])->name('stock-receivings.post');
+    Route::get('stock-receivings/{stock_receiving}/dr-image', [\App\Http\Controllers\StockReceivingController::class, 'drImage'])->middleware('can:stock_receivings.view')->name('stock-receivings.dr-image');
+    Route::post('stock-receivings/{stock_receiving}/post',[\App\Http\Controllers\StockReceivingController::class, 'post'])->name('stock-receivings.post');
     Route::post('stock-receivings/{stock_receiving}/decline', [\App\Http\Controllers\StockReceivingController::class, 'decline'])->name('stock-receivings.decline');
     Route::resource('stock-receivings', \App\Http\Controllers\StockReceivingController::class)->except(['create', 'edit', 'store']);
 

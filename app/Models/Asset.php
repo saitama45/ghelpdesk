@@ -11,6 +11,7 @@ class Asset extends Model
 
     protected $fillable = [
         'item_code',
+        'sap_codes',
         'category_id',
         'sub_category_id',
         'brand',

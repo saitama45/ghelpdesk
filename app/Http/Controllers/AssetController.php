@@ -13,11 +13,17 @@ use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class AssetController extends Controller implements HasMiddleware
 {
+    // An asset carries exactly one SAP code; a comma/semicolon means a list was entered.
+    private const SAP_CODE_MESSAGES = [
+        'sap_codes.not_regex' => 'Enter only one SAP code per asset.',
+    ];
+
     public static function middleware(): array
     {
         return [
@@ -59,6 +65,7 @@ class AssetController extends Controller implements HasMiddleware
             $search = $request->search;
             $query->where(function($q) use ($search) {
                 $q->where('item_code', 'like', "%{$search}%")
+                  ->orWhere('sap_codes', 'like', "%{$search}%")
                   ->orWhere('brand', 'like', "%{$search}%")
                   ->orWhere('model', 'like', "%{$search}%")
                   ->orWhere('description', 'like', "%{$search}%")
@@ -99,6 +106,7 @@ class AssetController extends Controller implements HasMiddleware
     public function store(Request $request)
     {
         $validated = $request->validate([
+            'sap_codes' => 'nullable|string|max:255|not_regex:/[,;]/',
             'category_id' => 'required|exists:categories,id',
             'sub_category_id' => 'nullable|exists:sub_categories,id',
             'brand' => 'nullable|string|max:255',
@@ -108,7 +116,7 @@ class AssetController extends Controller implements HasMiddleware
             'type' => 'required|in:Fixed,Consumables',
             'eol_years' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
-        ]);
+        ], self::SAP_CODE_MESSAGES);
 
         $validated['item_code'] = $this->nextItemCode();
 
@@ -121,6 +129,7 @@ class AssetController extends Controller implements HasMiddleware
     {
         $validated = $request->validate([
             'item_code' => 'required|string|unique:assets,item_code,' . $asset->id,
+            'sap_codes' => 'nullable|string|max:255|not_regex:/[,;]/',
             'category_id' => 'required|exists:categories,id',
             'sub_category_id' => 'nullable|exists:sub_categories,id',
             'brand' => 'nullable|string|max:255',
@@ -130,7 +139,7 @@ class AssetController extends Controller implements HasMiddleware
             'type' => 'required|in:Fixed,Consumables',
             'eol_years' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
-        ]);
+        ], self::SAP_CODE_MESSAGES);
 
         $asset->update($validated);
 
@@ -198,6 +207,7 @@ class AssetController extends Controller implements HasMiddleware
 
             $validator = \Validator::make([
                 'item_code' => $data['item_code'] ?? null,
+                'sap_codes' => ($data['sap_codes'] ?? '') ?: null,
                 'category_id' => $categoryId,
                 'sub_category_id' => $subCategoryId,
                 'brand' => $data['brand'] ?: null,
@@ -209,6 +219,7 @@ class AssetController extends Controller implements HasMiddleware
                 'is_active' => $data['is_active'] ?? '1',
             ], [
                 'item_code' => 'required|string|max:255|unique:assets,item_code',
+                'sap_codes' => 'nullable|string|max:255|not_regex:/[,;]/',
                 'category_id' => 'required|exists:categories,id',
                 'sub_category_id' => 'nullable|exists:sub_categories,id',
                 'brand' => 'nullable|string|max:255',
@@ -218,7 +229,7 @@ class AssetController extends Controller implements HasMiddleware
                 'type' => 'required|in:Fixed,Consumables',
                 'eol_years' => 'nullable|integer|min:0',
                 'is_active' => 'nullable|in:0,1',
-            ]);
+            ], self::SAP_CODE_MESSAGES);
 
             if ($validator->fails()) {
                 $errors[] = "Row {$rowNum}: " . implode(', ', $validator->errors()->all());
@@ -227,6 +238,7 @@ class AssetController extends Controller implements HasMiddleware
 
             Asset::create([
                 'item_code' => $data['item_code'],
+                'sap_codes' => ($data['sap_codes'] ?? '') ?: null,
                 'category_id' => $categoryId,
                 'sub_category_id' => $subCategoryId,
                 'brand' => $data['brand'] ?: null,
@@ -275,7 +287,7 @@ class AssetController extends Controller implements HasMiddleware
         $sheet = $spreadsheet->getSheet(0);
         $sheet->setTitle('Import Template');
 
-        $headers = ['item_code', 'category', 'sub_category', 'brand', 'model', 'description', 'cost', 'type', 'eol_years', 'is_active'];
+        $headers = ['item_code', 'sap_codes', 'category', 'sub_category', 'brand', 'model', 'description', 'cost', 'type', 'eol_years', 'is_active'];
         foreach ($headers as $index => $header) {
             $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
             $sheet->setCellValue("{$col}1", $header);
@@ -284,6 +296,7 @@ class AssetController extends Controller implements HasMiddleware
         $sheet->fromArray([
             [
                 'AST-001',
+                '100234',
                 $categories->get(0)?->name ?? '',
                 $subCategories->get(0)?->name ?? '',
                 'Dell',
@@ -296,6 +309,7 @@ class AssetController extends Controller implements HasMiddleware
             ],
             [
                 'AST-002',
+                '200871',
                 $categories->get(1)?->name ?? $categories->get(0)?->name ?? '',
                 $subCategories->get(1)?->name ?? $subCategories->get(0)?->name ?? '',
                 'HP',
@@ -308,12 +322,15 @@ class AssetController extends Controller implements HasMiddleware
             ],
         ], null, 'A2');
 
-        $sheet->getStyle('A1:J1')->getFont()->setBold(true);
-        $sheet->getStyle('A1:J1')->getFill()
+        $sheet->getStyle('A1:K1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:K1')->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setARGB('FFD9E1F2');
 
-        foreach (range(1, 10) as $colIndex) {
+        // Text format keeps SAP codes like "0012345" from losing leading zeros in Excel.
+        $sheet->getStyle('B2:B1001')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
+
+        foreach (range(1, 11) as $colIndex) {
             $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
@@ -321,7 +338,7 @@ class AssetController extends Controller implements HasMiddleware
         if ($categories->isNotEmpty()) {
             $categoryFormula = sprintf('Lists!$A$2:$A$%d', $categories->count() + 1);
             foreach (range(2, 1001) as $row) {
-                $categoryValidation = $sheet->getCell("B{$row}")->getDataValidation();
+                $categoryValidation = $sheet->getCell("C{$row}")->getDataValidation();
                 $categoryValidation->setType(DataValidation::TYPE_LIST)
                     ->setErrorStyle(DataValidation::STYLE_INFORMATION)
                     ->setAllowBlank(false)
@@ -336,7 +353,7 @@ class AssetController extends Controller implements HasMiddleware
         if ($subCategories->isNotEmpty()) {
             $subCategoryFormula = sprintf('Lists!$B$2:$B$%d', $subCategories->count() + 1);
             foreach (range(2, 1001) as $row) {
-                $subCategoryValidation = $sheet->getCell("C{$row}")->getDataValidation();
+                $subCategoryValidation = $sheet->getCell("D{$row}")->getDataValidation();
                 $subCategoryValidation->setType(DataValidation::TYPE_LIST)
                     ->setErrorStyle(DataValidation::STYLE_INFORMATION)
                     ->setAllowBlank(true)
@@ -349,14 +366,14 @@ class AssetController extends Controller implements HasMiddleware
         }
 
         foreach (range(2, 1001) as $row) {
-            $typeValidation = $sheet->getCell("H{$row}")->getDataValidation();
+            $typeValidation = $sheet->getCell("I{$row}")->getDataValidation();
             $typeValidation->setType(DataValidation::TYPE_LIST)
                 ->setErrorStyle(DataValidation::STYLE_INFORMATION)
                 ->setAllowBlank(false)
                 ->setShowDropDown(true)
                 ->setFormula1('Lists!$C$2:$C$3');
 
-            $binaryValidation = $sheet->getCell("J{$row}")->getDataValidation();
+            $binaryValidation = $sheet->getCell("K{$row}")->getDataValidation();
             $binaryValidation->setType(DataValidation::TYPE_LIST)
                 ->setErrorStyle(DataValidation::STYLE_INFORMATION)
                 ->setAllowBlank(false)

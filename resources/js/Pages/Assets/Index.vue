@@ -1,7 +1,7 @@
 <template>
-    <AppLayout title="Assets">
-        <div class="py-12">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+    <AppLayout title="Assets" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
+        <div class="py-6">
+            <div>
                 <DataTable
                     title="Asset Management"
                     subtitle="Manage asset references and their properties"
@@ -59,6 +59,7 @@
                         <tr v-for="asset in data" :key="asset.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <span class="text-sm font-bold text-blue-600 font-mono tracking-tight">{{ asset.item_code }}</span>
+                                <div v-if="asset.sap_codes" class="text-[10px] font-mono text-gray-500 dark:text-gray-400 max-w-[12rem] truncate" :title="asset.sap_codes">SAP: {{ asset.sap_codes }}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex flex-col space-y-1">
@@ -150,6 +151,7 @@
                                 <li>The template includes two sample rows you can replace with real asset data.</li>
                                 <li>Use existing category and sub-category names exactly as they appear in the system.</li>
                                 <li>Duplicate item codes are skipped during import and returned as issues.</li>
+                                <li><code>sap_codes</code> is optional and holds one SAP code per asset.</li>
                             </ul>
                         </div>
 
@@ -256,7 +258,7 @@
                     </div>
 
                     <form @submit.prevent="submitForm" class="space-y-5">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Item Code</label>
                                 <div class="relative">
@@ -271,6 +273,11 @@
                                 </div>
                                 <p v-if="!isEditing" class="mt-1 text-[10px] text-blue-600 font-medium">System generated code</p>
                             </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">SAP Codes</label>
+                                <input v-model="form.sap_codes" type="text" maxlength="255"
+                                       placeholder="e.g. 100234"
+                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm font-mono dark:bg-gray-900/50 dark:border-gray-600 dark:text-gray-100">                            </div>
                             <div>
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Type</label>
                                 <Autocomplete
@@ -421,6 +428,7 @@ const fetchNextCode = async () => {
 
 const form = reactive({
     item_code: '',
+    sap_codes: '',
     category_id: null,
     sub_category_id: null,
     brand: '',
@@ -473,6 +481,7 @@ const openCreateModal = () => {
     autoDescription.value = ''
     Object.assign(form, {
         item_code: '',
+        sap_codes: '',
         category_id: props.categories.length > 0 ? props.categories[0].id : null,
         sub_category_id: null,
         brand: '',
@@ -505,6 +514,7 @@ const editAsset = (asset) => {
         .join(' ')
     Object.assign(form, {
         item_code: asset.item_code,
+        sap_codes: asset.sap_codes || '',
         category_id: asset.category_id,
         sub_category_id: asset.sub_category_id,
         brand: asset.brand || '',

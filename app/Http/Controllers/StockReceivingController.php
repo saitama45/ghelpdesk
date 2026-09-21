@@ -10,10 +10,14 @@ use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 class StockReceivingController extends Controller
 {
+    /** Keep in step with DR_IMAGE_MAX_MB in StockReceiving/Index.vue. */
+    private const DR_IMAGE_MAX_KB = 5120;
+
     public function index(Request $request)
     {
         $search       = trim((string) $request->input('search', ''));
@@ -113,9 +117,26 @@ class StockReceivingController extends Controller
             'asset_transfers.*.entries.*.received_quantity' => 'required|integer|min:0',
             'asset_transfers.*.entries.*.condition'       => 'required|string|in:Good,Damaged,Missing',
             'asset_transfers.*.entries.*.damage_notes'    => 'nullable|string|max:1000',
+            // The browser shrinks phone photos before upload; this cap is only a backstop.
+            'dr_image'                                    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:'.self::DR_IMAGE_MAX_KB,
+            'remove_dr_image'                             => 'nullable|boolean',
+        ], [
+            'dr_image.max' => 'The DR image may not be larger than '.(self::DR_IMAGE_MAX_KB / 1024).' MB.',
         ]);
 
         $relatedRows = $this->groupedReceivingRows($stockReceiving)->get()->keyBy('id');
+
+        // One DR photo per receiving: the same path is stamped on every row in the group.
+        $currentPath = $relatedRows->pluck('dr_image_path')->filter()->first();
+        $drImagePath = $currentPath;
+        if ($request->hasFile('dr_image')) {
+            $drImagePath = str_replace('\\', '/', $request->file('dr_image')->store('stock-receiving-dr', 'local'));
+        } elseif ($request->boolean('remove_dr_image')) {
+            $drImagePath = null;
+        }
+        if ($currentPath && $currentPath !== $drImagePath) {
+            Storage::disk('local')->delete($currentPath);
+        }
 
         foreach ($validated['asset_transfers'] as $transfer) {
             foreach ($transfer['entries'] as $entry) {
@@ -128,12 +149,25 @@ class StockReceivingController extends Controller
                     'condition'         => $entry['condition'],
                     'damage_notes'      => $entry['damage_notes'] ?? null,
                     'remarks'           => $validated['remarks'] ?? null,
+                    'dr_image_path'     => $drImagePath,
                     'updated_by'        => $request->user()?->id,
                 ]);
             }
         }
 
         return redirect()->back()->with('success', 'Receiving Stock updated successfully');
+    }
+
+    /**
+     * The DR photo sits on the private disk (it is an internal document), so it is
+     * served through this authenticated route rather than the public /serve-storage.
+     */
+    public function drImage(StockReceiving $stockReceiving)
+    {
+        $path = $stockReceiving->dr_image_path;
+        abort_unless($path && Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->response($path, null, ['Cache-Control' => 'private, max-age=86400']);
     }
 
     public function destroy(Request $request, StockReceiving $stockReceiving)
