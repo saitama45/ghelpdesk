@@ -24,6 +24,7 @@ class StockIn extends Model
         'posted_date',
         'status',
         'asset_id',
+        'stock_pack_id',
         'asset_type',
         'is_allocation',
         'quantity',
@@ -42,6 +43,7 @@ class StockIn extends Model
 
     protected $casts = [
         'asset_id' => 'integer',
+        'stock_pack_id' => 'integer',
         'is_allocation' => 'boolean',
         'source_stock_in_id' => 'integer',
         'created_by' => 'integer',
@@ -60,6 +62,12 @@ class StockIn extends Model
     public function asset()
     {
         return $this->belongsTo(Asset::class);
+    }
+
+    /** The bulk unit (box/pack) this piece was received in, if any. */
+    public function pack()
+    {
+        return $this->belongsTo(StockPack::class, 'stock_pack_id');
     }
 
     public function creator()

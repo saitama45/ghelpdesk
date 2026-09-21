@@ -94,7 +94,7 @@
 </head>
 <body>
     <div class="header">
-        <h1>STOCK-IN QR CODES</h1>
+        <h1>{{ $heading ?? 'STOCK-IN QR CODES' }}</h1>
         <div class="meta">
             {{ $items->count() }} label{{ $items->count() === 1 ? '' : 's' }} generated on {{ now()->format('F d, Y h:i A') }}
         </div>
@@ -104,10 +104,11 @@
         @foreach($items->chunk(3) as $row)
             <tr>
                 @foreach($row as $label)
-                    @php($item = $label['item'])
+                    {{-- Box labels pass their own text; piece labels render from the stock row. --}}
+                    @php($item = $label['item'] ?? null)
                     <td class="label-cell">
                         <div class="label">
-                            <div class="item-code">{{ $item->asset?->item_code ?: 'No Item Code' }}</div>
+                            <div class="item-code">{{ $label['item_code'] ?? ($item?->asset?->item_code ?: 'No Item Code') }}@if(!empty($label['box_tag'])) &middot; {{ $label['box_tag'] }}@endif</div>
                             <div class="qr-wrap">
                                 @if($label['image'])
                                     <img class="qr-code" src="{{ $label['image'] }}" alt="QR Code">
@@ -115,12 +116,22 @@
                                     <div class="empty-image">QR image unavailable</div>
                                 @endif
                             </div>
-                            <div class="code">{{ $item->serial_no ?: $item->barcode ?: 'No serial/barcode' }}</div>
-                            <div class="details">{{ $item->asset?->description ?: $item->asset?->model ?: '-' }}</div>
-                            <div class="details">{{ $item->receive_date?->format('M d, Y') ?: '-' }}</div>
+                            <div class="code">{{ $label['code'] ?? ($item->serial_no ?: $item->barcode ?: 'No serial/barcode') }}</div>
+                            @if(isset($label['lines']))
+                                @foreach($label['lines'] as $line)
+                                    <div class="details">{{ $line }}</div>
+                                @endforeach
+                            @else
+                                <div class="details">{{ $item->asset?->description ?: $item->asset?->model ?: '-' }}</div>
+                                <div class="details">{{ $item->receive_date?->format('M d, Y') ?: '-' }}</div>
+                            @endif
                         </div>
                     </td>
                 @endforeach
+                {{-- Pad short rows so 1-2 labels keep the label width instead of stretching. --}}
+                @for($pad = $row->count(); $pad < 3; $pad++)
+                    <td class="label-cell"></td>
+                @endfor
             </tr>
         @endforeach
     </table>

@@ -356,6 +356,10 @@
                                         >
                                             {{ row.soh || 0 }}
                                         </button>
+                                        <p v-if="bulkEquivalent(row)" class="mt-0.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400"
+                                           :title="`Conversion only (1 ${row.asset.bulk_uom} = ${row.asset.units_per_bulk} ${row.asset.base_uom || 'PC'}); not a count of sealed boxes`">
+                                            {{ bulkEquivalent(row) }}
+                                        </p>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
                                         <span class="text-sm text-gray-600 dark:text-gray-300">
@@ -1210,6 +1214,20 @@ const parseDateOnly = (value) => {
 const formatSignedQuantity = (value) => {
     const quantity = Number(value || 0)
     return `${quantity > 0 ? '+' : ''}${quantity}`
+}
+
+// SOH is counted in pieces; for items with a bulk UOM also show the equivalent, e.g. "= 2 BOX + 2 PC".
+const bulkEquivalent = (row) => {
+    const asset = row.asset
+    const perBulk = Number(asset?.units_per_bulk || 0)
+    const soh = Number(row.soh || 0)
+    if (!asset?.bulk_uom || perBulk < 2 || soh <= 0) return ''
+    const bulks = Math.floor(soh / perBulk)
+    const rest = soh % perBulk
+    const parts = []
+    if (bulks) parts.push(`${bulks} ${asset.bulk_uom}`)
+    if (rest) parts.push(`${rest} ${asset.base_uom || 'PC'}`)
+    return `= ${parts.join(' + ')}`
 }
 
 const formatPlainQuantity = (value) => {

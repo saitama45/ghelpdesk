@@ -23,6 +23,7 @@ class StockTransfer extends Model
         'received_at',
         'status',
         'asset_id',
+        'stock_pack_id',
         'source_stock_in_id',
         'asset_type',
         'is_allocation',
@@ -42,6 +43,7 @@ class StockTransfer extends Model
 
     protected $casts = [
         'asset_id' => 'integer',
+        'stock_pack_id' => 'integer',
         'source_stock_in_id' => 'integer',
         'is_allocation' => 'boolean',
         'quantity' => 'integer',
@@ -61,6 +63,12 @@ class StockTransfer extends Model
     public function asset()
     {
         return $this->belongsTo(Asset::class);
+    }
+
+    /** The bulk unit (box/pack) this piece was received in, if any. */
+    public function pack()
+    {
+        return $this->belongsTo(StockPack::class, 'stock_pack_id');
     }
 
     public function creator()

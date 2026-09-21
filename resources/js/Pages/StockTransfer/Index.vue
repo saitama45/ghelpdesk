@@ -375,7 +375,7 @@
                                                 </td>
                                                 <td class="px-3 py-2 text-right" @click.stop>
                                                     <template v-if="isAssetSelected(asset)">
-                                                        <template v-if="asset.type === 'Fixed'">
+                                                        <template v-if="isUnitTracked(asset)">
                                                             <span v-if="getSelection(asset)?.isLoadingUnits" class="text-xs text-gray-400 dark:text-gray-400">...</span>
                                                             <span v-else class="text-xs font-bold" :class="getSelection(asset)?.availableUnits.length > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-400 dark:text-red-300'">
                                                                 {{ getSelection(asset)?.entries.length }}/{{ getSelection(asset)?.availableUnits.length }}
@@ -405,6 +405,21 @@
                                 <span class="text-xs font-black text-blue-800 uppercase tracking-widest dark:text-blue-300">Selected Assets</span>
                                 <span class="text-xs font-bold text-blue-600 dark:text-blue-400">{{ assetSelections.length }} asset(s) · {{ totalSelectedQty }} unit(s)</span>
                             </div>
+                            <!-- Scan a box label to pick every available piece in it, or a piece label to pick one -->
+                            <div v-if="!readOnlyMode && assetSelections.some(sel => isUnitTracked(sel.asset) && sel.availableUnits.length > 0)"
+                                 class="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-blue-100 bg-white dark:bg-gray-800 dark:border-blue-400/30">
+                                <input
+                                    v-model="transferScan"
+                                    @keydown.enter.prevent="handleTransferScan"
+                                    type="text"
+                                    placeholder="Scan a box or piece barcode, then Enter"
+                                    class="flex-1 min-w-[12rem] rounded-md border-gray-300 text-xs font-mono focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                                >
+                                <span v-if="transferScanFeedback" class="text-[11px] font-semibold"
+                                      :class="transferScanFeedback.type === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'">
+                                    {{ transferScanFeedback.message }}
+                                </span>
+                            </div>
                             <div class="divide-y divide-blue-100 dark:divide-blue-400/30">
                                 <div v-for="sel in assetSelections" :key="sel.asset.id" class="bg-white dark:bg-gray-800">
                                     <!-- Asset summary row -->
@@ -414,7 +429,7 @@
                                             <p class="text-xs text-gray-500 truncate dark:text-gray-300">{{ sel.asset.brand }} {{ sel.asset.model }}</p>
                                         </div>
                                         <!-- Non-Fixed: qty input -->
-                                        <template v-if="sel.asset.type !== 'Fixed' && !readOnlyMode">
+                                        <template v-if="qtyMode(sel) && !readOnlyMode">
                                             <div class="flex items-center gap-1.5">
                                                 <label class="text-[10px] font-bold text-gray-500 uppercase dark:text-gray-300">Qty</label>
                                                 <input
@@ -451,7 +466,7 @@
                                         </button>
                                     </div>
                                     <!-- Read-only details show every persisted coded row, regardless of catalog type. -->
-                                    <div v-if="(readOnlyMode && sel.entries.length > 0) || (sel.asset.type === 'Fixed' && sel.availableUnits.length > 0)" class="border-t border-blue-50 dark:border-blue-400/30">
+                                    <div v-if="(readOnlyMode && sel.entries.length > 0) || (isUnitTracked(sel.asset) && sel.availableUnits.length > 0)" class="border-t border-blue-50 dark:border-blue-400/30">
                                         <table class="min-w-full divide-y divide-gray-100 dark:divide-gray-700">
                                             <thead class="bg-gray-50 dark:bg-gray-900/50">
                                                 <tr>
@@ -478,6 +493,7 @@
                                                         <td class="px-4 py-2">
                                                             <p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ entry.serial_no || 'NO SERIAL' }}</p>
                                                             <p class="text-[10px] font-mono text-gray-500 dark:text-gray-300">{{ entry.barcode }}</p>
+                                                            <p v-if="entry.pack" class="mt-0.5 text-[10px] font-semibold text-indigo-600 dark:text-indigo-300">{{ entry.pack.bulk_uom }} {{ entry.pack.barcode }}</p>
                                                         </td>
                                                         <td class="px-4 py-2 text-[10px] font-mono text-gray-500 dark:text-gray-300">
                                                             <details v-if="entry.qrcode" class="max-w-md">
@@ -491,7 +507,27 @@
                                                 </template>
                                                 <!-- Edit mode: show available units with checkboxes -->
                                                 <template v-else>
-                                                    <tr v-for="unit in sel.availableUnits" :key="unit.id"
+                                                  <template v-for="group in unitGroups(sel)" :key="group.key">
+                                                    <tr v-if="group.pack" class="bg-indigo-50/70 dark:bg-indigo-500/10">
+                                                        <td class="px-4 py-1.5" @click.stop>
+                                                            <input type="checkbox"
+                                                                :checked="isGroupSelected(sel, group)"
+                                                                :indeterminate.prop="isGroupPartlySelected(sel, group)"
+                                                                @change="toggleGroup(sel, group, $event.target.checked)"
+                                                                :disabled="group.units.every(u => u.is_reserved)"
+                                                                class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 disabled:opacity-40 dark:border-gray-600 dark:bg-gray-900">
+                                                        </td>
+                                                        <td colspan="3" class="px-4 py-1.5">
+                                                            <span class="text-[11px] font-black text-indigo-700 uppercase dark:text-indigo-200">{{ group.pack.bulk_uom }} {{ group.pack.barcode }}</span>
+                                                            <span class="ml-2 text-[10px] text-indigo-500 dark:text-indigo-300">
+                                                                {{ group.units.length }} of {{ group.pack.units_per_pack }} {{ sel.asset.base_uom || 'PC' }} here
+                                                                <template v-if="groupSelectedCount(sel, group) > 0">
+                                                                    · {{ groupSelectedCount(sel, group) === group.pack.units_per_pack ? 'whole box' : `split: ${groupSelectedCount(sel, group)} picked` }}
+                                                                </template>
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                    <tr v-for="unit in group.units" :key="unit.id"
                                                         class="transition-colors"
                                                         :class="[
                                                             unit.is_reserved ? 'bg-amber-50/50 opacity-70 cursor-not-allowed dark:bg-amber-900/20' : 'hover:bg-blue-50/50 cursor-pointer dark:hover:bg-blue-500/10',
@@ -518,6 +554,7 @@
                                                         </td>
                                                         <td class="px-4 py-2 text-right text-sm font-bold text-gray-700 dark:text-gray-300">{{ Number(unit.cost).toLocaleString() }}</td>
                                                     </tr>
+                                                  </template>
                                                 </template>
                                             </tbody>
                                         </table>
@@ -720,9 +757,82 @@ const isAssetSelected = (asset) => assetSelections.value.some(s => s.asset.id ==
 const getSelection = (asset) => assetSelections.value.find(s => s.asset.id === asset.id)
 
 
+// Fixed items, and items received in boxes, move as labelled pieces picked from stock.
+const isUnitTracked = (asset) => asset?.type === 'Fixed' || !!asset?.bulk_uom
+
+// Other consumables move by quantity. Boxed items with no tracked pieces here (stock received
+// before boxes existed) fall back to quantity too.
+const qtyMode = (sel) => !isUnitTracked(sel.asset)
+    || (sel.asset.type !== 'Fixed' && !sel.isLoadingUnits && sel.availableUnits.length === 0)
+
+/** Available units grouped by box (boxes first), then loose pieces. */
+const unitGroups = (sel) => {
+    const groups = new Map()
+    const loose = []
+    for (const unit of sel.availableUnits) {
+        if (unit.pack) {
+            if (!groups.has(unit.pack.id)) groups.set(unit.pack.id, { key: `pack-${unit.pack.id}`, pack: unit.pack, units: [] })
+            groups.get(unit.pack.id).units.push(unit)
+        } else {
+            loose.push(unit)
+        }
+    }
+    return [...groups.values(), ...(loose.length ? [{ key: 'loose', pack: null, units: loose }] : [])]
+}
+
+const groupSelectedCount = (sel, group) => group.units.filter(u => isUnitSelected(sel, u)).length
+const isGroupSelected = (sel, group) => {
+    const pickable = group.units.filter(u => !u.is_reserved)
+    return pickable.length > 0 && pickable.every(u => isUnitSelected(sel, u))
+}
+const isGroupPartlySelected = (sel, group) => {
+    const picked = groupSelectedCount(sel, group)
+    return picked > 0 && !isGroupSelected(sel, group)
+}
+const toggleGroup = (sel, group, checked) => {
+    group.units.filter(u => !u.is_reserved).forEach(unit => {
+        if (checked !== isUnitSelected(sel, unit)) toggleUnit(sel, unit)
+    })
+}
+
+const transferScan = ref('')
+const transferScanFeedback = ref(null)
+
+/** A box barcode picks every available piece of that box; a piece barcode picks one piece. */
+const handleTransferScan = () => {
+    const code = transferScan.value.trim().toLowerCase()
+    transferScan.value = ''
+    if (!code) return
+
+    let message = null
+    for (const sel of assetSelections.value) {
+        const boxUnits = sel.availableUnits.filter(u => u.pack?.barcode?.toLowerCase() === code && !u.is_reserved)
+        if (boxUnits.length) {
+            boxUnits.forEach(unit => { if (!isUnitSelected(sel, unit)) toggleUnit(sel, unit) })
+            message = `${boxUnits[0].pack.bulk_uom} picked: ${boxUnits.length} ${sel.asset.base_uom || 'PC'}`
+            break
+        }
+        const unit = sel.availableUnits.find(u => (u.barcode || '').toLowerCase() === code || (u.serial_no || '').toLowerCase() === code)
+        if (unit) {
+            if (unit.is_reserved) {
+                transferScanFeedback.value = { type: 'error', message: `Reserved in ${unit.reserved_in || 'another transfer'}` }
+                return
+            }
+            if (!isUnitSelected(sel, unit)) toggleUnit(sel, unit)
+            message = `Picked ${unit.barcode}`
+            break
+        }
+    }
+
+    transferScanFeedback.value = message
+        ? { type: 'success', message }
+        : { type: 'error', message: 'Barcode not found among the available units.' }
+    setTimeout(() => { transferScanFeedback.value = null }, 2500)
+}
+
 const totalSelectedQty = computed(() =>
     assetSelections.value.reduce((sum, sel) => {
-        if (sel.asset.type === 'Fixed' && sel.availableUnits.length > 0) {
+        if (isUnitTracked(sel.asset) && sel.availableUnits.length > 0) {
             return sum + sel.entries.length
         }
         return sum + sel.qty
@@ -758,7 +868,7 @@ const toggleAsset = async (asset) => {
             isLoadingUnits: false,
         })
         assetSelections.value.push(sel)
-        if (asset.type === 'Fixed') {
+        if (isUnitTracked(asset)) {
             await loadAssetUnits(sel)
         }
     }
@@ -930,6 +1040,7 @@ const editTransfer = async (item) => {
                 eol_months: r.eol_months ?? 0,
                 cost: r.cost ?? 0,
                 price: r.price ?? 0,
+                pack: r.pack || null,
             }))
 
             selList.push(reactive({
@@ -961,7 +1072,7 @@ const openLinkedTransfer = async () => {
 }
 
 const buildEntries = (sel) => {
-    if (sel.asset.type === 'Fixed' && sel.availableUnits.length > 0) {
+    if (isUnitTracked(sel.asset) && sel.availableUnits.length > 0) {
         return sel.entries
     }
     const entries = []
@@ -994,7 +1105,7 @@ const submitForm = () => {
     }
 
     for (const sel of assetSelections.value) {
-        if (sel.asset.type === 'Fixed' && sel.availableUnits.length > 0 && sel.entries.length === 0) {
+        if (isUnitTracked(sel.asset) && sel.availableUnits.length > 0 && sel.entries.length === 0) {
             showError(`Please select units to transfer for ${sel.asset.item_code}`)
             return
         }

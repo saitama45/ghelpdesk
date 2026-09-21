@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Asset;
 use App\Models\Category;
+use App\Models\ReferenceOption;
 use App\Models\SubCategory;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -22,6 +24,13 @@ class AssetController extends Controller implements HasMiddleware
     // An asset carries exactly one SAP code; a comma/semicolon means a list was entered.
     private const SAP_CODE_MESSAGES = [
         'sap_codes.not_regex' => 'Enter only one SAP code per asset.',
+    ];
+
+    private const UOM_MESSAGES = [
+        'base_uom.in' => 'Choose a base UOM from the list.',
+        'bulk_uom.in' => 'Choose a bulk UOM from the list.',
+        'units_per_bulk.required_with' => 'Enter how many pieces are in one bulk unit.',
+        'units_per_bulk.min' => 'A bulk unit must hold at least 2 pieces.',
     ];
 
     public static function middleware(): array
@@ -99,6 +108,8 @@ class AssetController extends Controller implements HasMiddleware
             'subCategories' => $subCategories,
             'brandOptions' => $brandOptions,
             'modelOptions' => $modelOptions,
+            'uomBaseOptions' => ReferenceOption::ofType('uom_base'),
+            'uomBulkOptions' => ReferenceOption::ofType('uom_bulk'),
             'filters' => $request->only(['search', 'per_page']),
         ]);
     }
@@ -116,11 +127,12 @@ class AssetController extends Controller implements HasMiddleware
             'type' => 'required|in:Fixed,Consumables',
             'eol_years' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
-        ], self::SAP_CODE_MESSAGES);
+            ...$this->uomRules(),
+        ], [...self::SAP_CODE_MESSAGES, ...self::UOM_MESSAGES]);
 
         $validated['item_code'] = $this->nextItemCode();
 
-        Asset::create($validated);
+        Asset::create($this->normalizeUom($validated));
 
         return redirect()->back()->with('success', 'Asset created successfully');
     }
@@ -139,9 +151,10 @@ class AssetController extends Controller implements HasMiddleware
             'type' => 'required|in:Fixed,Consumables',
             'eol_years' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
-        ], self::SAP_CODE_MESSAGES);
+            ...$this->uomRules(),
+        ], [...self::SAP_CODE_MESSAGES, ...self::UOM_MESSAGES]);
 
-        $asset->update($validated);
+        $asset->update($this->normalizeUom($validated));
 
         return redirect()->back()->with('success', 'Asset updated successfully');
     }
@@ -150,6 +163,33 @@ class AssetController extends Controller implements HasMiddleware
     {
         $asset->delete();
         return redirect()->back()->with('success', 'Asset deleted successfully');
+    }
+
+    /**
+     * Base UOM is what stock is counted in (one stock row = one piece). A bulk UOM is optional,
+     * and when set it needs a pieces-per-bulk conversion of at least 2.
+     */
+    private function uomRules(): array
+    {
+        return [
+            'base_uom' => ['nullable', 'string', Rule::in(ReferenceOption::valuesOfType('uom_base'))],
+            'bulk_uom' => ['nullable', 'string', Rule::in(ReferenceOption::valuesOfType('uom_bulk'))],
+            'units_per_bulk' => ['nullable', 'required_with:bulk_uom', 'integer', 'min:2', 'max:100000'],
+        ];
+    }
+
+    /** Defaults the base UOM and drops a stray conversion when no bulk UOM is chosen. */
+    private function normalizeUom(array $data): array
+    {
+        // Callers that predate UOM (or leave it blank) get the default piece unit.
+        $data['base_uom'] = ($data['base_uom'] ?? null) ?: 'PC';
+
+        if (empty($data['bulk_uom'])) {
+            $data['bulk_uom'] = null;
+            $data['units_per_bulk'] = null;
+        }
+
+        return $data;
     }
 
     public function import(Request $request)
@@ -217,6 +257,10 @@ class AssetController extends Controller implements HasMiddleware
                 'type' => $data['type'] ?? 'Fixed',
                 'eol_years' => $data['eol_years'] ?: null,
                 'is_active' => $data['is_active'] ?? '1',
+                // UOM columns are optional so templates made before they existed still import.
+                'base_uom' => mb_strtoupper(($data['base_uom'] ?? '') ?: 'PC'),
+                'bulk_uom' => mb_strtoupper($data['bulk_uom'] ?? '') ?: null,
+                'units_per_bulk' => ($data['units_per_bulk'] ?? '') ?: null,
             ], [
                 'item_code' => 'required|string|max:255|unique:assets,item_code',
                 'sap_codes' => 'nullable|string|max:255|not_regex:/[,;]/',
@@ -229,14 +273,20 @@ class AssetController extends Controller implements HasMiddleware
                 'type' => 'required|in:Fixed,Consumables',
                 'eol_years' => 'nullable|integer|min:0',
                 'is_active' => 'nullable|in:0,1',
-            ], self::SAP_CODE_MESSAGES);
+                ...$this->uomRules(),
+            ], [...self::SAP_CODE_MESSAGES, ...self::UOM_MESSAGES]);
 
             if ($validator->fails()) {
                 $errors[] = "Row {$rowNum}: " . implode(', ', $validator->errors()->all());
                 continue;
             }
 
+            $uom = $this->normalizeUom($validator->validated());
+
             Asset::create([
+                'base_uom' => $uom['base_uom'],
+                'bulk_uom' => $uom['bulk_uom'],
+                'units_per_bulk' => $uom['units_per_bulk'],
                 'item_code' => $data['item_code'],
                 'sap_codes' => ($data['sap_codes'] ?? '') ?: null,
                 'category_id' => $categoryId,
@@ -284,10 +334,21 @@ class AssetController extends Controller implements HasMiddleware
         $listsSheet->setCellValue('C2', 'Fixed');
         $listsSheet->setCellValue('C3', 'Consumables');
 
+        $baseUoms = ReferenceOption::valuesOfType('uom_base');
+        $bulkUoms = ReferenceOption::valuesOfType('uom_bulk');
+        $listsSheet->setCellValue('D1', 'Base UOM');
+        foreach ($baseUoms as $index => $uom) {
+            $listsSheet->setCellValue('D'.($index + 2), $uom);
+        }
+        $listsSheet->setCellValue('E1', 'Bulk UOM');
+        foreach ($bulkUoms as $index => $uom) {
+            $listsSheet->setCellValue('E'.($index + 2), $uom);
+        }
+
         $sheet = $spreadsheet->getSheet(0);
         $sheet->setTitle('Import Template');
 
-        $headers = ['item_code', 'sap_codes', 'category', 'sub_category', 'brand', 'model', 'description', 'cost', 'type', 'eol_years', 'is_active'];
+        $headers = ['item_code', 'sap_codes', 'category', 'sub_category', 'brand', 'model', 'description', 'cost', 'type', 'eol_years', 'is_active', 'base_uom', 'bulk_uom', 'units_per_bulk'];
         foreach ($headers as $index => $header) {
             $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index + 1);
             $sheet->setCellValue("{$col}1", $header);
@@ -306,6 +367,9 @@ class AssetController extends Controller implements HasMiddleware
                 'Fixed',
                 '4',
                 '1',
+                'PC',
+                '',
+                '',
             ],
             [
                 'AST-002',
@@ -319,18 +383,21 @@ class AssetController extends Controller implements HasMiddleware
                 'Consumables',
                 '',
                 '1',
+                'PC',
+                'BOX',
+                '10',
             ],
         ], null, 'A2');
 
-        $sheet->getStyle('A1:K1')->getFont()->setBold(true);
-        $sheet->getStyle('A1:K1')->getFill()
+        $sheet->getStyle('A1:N1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:N1')->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setARGB('FFD9E1F2');
 
         // Text format keeps SAP codes like "0012345" from losing leading zeros in Excel.
         $sheet->getStyle('B2:B1001')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
 
-        foreach (range(1, 11) as $colIndex) {
+        foreach (range(1, 14) as $colIndex) {
             $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
@@ -379,6 +446,26 @@ class AssetController extends Controller implements HasMiddleware
                 ->setAllowBlank(false)
                 ->setShowDropDown(true)
                 ->setFormula1('"0,1"');
+
+            if ($baseUoms) {
+                $sheet->getCell("L{$row}")->getDataValidation()
+                    ->setType(DataValidation::TYPE_LIST)
+                    ->setErrorStyle(DataValidation::STYLE_INFORMATION)
+                    ->setAllowBlank(true)
+                    ->setShowDropDown(true)
+                    ->setFormula1(sprintf('Lists!$D$2:$D$%d', count($baseUoms) + 1));
+            }
+            if ($bulkUoms) {
+                $sheet->getCell("M{$row}")->getDataValidation()
+                    ->setType(DataValidation::TYPE_LIST)
+                    ->setErrorStyle(DataValidation::STYLE_INFORMATION)
+                    ->setAllowBlank(true)
+                    ->setShowDropDown(true)
+                    ->setShowInputMessage(true)
+                    ->setPromptTitle('Bulk UOM (optional)')
+                    ->setPrompt('Leave blank for items handled per piece. If set, also fill units_per_bulk.')
+                    ->setFormula1(sprintf('Lists!$E$2:$E$%d', count($bulkUoms) + 1));
+            }
         }
 
         $spreadsheet->setActiveSheetIndex(0);

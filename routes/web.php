@@ -256,6 +256,8 @@ Route::middleware('auth')->group(function () {
     Route::post('stock-ins/{stock_in}/post', [\App\Http\Controllers\StockInController::class, 'post'])->name('stock-ins.post');
     Route::get('stock-ins/{stock_in}/print-barcodes', [\App\Http\Controllers\StockInController::class, 'printBarcodes'])->name('stock-ins.print-barcodes');
     Route::get('stock-ins/{stock_in}/print-qrcodes', [\App\Http\Controllers\StockInController::class, 'printQrcodes'])->name('stock-ins.print-qrcodes');
+    Route::get('stock-ins/{stock_in}/print-pack-barcodes', [\App\Http\Controllers\StockInController::class, 'printPackBarcodes'])->middleware('can:stock_ins.view')->name('stock-ins.print-pack-barcodes');
+    Route::get('stock-ins/{stock_in}/print-pack-qrcodes', [\App\Http\Controllers\StockInController::class, 'printPackQrcodes'])->middleware('can:stock_ins.view')->name('stock-ins.print-pack-qrcodes');
     Route::resource('stock-ins', \App\Http\Controllers\StockInController::class);
 
     Route::get('stock-transfers/available-stock', [\App\Http\Controllers\StockTransferController::class, 'availableStock'])->name('stock-transfers.available-stock');

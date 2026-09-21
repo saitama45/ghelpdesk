@@ -158,7 +158,7 @@ class StockTransferController extends Controller
 
         $assets = Asset::whereIn('id', $sohData->keys())
             ->orderBy('item_code')
-            ->get(['id', 'item_code', 'brand', 'model', 'description', 'type', 'cost'])
+            ->get(['id', 'item_code', 'brand', 'model', 'description', 'type', 'cost', 'base_uom', 'bulk_uom', 'units_per_bulk'])
             ->map(function ($a) use ($sohData, $pendingData) {
                 $soh = (int) $sohData->get($a->id, 0);
                 $pending = (int) $pendingData->get($a->id, 0);
@@ -179,7 +179,7 @@ class StockTransferController extends Controller
             'origin_location' => 'required|string|max:255',
         ]);
 
-        $asset = Asset::select('id', 'item_code', 'brand', 'model', 'description', 'type', 'cost')
+        $asset = Asset::select('id', 'item_code', 'brand', 'model', 'description', 'type', 'cost', 'base_uom', 'bulk_uom', 'units_per_bulk')
             ->findOrFail($validated['asset_id']);
 
         $originLocation = $this->normalizeStoreCode($validated['origin_location']);
@@ -197,8 +197,9 @@ class StockTransferController extends Controller
         );
 
         $availableUnits = collect();
-        if ($soh > 0 && $asset->type === 'Fixed') {
+        if ($soh > 0 && $this->isUnitTracked($asset)) {
             $stockInRecords = StockIn::query()
+                ->with('pack:id,barcode,bulk_uom,units_per_pack')
                 ->where('asset_id', $asset->id)
                 ->where('status', 'Posted')
                 ->with(['sourceStockTransfers' => function ($q) {
@@ -287,6 +288,7 @@ class StockTransferController extends Controller
 
         $originLocation      = $this->normalizeStoreCode($validated['origin_location']);
         $destinationLocation = $this->normalizeStoreCode($validated['destination_location']);
+        $packBySource        = $this->packIdsForSources($validated['asset_transfers']);
 
         foreach ($validated['asset_transfers'] as $transfer) {
             foreach ($transfer['entries'] as $entry) {
@@ -299,6 +301,7 @@ class StockTransferController extends Controller
                     'memo_remarks'         => $validated['memo_remarks'] ?? null,
                     'status'               => $validated['status'],
                     'asset_id'             => $transfer['asset_id'],
+                    'stock_pack_id'        => $packBySource[$entry['source_stock_in_id'] ?? 0] ?? null,
                     'quantity'             => 1,
                     'created_by'           => $request->user()?->id,
                     'updated_by'           => $request->user()?->id,
@@ -351,6 +354,8 @@ class StockTransferController extends Controller
         $destinationLocation = $this->normalizeStoreCode($validated['destination_location']);
         $transferNo          = $validated['transfer_no'] ?? $stockTransfer->transfer_no;
 
+        $packBySource = $this->packIdsForSources($validated['asset_transfers']);
+
         // Replace all existing rows for this transfer with the new payload
         $originalCreatedBy = $stockTransfer->created_by;
         $this->groupedTransferRows($stockTransfer)->delete();
@@ -366,6 +371,7 @@ class StockTransferController extends Controller
                     'memo_remarks'         => $validated['memo_remarks'] ?? null,
                     'status'               => $validated['status'],
                     'asset_id'             => $transfer['asset_id'],
+                    'stock_pack_id'        => $packBySource[$entry['source_stock_in_id'] ?? 0] ?? null,
                     'quantity'             => 1,
                     'created_by'           => $originalCreatedBy,
                     'updated_by'           => auth()->id(),
@@ -434,6 +440,7 @@ class StockTransferController extends Controller
                     'origin_location'      => $item->origin_location,
                     'destination_location' => $item->destination_location,
                     'asset_id'             => $item->asset_id,
+                    'stock_pack_id'        => $item->stock_pack_id,
                     'source_stock_in_id'   => $item->source_stock_in_id,
                     'serial_no'            => $item->serial_no,
                     'barcode'              => $item->barcode,
@@ -493,14 +500,39 @@ class StockTransferController extends Controller
             return implode(' ', $parts);
         };
 
-        $lines = $rows->map(fn (StockTransfer $row) => [
-            'item_code'   => $row->asset?->item_code,
-            'description' => $describe($row->asset),
-            'serial_no'   => $row->serial_no,
-            'barcode'     => $row->barcode,
-            'condition'   => $row->asset_type,
-            'quantity'    => (int) $row->quantity,
-        ])->sortBy('item_code')->values();
+        // A box travelling whole is one DR line (its box barcode, "1 BOX of 12 PC"). Pieces of a
+        // split box, and loose pieces, are listed one by one; a split piece names its box.
+        $piecesPerPack = $rows->whereNotNull('stock_pack_id')->countBy('stock_pack_id');
+        $wholePackIds = $rows->pluck('pack')->filter()->unique('id')
+            ->filter(fn ($pack) => ($piecesPerPack[$pack->id] ?? 0) === (int) $pack->units_per_pack)
+            ->pluck('id')->all();
+
+        $boxLines = $rows->filter(fn (StockTransfer $row) => in_array($row->stock_pack_id, $wholePackIds, true))
+            ->unique('stock_pack_id')
+            ->map(fn (StockTransfer $row) => [
+                'item_code'   => $row->asset?->item_code,
+                'description' => trim($describe($row->asset).sprintf(' (%d %s inside)', $row->pack->units_per_pack, $row->asset?->base_uom ?: 'PC')),
+                'serial_no'   => null,
+                'barcode'     => $row->pack->barcode,
+                'condition'   => $row->asset_type,
+                'quantity'    => 1,
+                'unit'        => $row->pack->bulk_uom,
+                'pieces'      => (int) $row->pack->units_per_pack,
+            ]);
+
+        $pieceLines = $rows->reject(fn (StockTransfer $row) => in_array($row->stock_pack_id, $wholePackIds, true))
+            ->map(fn (StockTransfer $row) => [
+                'item_code'   => $row->asset?->item_code,
+                'description' => $describe($row->asset).($row->pack ? ' (from '.$row->pack->bulk_uom.' '.$row->pack->barcode.')' : ''),
+                'serial_no'   => $row->serial_no,
+                'barcode'     => $row->barcode,
+                'condition'   => $row->asset_type,
+                'quantity'    => (int) $row->quantity,
+                'unit'        => $row->asset?->base_uom ?: 'PC',
+                'pieces'      => (int) $row->quantity,
+            ]);
+
+        $lines = $boxLines->concat($pieceLines)->sortBy('item_code')->values();
 
         $drNo = $stockTransfer->transfer_no ?: 'TRF-'.$stockTransfer->id;
 
@@ -512,14 +544,42 @@ class StockTransferController extends Controller
             'company'     => $company,
             'logo'        => $logo,
             'lines'       => $lines,
-            'totalQty'    => $lines->sum('quantity'),
+            'totalQty'    => $lines->sum('pieces'),
+            'boxCount'    => $boxLines->count(),
             'generatedAt' => now(),
         ])->setPaper('a4', 'portrait')->stream('DR-'.Str::slug($drNo).'.pdf');
     }
 
+    /**
+     * Fixed items, and any item received in boxes, move as individually labelled pieces
+     * picked from stock; other consumables move by quantity.
+     */
+    protected function isUnitTracked(Asset $asset): bool
+    {
+        return $asset->type === 'Fixed' || ! empty($asset->bulk_uom);
+    }
+
+    /**
+     * The box of each picked source unit, looked up server-side so a transfer row can never
+     * claim a box its piece does not belong to.
+     *
+     * @return array<int, int|null> source stock_in id => stock_pack_id
+     */
+    protected function packIdsForSources(array $assetTransfers): array
+    {
+        $sourceIds = collect($assetTransfers)
+            ->flatMap(fn ($transfer) => array_column($transfer['entries'], 'source_stock_in_id'))
+            ->filter()
+            ->unique();
+
+        return $sourceIds->isEmpty()
+            ? []
+            : StockIn::whereIn('id', $sourceIds)->pluck('stock_pack_id', 'id')->all();
+    }
+
     protected function groupedTransferRows(StockTransfer $stockTransfer)
     {
-        $query = StockTransfer::with(['asset', 'creator:id,name,email', 'updater:id,name,email', 'sourceStockIn']);
+        $query = StockTransfer::with(['asset', 'pack', 'creator:id,name,email', 'updater:id,name,email', 'sourceStockIn']);
 
         if ($stockTransfer->transfer_no !== null) {
             // Group by transfer_no — captures all assets in the same transaction

@@ -35,7 +35,13 @@ Session, cache and queue all use the `database` driver in dev/prod (`sessions`, 
 
 **Requests & forms** — `pos_requests(+_details,+_approvals)`, `sap_requests(+_items,+_approvals)`, `form_definitions`, `form_definition_request_type`, `table_definitions`, `table_records`, `table_record_approvals`, `acct_document_reviews(+_events)`.
 
-**Inventory & assets** — `assets`, `stock_ins`, `stock_transfers`, `stock_receivings`, `inventory_transactions`.
+**Inventory & assets** — `assets`, `stock_ins`, `stock_transfers`, `stock_receivings`, `stock_packs`, `inventory_transactions`.
+Every stock row is **one piece** (`quantity = 1`, own barcode/QR), and the ledger counts pieces. An asset's
+`base_uom` (default PC) is the piece unit. The optional `bulk_uom` + `units_per_bulk` (BOX of 12) describe a box.
+Each box received at Stock In is a `stock_packs` row with its own label, and its pieces carry `stock_pack_id` on all three
+stock tables. On a transfer the id is copied from the source unit, never taken from the client, so a split box stays
+traceable and a receiving box scan verifies only that box's pieces present. UOM lists are `reference_options` types
+`uom_base` / `uom_bulk`. `stock_packs` is entity-stamped but deliberately not in `SCOPED_MODELS`.
 
 **Monitoring** — `npc_*` (statuses, documents, payments, registrations, seal receipts, proofs, workflow steps), `cctv_systems`, `cctv_inspections(+_units)`, `alaga_assessments`, `mall_hookups(+_costs,+_logs)`, `payment_*` (records, tenders, approvals, invoices, vendors, renewals, overpayments, weekly plans, settings, reminder log), `wigs_*`.
 

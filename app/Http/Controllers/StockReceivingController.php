@@ -300,7 +300,7 @@ class StockReceivingController extends Controller
 
     protected function groupedReceivingRows(StockReceiving $stockReceiving)
     {
-        $query = StockReceiving::with(['asset', 'creator:id,name,email', 'updater:id,name,email', 'sourceStockIn', 'stockTransfer']);
+        $query = StockReceiving::with(['asset', 'pack', 'creator:id,name,email', 'updater:id,name,email', 'sourceStockIn', 'stockTransfer']);
 
         if ($stockReceiving->receiving_no !== null) {
             $query->where('receiving_no', $stockReceiving->receiving_no)

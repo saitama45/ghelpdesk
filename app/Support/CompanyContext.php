@@ -68,6 +68,7 @@ class CompanyContext
         'stock_ins',
         'stock_transfers',
         'stock_receivings',
+        'stock_packs',
         'payment_records',
         'payment_vendors',
         'cctv_systems',

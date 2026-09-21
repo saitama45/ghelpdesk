@@ -21,6 +21,9 @@ class Asset extends Model
         'type',
         'eol_years',
         'is_active',
+        'base_uom',
+        'bulk_uom',
+        'units_per_bulk',
     ];
 
     protected $casts = [
@@ -29,6 +32,7 @@ class Asset extends Model
         'cost' => 'decimal:2',
         'eol_years' => 'integer',
         'is_active' => 'boolean',
+        'units_per_bulk' => 'integer',
     ];
 
     public function category()

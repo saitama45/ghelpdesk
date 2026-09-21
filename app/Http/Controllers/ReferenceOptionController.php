@@ -26,6 +26,8 @@ class ReferenceOptionController extends Controller implements HasMiddleware
         'store_remote_app',
         'payment_mode',
         'vendor_type',
+        'uom_base',
+        'uom_bulk',
     ];
 
     // Maps store_options reference types to the store_options.type they populate.
@@ -120,6 +122,14 @@ class ReferenceOptionController extends Controller implements HasMiddleware
 
         if ($type === 'vendor_type') {
             return [\App\Models\Vendor::where('vendor_type', $value)->exists(), 'vendors'];
+        }
+
+        if ($type === 'uom_base') {
+            return [\App\Models\Asset::where('base_uom', $value)->exists(), 'assets'];
+        }
+
+        if ($type === 'uom_bulk') {
+            return [\App\Models\Asset::where('bulk_uom', $value)->exists(), 'assets'];
         }
 
         if ($type === 'company_type') {

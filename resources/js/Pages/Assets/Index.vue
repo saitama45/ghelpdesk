@@ -49,7 +49,7 @@
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Category / Sub</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Asset Info</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Cost</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Type / EOL</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Type / EOL / UOM</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Status</th>
                             <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Actions</th>
                         </tr>
@@ -90,6 +90,9 @@
                                     </span>
                                     <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest dark:text-gray-300">
                                         EOL: {{ asset.eol_years ? asset.eol_years + ' Years' : 'N/A' }}
+                                    </span>
+                                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest dark:text-gray-300">
+                                        UOM: {{ asset.bulk_uom ? `${asset.bulk_uom} of ${asset.units_per_bulk} ${asset.base_uom || 'PC'}` : (asset.base_uom || 'PC') }}
                                     </span>
                                 </div>
                             </td>
@@ -152,6 +155,7 @@
                                 <li>Use existing category and sub-category names exactly as they appear in the system.</li>
                                 <li>Duplicate item codes are skipped during import and returned as issues.</li>
                                 <li><code>sap_codes</code> is optional and holds one SAP code per asset.</li>
+                                <li><code>base_uom</code> defaults to PC. Fill <code>bulk_uom</code> + <code>units_per_bulk</code> only for items received in boxes/packs.</li>
                             </ul>
                         </div>
 
@@ -347,6 +351,51 @@
                             </div>
                         </div>
 
+                        <!-- Units of measure: stock is counted in the base UOM; the bulk UOM groups pieces -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Base UOM</label>
+                                <ManageableAutocomplete
+                                    v-model="form.base_uom"
+                                    :options="uomBaseOptionsLocal"
+                                    option-type="uom_base"
+                                    placeholder="e.g. PC, UNIT"
+                                    :can-create="hasPermission('reference_options.create')"
+                                    :can-edit="hasPermission('reference_options.edit')"
+                                    :can-delete="hasPermission('reference_options.delete')"
+                                    @options-changed="uomBaseOptionsLocal = $event"
+                                />
+                                <p class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">Per piece — stock is counted in this.</p>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Bulk UOM <span class="normal-case font-medium text-gray-400">(optional)</span></label>
+                                <ManageableAutocomplete
+                                    v-model="form.bulk_uom"
+                                    :options="uomBulkOptionsLocal"
+                                    option-type="uom_bulk"
+                                    placeholder="e.g. BOX, PACK"
+                                    :can-create="hasPermission('reference_options.create')"
+                                    :can-edit="hasPermission('reference_options.edit')"
+                                    :can-delete="hasPermission('reference_options.delete')"
+                                    @options-changed="uomBulkOptionsLocal = $event"
+                                />
+                                <button v-if="form.bulk_uom" type="button" @click="form.bulk_uom = ''; form.units_per_bulk = null"
+                                        class="mt-1 text-[10px] font-medium text-blue-600 hover:underline">Clear bulk UOM</button>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">
+                                    {{ form.base_uom || 'PC' }} per {{ form.bulk_uom || 'bulk' }}
+                                </label>
+                                <input v-model.number="form.units_per_bulk" type="number" step="1" min="2"
+                                       :disabled="!form.bulk_uom" :required="!!form.bulk_uom"
+                                       :placeholder="form.bulk_uom ? 'e.g. 12' : 'Set a bulk UOM first'"
+                                       class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100 disabled:text-gray-400 dark:border-gray-600 dark:disabled:bg-gray-800">
+                                <p v-if="form.bulk_uom && form.units_per_bulk >= 2" class="mt-1 text-[10px] text-gray-500 dark:text-gray-400">
+                                    1 {{ form.bulk_uom }} = {{ form.units_per_bulk }} {{ form.base_uom || 'PC' }}. Can be changed per stock-in.
+                                </p>
+                            </div>
+                        </div>
+
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Description</label>
                             <textarea v-model="form.description" rows="3"
@@ -384,6 +433,7 @@ import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import DataTable from '@/Components/DataTable.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
+import ManageableAutocomplete from '@/Components/ManageableAutocomplete.vue'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
 import { useErrorHandler } from '@/Composables/useErrorHandler'
@@ -397,6 +447,8 @@ const props = defineProps({
     subCategories: Array,
     brandOptions: Array,
     modelOptions: Array,
+    uomBaseOptions: { type: Array, default: () => [] },
+    uomBulkOptions: { type: Array, default: () => [] },
     filters: Object
 })
 
@@ -415,6 +467,8 @@ const selectedImportFile = ref(null)
 const isImporting = ref(false)
 const importResults = ref(null)
 const autoDescription = ref('')
+const uomBaseOptionsLocal = ref([...props.uomBaseOptions])
+const uomBulkOptionsLocal = ref([...props.uomBulkOptions])
 
 const fetchNextCode = async () => {
     try {
@@ -437,7 +491,10 @@ const form = reactive({
     cost: null,
     type: 'Fixed',
     eol_years: null,
-    is_active: true
+    is_active: true,
+    base_uom: 'PC',
+    bulk_uom: '',
+    units_per_bulk: null,
 })
 
 onMounted(() => {
@@ -490,7 +547,10 @@ const openCreateModal = () => {
         cost: null,
         type: 'Fixed',
         eol_years: null,
-        is_active: true
+        is_active: true,
+        base_uom: 'PC',
+        bulk_uom: '',
+        units_per_bulk: null,
     })
     fetchNextCode()
     showModal.value = true
@@ -523,7 +583,10 @@ const editAsset = (asset) => {
         cost: asset.cost,
         type: asset.type || 'Fixed',
         eol_years: asset.eol_years,
-        is_active: asset.is_active
+        is_active: asset.is_active,
+        base_uom: asset.base_uom || 'PC',
+        bulk_uom: asset.bulk_uom || '',
+        units_per_bulk: asset.units_per_bulk,
     })
     showModal.value = true
 }

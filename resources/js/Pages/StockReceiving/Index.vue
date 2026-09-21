@@ -270,7 +270,7 @@
                             v-model="scanInput"
                             @keydown.enter.prevent="handleScan()"
                             @paste="handlePaste"
-                            placeholder="Scan barcode and press Enter"
+                            placeholder="Scan a box or piece barcode and press Enter"
                             class="flex-1 rounded-lg border-gray-200 text-sm font-mono focus:ring-blue-500 focus:border-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                             autocomplete="off"
                             spellcheck="false"
@@ -311,8 +311,23 @@
                                         </tr>
                                     </thead>
                                     <tbody class="bg-white divide-y divide-gray-100 dark:bg-gray-800 dark:divide-gray-700">
-                                        <tr v-for="row in group.rows" :key="row.id">
-                                            <td class="px-4 py-2">
+                                      <template v-for="box in boxGroups(group.rows)" :key="box.key">
+                                        <!-- Box header: one scan of its label verifies every piece below -->
+                                        <tr v-if="box.pack" class="bg-indigo-50/70 dark:bg-indigo-500/10">
+                                            <td colspan="5" class="px-4 py-1.5">
+                                                <span class="text-[11px] font-black text-indigo-700 uppercase dark:text-indigo-200">{{ box.pack.bulk_uom }} {{ box.pack.barcode }}</span>
+                                                <span class="ml-2 text-[10px] font-semibold text-indigo-500 dark:text-indigo-300">
+                                                    {{ box.rows.filter(r => verifiedIds.has(r.id)).length }}/{{ box.rows.length }} pcs verified
+                                                </span>
+                                                <span v-if="box.rows.length < box.pack.units_per_pack"
+                                                      class="ml-2 inline-flex items-center rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-black uppercase text-amber-700 dark:bg-amber-500/15 dark:text-amber-200"
+                                                      :title="`Only ${box.rows.length} of the ${box.pack.units_per_pack} pieces in this box were sent here`">
+                                                    Partial box · {{ box.rows.length }} of {{ box.pack.units_per_pack }}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                        <tr v-for="row in box.rows" :key="row.id">
+                                            <td class="px-4 py-2" :class="box.pack ? 'pl-8' : ''">
                                                 <p class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ row.serial_no || 'NO SERIAL' }}</p>
                                                 <p class="text-[10px] font-mono text-gray-500 dark:text-gray-300">{{ row.barcode }}</p>
                                             </td>
@@ -359,6 +374,7 @@
                                                 <span v-else class="text-xs text-gray-300 italic">—</span>
                                             </td>
                                         </tr>
+                                      </template>
                                     </tbody>
                                 </table>
                             </div>
@@ -643,23 +659,49 @@ const scanInput     = ref('')
 const scanFeedback  = ref(null)
 const scanInputRef  = ref(null)
 
+// code -> { ids, pack }. A piece barcode/serial covers that piece; a box barcode covers every
+// piece of that box in THIS receiving (after a split, only the pieces that were sent here).
 const scanLookup = computed(() => {
     const map = new Map()
     itemRows.value.forEach(row => {
-        if (row.barcode)   map.set(row.barcode.trim().toLowerCase(),   row.id)
-        if (row.serial_no) map.set(row.serial_no.trim().toLowerCase(), row.id)
+        if (row.barcode)   map.set(row.barcode.trim().toLowerCase(),   { ids: [row.id], pack: null })
+        if (row.serial_no) map.set(row.serial_no.trim().toLowerCase(), { ids: [row.id], pack: null })
+    })
+    itemRows.value.forEach(row => {
+        const code = row.pack?.barcode?.trim().toLowerCase()
+        if (!code) return
+        if (!map.has(code) || !map.get(code).pack) map.set(code, { ids: [], pack: row.pack })
+        map.get(code).ids.push(row.id)
     })
     return map
 })
+
+/** Rows of one asset grouped by box (boxes first), then loose pieces. */
+const boxGroups = (rows) => {
+    const boxes = new Map()
+    const loose = []
+    for (const row of rows) {
+        if (row.pack) {
+            if (!boxes.has(row.pack.id)) boxes.set(row.pack.id, { key: `pack-${row.pack.id}`, pack: row.pack, rows: [] })
+            boxes.get(row.pack.id).rows.push(row)
+        } else {
+            loose.push(row)
+        }
+    }
+    return [...boxes.values(), ...(loose.length ? [{ key: 'loose', pack: null, rows: loose }] : [])]
+}
 
 const handleScan = (overrideValue) => {
     const value = (overrideValue ?? scanInput.value).trim()
     if (!value) return
 
-    const rowId = scanLookup.value.get(value.toLowerCase())
-    if (rowId) {
-        verifiedIds.value = new Set([...verifiedIds.value, rowId])
-        scanFeedback.value = { type: 'success', message: '✓ Verified' }
+    const match = scanLookup.value.get(value.toLowerCase())
+    if (match) {
+        verifiedIds.value = new Set([...verifiedIds.value, ...match.ids])
+        scanFeedback.value = {
+            type: 'success',
+            message: match.pack ? `✓ ${match.pack.bulk_uom} verified · ${match.ids.length} pcs` : '✓ Verified',
+        }
     } else {
         scanFeedback.value = { type: 'error', message: 'Barcode not found in this receiving.' }
     }
@@ -719,6 +761,8 @@ const loadIntoModal = async (item, options = {}) => {
             received_quantity: r.received_quantity,
             condition: r.condition || 'Good',
             damage_notes: r.damage_notes || '',
+            stock_pack_id: r.stock_pack_id || null,
+            pack: r.pack || null,
         }))
         currentId.value = item.id
         readOnly.value = !!options.readOnly

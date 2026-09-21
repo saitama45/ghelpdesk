@@ -142,7 +142,7 @@
                     <td>{{ $line['barcode'] ?: '—' }}</td>
                     <td class="c">{{ $line['condition'] ?: '—' }}</td>
                     <td class="c">{{ $line['quantity'] }}</td>
-                    <td class="c">pc</td>
+                    <td class="c">{{ $line['unit'] ?? 'pc' }}</td>
                 </tr>
             @empty
                 <tr><td colspan="8" class="c muted">No items on this transfer.</td></tr>
@@ -150,7 +150,12 @@
         </tbody>
         <tfoot>
             <tr>
-                <td colspan="6" class="r">TOTAL QUANTITY</td>
+                <td colspan="6" class="r">
+                    TOTAL QUANTITY
+                    @if (($boxCount ?? 0) > 0)
+                        <span style="font-weight: normal;">({{ $boxCount }} whole box{{ $boxCount === 1 ? '' : 'es' }} included)</span>
+                    @endif
+                </td>
                 <td class="c">{{ $totalQty }}</td>
                 <td class="c">pc{{ $totalQty === 1 ? '' : 's' }}</td>
             </tr>

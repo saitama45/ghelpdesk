@@ -668,24 +668,24 @@
                                         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 items-start">
                                             <div>
                                                 <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 dark:text-gray-400">
-                                                    Qty <span class="text-red-500">*</span>
+                                                    {{ assetHasBulk(asset) && !isTransferMode ? 'Loose Pcs' : 'Qty' }} <span v-if="!assetHasBulk(asset)" class="text-red-500">*</span>
                                                 </label>
                                                 <div class="flex items-center gap-1">
                                                     <button
                                                         type="button"
-                                                        @click="setAssetQty(asset.id, getEntriesForAsset(asset.id).length - 1)"
+                                                        @click="setAssetQty(asset.id, looseEntriesForAsset(asset.id).length - 1)"
                                                         class="flex-shrink-0 w-7 h-7 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-bold flex items-center justify-center dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                                                     >−</button>
                                                     <input
                                                         type="number"
-                                                        :value="getEntriesForAsset(asset.id).length"
+                                                        :value="looseEntriesForAsset(asset.id).length"
                                                         @change="setAssetQty(asset.id, $event.target.value)"
-                                                        min="1"
+                                                        :min="packsForAsset(asset.id).length ? 0 : 1"
                                                     class="w-14 text-center rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs font-bold dark:border-gray-600 dark:bg-slate-900 dark:text-slate-100"
                                                     >
                                                     <button
                                                         type="button"
-                                                        @click="setAssetQty(asset.id, getEntriesForAsset(asset.id).length + 1)"
+                                                        @click="setAssetQty(asset.id, looseEntriesForAsset(asset.id).length + 1)"
                                                         class="flex-shrink-0 w-7 h-7 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-bold flex items-center justify-center dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
                                                     >+</button>
                                                 </div>
@@ -704,17 +704,59 @@
                                             </div>
                                         </div>
 
+
+                                        <!-- Boxes: each is one labelled bulk unit holding its own labelled pieces -->
+                                        <div v-if="assetHasBulk(asset) && !isTransferMode" class="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 space-y-2 dark:border-indigo-400/30 dark:bg-indigo-500/10">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <p class="text-[10px] font-black text-indigo-700 uppercase tracking-widest dark:text-indigo-200">
+                                                    {{ asset.bulk_uom }} ({{ packsForAsset(asset.id).length }}) &middot; 1 {{ asset.bulk_uom }} = {{ asset.units_per_bulk }} {{ asset.base_uom || 'PC' }}
+                                                </p>
+                                                <button v-if="!readOnlyMode" type="button" @click="addPack(asset)"
+                                                        class="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-[10px] font-black text-white uppercase tracking-wider hover:bg-indigo-700 transition-colors">
+                                                    <PlusIcon class="w-3 h-3" />
+                                                    Add {{ asset.bulk_uom }}
+                                                </button>
+                                            </div>
+                                            <p v-if="packsForAsset(asset.id).length === 0" class="text-[10px] text-indigo-500 dark:text-indigo-300">
+                                                No {{ asset.bulk_uom }} yet. Add one to receive {{ asset.units_per_bulk }} {{ asset.base_uom || 'PC' }} as a labelled {{ asset.bulk_uom }}, or use Loose Pcs for single pieces.
+                                            </p>
+                                            <div v-for="pack in packsForAsset(asset.id)" :key="pack.key"
+                                                 class="flex flex-wrap items-center gap-2.5 rounded-md border border-indigo-100 bg-white px-2.5 py-1.5 dark:bg-gray-800 dark:border-indigo-400/20">
+                                                <span class="flex-shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-[9px] font-black text-indigo-700 uppercase dark:bg-indigo-500/20 dark:text-indigo-200">{{ pack.bulk_uom }} {{ packNumber(pack) }}</span>
+                                                <div class="flex-shrink-0 cursor-pointer" :title="pack.barcode"
+                                                     @click="pack.barcodeDataUrl && (barcodePreview = { show: true, src: pack.barcodeDataUrl, text: pack.barcode })">
+                                                    <img v-if="pack.barcodeDataUrl" :src="pack.barcodeDataUrl" class="h-6 max-w-[90px]" :alt="pack.barcode">
+                                                </div>
+                                                <div class="flex-shrink-0 cursor-pointer" :title="`${pack.bulk_uom} QR code`"
+                                                     @click="pack.qrcodeDataUrl && (barcodePreview = { show: true, src: pack.qrcodeDataUrl, text: pack.barcode, isQr: true })">
+                                                    <img v-if="pack.qrcodeDataUrl" :src="pack.qrcodeDataUrl" class="h-6 w-6" alt="QR">
+                                                </div>
+                                                <label class="flex items-center gap-1 text-[10px] font-bold text-gray-500 dark:text-gray-300">
+                                                    {{ asset.base_uom || 'PC' }} inside
+                                                    <input type="number" min="1" :value="pack.units_per_pack" @change="setPackSize(pack, $event.target.value)"
+                                                           class="w-14 text-center rounded-md border-gray-300 text-xs font-bold dark:border-gray-600 dark:bg-slate-900 dark:text-slate-100">
+                                                </label>
+                                                <button v-if="!readOnlyMode" type="button" @click="regenPackCodes(pack)"
+                                                        class="flex-shrink-0 text-[9px] font-black text-indigo-400 hover:text-indigo-700 transition-colors" :title="`Regenerate ${pack.bulk_uom} barcode & QR`">↻</button>
+                                                <button v-if="!readOnlyMode" type="button" @click="removePack(pack)"
+                                                        class="ml-auto p-0.5 text-gray-300 hover:text-red-500 transition-colors dark:text-gray-500" :title="`Remove this ${pack.bulk_uom} and its pieces`">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+
                                         <!-- Units List -->
                                         <div class="space-y-1.5">
                                             <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Units ({{ getEntriesForAsset(asset.id).length }})</p>
                                             <div class="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden dark:border-gray-700 dark:divide-gray-700">
                                                 <div
-                                                    v-for="(entry, unitIdx) in getEntriesForAsset(asset.id)"
+                                                    v-for="(entry, unitIdx) in orderedEntriesForAsset(asset.id)"
                                                     :key="entry.uid"
                                                     class="flex items-center gap-2.5 px-3 py-2 bg-white hover:bg-gray-50/50 dark:bg-gray-800 dark:hover:bg-slate-700/70"
                                                 >
                                                     <!-- Unit # badge -->
                                                     <span class="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[9px] font-black flex items-center justify-center dark:bg-blue-500/15 dark:text-blue-200">{{ unitIdx + 1 }}</span>
+                                                    <span v-if="entryBoxLabel(entry)" class="flex-shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold text-indigo-600 uppercase dark:bg-indigo-500/15 dark:text-indigo-200">{{ entryBoxLabel(entry) }}</span>
 
                                                     <!-- Serial No (Fixed only) -->
                                                     <div class="flex-1 min-w-0">
@@ -803,6 +845,24 @@
                                         <QrCodeIcon class="h-4 w-4" />
                                         <span>Print QR Codes</span>
                                     </button>
+                                    <template v-if="hasSavedBoxes">
+                                        <button
+                                            type="button"
+                                            @click="printStockInCodes('pack-barcodes')"
+                                            class="inline-flex items-center gap-1.5 rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-200 dark:border-indigo-400/40"
+                                        >
+                                            <PrinterIcon class="h-4 w-4" />
+                                            <span>Box Barcodes</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            @click="printStockInCodes('pack-qrcodes')"
+                                            class="inline-flex items-center gap-1.5 rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-200 dark:border-indigo-400/40"
+                                        >
+                                            <QrCodeIcon class="h-4 w-4" />
+                                            <span>Box QR Codes</span>
+                                        </button>
+                                    </template>
                                 </div>
                                 <span class="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">{{ form.entries.length }} unit(s)</span>
                                 <button
@@ -965,12 +1025,53 @@
                                         </div>
                                     </div>
 
+
+                                    <!-- Boxes: each is one labelled bulk unit holding its own labelled pieces -->
+                                    <div v-if="assetHasBulk(asset) && !isTransferMode" class="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 space-y-2 dark:border-indigo-400/30 dark:bg-indigo-500/10">
+                                        <div class="flex items-center justify-between gap-2">
+                                            <p class="text-[10px] font-black text-indigo-700 uppercase tracking-widest dark:text-indigo-200">
+                                                {{ asset.bulk_uom }} ({{ packsForAsset(asset.id).length }}) &middot; 1 {{ asset.bulk_uom }} = {{ asset.units_per_bulk }} {{ asset.base_uom || 'PC' }}
+                                            </p>
+                                            <button v-if="!readOnlyMode" type="button" @click="addPack(asset)"
+                                                    class="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-[10px] font-black text-white uppercase tracking-wider hover:bg-indigo-700 transition-colors">
+                                                <PlusIcon class="w-3 h-3" />
+                                                Add {{ asset.bulk_uom }}
+                                            </button>
+                                        </div>
+                                        <p v-if="packsForAsset(asset.id).length === 0" class="text-[10px] text-indigo-500 dark:text-indigo-300">
+                                            No {{ asset.bulk_uom }} yet. Add one to receive {{ asset.units_per_bulk }} {{ asset.base_uom || 'PC' }} as a labelled {{ asset.bulk_uom }}, or use Loose Pcs for single pieces.
+                                        </p>
+                                        <div v-for="pack in packsForAsset(asset.id)" :key="pack.key"
+                                             class="flex flex-wrap items-center gap-2.5 rounded-md border border-indigo-100 bg-white px-2.5 py-1.5 dark:bg-gray-800 dark:border-indigo-400/20">
+                                            <span class="flex-shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-[9px] font-black text-indigo-700 uppercase dark:bg-indigo-500/20 dark:text-indigo-200">{{ pack.bulk_uom }} {{ packNumber(pack) }}</span>
+                                            <div class="flex-shrink-0 cursor-pointer" :title="pack.barcode"
+                                                 @click="pack.barcodeDataUrl && (barcodePreview = { show: true, src: pack.barcodeDataUrl, text: pack.barcode })">
+                                                <img v-if="pack.barcodeDataUrl" :src="pack.barcodeDataUrl" class="h-6 max-w-[90px]" :alt="pack.barcode">
+                                            </div>
+                                            <div class="flex-shrink-0 cursor-pointer" :title="`${pack.bulk_uom} QR code`"
+                                                 @click="pack.qrcodeDataUrl && (barcodePreview = { show: true, src: pack.qrcodeDataUrl, text: pack.barcode, isQr: true })">
+                                                <img v-if="pack.qrcodeDataUrl" :src="pack.qrcodeDataUrl" class="h-6 w-6" alt="QR">
+                                            </div>
+                                            <label class="flex items-center gap-1 text-[10px] font-bold text-gray-500 dark:text-gray-300">
+                                                {{ asset.base_uom || 'PC' }} inside
+                                                <input type="number" min="1" :value="pack.units_per_pack" @change="setPackSize(pack, $event.target.value)"
+                                                       class="w-14 text-center rounded-md border-gray-300 text-xs font-bold dark:border-gray-600 dark:bg-slate-900 dark:text-slate-100">
+                                            </label>
+                                            <button v-if="!readOnlyMode" type="button" @click="regenPackCodes(pack)"
+                                                    class="flex-shrink-0 text-[9px] font-black text-indigo-400 hover:text-indigo-700 transition-colors" :title="`Regenerate ${pack.bulk_uom} barcode & QR`">↻</button>
+                                            <button v-if="!readOnlyMode" type="button" @click="removePack(pack)"
+                                                    class="ml-auto p-0.5 text-gray-300 hover:text-red-500 transition-colors dark:text-gray-500" :title="`Remove this ${pack.bulk_uom} and its pieces`">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <!-- Units List -->
                                     <div class="space-y-1.5">
                                         <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Units ({{ getEntriesForAsset(asset.id).length }})</p>
                                         <div class="divide-y divide-gray-100 rounded-xl border border-gray-200 overflow-hidden bg-white shadow-sm dark:bg-gray-800 dark:border-gray-700 dark:divide-gray-700">
                                             <div
-                                                v-for="(entry, unitIdx) in getEntriesForAsset(asset.id)"
+                                                v-for="(entry, unitIdx) in orderedEntriesForAsset(asset.id)"
                                                 :key="entry.uid"
                                                 class="p-3 space-y-2"
                                             >
@@ -1011,6 +1112,7 @@
                                                 <!-- Compact unit row: #, serial, barcode, QR, regen -->
                                                 <div class="flex items-center gap-2.5">
                                                     <span class="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[9px] font-black flex items-center justify-center dark:bg-blue-500/15 dark:text-blue-200">{{ unitIdx + 1 }}</span>
+                                                    <span v-if="entryBoxLabel(entry)" class="flex-shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold text-indigo-600 uppercase dark:bg-indigo-500/15 dark:text-indigo-200">{{ entryBoxLabel(entry) }}</span>
 
                                                     <div class="flex-1 min-w-0">
                                                         <input
@@ -1420,7 +1522,9 @@ const form = reactive({
     memo_remarks: '',
     status: 'For Posting',
     quantity: 0,
-    entries: []
+    entries: [],
+    // Boxes (bulk units) received in this stock-in; their pieces point back via entry.pack_key.
+    packs: [],
 })
 
 let entryUid = 0
@@ -1454,6 +1558,8 @@ const createEntry = (overrides = {}) => ({
     price: 0,
     destination_location: headerDestinationLocation.value || '',
     stock_in_id: null,
+    pack_key: null,
+    stock_pack_id: null,
     ...overrides
 })
 
@@ -1491,13 +1597,14 @@ const sourceUnitEntryDefaults = (unit) => ({
     price: Number(unit.price || 0),
 })
 
-const addEntryForAsset = async (asset, unit = null) => {
+const addEntryForAsset = async (asset, unit = null, packKey = null) => {
     if (!asset) return
     const aid = Number(asset.id)
     const shared = groupSharedFields[aid]
 
     const defaults = {
         asset_id: aid,
+        pack_key: packKey,
         cost: shared ? shared.cost : (asset.cost || 0),
         price: shared ? shared.price : 0,
         warranty_months: shared ? shared.warranty_months : 12,
@@ -1537,7 +1644,12 @@ const addEntryForAsset = async (asset, unit = null) => {
  */
 const pickAsset = async (asset) => {
     initGroupSharedFields(asset)
-    await addEntryForAsset(asset)
+    // Items stocked in boxes start with one box; loose pieces can still be added with Loose Pcs.
+    if (assetHasBulk(asset) && !isTransferMode.value) {
+        await addPack(asset)
+    } else {
+        await addEntryForAsset(asset)
+    }
     assetSearch.value = ''
     showAssetPicker.value = false
 }
@@ -1651,15 +1763,19 @@ const setAssetQty = async (assetId, rawQty) => {
     const aid = Number(assetId)
     const asset = normalizedAssets.value.find(a => a.id === aid)
     if (!asset) return
-    const newQty = Math.max(1, parseInt(rawQty) || 1)
-    const currentEntries = getEntriesForAsset(aid)
+    // Qty controls loose pieces only; pieces inside boxes follow their box. With a box present,
+    // zero loose pieces is valid.
+    const minQty = packsForAsset(aid).length > 0 ? 0 : 1
+    const parsed = parseInt(rawQty)
+    const newQty = Math.max(minQty, Number.isNaN(parsed) ? minQty : parsed)
+    const currentEntries = looseEntriesForAsset(aid)
 
     if (newQty > currentEntries.length) {
         for (let i = currentEntries.length; i < newQty; i++) {
             await addEntryForAsset(asset)
         }
     } else if (newQty < currentEntries.length) {
-        const toRemove = getEntriesForAsset(aid).slice(newQty)
+        const toRemove = currentEntries.slice(newQty)
         for (let i = form.entries.length - 1; i >= 0; i--) {
             if (toRemove.includes(form.entries[i])) {
                 form.entries.splice(i, 1)
@@ -1677,12 +1793,116 @@ const removeAssetGroup = (assetId) => {
         }
     }
     form.quantity = form.entries.length
+    form.packs = form.packs.filter(pack => Number(pack.asset_id) !== aid)
     delete groupSharedFields[aid]
 }
 
 const regenUnitCodes = (entryIndex) => {
     generateBarcode(entryIndex)
     generateQrcode(entryIndex)
+}
+
+// ---- Boxes (bulk units) -------------------------------------------------------------
+// A box is its own labelled unit; the pieces inside stay ordinary entries (one row = one
+// piece, each with its own barcode/QR) linked by pack_key. Stock is counted in pieces.
+let packUid = 0
+let packSeq = 0
+
+const assetHasBulk = (asset) => !!(asset?.bulk_uom && Number(asset?.units_per_bulk) >= 2)
+const packsForAsset = (assetId) => form.packs.filter(pack => Number(pack.asset_id) === Number(assetId))
+const packNumber = (pack) => packsForAsset(pack.asset_id).indexOf(pack) + 1
+const piecesOfPack = (key) => form.entries.filter(entry => entry.pack_key === key)
+const packForEntry = (entry) => (entry?.pack_key ? form.packs.find(pack => pack.key === entry.pack_key) : null)
+const looseEntriesForAsset = (assetId) => getEntriesForAsset(assetId).filter(entry => !entry.pack_key)
+
+/** Box pieces first, in box order, then loose pieces. */
+const orderedEntriesForAsset = (assetId) => [
+    ...packsForAsset(assetId).flatMap(pack => piecesOfPack(pack.key)),
+    ...looseEntriesForAsset(assetId),
+]
+
+const entryBoxLabel = (entry) => {
+    const pack = packForEntry(entry)
+    if (pack) return `${pack.bulk_uom} ${packNumber(pack)}`
+    return entry?.stock_pack_id ? 'In box' : ''
+}
+
+const hasSavedBoxes = computed(() => form.packs.some(pack => pack.id) || form.entries.some(entry => entry.stock_pack_id))
+
+const generatePackQr = (pack) => {
+    const asset = normalizedAssets.value.find(a => a.id === Number(pack.asset_id))
+    pack.qrcode = [
+        `Item Code: ${asset?.item_code || 'N/A'}`,
+        `Description: ${asset?.description || 'N/A'}`,
+        `Box: ${pack.barcode}`,
+        `Contents: ${pack.units_per_pack} ${asset?.base_uom || 'PC'} per ${pack.bulk_uom}`,
+        `Vendor: ${form.vendor || 'N/A'}`,
+        `Received Date: ${formatDateNumeric(form.receive_date)}`,
+        `DR No: ${form.dr_no || 'N/A'}`,
+        `DR Date: ${formatDateNumeric(form.dr_date)}`,
+        `Received By: ${form.received_by || 'N/A'}`,
+    ].join('\n')
+    makeQrcodeDataUrl(pack.qrcode).then(url => { pack.qrcodeDataUrl = url })
+}
+
+const generatePackBarcode = (pack) => {
+    const asset = normalizedAssets.value.find(a => a.id === Number(pack.asset_id))
+    pack.barcode = `${asset?.item_code || 'ST'}-BX-${Date.now()}-${++packSeq}`
+    pack.barcodeDataUrl = makeBarcodeDataUrl(pack.barcode)
+}
+
+/** New box code: the box QR and every piece QR (which names the box) are rebuilt. */
+const regenPackCodes = (pack) => {
+    generatePackBarcode(pack)
+    generatePackQr(pack)
+    piecesOfPack(pack.key).forEach(entry => generateQrcode(form.entries.indexOf(entry)))
+}
+
+const addPack = async (asset) => {
+    if (!assetHasBulk(asset)) return
+    const pack = reactive({
+        key: `pack-new-${packUid++}`,
+        id: null,
+        asset_id: Number(asset.id),
+        bulk_uom: asset.bulk_uom,
+        units_per_pack: Number(asset.units_per_bulk),
+        barcode: '',
+        qrcode: '',
+        barcodeDataUrl: null,
+        qrcodeDataUrl: null,
+    })
+    form.packs.push(pack)
+    // Box code first, so each piece QR can name its box.
+    generatePackBarcode(pack)
+    for (let i = 0; i < pack.units_per_pack; i++) {
+        await addEntryForAsset(asset, null, pack.key)
+    }
+    generatePackQr(pack)
+}
+
+/** Pieces per box default from the asset but can differ per delivery. */
+const setPackSize = async (pack, rawSize) => {
+    const size = Math.max(1, parseInt(rawSize) || 1)
+    const asset = normalizedAssets.value.find(a => a.id === Number(pack.asset_id))
+    const pieces = piecesOfPack(pack.key)
+
+    if (size > pieces.length) {
+        for (let i = pieces.length; i < size; i++) {
+            await addEntryForAsset(asset, null, pack.key)
+        }
+    } else if (size < pieces.length) {
+        const toRemove = new Set(pieces.slice(size))
+        form.entries = form.entries.filter(entry => !toRemove.has(entry))
+        form.quantity = form.entries.length
+    }
+    pack.units_per_pack = size
+    generatePackQr(pack)
+}
+
+const removePack = (pack) => {
+    form.entries = form.entries.filter(entry => entry.pack_key !== pack.key)
+    form.packs = form.packs.filter(p => p !== pack)
+    form.quantity = form.entries.length
 }
 
 const missingGeneratedCodeRows = () => form.entries
@@ -1934,6 +2154,7 @@ const generateQrcode = (entryIndex) => {
         `Received By: ${form.received_by || 'N/A'}`,
         `Serial No: ${entry?.serial_no || 'N/A'}`,
         `Barcode: ${entry?.barcode || 'N/A'}`,
+        ...(packForEntry(entry) ? [`Box: ${packForEntry(entry).barcode}`] : []),
         `Destination Location: ${entry?.destination_location || 'N/A'}`,
         `Warranty Until: ${formatDateNumeric(addMonths(form.receive_date, entry?.warranty_months))}`,
         `EOL: ${formatDateNumeric(addMonths(form.receive_date, entry?.eol_months))}`
@@ -2045,6 +2266,7 @@ const resetForm = () => {
         status: 'For Posting',
         quantity: 0,
         entries: [],
+        packs: [],
     })
 }
 
@@ -2100,6 +2322,34 @@ const editItem = async (item, aggregatedQuantity = item.quantity, relatedRows = 
     currentId.value = item.id
     editingStockIn.value = auditSource
     suppressOriginLocationWatch = true
+    // A box whose pieces are all in this group is editable here. Pieces of a box that is only
+    // partly here (moved by transfer) keep their stock_pack_id unchanged.
+    const piecesPerPack = new Map()
+    relatedRows.forEach(row => {
+        if (row.stock_pack_id) piecesPerPack.set(row.stock_pack_id, (piecesPerPack.get(row.stock_pack_id) || 0) + 1)
+    })
+    const editablePacks = []
+    const editablePackIds = new Set()
+    relatedRows.forEach(row => {
+        const pack = row.pack
+        if (!pack || editablePackIds.has(row.stock_pack_id)) return
+        if (piecesPerPack.get(row.stock_pack_id) !== Number(pack.units_per_pack)) return
+        editablePackIds.add(row.stock_pack_id)
+        editablePacks.push(reactive({
+            key: `pack-${row.stock_pack_id}`,
+            id: row.stock_pack_id,
+            asset_id: Number(row.asset_id),
+            bulk_uom: pack.bulk_uom,
+            units_per_pack: Number(pack.units_per_pack),
+            barcode: pack.barcode,
+            qrcode: pack.qrcode || '',
+            barcodeDataUrl: makeBarcodeDataUrl(pack.barcode),
+            qrcodeDataUrl: null,
+        }))
+    })
+    editablePacks.forEach(pack => {
+        if (pack.qrcode) makeQrcodeDataUrl(pack.qrcode).then(url => { pack.qrcodeDataUrl = url })
+    })
     Object.assign(form, {
         receive_date: toDateKey(item.receive_date),
         dr_no: item.dr_no || '',
@@ -2124,7 +2374,10 @@ const editItem = async (item, aggregatedQuantity = item.quantity, relatedRows = 
             cost: Number(row.cost || 0),
             price: Number(row.price || 0),
             destination_location: normalizeLocationValue(row.destination_location || row.location),
-        }))
+            pack_key: editablePackIds.has(row.stock_pack_id) ? `pack-${row.stock_pack_id}` : null,
+            stock_pack_id: row.stock_pack_id || null,
+        })),
+        packs: editablePacks,
     })
     // Populate header-level destination from the first entry (all entries share same destination)
     const firstDest = relatedRows.length > 0
@@ -2256,7 +2509,12 @@ const printStockInCodes = (type) => {
         return
     }
 
-    const routeName = type === 'qrcodes' ? 'stock-ins.print-qrcodes' : 'stock-ins.print-barcodes'
+    const routeName = {
+        qrcodes: 'stock-ins.print-qrcodes',
+        barcodes: 'stock-ins.print-barcodes',
+        'pack-qrcodes': 'stock-ins.print-pack-qrcodes',
+        'pack-barcodes': 'stock-ins.print-pack-barcodes',
+    }[type] || 'stock-ins.print-barcodes'
     const popup = window.open('', '_blank')
 
     if (!popup) {
@@ -2336,6 +2594,14 @@ const submitForm = async (statusOverride = form.status || 'For Posting') => {
         quantity: form.quantity,
         entries: form.entries.map(({ uid, ...entry }) => ({
             ...entry,
+        })),
+        packs: form.packs.map(pack => ({
+            key: pack.key,
+            id: pack.id,
+            barcode: pack.barcode,
+            qrcode: pack.qrcode,
+            bulk_uom: pack.bulk_uom,
+            units_per_pack: pack.units_per_pack,
         })),
     }
 

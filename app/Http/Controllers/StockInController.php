@@ -6,6 +6,7 @@ use App\Models\Asset;
 use App\Models\Category;
 use App\Models\InventoryTransaction;
 use App\Models\StockIn;
+use App\Models\StockPack;
 use App\Models\Store;
 use App\Models\Vendor;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -277,12 +278,22 @@ class StockInController extends Controller
             'entries.*.cost' => 'required|numeric|min:0',
             'entries.*.price' => 'required|numeric|min:0',
             'entries.*.destination_location' => 'nullable|string|max:255',
+            'entries.*.pack_key' => 'nullable|string|max:64',
+            'entries.*.stock_pack_id' => 'nullable|integer|exists:stock_packs,id',
+            'packs' => 'nullable|array',
+            'packs.*.key' => 'required|string|max:64|distinct',
+            'packs.*.id' => 'nullable|integer|exists:stock_packs,id',
+            'packs.*.barcode' => 'required|string|max:255|distinct',
+            'packs.*.qrcode' => 'required|string',
+            'packs.*.bulk_uom' => 'required|string|max:30',
+            'packs.*.units_per_pack' => 'required|integer|min:1|max:100000',
         ], $this->stockInCodeValidationMessages());
 
         $this->validateSerialNoDuplicates($validated['entries']);
 
         $originLocation = $this->normalizeStoreCode($validated['origin_location'] ?? null);
         $validated['entries'] = $this->prepareMultiAssetEntriesForSave($originLocation, $validated['entries']);
+        $validated['entries'] = $this->resolvePacks($validated['packs'] ?? [], $validated['entries'], $originLocation);
 
         if ((int) $validated['quantity'] !== count($validated['entries'])) {
             throw ValidationException::withMessages([
@@ -317,6 +328,7 @@ class StockInController extends Controller
                     'cost',
                     'price',
                     'destination_location',
+                    'stock_pack_id',
                 ])),
             ]);
         }
@@ -349,6 +361,15 @@ class StockInController extends Controller
             'entries.*.cost' => 'required_with:entries|numeric|min:0',
             'entries.*.price' => 'required_with:entries|numeric|min:0',
             'entries.*.destination_location' => 'nullable|string|max:255',
+            'entries.*.pack_key' => 'nullable|string|max:64',
+            'entries.*.stock_pack_id' => 'nullable|integer|exists:stock_packs,id',
+            'packs' => 'nullable|array',
+            'packs.*.key' => 'required|string|max:64|distinct',
+            'packs.*.id' => 'nullable|integer|exists:stock_packs,id',
+            'packs.*.barcode' => 'required|string|max:255|distinct',
+            'packs.*.qrcode' => 'required|string',
+            'packs.*.bulk_uom' => 'required|string|max:30',
+            'packs.*.units_per_pack' => 'required|integer|min:1|max:100000',
             'source_stock_in_id' => 'nullable|integer|exists:stock_ins,id',
             'serial_no' => 'nullable|string',
             'barcode' => 'required_without:entries|string',
@@ -388,6 +409,7 @@ class StockInController extends Controller
                 $entryDetails,
                 $relatedRows->pluck('id')->all()
             );
+            $validated['entries'] = $this->resolvePacks($validated['packs'] ?? [], $validated['entries'], $originLocation);
 
             if ((int) $validated['quantity'] !== count($validated['entries'])) {
                 throw ValidationException::withMessages([
@@ -529,12 +551,15 @@ class StockInController extends Controller
 
         $headerIndexes = array_flip($header);
         $assetsByItemCode = Asset::query()
-            ->get(['id', 'item_code', 'cost'])
+            ->get(['id', 'item_code', 'cost', 'description', 'base_uom', 'bulk_uom'])
             ->keyBy(fn (Asset $asset) => mb_strtolower(trim((string) $asset->item_code)));
 
         $imported = 0;
         $errors = [];
         $rowNum = 1;
+        // Optional column: rows of one item + DR sharing a box_no become one box (stock pack).
+        $boxColumn = $headerIndexes['box_no'] ?? null;
+        $boxes = [];
 
         foreach ($rows as $line) {
             $rowNum++;
@@ -555,6 +580,13 @@ class StockInController extends Controller
 
             if (! $asset) {
                 $errors[] = "Row {$rowNum}: item_code '{$itemCode}' was not found.";
+
+                continue;
+            }
+
+            $boxNo = $boxColumn !== null ? $this->normalizeImportValue($line[$boxColumn] ?? null) : '';
+            if ($boxNo !== '' && ! $asset->bulk_uom) {
+                $errors[] = "Row {$rowNum}: item '{$asset->item_code}' has no bulk UOM, so box_no cannot be used. Set its Bulk UOM on /assets first.";
 
                 continue;
             }
@@ -603,7 +635,7 @@ class StockInController extends Controller
 
             $validated = $validator->validated();
 
-            StockIn::create([
+            $row = StockIn::create([
                 'receive_date' => $validated['receive_date'],
                 'dr_no' => $validated['dr_no'] ?? null,
                 'dr_date' => $validated['dr_date'] ?? null,
@@ -625,11 +657,20 @@ class StockInController extends Controller
                     'cost',
                     'price',
                     'destination_location',
+                    'stock_pack_id',
                 ])),
             ]);
 
+            if ($boxNo !== '') {
+                $boxKey = implode('|', [$asset->id, $validated['dr_no'] ?? '', mb_strtolower($boxNo)]);
+                $boxes[$boxKey] ??= ['asset' => $asset, 'validated' => $validated, 'ids' => []];
+                $boxes[$boxKey]['ids'][] = $row->id;
+            }
+
             $imported++;
         }
+
+        $this->createImportedBoxes($boxes, $request->user()?->id);
 
         return response()->json([
             'imported' => $imported,
@@ -673,11 +714,16 @@ class StockInController extends Controller
         $sheet = $spreadsheet->getSheet(0);
         $sheet->setTitle('Import Template');
 
-        $headers = $this->stockInImportHeaders();
+        // box_no is optional (older files without it still import), so it sits after the required columns.
+        $headers = [...$this->stockInImportHeaders(), 'box_no'];
         foreach ($headers as $index => $header) {
             $col = Coordinate::stringFromColumnIndex($index + 1);
             $sheet->setCellValue("{$col}1", $header);
         }
+        $sheet->getComment('P1')->getText()->createTextRun(
+            'Optional. Rows of the same item and DR with the same box_no are received as one box '
+            .'(the item needs a Bulk UOM). Leave blank for loose pieces.'
+        );
 
         $today = now()->toDateString();
         $sampleAsset = $assets->first();
@@ -701,6 +747,7 @@ class StockInController extends Controller
                 $sampleAsset?->cost ?? '0',
                 '0',
                 $sampleStore?->code ?? '',
+                '',
             ],
             [
                 $today,
@@ -718,11 +765,12 @@ class StockInController extends Controller
                 $sampleAsset?->cost ?? '0',
                 '0',
                 $sampleStore?->code ?? '',
+                '',
             ],
         ], null, 'A2');
 
-        $sheet->getStyle('A1:O1')->getFont()->setBold(true);
-        $sheet->getStyle('A1:O1')->getFill()
+        $sheet->getStyle('A1:P1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:P1')->getFill()
             ->setFillType(Fill::FILL_SOLID)
             ->getStartColor()->setARGB('FFD9E1F2');
         $sheet->getStyle('A:A')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_DATE_YYYYMMDD);
@@ -770,14 +818,15 @@ class StockInController extends Controller
     public function printBarcodes(StockIn $stockIn)
     {
         $barcode = new DNS1D;
-        $items = $this->groupedStockInRows($stockIn)
-            ->whereNotNull('barcode')
-            ->get()
-            ->map(function (StockIn $item) use ($barcode) {
+        $rows = $this->groupedStockInRows($stockIn)->whereNotNull('barcode')->get();
+        $boxTags = $this->pieceBoxTags($rows);
+        $items = $rows
+            ->map(function (StockIn $item) use ($barcode, $boxTags) {
                 $png = $barcode->getBarcodePNG($item->barcode, 'C128', 2, 58);
 
                 return [
                     'item' => $item,
+                    'box_tag' => $boxTags[$item->id] ?? null,
                     'image' => $this->temporaryCodeImage(
                         $png ? $this->opaquePng($png) : $barcode->getBarcodeSVG($item->barcode, 'C128', 2, 58, 'black', false, true),
                         $png ? 'png' : 'svg'
@@ -799,14 +848,15 @@ class StockInController extends Controller
     public function printQrcodes(StockIn $stockIn)
     {
         $qrcode = new DNS2D;
-        $items = $this->groupedStockInRows($stockIn)
-            ->whereNotNull('qrcode')
-            ->get()
-            ->map(function (StockIn $item) use ($qrcode) {
+        $rows = $this->groupedStockInRows($stockIn)->whereNotNull('qrcode')->get();
+        $boxTags = $this->pieceBoxTags($rows);
+        $items = $rows
+            ->map(function (StockIn $item) use ($qrcode, $boxTags) {
                 $png = $qrcode->getBarcodePNG($item->qrcode, 'QRCODE', 4, 4, [0, 0, 0], [255, 255, 255]);
 
                 return [
                     'item' => $item,
+                    'box_tag' => $boxTags[$item->id] ?? null,
                     'image' => $this->temporaryCodeImage(
                         $png ? $this->opaquePng($png) : $qrcode->getBarcodeSVG($item->qrcode, 'QRCODE', 4, 4, 'black'),
                         $png ? 'png' : 'svg'
@@ -823,6 +873,111 @@ class StockInController extends Controller
             $items,
             'qrcodes-'.$stockIn->receive_date->format('Y-m-d').'.pdf'
         );
+    }
+
+    /** One barcode label per box (bulk unit) in this stock-in group. */
+    public function printPackBarcodes(StockIn $stockIn)
+    {
+        $barcode = new DNS1D;
+        $items = $this->packLabels($stockIn, function (StockPack $pack) use ($barcode) {
+            $png = $barcode->getBarcodePNG($pack->barcode, 'C128', 2, 58);
+
+            return $this->temporaryCodeImage(
+                $png ? $this->opaquePng($png) : $barcode->getBarcodeSVG($pack->barcode, 'C128', 2, 58, 'black', false, true),
+                $png ? 'png' : 'svg'
+            );
+        });
+
+        if ($items->isEmpty()) {
+            return 'No boxes in this stock group.';
+        }
+
+        return $this->renderCodePdf(
+            'pdf.stock-in-barcodes',
+            $items,
+            'box-barcodes-'.$stockIn->receive_date->format('Y-m-d').'.pdf',
+            ['heading' => 'STOCK-IN BOX BARCODES']
+        );
+    }
+
+    /** One QR label per box (bulk unit) in this stock-in group. */
+    public function printPackQrcodes(StockIn $stockIn)
+    {
+        $qrcode = new DNS2D;
+        $items = $this->packLabels($stockIn, function (StockPack $pack) use ($qrcode) {
+            $content = $pack->qrcode ?: $pack->barcode;
+            $png = $qrcode->getBarcodePNG($content, 'QRCODE', 4, 4, [0, 0, 0], [255, 255, 255]);
+
+            return $this->temporaryCodeImage(
+                $png ? $this->opaquePng($png) : $qrcode->getBarcodeSVG($content, 'QRCODE', 4, 4, 'black'),
+                $png ? 'png' : 'svg'
+            );
+        });
+
+        if ($items->isEmpty()) {
+            return 'No boxes in this stock group.';
+        }
+
+        return $this->renderCodePdf(
+            'pdf.stock-in-qrcodes',
+            $items,
+            'box-qrcodes-'.$stockIn->receive_date->format('Y-m-d').'.pdf',
+            ['heading' => 'STOCK-IN BOX QR CODES']
+        );
+    }
+
+    /**
+     * Boxes of a stock-in group in receive order, each as a label: "BOX 2 of 3", the box code,
+     * and what it holds. $image renders the code picture for one pack.
+     */
+    private function packLabels(StockIn $stockIn, callable $image)
+    {
+        $rows = $this->groupedStockInRows($stockIn)->whereNotNull('stock_pack_id')->get();
+        $packs = StockPack::whereIn('id', $rows->pluck('stock_pack_id')->unique())->orderBy('id')->get();
+        $total = $packs->count();
+
+        return $packs->values()->map(function (StockPack $pack, int $index) use ($rows, $total, $image, $stockIn) {
+            $pieces = $rows->where('stock_pack_id', $pack->id);
+            $asset = $pieces->first()?->asset;
+
+            return [
+                'item_code' => ($asset?->item_code ?: 'No Item Code').' · '.$pack->bulk_uom.' '.($index + 1).' of '.$total,
+                'code' => $pack->barcode,
+                'lines' => [
+                    sprintf('%s of %d %s | %s', $pack->bulk_uom, $pack->units_per_pack, $asset?->base_uom ?: 'PC',
+                        $asset?->description ?: $asset?->model ?: '-'),
+                    sprintf('Date: %s | Dest: %s', $stockIn->receive_date?->format('M d, Y') ?: '-',
+                        $pieces->first()?->destination_location ?: '-'),
+                ],
+                'image' => $image($pack),
+            ];
+        });
+    }
+
+    /**
+     * Short "BOX 2 · 3/12" tag for each piece label, so a loose piece can be matched to its box.
+     * Box numbers follow the same order as the box labels.
+     *
+     * @return array<int, string> stock_in id => tag
+     */
+    private function pieceBoxTags($rows): array
+    {
+        $packIds = $rows->pluck('stock_pack_id')->filter()->unique()->sort()->values();
+        if ($packIds->isEmpty()) {
+            return [];
+        }
+        $packs = StockPack::whereIn('id', $packIds)->get()->keyBy('id');
+
+        $tags = [];
+        foreach ($packIds as $number => $packId) {
+            $pack = $packs->get($packId);
+            $pieces = $rows->where('stock_pack_id', $packId)->sortBy('id')->values();
+            foreach ($pieces as $position => $piece) {
+                $tags[$piece->id] = sprintf('%s %d · %d/%d', $pack?->bulk_uom ?: 'BOX', $number + 1, $position + 1, $pack?->units_per_pack ?: $pieces->count());
+            }
+        }
+
+        return $tags;
     }
 
     private function opaquePng(string $base64Png): string|false
@@ -862,10 +1017,10 @@ class StockInController extends Controller
         return $path;
     }
 
-    private function renderCodePdf(string $view, $items, string $filename)
+    private function renderCodePdf(string $view, $items, string $filename, array $extra = [])
     {
         try {
-            $content = Pdf::loadView($view, compact('items'))
+            $content = Pdf::loadView($view, [...compact('items'), ...$extra])
                 ->setPaper('a4', 'portrait')
                 ->output();
         } finally {
@@ -1026,7 +1181,7 @@ class StockInController extends Controller
 
     protected function groupedStockInRows(StockIn $stockIn)
     {
-        $query = StockIn::with(['asset', 'creator:id,name,email', 'updater:id,name,email', 'sourceStockIn'])
+        $query = StockIn::with(['asset', 'pack', 'creator:id,name,email', 'updater:id,name,email', 'sourceStockIn'])
             ->where('asset_id', $stockIn->asset_id)
             ->whereDate('receive_date', $stockIn->receive_date);
 
@@ -1107,6 +1262,8 @@ class StockInController extends Controller
                     'eol_months'      => isset($entry['eol_months'])      && $entry['eol_months']      !== '' ? $entry['eol_months']      : $source->eol_months,
                     'cost'            => isset($entry['cost'])            && $entry['cost']            !== '' ? $entry['cost']            : $source->cost,
                     'price'           => isset($entry['price'])           && $entry['price']           !== '' ? $entry['price']           : $source->price,
+                    // A piece moved between locations stays part of the box it was received in.
+                    'stock_pack_id'   => $source->stock_pack_id,
                 ];
             } else {
                 // Consumable Transfer logic (if any specific validation needed)
@@ -1178,6 +1335,7 @@ class StockInController extends Controller
                     'cost',
                     'price',
                     'destination_location',
+                    'stock_pack_id',
                 ])),
             ];
 
@@ -1198,6 +1356,106 @@ class StockInController extends Controller
             $extraRow->delete();
         }
     }
+
+    /**
+     * Turns the submitted boxes into stock_packs rows and stamps stock_pack_id on their pieces.
+     *
+     * Only a supplier receipt creates boxes. On an internal transfer every piece keeps the box it
+     * came from (set in prepareMultiAssetEntriesForSave), so submitted packs are ignored there.
+     * Each box must hold exactly its declared number of pieces, all of the box's own asset.
+     */
+    protected function resolvePacks(array $packs, array $entries, ?string $originLocation): array
+    {
+        if ($this->isInternalTransferLocation($this->normalizeStoreCode($originLocation))) {
+            return array_map(fn ($entry) => Arr::except($entry, ['pack_key']), $entries);
+        }
+
+        $packsByKey = collect($packs)->keyBy('key');
+        $piecesByKey = [];
+
+        foreach ($entries as $index => $entry) {
+            $key = $entry['pack_key'] ?? null;
+            if ($key === null || $key === '') {
+                continue;
+            }
+            if (! $packsByKey->has($key)) {
+                throw ValidationException::withMessages([
+                    "entries.{$index}.pack_key" => 'This piece refers to a box that is not in the submission.',
+                ]);
+            }
+            $piecesByKey[$key][] = $index;
+        }
+
+        $assets = Asset::whereIn('id', array_unique(array_column($entries, 'asset_id')))->get()->keyBy('id');
+        $userId = auth()->id();
+        $idsByKey = [];
+
+        foreach ($packsByKey as $key => $pack) {
+            $pieceIndexes = $piecesByKey[$key] ?? [];
+            $declared = (int) $pack['units_per_pack'];
+
+            if (count($pieceIndexes) !== $declared) {
+                throw ValidationException::withMessages([
+                    'packs' => sprintf('Box %s declares %d piece(s) but has %d.', $pack['barcode'], $declared, count($pieceIndexes)),
+                ]);
+            }
+
+            $assetIds = array_values(array_unique(array_map(fn ($i) => (int) $entries[$i]['asset_id'], $pieceIndexes)));
+            if (count($assetIds) !== 1) {
+                throw ValidationException::withMessages([
+                    'packs' => sprintf('Box %s mixes different items; a box holds one item only.', $pack['barcode']),
+                ]);
+            }
+            $asset = $assets->get($assetIds[0]);
+
+            $existing = ! empty($pack['id'])
+                ? StockPack::whereKey($pack['id'])->where('asset_id', $asset->id)->first()
+                : null;
+
+            $clash = StockPack::where('barcode', $pack['barcode'])
+                ->when($existing, fn ($q) => $q->whereKeyNot($existing->id))
+                ->exists();
+            if ($clash) {
+                throw ValidationException::withMessages([
+                    'packs' => sprintf('Box barcode %s is already used. Regenerate it and save again.', $pack['barcode']),
+                ]);
+            }
+
+            $attributes = [
+                'asset_id' => $asset->id,
+                'barcode' => $pack['barcode'],
+                'qrcode' => $pack['qrcode'],
+                'bulk_uom' => mb_strtoupper($pack['bulk_uom']),
+                'units_per_pack' => $declared,
+                'updated_by' => $userId,
+            ];
+
+            if ($existing) {
+                $existing->update($attributes);
+                $idsByKey[$key] = $existing->id;
+            } else {
+                $idsByKey[$key] = StockPack::create([...$attributes, 'created_by' => $userId])->id;
+            }
+        }
+
+        // A piece with no pack_key may still carry the id of a box it already belongs to: part of a
+        // box that reached this group by transfer, so its count is not this group's to check.
+        $keptIds = collect($entries)->whereNull('pack_key')->pluck('stock_pack_id')->filter()->unique();
+        $keptPacks = StockPack::whereIn('id', $keptIds)->pluck('asset_id', 'id');
+
+        return array_map(function ($entry) use ($idsByKey, $keptPacks) {
+            $key = $entry['pack_key'] ?? null;
+            if ($key !== null && $key !== '') {
+                $entry['stock_pack_id'] = $idsByKey[$key] ?? null;
+            } else {
+                $kept = $entry['stock_pack_id'] ?? null;
+                $entry['stock_pack_id'] = $kept && (int) $keptPacks->get($kept) === (int) $entry['asset_id'] ? (int) $kept : null;
+            }
+
+            return Arr::except($entry, ['pack_key']);
+        }, $entries);
+    }
+
 
     protected function normalizeStockEntry(array $entry): array
     {
@@ -1250,6 +1508,43 @@ class StockInController extends Controller
             'barcode.required_without' => 'Generate a barcode before updating this stock-in record.',
             'qrcode.required_without' => 'Generate a QR code before updating this stock-in record.',
         ];
+    }
+
+    /**
+     * Turns imported rows grouped by box_no into stock packs. A box holds exactly the rows that
+     * imported successfully, with codes generated the same way the Stock In form does.
+     */
+    protected function createImportedBoxes(array $boxes, ?int $userId): void
+    {
+        $sequence = 0;
+        foreach ($boxes as $box) {
+            $asset = $box['asset'];
+            $validated = $box['validated'];
+            $barcode = sprintf('%s-BX-%s-%d', $asset->item_code, now()->format('YmdHisv'), ++$sequence);
+            $units = count($box['ids']);
+
+            $pack = StockPack::create([
+                'asset_id' => $asset->id,
+                'barcode' => $barcode,
+                'qrcode' => implode("\n", [
+                    'Item Code: '.$asset->item_code,
+                    'Description: '.($asset->description ?: 'N/A'),
+                    'Box: '.$barcode,
+                    sprintf('Contents: %d %s per %s', $units, $asset->base_uom ?: 'PC', $asset->bulk_uom),
+                    'Vendor: '.($validated['vendor'] ?? null ?: 'N/A'),
+                    'Received Date: '.($validated['receive_date'] ?? 'N/A'),
+                    'DR No: '.($validated['dr_no'] ?? null ?: 'N/A'),
+                    'DR Date: '.($validated['dr_date'] ?? null ?: 'N/A'),
+                    'Received By: '.($validated['received_by'] ?? null ?: 'N/A'),
+                ]),
+                'bulk_uom' => $asset->bulk_uom,
+                'units_per_pack' => $units,
+                'created_by' => $userId,
+                'updated_by' => $userId,
+            ]);
+
+            StockIn::whereIn('id', $box['ids'])->update(['stock_pack_id' => $pack->id]);
+        }
     }
 
     protected function stockInImportHeaders(): array

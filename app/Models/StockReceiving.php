@@ -16,6 +16,7 @@ class StockReceiving extends Model
         'origin_location',
         'destination_location',
         'asset_id',
+        'stock_pack_id',
         'source_stock_in_id',
         'serial_no',
         'barcode',
@@ -42,6 +43,7 @@ class StockReceiving extends Model
     protected $casts = [
         'stock_transfer_id' => 'integer',
         'asset_id' => 'integer',
+        'stock_pack_id' => 'integer',
         'source_stock_in_id' => 'integer',
         'is_allocation' => 'boolean',
         'transferred_quantity' => 'integer',
@@ -64,6 +66,12 @@ class StockReceiving extends Model
     public function asset()
     {
         return $this->belongsTo(Asset::class);
+    }
+
+    /** The bulk unit (box/pack) this piece was received in, if any. */
+    public function pack()
+    {
+        return $this->belongsTo(StockPack::class, 'stock_pack_id');
     }
 
     public function sourceStockIn()
