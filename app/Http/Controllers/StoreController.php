@@ -31,7 +31,7 @@ class StoreController extends Controller implements HasMiddleware
     public static function middleware(): array
     {
         return [
-            new Middleware('can:stores.view', only: ['index', 'downloadBlueprint']),
+            new Middleware('can:stores.view', only: ['index', 'export', 'downloadBlueprint']),
             new Middleware('can:stores.create', only: ['store']),
             new Middleware('can:stores.edit', only: ['update', 'uploadBlueprint', 'destroyBlueprint']),
             new Middleware('can:stores.delete', only: ['destroy']),
@@ -39,6 +39,31 @@ class StoreController extends Controller implements HasMiddleware
     }
 
     public function index(Request $request)
+    {
+        $query = $this->filteredQuery($request);
+
+        $stores = $query->latest()->paginate($request->get('per_page', 10))->withQueryString();
+        $users = User::active()->orderBy('name')->get(['id', 'name']);
+        $clusters = EntityReferenceScope::visible(Cluster::query())->where('department_id', DepartmentReferences::viewedId())->orderBy('name')->get(['id', 'code', 'name']);
+        $settings = Setting::where('group', 'thresholds')->pluck('value', 'key');
+
+        return Inertia::render('Stores/Index', [
+            'stores' => $stores,
+            'users' => $users,
+            'clusters' => $clusters,
+            'companies' => Company::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
+            'settings' => $settings,
+            'classOptions' => ReferenceOption::ofType('store_class'),
+            'hookupOptions' => ReferenceOption::ofType('store_hookup'),
+            'systemOptions' => ReferenceOption::ofType('store_system'),
+            'telcoOptions' => ReferenceOption::ofType('store_telco'),
+            'connectivityOptions' => ReferenceOption::ofType('store_connectivity_type'),
+            'remoteAppOptions' => ReferenceOption::ofType('store_remote_app'),
+        ]);
+    }
+
+    /** The list and the export share one query, so an export matches what the filters show. */
+    private function filteredQuery(Request $request)
     {
         // Follows the entity switcher. stores.company_id is the owning brand, so a
         // brand lists its own stores plus those of the entities it is tagged to
@@ -74,23 +99,86 @@ class StoreController extends Controller implements HasMiddleware
             });
         }
 
-        $stores = $query->latest()->paginate($request->get('per_page', 10))->withQueryString();
-        $users = User::active()->orderBy('name')->get(['id', 'name']);
-        $clusters = EntityReferenceScope::visible(Cluster::query())->where('department_id', DepartmentReferences::viewedId())->orderBy('name')->get(['id', 'code', 'name']);
-        $settings = Setting::where('group', 'thresholds')->pluck('value', 'key');
+        return $query;
+    }
 
-        return Inertia::render('Stores/Index', [
-            'stores' => $stores,
-            'users' => $users,
-            'clusters' => $clusters,
-            'companies' => Company::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
-            'settings' => $settings,
-            'classOptions' => ReferenceOption::ofType('store_class'),
-            'hookupOptions' => ReferenceOption::ofType('store_hookup'),
-            'systemOptions' => ReferenceOption::ofType('store_system'),
-            'telcoOptions' => ReferenceOption::ofType('store_telco'),
-            'connectivityOptions' => ReferenceOption::ofType('store_connectivity_type'),
-            'remoteAppOptions' => ReferenceOption::ofType('store_remote_app'),
+    public function export(Request $request)
+    {
+        $stores = $this->filteredQuery($request)->latest()->get();
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Stores');
+
+        $headers = [
+            'Code', 'Name', 'Entity', 'Brand', 'Legal Company', 'Company Applied With', 'Class', 'Sector', 'Area',
+            'Clusters', 'Address', 'Email', 'Contact Person', 'Contact Details', 'Mall Contacts', 'Opening Date',
+            'Hookup', 'Monitoring Status', 'Systems', 'Telcos', 'Connectivity Types', 'Remote Apps',
+            'Assigned Users', 'Latitude', 'Longitude', 'Radius (m)', 'Open Tickets', 'Status',
+        ];
+        $sheet->fromArray($headers, null, 'A1');
+        $lastCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+        $sheet->getStyle("A1:{$lastCol}1")->getFont()->setBold(true);
+        $sheet->getStyle("A1:{$lastCol}1")->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFD9E1F2');
+
+        $optionList = fn (Store $store, string $type) => $store->options->where('type', $type)->pluck('value')->implode(', ');
+        $rows = $stores->map(fn (Store $store) => [
+            $store->code,
+            $store->name,
+            $store->company?->name,
+            $store->brand,
+            $store->legal_company,
+            $store->company_applied_with,
+            $store->class,
+            $store->sector,
+            $store->area,
+            $store->clusters->pluck('name')->implode(', '),
+            $store->address,
+            $store->email,
+            $store->contact_person,
+            $store->contact_details,
+            collect($store->mall_contacts ?? [])->map(fn ($c) => implode(' / ', array_filter([
+                $c['name'] ?? null, $c['contact_number'] ?? null, $c['email'] ?? null, $c['operating_hours'] ?? null,
+            ])))->implode('; '),
+            $store->opening_date?->format('Y-m-d'),
+            $store->hookup,
+            $store->monitoring_status,
+            $optionList($store, 'system'),
+            $optionList($store, 'telco'),
+            $optionList($store, 'connectivity_type'),
+            $optionList($store, 'remote_app'),
+            $store->users->pluck('name')->implode(', '),
+            $store->latitude,
+            $store->longitude,
+            $store->radius_meters,
+            $store->tickets_count,
+            $store->is_active ? 'Active' : 'Inactive',
+        ])->all();
+        // Explicit strings keep codes such as "0012" from losing their zeros.
+        foreach ($rows as $i => $row) {
+            foreach ($row as $c => $value) {
+                $cell = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($c + 1).($i + 2);
+                is_int($value) || is_float($value)
+                    ? $sheet->setCellValue($cell, $value)
+                    : $sheet->setCellValueExplicit($cell, (string) $value, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            }
+        }
+
+        foreach (range(1, count($headers)) as $colIndex) {
+            $sheet->getColumnDimension(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex))->setAutoSize(true);
+        }
+
+        $writer = new Xlsx($spreadsheet);
+        $filename = 'stores-export-'.now()->format('Y-m-d-His').'.xlsx';
+
+        return response()->stream(function () use ($writer) {
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control' => 'max-age=0',
         ]);
     }
 
@@ -175,8 +263,10 @@ class StoreController extends Controller implements HasMiddleware
             'company_id' => 'required|exists:companies,id',
             'brand' => 'nullable|string|max:255',
             'class' => 'nullable|string|max:100',
-            'cluster' => 'nullable|required_without:cluster_ids|string|max:255',
-            'cluster_ids' => 'nullable|required_without:cluster|array',
+            // Optional: clusters are a department catalogue, and an entity (or desk)
+            // with none configured must still be able to register its stores.
+            'cluster' => 'nullable|string|max:255',
+            'cluster_ids' => 'nullable|array',
             'cluster_ids.*' => 'exists:clusters,id',
             'email' => 'nullable|email|max:255',
             'contact_person' => 'nullable|string|max:255',
@@ -511,15 +601,15 @@ class StoreController extends Controller implements HasMiddleware
                 'area'          => 'required|string|max:255',
                 'brand'         => 'required|string|max:255',
                 'class'         => 'required|in:Regular,Kitchen,Office',
-                'cluster'       => 'required|string|max:255',
-                'cluster_ids'    => 'required|array|min:1',
+                'cluster'       => 'nullable|string|max:255',
+                // Optional, but a cluster that was named must be a known one.
+                'cluster_ids'    => 'required_with:cluster|array',
                 'latitude'      => 'nullable|numeric|between:-90,90',
                 'longitude'     => 'nullable|numeric|between:-180,180',
                 'radius_meters' => 'nullable|integer|min:10|max:5000',
                 'is_active'     => 'nullable|in:0,1',
             ], [
-                'cluster_ids.required' => 'At least one valid cluster is required.',
-                'cluster_ids.min' => 'At least one valid cluster is required.',
+                'cluster_ids.required_with' => 'No matching cluster was found for the cluster column.',
             ]);
 
             if ($validator->fails()) {

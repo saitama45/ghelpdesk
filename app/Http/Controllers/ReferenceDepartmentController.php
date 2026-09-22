@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Department;
+use App\Models\{Category, Department, Item, SubCategory};
 use App\Support\{CompanyContext, DepartmentReferences, EntityReferenceScope};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -41,6 +41,9 @@ class ReferenceDepartmentController extends Controller
             if ((int) $row->department_id === (int) $department->id) {
                 return;
             }
+            if ($type === 'items') {
+                $this->alignClassification($row, $department);
+            }
             $duplicate = $class::where('company_id', $department->company_id)->where('department_id', $department->id)
                 ->where('name', $row->name)->whereKeyNot($row->id);
             if ($type === 'items') {
@@ -58,5 +61,33 @@ class ReferenceDepartmentController extends Controller
         });
 
         return back()->with('success', 'Service department updated.');
+    }
+
+    /**
+     * A tagged item must use a category and sub-category of its own department.
+     * Point it at the department's same-named reference, or bring an untagged one
+     * of the same entity along with it; anything else is owned by another desk.
+     */
+    private function alignClassification(Item $item, Department $department): void
+    {
+        foreach (['category_id' => [Category::class, 'category'], 'sub_category_id' => [SubCategory::class, 'sub-category']] as $field => [$class, $label]) {
+            $reference = $item->$field ? $class::find($item->$field) : null;
+            if (! $reference || ((int) $reference->department_id === (int) $department->id
+                && (int) $reference->company_id === (int) $department->company_id)) {
+                continue;
+            }
+            $match = $class::where('company_id', $department->company_id)->where('department_id', $department->id)
+                ->where('name', $reference->name)->value('id');
+            if ($match) {
+                $item->$field = $match;
+            } elseif (! $reference->department_id
+                && (! $reference->company_id || (int) $reference->company_id === (int) $department->company_id)) {
+                $reference->company_id = $department->company_id;
+                $reference->department_id = $department->id;
+                $reference->save();
+            } else {
+                throw ValidationException::withMessages(['department_id' => "The item's {$label} \"{$reference->name}\" belongs to another department or entity. Create or tag a {$label} with that name for {$department->name} first."]);
+            }
+        }
     }
 }

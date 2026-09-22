@@ -429,8 +429,6 @@ const sortByName = (list) => [...(list || [])].sort((a, b) => a.name.localeCompa
 
 const categoryFilterOptions = computed(() => [{ id: '', name: 'All categories' }, ...sortByName(props.categories)])
 const subCategoryFilterOptions = computed(() => [{ id: '', name: 'All sub-categories' }, ...sortByName(props.subCategories)])
-const categoryFormOptions = computed(() => [{ id: null, name: 'None' }, ...sortByName(props.categories)])
-const subCategoryFormOptions = computed(() => [{ id: null, name: 'None' }, ...sortByName(props.subCategories)])
 
 const filters = reactive({
     category_id: props.filters.category_id ?? '',
@@ -500,6 +498,13 @@ const showModal = ref(false)
 const showImportModal = ref(false)
 const isEditing = ref(false)
 const currentItem = ref(null)
+
+// An untagged (or legacy) item can point at a reference outside the viewed
+// department's list; keep it selectable so the edit form shows its current value.
+const withCurrent = (list, current) => (current && !(list || []).some(o => String(o.id) === String(current.id)))
+    ? [...(list || []), current] : (list || [])
+const categoryFormOptions = computed(() => [{ id: null, name: 'None' }, ...sortByName(withCurrent(props.categories, currentItem.value?.category))])
+const subCategoryFormOptions = computed(() => [{ id: null, name: 'None' }, ...sortByName(withCurrent(props.subCategories, currentItem.value?.sub_category))])
 
 const form = reactive({
     category_id: null,

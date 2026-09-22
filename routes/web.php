@@ -312,6 +312,7 @@ Route::middleware('auth')->group(function () {
     Route::post('task-checklist-items/{taskChecklistItem}/duplicate', [\App\Http\Controllers\TaskCardController::class, 'duplicateChecklistItem'])->name('task-checklist-items.duplicate');
     Route::delete('task-card-comments/{taskCardComment}', [\App\Http\Controllers\TaskCardController::class, 'destroyComment'])->name('task-card-comments.destroy');
     Route::delete('task-card-attachments/{taskCardAttachment}', [\App\Http\Controllers\TaskCardController::class, 'destroyAttachment'])->name('task-card-attachments.destroy');
+    Route::get('stores/export', [\App\Http\Controllers\StoreController::class, 'export'])->name('stores.export');
     Route::get('stores/template', [\App\Http\Controllers\StoreController::class, 'template'])->name('stores.template');
     Route::post('stores/import', [\App\Http\Controllers\StoreController::class, 'import'])->name('stores.import');
     Route::get('stores/{store}/details', [\App\Http\Controllers\StoreController::class, 'details'])->name('stores.details');

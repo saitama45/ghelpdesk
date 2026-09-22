@@ -139,6 +139,26 @@ class TicketDepartmentReferencesTest extends TestCase
         $this->assertDatabaseHas('categories', ['id' => $id, 'department_id' => $this->fm->id]);
     }
 
+    public function test_tagging_an_untagged_item_brings_or_maps_its_classification(): void
+    {
+        $row = fn (array $extra) => ['company_id' => $this->company->id, 'is_active' => true, ...$extra];
+        $category = Category::find(DB::table('categories')->insertGetId($row(['name' => 'Addl Service'])));
+        $sub = SubCategory::find(DB::table('sub_categories')->insertGetId($row(['name' => 'Repair'])));
+        $item = Item::find(DB::table('items')->insertGetId($row(['name' => 'Service', 'category_id' => $category->id,
+            'sub_category_id' => $sub->id, 'concern_type' => 'Service Request', 'priority' => 'High'])));
+
+        $this->putJson(route('reference-departments.update', ['type' => 'items', 'id' => $item->id]),
+            ['department_id' => $this->tas->id])->assertRedirect();
+
+        $item->refresh();
+        $this->assertSame($this->tas->id, (int) $item->department_id);
+        // The untagged category comes along; the sub-category maps to TAS's own "Repair".
+        $this->assertSame($category->id, (int) $item->category_id);
+        $this->assertSame($this->tas->id, (int) $category->fresh()->department_id);
+        $this->assertSame($this->tasItem->sub_category_id, (int) $item->sub_category_id);
+        $this->assertNull($sub->fresh()->department_id);
+    }
+
     public function test_retagging_is_refused_when_it_would_duplicate_an_existing_identity(): void
     {
         $category = Category::where('department_id', $this->tas->id)->firstOrFail();
