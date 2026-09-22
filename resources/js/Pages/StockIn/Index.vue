@@ -709,7 +709,7 @@
                                         <div v-if="assetHasBulk(asset) && !isTransferMode" class="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 space-y-2 dark:border-indigo-400/30 dark:bg-indigo-500/10">
                                             <div class="flex items-center justify-between gap-2">
                                                 <p class="text-[10px] font-black text-indigo-700 uppercase tracking-widest dark:text-indigo-200">
-                                                    {{ asset.bulk_uom }} ({{ packsForAsset(asset.id).length }}) &middot; 1 {{ asset.bulk_uom }} = {{ asset.units_per_bulk }} {{ asset.base_uom || 'PC' }}
+                                                    Per {{ asset.bulk_uom }} barcodes &amp; QR ({{ packsForAsset(asset.id).length }}) &middot; 1 {{ asset.bulk_uom }} = {{ asset.units_per_bulk }} {{ asset.base_uom || 'PC' }}
                                                 </p>
                                                 <button v-if="!readOnlyMode" type="button" @click="addPack(asset)"
                                                         class="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-[10px] font-black text-white uppercase tracking-wider hover:bg-indigo-700 transition-colors">
@@ -745,9 +745,17 @@
                                             </div>
                                         </div>
 
+                                        <!-- No bulk UOM: say how to enable box receiving instead of silently hiding it -->
+                                        <p v-if="!assetHasBulk(asset) && !isTransferMode" class="text-[10px] text-gray-500 dark:text-gray-400">
+                                            Received per {{ asset.base_uom || 'PC' }} only. To receive this item in boxes/packs with their own labels, set its Bulk UOM on
+                                            <a :href="route('assets.index', { search: asset.item_code })" target="_blank" rel="noopener" class="font-semibold text-blue-600 hover:underline dark:text-blue-400">Assets</a>.
+                                        </p>
+
                                         <!-- Units List -->
                                         <div class="space-y-1.5">
-                                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Units ({{ getEntriesForAsset(asset.id).length }})</p>
+                                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">
+                                                {{ assetHasBulk(asset) ? `Per ${asset.base_uom || 'PC'} barcodes & QR` : 'Units' }} ({{ getEntriesForAsset(asset.id).length }})
+                                            </p>
                                             <div class="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden dark:border-gray-700 dark:divide-gray-700">
                                                 <div
                                                     v-for="(entry, unitIdx) in orderedEntriesForAsset(asset.id)"
@@ -828,41 +836,50 @@
                                 <p class="text-xs text-gray-500 dark:text-gray-300">Selected assets and their unit-level details.</p>
                             </div>
                             <div class="flex items-center gap-2">
-                                <div v-if="isEditing && editingStockIn" class="flex items-center gap-2">
-                                    <button
-                                        type="button"
-                                        @click="printStockInCodes('barcodes')"
-                                        class="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
-                                    >
-                                        <PrinterIcon class="h-4 w-4" />
-                                        <span>Print Barcodes</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        @click="printStockInCodes('qrcodes')"
-                                        class="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
-                                    >
-                                        <QrCodeIcon class="h-4 w-4" />
-                                        <span>Print QR Codes</span>
-                                    </button>
-                                    <template v-if="hasSavedBoxes">
+                                <!-- Printing is split by unit of measure: one label per box (bulk) vs one per piece (base). -->
+                                <div v-if="isEditing && editingStockIn" class="flex flex-wrap items-center gap-2">
+                                    <div v-if="hasSavedBoxes" class="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/60 px-2 py-1 dark:border-indigo-400/30 dark:bg-indigo-500/10">
+                                        <span class="text-[10px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-200">Per {{ printUomLabels.bulk }}</span>
                                         <button
                                             type="button"
                                             @click="printStockInCodes('pack-barcodes')"
-                                            class="inline-flex items-center gap-1.5 rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-200 dark:border-indigo-400/40"
+                                            class="inline-flex items-center gap-1 rounded-md border border-indigo-300 bg-white px-2 py-1 text-xs font-semibold text-indigo-700 shadow-sm hover:bg-indigo-100 dark:bg-gray-800 dark:text-indigo-200 dark:border-indigo-400/40"
+                                            :title="`One barcode label per ${printUomLabels.bulk}`"
                                         >
                                             <PrinterIcon class="h-4 w-4" />
-                                            <span>Box Barcodes</span>
+                                            <span>Barcodes</span>
                                         </button>
                                         <button
                                             type="button"
                                             @click="printStockInCodes('pack-qrcodes')"
-                                            class="inline-flex items-center gap-1.5 rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-200 dark:border-indigo-400/40"
+                                            class="inline-flex items-center gap-1 rounded-md border border-indigo-300 bg-white px-2 py-1 text-xs font-semibold text-indigo-700 shadow-sm hover:bg-indigo-100 dark:bg-gray-800 dark:text-indigo-200 dark:border-indigo-400/40"
+                                            :title="`One QR label per ${printUomLabels.bulk}`"
                                         >
                                             <QrCodeIcon class="h-4 w-4" />
-                                            <span>Box QR Codes</span>
+                                            <span>QR Codes</span>
                                         </button>
-                                    </template>
+                                    </div>
+                                    <div class="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 dark:border-gray-600 dark:bg-gray-900/50">
+                                        <span class="text-[10px] font-black uppercase tracking-wider text-gray-600 dark:text-gray-300">Per {{ printUomLabels.base }}</span>
+                                        <button
+                                            type="button"
+                                            @click="printStockInCodes('barcodes')"
+                                            class="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+                                            :title="`One barcode label per ${printUomLabels.base}, including those inside boxes`"
+                                        >
+                                            <PrinterIcon class="h-4 w-4" />
+                                            <span>Barcodes</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            @click="printStockInCodes('qrcodes')"
+                                            class="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+                                            :title="`One QR label per ${printUomLabels.base}, including those inside boxes`"
+                                        >
+                                            <QrCodeIcon class="h-4 w-4" />
+                                            <span>QR Codes</span>
+                                        </button>
+                                    </div>
                                 </div>
                                 <span class="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">{{ form.entries.length }} unit(s)</span>
                                 <button
@@ -1030,7 +1047,7 @@
                                     <div v-if="assetHasBulk(asset) && !isTransferMode" class="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 space-y-2 dark:border-indigo-400/30 dark:bg-indigo-500/10">
                                         <div class="flex items-center justify-between gap-2">
                                             <p class="text-[10px] font-black text-indigo-700 uppercase tracking-widest dark:text-indigo-200">
-                                                {{ asset.bulk_uom }} ({{ packsForAsset(asset.id).length }}) &middot; 1 {{ asset.bulk_uom }} = {{ asset.units_per_bulk }} {{ asset.base_uom || 'PC' }}
+                                                Per {{ asset.bulk_uom }} barcodes &amp; QR ({{ packsForAsset(asset.id).length }}) &middot; 1 {{ asset.bulk_uom }} = {{ asset.units_per_bulk }} {{ asset.base_uom || 'PC' }}
                                             </p>
                                             <button v-if="!readOnlyMode" type="button" @click="addPack(asset)"
                                                     class="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-[10px] font-black text-white uppercase tracking-wider hover:bg-indigo-700 transition-colors">
@@ -1066,9 +1083,17 @@
                                         </div>
                                     </div>
 
+                                    <!-- No bulk UOM: say how to enable box receiving instead of silently hiding it -->
+                                    <p v-if="!assetHasBulk(asset) && !isTransferMode" class="text-[10px] text-gray-500 dark:text-gray-400">
+                                        Received per {{ asset.base_uom || 'PC' }} only. To receive this item in boxes/packs with their own labels, set its Bulk UOM on
+                                        <a :href="route('assets.index', { search: asset.item_code })" target="_blank" rel="noopener" class="font-semibold text-blue-600 hover:underline dark:text-blue-400">Assets</a>.
+                                    </p>
+
                                     <!-- Units List -->
                                     <div class="space-y-1.5">
-                                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">Units ({{ getEntriesForAsset(asset.id).length }})</p>
+                                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">
+                                                {{ assetHasBulk(asset) ? `Per ${asset.base_uom || 'PC'} barcodes & QR` : 'Units' }} ({{ getEntriesForAsset(asset.id).length }})
+                                            </p>
                                         <div class="divide-y divide-gray-100 rounded-xl border border-gray-200 overflow-hidden bg-white shadow-sm dark:bg-gray-800 dark:border-gray-700 dark:divide-gray-700">
                                             <div
                                                 v-for="(entry, unitIdx) in orderedEntriesForAsset(asset.id)"
@@ -1826,6 +1851,16 @@ const entryBoxLabel = (entry) => {
     if (pack) return `${pack.bulk_uom} ${packNumber(pack)}`
     return entry?.stock_pack_id ? 'In box' : ''
 }
+
+/** UOM names for the print groups; a stock-in group holds one asset, so its first entry decides. */
+const printUomLabels = computed(() => {
+    const asset = form.entries.length ? getAssetForEntry(form.entries[0]) : null
+    const firstPack = form.packs[0]
+    return {
+        base: asset?.base_uom || 'PC',
+        bulk: firstPack?.bulk_uom || asset?.bulk_uom || 'BOX',
+    }
+})
 
 const hasSavedBoxes = computed(() => form.packs.some(pack => pack.id) || form.entries.some(entry => entry.stock_pack_id))
 

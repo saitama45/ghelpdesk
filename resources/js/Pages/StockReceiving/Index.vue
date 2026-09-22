@@ -257,6 +257,28 @@
                         </div>
                     </div>
 
+                    <!-- Verify by bulk UOM (one scan per box) or base UOM (one scan per piece) -->
+                    <div v-if="!readOnly && hasBoxes" class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs font-bold text-gray-600 dark:text-gray-300">Verify by:</span>
+                        <div class="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 dark:border-gray-700 dark:bg-gray-900">
+                            <button type="button" @click="setVerifyMode('bulk')"
+                                class="rounded-md px-3 py-1 text-xs font-bold transition-colors"
+                                :class="verifyMode === 'bulk' ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'">
+                                Per {{ uomLabels.bulk }}
+                            </button>
+                            <button type="button" @click="setVerifyMode('base')"
+                                class="rounded-md px-3 py-1 text-xs font-bold transition-colors"
+                                :class="verifyMode === 'base' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'">
+                                Per {{ uomLabels.base }}
+                            </button>
+                        </div>
+                        <span class="text-[11px] text-gray-500 dark:text-gray-400">
+                            {{ verifyMode === 'bulk'
+                                ? `Scan each ${uomLabels.bulk} label once; loose ${uomLabels.base} are scanned one by one.`
+                                : `Scan every ${uomLabels.base} label, including those inside a ${uomLabels.bulk}.` }}
+                        </span>
+                    </div>
+
                     <!-- Barcode scan strip (edit mode only) -->
                     <div v-if="!readOnly" class="flex items-center gap-3 rounded-xl border border-blue-100 bg-blue-50 p-3 dark:border-blue-400/30 dark:bg-blue-500/10">
                         <svg class="w-5 h-5 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -270,7 +292,7 @@
                             v-model="scanInput"
                             @keydown.enter.prevent="handleScan()"
                             @paste="handlePaste"
-                            placeholder="Scan a box or piece barcode and press Enter"
+                            :placeholder="scanPlaceholder"
                             class="flex-1 rounded-lg border-gray-200 text-sm font-mono focus:ring-blue-500 focus:border-blue-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                             autocomplete="off"
                             spellcheck="false"
@@ -286,7 +308,10 @@
 
                     <!-- Scan progress -->
                     <p v-if="!readOnly" class="text-xs font-bold text-gray-500 dark:text-gray-300">
-                        Verified: {{ verifiedIds.size }} / {{ itemRows.length }} items
+                        Verified: {{ verifiedIds.size }} / {{ itemRows.length }} {{ uomLabels.base }}
+                        <template v-if="hasBoxes && verifyMode === 'bulk'">
+                            · {{ uomLabels.bulk }}: {{ verifiedBoxCount }} / {{ boxCount }}
+                        </template>
                     </p>
 
                     <!-- Items grouped by asset -->
@@ -659,6 +684,38 @@ const scanInput     = ref('')
 const scanFeedback  = ref(null)
 const scanInputRef  = ref(null)
 
+// ---- Verify mode: per bulk UOM (box label) or per base UOM (piece label) -------------------
+const VERIFY_MODE_KEY = 'stockReceiving.verifyMode'
+const readStoredVerifyMode = () => {
+    try { return localStorage.getItem(VERIFY_MODE_KEY) } catch { return null }
+}
+const verifyMode = ref(readStoredVerifyMode() === 'base' ? 'base' : 'bulk')
+const setVerifyMode = (mode) => {
+    verifyMode.value = mode
+    try { localStorage.setItem(VERIFY_MODE_KEY, mode) } catch { /* private window: keep in memory only */ }
+    nextTick(() => scanInputRef.value?.focus())
+}
+
+const hasBoxes = computed(() => itemRows.value.some(row => row.pack))
+const uomLabels = computed(() => {
+    const boxed = itemRows.value.find(row => row.pack)
+    return {
+        bulk: boxed?.pack?.bulk_uom || 'BOX',
+        base: (boxed || itemRows.value[0])?.asset?.base_uom || 'PC',
+    }
+})
+const boxIds = computed(() => [...new Set(itemRows.value.filter(row => row.pack).map(row => row.pack.id))])
+const boxCount = computed(() => boxIds.value.length)
+const verifiedBoxCount = computed(() => boxIds.value.filter(id =>
+    itemRows.value.filter(row => row.pack?.id === id).every(row => verifiedIds.value.has(row.id))
+).length)
+const scanPlaceholder = computed(() => {
+    if (!hasBoxes.value) return 'Scan barcode and press Enter'
+    return verifyMode.value === 'bulk'
+        ? `Scan a ${uomLabels.value.bulk} label (or a loose ${uomLabels.value.base}) and press Enter`
+        : `Scan a ${uomLabels.value.base} label and press Enter`
+})
+
 // code -> { ids, pack }. A piece barcode/serial covers that piece; a box barcode covers every
 // piece of that box in THIS receiving (after a split, only the pieces that were sent here).
 const scanLookup = computed(() => {
@@ -696,11 +753,22 @@ const handleScan = (overrideValue) => {
     if (!value) return
 
     const match = scanLookup.value.get(value.toLowerCase())
-    if (match) {
+    // Per-box mode wants the box label for boxed pieces; per-piece mode wants piece labels only.
+    const scannedRow = match && !match.pack ? itemRows.value.find(row => row.id === match.ids[0]) : null
+    const rejection = !match || !hasBoxes.value ? null
+        : verifyMode.value === 'base' && match.pack
+            ? `Verifying per ${uomLabels.value.base}: scan each ${uomLabels.value.base} label, not the ${match.pack.bulk_uom} label.`
+            : verifyMode.value === 'bulk' && scannedRow?.pack
+                ? `Verifying per ${scannedRow.pack.bulk_uom}: scan the ${scannedRow.pack.bulk_uom} label ${scannedRow.pack.barcode}.`
+                : null
+
+    if (rejection) {
+        scanFeedback.value = { type: 'error', message: rejection }
+    } else if (match) {
         verifiedIds.value = new Set([...verifiedIds.value, ...match.ids])
         scanFeedback.value = {
             type: 'success',
-            message: match.pack ? `✓ ${match.pack.bulk_uom} verified · ${match.ids.length} pcs` : '✓ Verified',
+            message: match.pack ? `✓ ${match.pack.bulk_uom} verified · ${match.ids.length} ${uomLabels.value.base}` : '✓ Verified',
         }
     } else {
         scanFeedback.value = { type: 'error', message: 'Barcode not found in this receiving.' }
