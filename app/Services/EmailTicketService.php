@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Mail\TicketCommentAdded;
 use App\Models\Company;
+use App\Models\Department;
 use App\Models\EmailIntakeLog;
 use App\Models\Scopes\ActiveEntityScope;
 use App\Models\Setting;
@@ -666,12 +667,21 @@ class EmailTicketService
         }
 
         return DB::transaction(function () use ($message, $subject, $senderEmail, $senderName, $messageId, $user, $cleanBody, $emailBodyHash, $richBody, $servingDepartmentId) {
-            // Email tickets default to the TGI entity (same product decision as
-            // dynamic forms). 'TBG' predates the company-code cleanup and matches
-            // no row, which used to silently fall through to Company::first().
-            $company = Company::where('code', \App\Support\CompanyContext::DEFAULT_COMPANY_CODE)->first()
-                ?? Company::first();
-            $companyId = $company ? $company->id : null;
+            // Mail routed to a department belongs to that department's entity.
+            // Stamping TGI here hid e.g. every dbs.services@ ticket from users
+            // working under the DBS entity (ActiveEntityScope filters on it).
+            $companyId = $servingDepartmentId
+                ? Department::whereKey($servingDepartmentId)->value('company_id')
+                : null;
+
+            // Otherwise email tickets default to the TGI entity (same product
+            // decision as dynamic forms). 'TBG' predates the company-code cleanup
+            // and matches no row, which used to silently fall through to Company::first().
+            if (! $companyId) {
+                $company = Company::where('code', \App\Support\CompanyContext::DEFAULT_COMPANY_CODE)->first()
+                    ?? Company::first();
+                $companyId = $company ? $company->id : null;
+            }
 
             // The key is left to TicketObserver::creating on purpose. Its generator
             // is the only one that also reserves numbers retired by a renumber

@@ -642,6 +642,28 @@ class EmailTicketThreadingTest extends TestCase
         $this->assertSame($department->id, Ticket::firstOrFail()->serving_department_id);
     }
 
+    public function test_mail_routed_to_a_department_takes_that_departments_entity(): void
+    {
+        // Stamping the TGI default here hid every DBS-routed ticket from users
+        // working under the DBS entity.
+        $dbs = Company::create(['name' => 'Distinto Beverage Solutions', 'code' => 'DBS', 'is_active' => true]);
+        $department = $this->makeDepartment('DBS', 'dbs.services@example.test');
+        $department->update(['company_id' => $dbs->id]);
+
+        $this->service->processFake(new FakeEmailMessage(
+            messageId: '<dbs-request@example.test>',
+            senderEmail: 'customer@example.test',
+            subject: 'Beverage dispenser not cooling',
+            body: 'The dispenser at our branch stopped cooling this morning.',
+            toRecipients: ['dbs.services@example.test'],
+        ));
+
+        $ticket = Ticket::firstOrFail();
+        $this->assertSame($department->id, $ticket->serving_department_id);
+        $this->assertSame($dbs->id, (int) $ticket->company_id);
+        $this->assertStringStartsWith('DBS-', $ticket->ticket_key);
+    }
+
     public function test_mail_to_the_base_support_address_stays_in_the_shared_intake_pool(): void
     {
         // Enforcement is off by default, so the shared mailbox still accepts new

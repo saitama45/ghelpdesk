@@ -228,8 +228,21 @@ class DepartmentContext
             ? static::EXECUTIVE_ACCENT
             : static::accentFor($viewedDept?->code, $viewedDept?->name);
 
+        // The home department can sit under another entity (a TAS user viewing
+        // DBS), so it is not always in $departments. Sent separately so the
+        // "I belong to" selector can still name it instead of rendering blank.
+        $homeDept = $home
+            ? ($departments->firstWhere('id', $home) ?? Department::query()->find($home, ['id', 'name', 'code']))
+            : null;
+
         return [
             'home' => $home,
+            'homeDepartment' => $homeDept ? [
+                'id' => (int) $homeDept->id,
+                'name' => $homeDept->name,
+                'code' => $homeDept->code,
+                'inEntity' => $departments->contains('id', $homeDept->id),
+            ] : null,
             'viewed' => $viewed,
             'accessView' => ($home && $viewed && $home === $viewed) ? 'provider' : 'customer',
             'isExecutive' => $executive,

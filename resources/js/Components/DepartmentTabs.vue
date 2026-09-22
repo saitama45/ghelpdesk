@@ -18,12 +18,23 @@ const homeId = computed(() => ctx.value.home);
 const isExecutive = computed(() => ctx.value.isExecutive === true);
 const canSwitchHome = computed(() => ctx.value.canSwitchHome === true);
 
+// The home department may belong to another entity, so it is not always one of
+// the tabs. It then gets its own option: the 'self' value restores the DB home,
+// which is the only home that can sit outside the active entity (a session
+// override must be accessible, see DepartmentContext::homeDepartmentId).
+const homeDept = computed(() => ctx.value.homeDepartment || null);
+const homeOutsideEntity = computed(() => !isExecutive.value && homeDept.value && !homeDept.value.inEntity);
+
 // "I belong to" current selection: Executive sentinel or the home department id.
-const belongValue = computed(() => isExecutive.value ? 'executive' : (homeId.value != null ? String(homeId.value) : ''));
+const belongValue = computed(() => {
+    if (isExecutive.value) return 'executive';
+    if (homeOutsideEntity.value) return 'self';
+    return homeId.value != null ? String(homeId.value) : '';
+});
 const belongLabel = computed(() => {
     if (isExecutive.value) return 'Executive';
-    const d = departments.value.find(x => x.id === homeId.value);
-    return d ? (d.code || d.name) : '—';
+    const d = departments.value.find(x => x.id === homeId.value) || homeDept.value;
+    return d ? (d.code || d.name) : 'Not set';
 });
 
 const switchDepartment = (id) => {
@@ -130,7 +141,11 @@ const changeBelong = (event) => {
                     class="border-0 bg-transparent py-0.5 pl-2 pr-7 text-xs font-bold text-gray-800 focus:ring-0 dark:text-gray-100"
                     aria-label="Choose the department you belong to"
                 >
+                    <option v-if="belongValue === ''" value="" disabled>Not set</option>
                     <option value="executive">Executive</option>
+                    <option v-if="homeOutsideEntity" value="self" :title="homeDept.name">
+                        {{ homeDept.code || homeDept.name }}
+                    </option>
                     <option v-for="dept in departments" :key="dept.id" :value="String(dept.id)">
                         {{ dept.code || dept.name }}
                     </option>
