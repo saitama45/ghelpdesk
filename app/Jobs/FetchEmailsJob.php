@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\Setting;
 use App\Services\EmailTicketService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -72,6 +73,11 @@ class FetchEmailsJob implements ShouldBeUnique, ShouldQueue
         }
 
         try {
+            // queue:work lives for up to an hour and Setting::get() caches per process,
+            // so without this a mailbox or routing change made in /settings would be
+            // ignored by queued fetches until the worker recycled.
+            Setting::flushCache();
+
             $service->fetchAndProcess();
         } finally {
             $lock->release();

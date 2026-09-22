@@ -105,6 +105,15 @@ class Setting extends Model
     }
 
     /**
+     * Forget the per-process cache. Long-lived processes (queue:work) must call
+     * this before reading settings, or they keep values from when they booted.
+     */
+    public static function flushCache(): void
+    {
+        self::$cache = [];
+    }
+
+    /**
      * Get all settings grouped by their group column
      */
     public static function getAllGrouped()
