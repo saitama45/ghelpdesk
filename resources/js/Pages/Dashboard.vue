@@ -2,6 +2,7 @@
 import { Head, usePage, Link, router } from '@inertiajs/vue3';
 import { ticketUrl } from '@/Composables/useTicketLink';
 import { ref, computed, reactive, watch, onMounted } from 'vue';
+import { useTicketStatuses } from '@/Composables/useTicketStatuses';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import StoreHealthReport from '@/Components/StoreHealthReport.vue';
@@ -306,7 +307,8 @@ const activeTicketCount = computed(() => Number(props.stats?.open || 0));
 
 // The statuses that make up an "active" (not resolved/closed) ticket, used to build
 // the banner's drill-through link so it lists exactly what stats.open counted.
-const ACTIVE_TICKET_STATUSES = ['open', 'for_schedule', 'in_progress', 'waiting_service_provider', 'waiting_client_feedback'];
+const { keys: statusKeys, statusLabel, statusColor } = useTicketStatuses();
+const ACTIVE_TICKET_STATUSES = computed(() => statusKeys.value.filter(s => s !== 'resolved' && s !== 'closed'));
 
 const chartNumber = (value) => Number(value || 0);
 
@@ -388,7 +390,7 @@ const formatMinutes = (minutes) => {
 
 const activeTicketFilterParams = computed(() => {
     const params = {
-        status: ACTIVE_TICKET_STATUSES,
+        status: ACTIVE_TICKET_STATUSES.value,
         skip_default_department: 1,
     };
 
@@ -477,27 +479,9 @@ const truncate = (text, length = 100) => {
     return text.length > length ? text.substring(0, length) + '...' : text;
 };
 
-const getStatusColor = (status) => {
-    switch (status) {
-        case 'open': return 'bg-blue-100 text-blue-800';
-        case 'for_schedule': return 'bg-teal-100 text-teal-800';
-        case 'in_progress': return 'bg-purple-100 text-purple-800';
-        case 'resolved': return 'bg-green-100 text-green-800';
-        case 'closed': return 'bg-gray-100 text-gray-800';
-        case 'waiting_service_provider': return 'bg-orange-100 text-orange-800';
-        case 'waiting_client_feedback': return 'bg-blue-100 text-blue-800';
-        default: return 'bg-gray-100 text-gray-800';
-    }
-};
+const getStatusColor = (status) => statusColor(status);
 
-const getStatusLabel = (status) => {
-    switch (status) {
-        case 'for_schedule': return 'For Schedule';
-        case 'waiting_service_provider': return 'Waiting for service provider';
-        case 'waiting_client_feedback': return 'Waiting for clients feedback?';
-        default: return status ? status.replace('_', ' ') : '';
-    }
-};
+const getStatusLabel = (status) => statusLabel(status);
 
 const getPriorityColor = (priority) => {
     switch (String(priority || '').toLowerCase()) {

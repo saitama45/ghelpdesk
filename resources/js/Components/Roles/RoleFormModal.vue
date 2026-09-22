@@ -266,7 +266,7 @@ const permissionGroups = computed(() => {
         { name: 'Inventory', categories: ['Assets', 'Stock_in', 'Stock_transfer', 'Receiving_stock', 'Reports'] },
         { name: 'Monitoring', categories: ['NPC Status', 'CCTV Monitoring', 'ALAGA', 'WIGS', 'Payments & SOA', 'Accounting Documents', 'Mall Hookup'] },
         { name: 'Administrative', categories: ['Attendance', 'Schedules', 'Service Vehicle Trips', 'Presence', 'KB Articles', 'Holidays', 'QAT Tracker', 'UAT Tracker'] },
-        { name: 'References', categories: ['Companies', 'Departments', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Project Type & Store Class', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Form_builder'] },
+        { name: 'References', categories: ['Companies', 'Departments', 'Clusters', 'Stores', 'Vendors', 'Activity_templates', 'Project Type & Store Class', 'Categories', 'Subcategories', 'Items', 'Request_types', 'Ticket Statuses', 'Form_builder'] },
         { name: 'Reports', categories: ['Reports'] },
         { name: 'User Management', categories: ['Users', 'Roles'] },
         { name: 'Settings', categories: ['Settings', 'Canned_messages', 'Leadership Points'] }

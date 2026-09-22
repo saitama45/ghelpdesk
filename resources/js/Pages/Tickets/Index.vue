@@ -2,6 +2,7 @@
 import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
 import { ticketUrl } from '@/Composables/useTicketLink';
 import { ref, reactive, onMounted, watch, computed } from 'vue';
+import { useTicketStatuses } from '@/Composables/useTicketStatuses';
 import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import DataTable from '@/Components/DataTable.vue';
@@ -19,6 +20,8 @@ import { entityIdForStore, itemsForEntity, itemFitsEntity } from '@/lib/entityIt
 
 const props = defineProps({
     tickets: Object,
+    // Statuses the viewed department hides (References → Ticket Statuses).
+    hiddenTicketStatuses: { type: Array, default: () => [] },
     staff: Array,
     companies: Array,
     stores: Array,
@@ -367,21 +370,21 @@ const ticketKeyCompanyIdByValue = computed(() => new Map(
     ticketKeyFilterOptions.value.map(option => [String(option.value), Number(option.company_id)])
 ));
 
-const filterOptions = [
+// Status catalogue from References → Ticket Statuses (labels, colours, custom statuses).
+const { statuses: statusCatalogue, keys: statusKeys, statusLabel, statusColor } = useTicketStatuses();
+
+const filterOptions = computed(() => [
     { value: 'all', label: 'All' },
     { value: 'my_tickets', label: 'My Tickets' },
-    { value: 'open', label: 'Open' },
-    { value: 'for_schedule', label: 'For Schedule' },
-    { value: 'in_progress', label: 'In Progress' },
-    { value: 'resolved', label: 'Resolved' },
-    { value: 'waiting_service_provider', label: 'Waiting for service provider' },
-    { value: 'waiting_client_feedback', label: 'Waiting for Client\'s Feedback' },
-    { value: 'closed', label: 'Closed' },
+    ...statusCatalogue.value.map(s => ({ value: s.key, label: s.label })),
     { value: 'unassigned', label: 'Unassigned' },
-];
+]);
 
 const statusOptions = computed(() => {
-    return filterOptions.map(opt => ({ id: opt.value, name: opt.label }));
+    const hidden = props.hiddenTicketStatuses || [];
+    return filterOptions.value
+        .filter(opt => !hidden.includes(opt.value) || filterStatus.value.includes(opt.value))
+        .map(opt => ({ id: opt.value, name: opt.label }));
 });
 
 // Department filter is restricted to the department level only (no sub-unit
@@ -1330,10 +1333,10 @@ const submitBulkArchive = async () => {
 }
 
 const priorities = ['low', 'medium', 'high', 'urgent'];
-const statuses = ['open', 'for_schedule', 'in_progress', 'resolved', 'closed', 'waiting_service_provider', 'waiting_client_feedback'];
+const statuses = computed(() => statusKeys.value.filter(s => !(props.hiddenTicketStatuses || []).includes(s)));
 
 const bulkStatuses = computed(() => {
-    return statuses.filter(s => s !== 'resolved' && s !== 'closed');
+    return statuses.value.filter(s => s !== 'resolved' && s !== 'closed');
 });
 
 const handleFileSelect = (event) => {
@@ -1514,27 +1517,9 @@ const getPriorityBorder = (priority) => {
     return 'border-l-transparent';
 };
 
-const getStatusColor = (status) => {
-    switch (status) {
-        case 'open': return 'border-blue-500 text-black bg-white dark:bg-slate-900 dark:text-blue-100';
-        case 'for_schedule': return 'border-teal-500 text-black bg-white dark:bg-slate-900 dark:text-teal-100';
-        case 'in_progress': return 'border-violet-500 text-black bg-white dark:bg-slate-900 dark:text-violet-100';
-        case 'resolved': return 'border-green-500 text-black bg-white dark:bg-slate-900 dark:text-green-100';
-        case 'closed': return 'border-slate-400 text-black bg-white dark:border-slate-500 dark:bg-slate-900 dark:text-slate-100';
-        case 'waiting_service_provider': return 'border-orange-400 text-black bg-white dark:bg-slate-900 dark:text-orange-100';
-        case 'waiting_client_feedback': return 'border-sky-500 text-black bg-white dark:bg-slate-900 dark:text-sky-100';
-        default: return 'border-slate-300 text-black bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100';
-    }
-};
+const getStatusColor = (status) => statusColor(status, 'outline');
 
-const getStatusLabel = (status) => {
-    switch (status) {
-        case 'for_schedule': return 'For Schedule';
-        case 'waiting_service_provider': return 'Waiting for service provider';
-        case 'waiting_client_feedback': return 'Waiting for Client\'s Feedback';
-        default: return String(status || '').replace(/_/g, ' ');
-    }
-};
+const getStatusLabel = (status) => statusLabel(status);
 
 const getSlaRowClass = (ticket) => {
     if (!ticket.sla_metric) return 'border-l-transparent hover:bg-slate-50 dark:hover:bg-slate-800/70';
@@ -2403,7 +2388,7 @@ const requesterTabs = computed(() => {
                                     Respond
                                 </button>
                                 <button
-                                    v-if="canCreateChildTickets && hasPermission('tickets.edit')"
+                                    v-if="canCreateChildTickets && hasPermission('tickets.create_child')"
                                     @click="openBulkChildModal"
                                     class="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-lg border border-teal-300 bg-white px-3 py-2 text-sm font-semibold text-teal-700 transition-colors hover:bg-teal-50 dark:bg-gray-800"
                                 >

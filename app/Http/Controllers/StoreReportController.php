@@ -332,7 +332,7 @@ class StoreReportController extends Controller implements HasMiddleware
         return match ($status) {
             'waiting_service_provider' => 'Waiting for service provider',
             'waiting_client_feedback' => 'Waiting for clients feedback?',
-            default => $status ? str_replace('_', ' ', $status) : '',
+            default => $status ? \App\Support\TicketStatuses::label($status) : '',
         };
     }
 

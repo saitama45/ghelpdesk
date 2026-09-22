@@ -434,7 +434,7 @@ class AssetOperationalHealthService
                         'is_partner' => $ticket->vendor_id !== null,
                         // Sheet "Next Action": the committed next step, read off the
                         // ticket's own workflow state rather than typed by hand.
-                        'next_action' => self::NEXT_ACTION[$ticket->status] ?? 'Under Monitoring',
+                        'next_action' => self::NEXT_ACTION[\App\Support\TicketStatuses::behavior($ticket->status)] ?? 'Under Monitoring',
                         // Sheet "ETA": the SLA resolution target. Null when no SLA row
                         // exists — shown as an em dash, never faked.
                         'eta' => $eta?->format('M j, Y'),

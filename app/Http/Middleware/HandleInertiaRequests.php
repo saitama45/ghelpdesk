@@ -82,6 +82,8 @@ class HandleInertiaRequests extends Middleware
                 return $val ? json_decode($val, true) : null;
             }),
             'dynamicForms' => $this->activeFormDefinitions(),
+            // Ticket status catalogue (References -> Ticket Statuses): labels, colours, behaviour.
+            'ticketStatuses' => fn () => $user ? \App\Support\TicketStatuses::payload() : [],
             // A partial reload normally retains props omitted by the server. Flash
             // messages must always be returned (including as null after they are
             // consumed), or background polls can replay the previous toast forever.

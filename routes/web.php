@@ -220,6 +220,10 @@ Route::middleware('auth')->group(function () {
     Route::resource('sub-categories', \App\Http\Controllers\SubCategoryController::class)->except(['show', 'create', 'edit']);
     Route::resource('items', \App\Http\Controllers\ItemController::class)->except(['show', 'create', 'edit']);
     Route::resource('request-types', \App\Http\Controllers\RequestTypeController::class)->except(['show', 'create', 'edit']);
+    Route::get('ticket-statuses', [\App\Http\Controllers\TicketStatusController::class, 'index'])->name('ticket-statuses.index');
+    Route::put('ticket-statuses/visibility', [\App\Http\Controllers\TicketStatusController::class, 'visibility'])->name('ticket-statuses.visibility');
+    Route::post('ticket-statuses', [\App\Http\Controllers\TicketStatusController::class, 'store'])->name('ticket-statuses.store');
+    Route::put('ticket-statuses/{ticketStatus}', [\App\Http\Controllers\TicketStatusController::class, 'update'])->name('ticket-statuses.update');
     Route::put('request-types/{requestType}/schema', [\App\Http\Controllers\RequestTypeController::class, 'updateSchema'])->name('request-types.schema');
     Route::resource('form-builder', \App\Http\Controllers\FormBuilderController::class)->except(['show', 'create', 'edit']);
     Route::put('form-builder/{form_builder}/schema', [\App\Http\Controllers\FormBuilderController::class, 'updateSchema'])->name('form-builder.schema');

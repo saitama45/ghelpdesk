@@ -2,6 +2,7 @@
 import { Head, Link, useForm, usePage, router } from '@inertiajs/vue3';
 import { ticketUrl } from '@/Composables/useTicketLink';
 import { ref, computed, reactive, watch, nextTick, onMounted, onUnmounted } from 'vue';
+import { useTicketStatuses } from '@/Composables/useTicketStatuses';
 import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
@@ -19,6 +20,8 @@ import { ArrowDownTrayIcon, ChatBubbleBottomCenterTextIcon, CheckIcon, ChevronDo
 
 const props = defineProps({
     ticket: Object,
+    // Statuses this ticket's department hides (References → Ticket Statuses).
+    hiddenTicketStatuses: { type: Array, default: () => [] },
     // Department axis for THIS ticket: 'provider' when my home department serves
     // it, 'customer' when another department does. Server-resolved — see
     // App\Support\TicketAccess.
@@ -81,6 +84,7 @@ const axisHomeName = computed(() => props.departmentAxis?.homeDepartment?.name |
 // their own request (see canResolveAsCustomer). Everything else is desk work.
 const DESK_PERMISSIONS = [
     'tickets.edit',
+    'tickets.create_child',
     'tickets.assign',
     'tickets.close',
     'tickets.delete',
@@ -1267,8 +1271,11 @@ const titleInput = ref(null);
 const descriptionInput = ref(null);
 
 const priorities = ['low', 'medium', 'high', 'urgent'];
-const statuses = ['open', 'for_schedule', 'in_progress', 'resolved', 'closed', 'waiting_service_provider', 'waiting_client_feedback'];
+// Status catalogue from References → Ticket Statuses; custom statuses follow the
+// SLA behaviour of the system status they behave like.
+const { keys: statusKeys, statusLabel, statusColor, statusBehavior } = useTicketStatuses();
 const slaWaitingStatuses = new Set(['waiting_service_provider', 'waiting_client_feedback', 'for_schedule']);
+const isSlaWaiting = (status) => slaWaitingStatuses.has(statusBehavior(status));
 const slaStopStatuses = new Set(['resolved', 'closed']);
 const localSlaPausedAt = ref(null);
 
@@ -1284,7 +1291,7 @@ watch(
     (status) => {
         const backendPausedAt = getValidTicketDate(props.ticket.sla_metric?.paused_at);
 
-        if (slaWaitingStatuses.has(status)) {
+        if (isSlaWaiting(status)) {
             localSlaPausedAt.value = backendPausedAt || localSlaPausedAt.value || new Date();
             return;
         }
@@ -1421,7 +1428,7 @@ const slaRuntime = computed(() => {
         if (eventTime < cursorTime) continue;
 
         const intervalMilliseconds = getElapsedMilliseconds(cursor, event.changedAt);
-        if (slaWaitingStatuses.has(currentStatus)) {
+        if (isSlaWaiting(currentStatus)) {
             pausedMilliseconds += intervalMilliseconds;
         } else {
             activeMilliseconds += intervalMilliseconds;
@@ -1457,14 +1464,14 @@ const slaRuntime = computed(() => {
         const intervalMilliseconds = getElapsedMilliseconds(cursor, endAt);
         const intervalStatus = currentStatus || liveStatus;
 
-        if (slaWaitingStatuses.has(intervalStatus) || slaWaitingStatuses.has(liveStatus)) {
+        if (isSlaWaiting(intervalStatus) || isSlaWaiting(liveStatus)) {
             pausedMilliseconds += intervalMilliseconds;
         } else {
             activeMilliseconds += intervalMilliseconds;
         }
     }
 
-    const isPaused = !stoppedAt && (slaWaitingStatuses.has(currentStatus) || slaWaitingStatuses.has(liveStatus));
+    const isPaused = !stoppedAt && (isSlaWaiting(currentStatus) || isSlaWaiting(liveStatus));
     const state = stoppedAt ? 'stopped' : (isPaused ? 'paused' : 'running');
 
     return {
@@ -1542,7 +1549,10 @@ const resolutionSLA = computed(() => {
 
 // Filter available statuses based on permissions
 const availableStatuses = computed(() => {
-    return statuses.filter(status => {
+    const hidden = props.hiddenTicketStatuses || [];
+    return statusKeys.value.filter(status => {
+        // A hidden status stays listed only while it is the ticket's current one.
+        if (hidden.includes(status) && status !== props.ticket.status) return false;
         return canChangeTicketStatus(status);
     });
 });
@@ -2255,27 +2265,9 @@ const getPriorityColor = (priority) => {
     }
 };
 
-const getStatusColor = (status) => {
-    switch (status) {
-        case 'open': return 'text-blue-800 bg-blue-100';
-        case 'for_schedule': return 'text-teal-800 bg-teal-100';
-        case 'in_progress': return 'text-purple-800 bg-purple-100';
-        case 'resolved': return 'text-green-800 bg-green-100';
-        case 'closed': return 'text-gray-600 bg-gray-200';
-        case 'waiting_service_provider': return 'text-orange-800 bg-orange-100';
-        case 'waiting_client_feedback': return 'text-blue-800 bg-blue-100';
-        default: return 'text-gray-800 bg-gray-100';
-    }
-};
+const getStatusColor = (status) => statusColor(status);
 
-const getStatusLabel = (status) => {
-    switch (status) {
-        case 'for_schedule': return 'For Schedule';
-        case 'waiting_service_provider': return 'Waiting for service provider';
-        case 'waiting_client_feedback': return 'Waiting for Client\'s Feedback';
-        default: return status.replace('_', ' ');
-    }
-};
+const getStatusLabel = (status) => statusLabel(status);
 
 const formatFileSize = (bytes) => {
     if (bytes === 0) return '0 Bytes';
@@ -3005,7 +2997,7 @@ const linkify = (text) => {
 
                         <div class="pt-6 border-t space-y-3">
                             <button
-                                v-if="hasPermission('tickets.edit') && ['open', 'in_progress', 'for_schedule'].includes(ticket.status)"
+                                v-if="hasPermission('tickets.create_child') && ['open', 'in_progress', 'for_schedule'].includes(statusBehavior(ticket.status))"
                                 type="button" 
                                 @click="openChildModal" 
                                 class="w-full flex justify-center py-2 px-4 border border-blue-600 rounded-md text-sm font-black text-blue-600 bg-white hover:bg-blue-50 transition-colors uppercase tracking-widest dark:bg-gray-800"

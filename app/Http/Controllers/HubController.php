@@ -290,7 +290,7 @@ class HubController extends Controller
             ->get();
         $board = [];
         foreach ($boardLanes as $status => $label) {
-            $laneTickets = $boardTickets->where('status', $status);
+            $laneTickets = $boardTickets->filter(fn ($t) => \App\Support\TicketStatuses::behavior($t->status) === $status);
             $board[] = [
                 'status' => $status,
                 'label' => $label,

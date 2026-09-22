@@ -1,5 +1,6 @@
 import {
     HomeIcon,
+    AdjustmentsHorizontalIcon,
     BeakerIcon,
     ClipboardDocumentListIcon,
     QueueListIcon,
@@ -490,6 +491,15 @@ export const MODULE_REGISTRY = [
                 routeName: 'request-types.index',
                 activeMatch: ['request-types.*'],
                 permission: 'request_types.view',
+            },
+            {
+                id: 'ticket-statuses',
+                label: 'Ticket Statuses',
+                description: 'Statuses each department shows on tickets',
+                icon: AdjustmentsHorizontalIcon,
+                routeName: 'ticket-statuses.index',
+                activeMatch: ['ticket-statuses.*'],
+                permission: 'ticket_statuses.view',
             },
             {
                 id: 'form-builder',

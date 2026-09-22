@@ -662,8 +662,8 @@ class DashboardController extends Controller
     private function buildKanban($filteredQuery, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter): array
     {
         $kanbanColumns = [
-            ['key' => 'backlogs', 'label' => 'Backlogs', 'statuses' => ['open', 'for_schedule']],
-            ['key' => 'in_progress', 'label' => 'In Progress', 'statuses' => ['in_progress', 'waiting_service_provider', 'waiting_client_feedback']],
+            ['key' => 'backlogs', 'label' => 'Backlogs', 'statuses' => \App\Support\TicketStatuses::like(['open', 'for_schedule'])],
+            ['key' => 'in_progress', 'label' => 'In Progress', 'statuses' => \App\Support\TicketStatuses::like(['in_progress', 'waiting_service_provider', 'waiting_client_feedback'])],
             ['key' => 'resolved', 'label' => 'Resolved', 'statuses' => ['resolved']],
             ['key' => 'closed', 'label' => 'Closed', 'statuses' => ['closed']],
         ];
@@ -993,7 +993,7 @@ class DashboardController extends Controller
         $alarmDate = Carbon::now('Asia/Manila')->subDays($agingDays);
 
         $alarmedWaitingQuery = (clone $query)
-            ->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])
+            ->whereIn('status', \App\Support\TicketStatuses::like(['waiting_service_provider', 'waiting_client_feedback']))
             ->where('updated_at', '<=', $alarmDate);
 
         $alarmedWaitingTickets = (clone $alarmedWaitingQuery)
@@ -1092,9 +1092,9 @@ class DashboardController extends Controller
             'total' => (clone $filteredQuery)->count(),
             'open' => (clone $filteredQuery)->whereNotIn('status', ['resolved', 'closed'])->count(),
             'new' => (clone $newTicketsQuery)->count(),
-            'in_progress' => (clone $filteredQuery)->where('status', 'in_progress')->count(),
+            'in_progress' => (clone $filteredQuery)->whereIn('status', \App\Support\TicketStatuses::like(['in_progress']))->count(),
             'closed' => (clone $filteredQuery)->whereIn('status', ['resolved', 'closed'])->count(),
-            'waiting' => (clone $filteredQuery)->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])->count(),
+            'waiting' => (clone $filteredQuery)->whereIn('status', \App\Support\TicketStatuses::like(['waiting_service_provider', 'waiting_client_feedback']))->count(),
             'waiting_alarm' => $alarmedWaitingTickets->count(),
             'urgent' => $urgentTickets->count(),
             'unassigned' => (clone $filteredQuery)->whereNull('assignee_id')->count(),
@@ -1677,7 +1677,7 @@ class DashboardController extends Controller
             case 'waiting_alarm':
                 $agingDays = (int) Setting::get('waiting_aging_alarm_days', 3);
                 $alarmDate = Carbon::now('Asia/Manila')->subDays($agingDays);
-                $query->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])
+                $query->whereIn('status', \App\Support\TicketStatuses::like(['waiting_service_provider', 'waiting_client_feedback']))
                       ->where('updated_at', '<=', $alarmDate);
                 $filename = "aged_waiting_tickets";
                 break;

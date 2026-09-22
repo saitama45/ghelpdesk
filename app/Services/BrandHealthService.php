@@ -45,6 +45,12 @@ class BrandHealthService
         'wcf'  => ['waiting_client_feedback'],
     ];
 
+    /** WORKFLOW with each custom status added to the lane of the status it behaves like. */
+    private static function workflow(): array
+    {
+        return array_map(fn ($statuses) => \App\Support\TicketStatuses::like($statuses), self::WORKFLOW);
+    }
+
     /** Resolved counts as closed, matching the dashboard-wide open/closed tally. */
     private const TERMINAL_STATUSES = ['resolved', 'closed'];
 
@@ -162,7 +168,7 @@ class BrandHealthService
                 }
                 $health[$this->healthBucket($openTotal, $bands)]++;
 
-                foreach (self::WORKFLOW as $lane => $statuses) {
+                foreach (self::workflow() as $lane => $statuses) {
                     foreach ($statuses as $status) {
                         $workflow[$lane] += (int) ($counts[$status] ?? 0);
                     }
@@ -343,7 +349,7 @@ class BrandHealthService
                 }
 
                 $workflow = ['open' => 0, 'wsp' => 0, 'wcf' => 0];
-                foreach (self::WORKFLOW as $lane => $statuses) {
+                foreach (self::workflow() as $lane => $statuses) {
                     foreach ($statuses as $status) {
                         $workflow[$lane] += (int) ($counts[$status] ?? 0);
                     }
@@ -380,9 +386,9 @@ class BrandHealthService
         }
 
         $lanes = [
-            ['label' => 'OPEN', 'count' => $sum(self::WORKFLOW['open'])],
-            ['label' => 'WCF', 'count' => $sum(self::WORKFLOW['wcf'])],
-            ['label' => 'WSP', 'count' => $sum(self::WORKFLOW['wsp'])],
+            ['label' => 'OPEN', 'count' => $sum(self::workflow()['open'])],
+            ['label' => 'WCF', 'count' => $sum(self::workflow()['wcf'])],
+            ['label' => 'WSP', 'count' => $sum(self::workflow()['wsp'])],
         ];
 
         if ($bucket === 'all') {
@@ -547,7 +553,7 @@ class BrandHealthService
         return Ticket::query()
             ->withoutGlobalScope(ActiveEntityScope::class)
             ->whereNull('tickets.parent_id')
-            ->where('tickets.status', 'waiting_client_feedback')
+            ->whereIn('tickets.status', \App\Support\TicketStatuses::like(['waiting_client_feedback']))
             ->whereIn('tickets.store_id', $allStoreIds)
             ->whereDate('tickets.created_at', '<=', $asOfDate)
             ->with(['store:id,code,name'])

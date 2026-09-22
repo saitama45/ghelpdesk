@@ -105,7 +105,7 @@ class BrandHealthController extends Controller
     {
         // The register only surfaces tickets awaiting client feedback. Guard against a
         // stale click (someone else already actioned it) so we never re-close/reopen.
-        if ($ticket->status !== 'waiting_client_feedback') {
+        if (\App\Support\TicketStatuses::behavior($ticket->status) !== 'waiting_client_feedback') {
             return redirect()->back()->with('info', "{$ticket->ticket_key} is no longer awaiting confirmation.");
         }
 

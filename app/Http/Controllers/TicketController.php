@@ -25,6 +25,7 @@ use App\Services\TicketKnowledgeBaseService;
 use App\Support\DepartmentContext;
 use App\Support\DepartmentReferences;
 use App\Support\TicketAccess;
+use App\Support\TicketStatuses;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -493,7 +494,7 @@ class TicketController extends Controller
                 ->count(),
             'open' => (clone $summaryQuery)->where('status', 'open')->count(),
             'waiting' => (clone $summaryQuery)
-                ->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback'])
+                ->whereIn('status', TicketStatuses::like(['waiting_service_provider', 'waiting_client_feedback']))
                 ->count(),
             'urgent' => (clone $summaryQuery)
                 ->where(function ($q) {
@@ -528,7 +529,7 @@ class TicketController extends Controller
                     });
                 })
                 ->count(),
-            'in_progress' => (clone $summaryQuery)->where('status', 'in_progress')->count(),
+            'in_progress' => (clone $summaryQuery)->whereIn('status', TicketStatuses::like(['in_progress']))->count(),
         ];
 
         match ($request->input('dashboard_filter')) {
@@ -558,9 +559,9 @@ class TicketController extends Controller
                         ->whereBetween('resolution_target_at', [$now, $soon]);
                 });
             }),
-            'in_progress' => $query->where('status', 'in_progress'),
+            'in_progress' => $query->whereIn('status', TicketStatuses::like(['in_progress'])),
             'open'        => $query->where('status', 'open'),
-            'waiting'     => $query->whereIn('status', ['waiting_service_provider', 'waiting_client_feedback']),
+            'waiting'     => $query->whereIn('status', TicketStatuses::like(['waiting_service_provider', 'waiting_client_feedback'])),
             'urgent'      => $query->where(function ($q) {
                     $q->where('priority', 'urgent')
                       ->orWhereHas('item', fn($iq) => $iq->where('priority', 'Urgent'));
@@ -592,6 +593,8 @@ class TicketController extends Controller
             'stores' => $stores,
             'subCategories' => $subCategories,
             'referenceDepartmentId' => DepartmentReferences::viewedId(),
+            // Statuses the viewed department's desk has hidden (References → Ticket Statuses).
+            'hiddenTicketStatuses' => TicketStatuses::hiddenFor(DepartmentReferences::viewedId()),
             'vendors' => $vendors,
             'cannedMessages' => $cannedMessages,
             'departments' => $departments,
@@ -868,6 +871,7 @@ class TicketController extends Controller
     {
         $data = $request->validated();
         $data['serving_department_id'] ??= DepartmentReferences::viewedId();
+        TicketStatuses::assertSelectable($data['status'] ?? null, $data['serving_department_id'] ? (int) $data['serving_department_id'] : null);
 
         if (! empty($data['project_task_id'])) {
             abort_unless(
@@ -1164,6 +1168,7 @@ class TicketController extends Controller
             // see the guards on update/accept/split/schedule/CC.
             'departmentAxis' => fn () => TicketAccess::payload($ticket, auth()->user()),
             'referenceDepartmentId' => fn () => TicketAccess::servingDepartmentId($ticket),
+            'hiddenTicketStatuses' => fn () => TicketStatuses::hiddenFor(TicketAccess::servingDepartmentId($ticket)),
             'viewers' => fn () => $ticket->views()
                 ->with('user:id,name,profile_photo')
                 ->orderByDesc('viewed_at')
@@ -1282,7 +1287,7 @@ class TicketController extends Controller
     {
         $validated = $request->validated();
 
-        $this->authorizeTicketStatusChange($validated['status'] ?? null, $ticket->status);
+        $this->authorizeTicketStatusChange($validated['status'] ?? null, $ticket->status, $ticket);
 
         // Internal customer on another desk's ticket. The request only got here by
         // being a resolve (see UpdateTicketRequest::authorize) — reduce it to that
@@ -1583,10 +1588,14 @@ class TicketController extends Controller
         }
     }
 
-    private function authorizeTicketStatusChange(?string $newStatus, ?string $oldStatus): void
+    private function authorizeTicketStatusChange(?string $newStatus, ?string $oldStatus, ?Ticket $ticket = null): void
     {
         if (!$newStatus || $newStatus === $oldStatus) {
             return;
+        }
+
+        if ($ticket) {
+            TicketStatuses::assertSelectableForTicket($newStatus, $ticket);
         }
 
         $requiredPermission = match ($newStatus) {
@@ -1682,10 +1691,12 @@ class TicketController extends Controller
      */
     public function storeChild(Request $request, Ticket $ticket)
     {
+        // Also covers Escalate to Partner, which is a child ticket too.
+        abort_unless($request->user()->can('tickets.create_child'), 403);
         TicketAccess::assertProvider($ticket, $request->user());
 
         // Allow additional child tickets after the parent moves to For Schedule.
-        if (!in_array($ticket->status, ['open', 'in_progress', 'for_schedule', 'waiting_service_provider'], true)) {
+        if (!in_array(TicketStatuses::behavior($ticket->status), ['open', 'in_progress', 'for_schedule', 'waiting_service_provider'], true)) {
             return redirect()->back()->withErrors(['error' => 'Child tickets can only be created for Open, In Progress, For Schedule, or Waiting tickets.']);
         }
 
@@ -2344,14 +2355,14 @@ class TicketController extends Controller
         // asked for one.
         $requiresResolutionRecord = $isTerminalStatusChange && ! $isCustomerResolve;
 
-        $this->authorizeTicketStatusChange($request->input('status'), $ticket->status);
+        $this->authorizeTicketStatusChange($request->input('status'), $ticket->status, $ticket);
 
         $this->assertTicketClassifiedForResponse($ticket, $request);
 
         $request->validate([
             'comment_text' => [Rule::requiredIf(!$isTerminalStatusChange && !$hasAttachments), 'nullable', 'string'],
             'is_internal' => 'nullable|boolean',
-            'status' => 'nullable|string|in:open,for_schedule,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
+            'status' => ['nullable', 'string', Rule::in(TicketStatuses::keys())],
             'action_taken' => [Rule::requiredIf($requiresResolutionRecord), 'nullable', 'string'],
             'root_cause_analysis' => [Rule::requiredIf($requiresResolutionRecord && $requiresRcaOnResolve), 'nullable', 'string'],
             'attachments' => 'nullable|array',
@@ -2826,6 +2837,8 @@ class TicketController extends Controller
         $referenceTickets = Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
             ->whereIn('id', $validated['ticket_ids'])->get();
         foreach ($referenceTickets as $referenceTicket) {
+            // Checked before fill() so the ticket still carries its current status.
+            TicketStatuses::assertSelectableForTicket($updates['status'] ?? null, $referenceTicket);
             $referenceTicket->fill($updates);
             DepartmentReferences::validateTicket($referenceTicket);
         }
@@ -2945,7 +2958,7 @@ class TicketController extends Controller
      */
     public function bulkStoreChild(Request $request)
     {
-        abort_unless($request->user()->can('tickets.edit'), 403);
+        abort_unless($request->user()->can('tickets.create_child'), 403);
 
         $validated = $request->validate([
             'tickets'                     => 'required|array|min:1',

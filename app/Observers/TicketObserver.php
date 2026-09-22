@@ -248,7 +248,7 @@ class TicketObserver
             'resolution_target_at' => SlaService::calculateTarget($now, $ticket->item_id, 'resolution', $subUnit, $departmentId, $departmentNodeId),
         ]);
 
-        if (in_array($ticket->status, ['waiting_service_provider', 'waiting_client_feedback', 'for_schedule'])) {
+        if (in_array(\App\Support\TicketStatuses::behavior($ticket->status), \App\Support\TicketStatuses::PAUSED, true)) {
             $metric->update(['paused_at' => $now]);
         }
     }
@@ -291,11 +291,11 @@ class TicketObserver
             }
 
             // 3. Handle Pausing (Waiting factors)
-            if (in_array($newStatus, ['waiting_service_provider', 'waiting_client_feedback', 'for_schedule'])) {
+            if (in_array(\App\Support\TicketStatuses::behavior($newStatus), \App\Support\TicketStatuses::PAUSED, true)) {
                 $metric->update(['paused_at' => Carbon::now()]);
             } 
             // Resume SLA
-            elseif (in_array($oldStatus, ['waiting_service_provider', 'waiting_client_feedback', 'for_schedule']) && $metric->paused_at) {
+            elseif (in_array(\App\Support\TicketStatuses::behavior($oldStatus), \App\Support\TicketStatuses::PAUSED, true) && $metric->paused_at) {
                 $pausedSeconds = (int) $metric->paused_at->diffInSeconds(Carbon::now());
                 
                 $data = [
@@ -342,8 +342,9 @@ class TicketObserver
                     'waiting_client_feedback' => 'In Progress',
                 ];
 
-                if (isset($statusMap[$newStatus])) {
-                    $posRequest->update(['status' => $statusMap[$newStatus]]);
+                $posStatus = $statusMap[\App\Support\TicketStatuses::behavior($newStatus)] ?? null;
+                if ($posStatus) {
+                    $posRequest->update(['status' => $posStatus]);
                 }
             }
 

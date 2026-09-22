@@ -807,7 +807,7 @@ class EmailTicketService
 
             // RE-OPEN TRIGGER: If a customer replies to an Open, Waiting, or Resolved ticket,
             // set status to Open to alert the staff.
-            if (in_array($ticket->status, ['waiting_service_provider', 'waiting_client_feedback', 'resolved'])) {
+            if (in_array(\App\Support\TicketStatuses::behavior($ticket->status), ['waiting_service_provider', 'waiting_client_feedback', 'resolved'], true)) {
                 $oldStatus = $ticket->status;
                 $ticket->update(['status' => 'open']);
                 

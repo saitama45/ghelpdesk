@@ -93,8 +93,8 @@ class QueueService
             ->whereNull('deleted_at')
             ->whereIn('status', array_merge(
                 self::WAITING_STATUSES,
-                self::SERVING_STATUSES,
-                self::HOLD_STATUSES
+                \App\Support\TicketStatuses::like(self::SERVING_STATUSES),
+                \App\Support\TicketStatuses::like(self::HOLD_STATUSES)
             ))
             ->whereNotNull('assignee_id')
             ->with('assignee:id,department_node_id')
@@ -188,7 +188,7 @@ class QueueService
     {
         if (
             $preserveCalledLane
-            && in_array($ticket->status, self::SERVING_STATUSES, true)
+            && in_array(\App\Support\TicketStatuses::behavior($ticket->status), self::SERVING_STATUSES, true)
             && $ticket->queue_called_lane
         ) {
             return (string) $ticket->queue_called_lane;
@@ -216,7 +216,7 @@ class QueueService
 
         $tickets = $this->activeTicketQuery($companyId)
             ->whereNull('deleted_at')
-            ->whereIn('status', array_merge(self::WAITING_STATUSES, self::SERVING_STATUSES, self::HOLD_STATUSES))
+            ->whereIn('status', array_merge(self::WAITING_STATUSES, \App\Support\TicketStatuses::like(self::SERVING_STATUSES), \App\Support\TicketStatuses::like(self::HOLD_STATUSES)))
             ->with([
                 'assignee:id,name,profile_photo,department_node_id',
                 'reporter:id,name',
@@ -242,9 +242,9 @@ class QueueService
                     : self::TRIAGE_KEY;
             }
 
-            if (in_array($ticket->status, self::SERVING_STATUSES, true)) {
+            if (in_array(\App\Support\TicketStatuses::behavior($ticket->status), self::SERVING_STATUSES, true)) {
                 $buckets[$laneKey]['serving']->push($ticket);
-            } elseif (in_array($ticket->status, self::HOLD_STATUSES, true)) {
+            } elseif (in_array(\App\Support\TicketStatuses::behavior($ticket->status), self::HOLD_STATUSES, true)) {
                 $buckets[$laneKey]['hold']->push($ticket);
             } else {
                 $buckets[$laneKey]['waiting']->push($ticket);
@@ -348,9 +348,9 @@ class QueueService
         $lane = $lanes->get($laneKey) ?? $lanes->get(self::TRIAGE_KEY);
 
         $state = 'waiting';
-        if (in_array($ticket->status, self::SERVING_STATUSES, true)) {
+        if (in_array(\App\Support\TicketStatuses::behavior($ticket->status), self::SERVING_STATUSES, true)) {
             $state = 'serving';
-        } elseif (in_array($ticket->status, self::HOLD_STATUSES, true)) {
+        } elseif (in_array(\App\Support\TicketStatuses::behavior($ticket->status), self::HOLD_STATUSES, true)) {
             $state = 'hold';
         }
 
@@ -579,6 +579,10 @@ class QueueService
 
     public function statusLabel(string $status): string
     {
+        if (! \App\Support\TicketStatuses::isSystem($status)) {
+            return \App\Support\TicketStatuses::label($status);
+        }
+
         return match ($status) {
             'open' => 'In queue',
             'in_progress' => 'Now serving',

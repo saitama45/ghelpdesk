@@ -33,7 +33,7 @@ class StoreTicketRequest extends FormRequest
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'type' => 'nullable|in:bug,feature,task,spike',
-            'status' => 'required|in:open,for_schedule,in_progress,resolved,closed,waiting_service_provider,waiting_client_feedback',
+            'status' => ['required', \Illuminate\Validation\Rule::in(\App\Support\TicketStatuses::keys())],
             'priority' => 'nullable|in:low,medium,high,urgent',
             'severity' => 'nullable|in:critical,major,minor,cosmetic',
             'assignee_id' => 'nullable|exists:users,id',

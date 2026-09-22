@@ -37,6 +37,7 @@ class RolesAndPermissionSeeder extends Seeder
             'tickets.delete' => 'Archive and purge tickets',
             'tickets.canned_messages' => 'Use canned messages',
             'tickets.internal_notes' => 'Use internal notes',
+            'tickets.create_child' => 'Create child tickets and escalate to partners',
 
             // Queue Management
             'queue.view' => 'View the queue board',
@@ -113,6 +114,11 @@ class RolesAndPermissionSeeder extends Seeder
             'request_types.create' => 'Create request types',
             'request_types.edit' => 'Edit request types',
             'request_types.delete' => 'Delete request types',
+
+            // Ticket Statuses (per-department visibility)
+            'ticket_statuses.view' => 'View ticket status visibility',
+            'ticket_statuses.create' => 'Add ticket statuses',
+            'ticket_statuses.edit' => 'Rename ticket statuses and show or hide them per department',
 
             // Form Builder
             'form_builder.view' => 'View form builder',
@@ -346,7 +352,7 @@ class RolesAndPermissionSeeder extends Seeder
 
         $techSupport->givePermissionTo([
             'dashboard.view',
-            'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.resolve', 'tickets.close', 'tickets.canned_messages', 'tickets.internal_notes',
+            'tickets.view', 'tickets.edit', 'tickets.assign', 'tickets.resolve', 'tickets.close', 'tickets.canned_messages', 'tickets.internal_notes', 'tickets.create_child',
             'queue.view', 'queue.operate',
             'task_boards.view', 'task_boards.create', 'task_boards.edit', 'task_boards.manage_members',
             'attendance.view', 'attendance.logs', 'attendance.create',

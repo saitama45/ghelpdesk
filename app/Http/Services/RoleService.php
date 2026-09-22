@@ -93,6 +93,7 @@ class RoleService
             'subcategories',
             'items',
             'request_types',
+            'ticket statuses',
             'form_builder',
             'stores',
             'cctv monitoring',
@@ -151,6 +152,8 @@ class RoleService
                 $categoryDisplay = 'Leadership Points';
             } elseif ($category === 'reference_options') {
                 $categoryDisplay = 'Project Type & Store Class';
+            } elseif ($category === 'ticket_statuses') {
+                $categoryDisplay = 'Ticket Statuses';
             } elseif ($category === 'queue') {
                 $categoryDisplay = 'Queue Monitor';
             } elseif ($category === 'qat') {

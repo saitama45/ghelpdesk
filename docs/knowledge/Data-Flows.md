@@ -76,6 +76,15 @@ intake → TicketObserver (key/company/SLA) → assignment → work → resolve 
 - `tickets.department_id` = the REQUESTER's department.
 - `tickets.serving_department_id` = the desk that owns the work (from the plus-address it arrived on, the form's owning department, or an override); falls back to the assignee's department. See `Ticket::scopeOwnedByDepartment()`.
 
+**Ticket status catalogue + per-department visibility (References -> Ticket Statuses, `/ticket-statuses`)**
+- Catalogue table `ticket_statuses` (key, label, color, behaves_like, is_system, sort_order), read through `app/Support/TicketStatuses.php` and shared to every page as the `ticketStatuses` Inertia prop (`resources/js/Composables/useTicketStatuses.js` gives label/colour/behaviour; Tickets Index/Edit + Dashboard use it).
+- The 7 SYSTEM keys can be renamed/recoloured but their key never changes. A CUSTOM status (`ticket_statuses.create`) must `behaves_like` a non-terminal system status; every behavioural check (SLA pause in `TicketObserver`, `QueueService` serving/hold, Dashboard kanban/waiting counts, Hub board lanes, BrandHealth lanes, email re-open, POS sync, child-ticket eligibility) goes through `TicketStatuses::behavior()` / `like()`. New code that branches on a status must do the same.
+- `tickets.status` has a SQL Server CHECK `CK_Tickets_Status` listing the 7 keys. Migration `2026_09_22_110000` DISABLED it (NOCHECK, not dropped); statuses are validated by `Rule::in(TicketStatuses::keys())` in the form requests instead.
+- Visibility: `ticket_status_visibilities` (department_id, status, is_visible). System status: visible unless a row hides it. Custom status: hidden unless a row shows it (the create modal switches it on for the chosen departments). `open`, `resolved`, `closed` can never be hidden.
+- Applies to the ticket's SERVING department (Edit page, update, comment status, bulk update) and to the VIEWED department (Index create modal, bulk status, filter). A ticket already in a hidden status keeps it. System transitions (child ticket -> parent `for_schedule`, schedule runner) bypass the check.
+- Gated `ticket_statuses.view/.create/.edit`; labels are global (all entities), a visibility column is editable by its home-department members or `departments.edit` (`DepartmentReferences::canManage`). No delete: hide a status instead.
+- Child tickets / Escalate to Partner (`storeChild`, `bulkStoreChild`) are gated by their own `tickets.create_child` (was piggybacking on `tickets.edit`; single-child had no permission check at all). Migration `2026_09_22_100000` granted it to every role/user holding `tickets.edit`.
+
 ## 2. Inbound email → ticket / comment
 `app/Console/Commands/FetchEmails.php` (scheduled every 30s, `withoutOverlapping(5)`) → `EmailTicketService::fetchAndProcess()`:
 1. Throttled to one run per 20s (`Setting: last_email_sync_at`); IMAP config comes from the `settings` table, not `.env`.
