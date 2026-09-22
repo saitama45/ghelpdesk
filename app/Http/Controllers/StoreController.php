@@ -19,6 +19,7 @@ use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
@@ -187,7 +188,7 @@ class StoreController extends Controller implements HasMiddleware
         $request->merge(['opening_date' => $request->input('opening_date') ?: null]);
 
         $validated = $request->validate(
-            $this->storeValidationRules('required|string|max:50|unique:stores,code', 'required|string|max:255|unique:stores,name')
+            $this->storeValidationRules('required|string|max:50|unique:stores,code', $this->storeNameRule($request))
         );
 
         $validated['radius_meters'] = $validated['radius_meters'] ?? 150;
@@ -223,7 +224,7 @@ class StoreController extends Controller implements HasMiddleware
         $validated = $request->validate(
             $this->storeValidationRules(
                 'required|string|max:50|unique:stores,code,' . $store->id,
-                'required|string|max:255|unique:stores,name,' . $store->id
+                $this->storeNameRule($request, $store)
             )
         );
 
@@ -251,9 +252,20 @@ class StoreController extends Controller implements HasMiddleware
     }
 
     /**
+     * Store names are unique per entity: two entities may each run a store
+     * with the same name (e.g. "DS SM North"). Codes stay globally unique.
+     */
+    private function storeNameRule(Request $request, ?Store $store = null): array
+    {
+        $unique = Rule::unique('stores', 'name')->where('company_id', $request->input('company_id'));
+
+        return ['required', 'string', 'max:255', $store ? $unique->ignore($store->id) : $unique];
+    }
+
+    /**
      * Shared validation rules for store create/update.
      */
-    private function storeValidationRules(string $codeRule, string $nameRule): array
+    private function storeValidationRules(string $codeRule, string|array $nameRule): array
     {
         return [
             'code' => $codeRule,
@@ -538,12 +550,23 @@ class StoreController extends Controller implements HasMiddleware
 
     public function import(Request $request)
     {
-        $request->validate(['file' => 'required|file|mimes:xlsx,csv,txt|max:5120']);
+        // Workbooks saved from Excel carry styles/formatting far beyond the data and
+        // easily pass 5 MB, so allow 50 MB and read values only.
+        $request->validate(['file' => 'required|file|mimes:xlsx,csv,txt|max:51200']);
 
-        $spreadsheet = IOFactory::load($request->file('file')->getRealPath());
-        $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
+        $path = $request->file('file')->getRealPath();
+        $reader = IOFactory::createReaderForFile($path);
+        $reader->setReadDataOnly(true);
+        $reader->setReadEmptyCells(false);
+        $sheet = $reader->load($path)->getActiveSheet();
 
-        $header = array_map('trim', array_shift($rows));
+        // Stop at the last cell holding data, not the last formatted one.
+        $rows = $sheet->rangeToArray(
+            'A1:' . $sheet->getHighestDataColumn() . $sheet->getHighestDataRow(),
+            null, true, true, false
+        );
+
+        $header = array_map(fn($v) => trim((string) $v), array_shift($rows) ?? []);
         $userMap = User::pluck('id', 'email')->toArray();
         $clusters = EntityReferenceScope::visible(Cluster::query())->where('department_id', DepartmentReferences::viewedId())->get(['id', 'code', 'name']);
         $clusterLookup = $clusters->flatMap(function (Cluster $cluster) {
