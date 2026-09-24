@@ -149,6 +149,33 @@ jobs:
           ini-values: post_max_size=256M, max_execution_time=180
           coverage: none
 
+      # The sqlsrv/pdo_sqlsrv extensions are only a wrapper: they talk to SQL
+      # Server through Microsoft's ODBC driver, which must be installed on the
+      # machine. The runner image no longer ships it, so every migrate failed
+      # with "SQLSTATE[IMSSP]: This extension requires the Microsoft ODBC Driver
+      # for SQL Server" before FTP ran, and neither MonsterASP site was updated.
+      # Installed explicitly here, and skipped when the image already has it.
+      - name: Install the Microsoft ODBC driver for SQL Server
+        shell: bash
+        run: |
+          if odbcinst -q -d 2>/dev/null | grep -q "ODBC Driver 18 for SQL Server"; then
+            echo "ODBC Driver 18 for SQL Server is already installed."
+            exit 0
+          fi
+
+          # Reuse the image's packages.microsoft.com source when it has one;
+          # adding a second entry with a different key makes apt refuse to run.
+          if ! grep -rqs "packages.microsoft.com/ubuntu" /etc/apt/sources.list /etc/apt/sources.list.d/; then
+            curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+              | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/ubuntu/$(lsb_release -rs)/prod $(lsb_release -cs) main" \
+              | sudo tee /etc/apt/sources.list.d/microsoft-prod.list > /dev/null
+          fi
+
+          sudo apt-get update -qq
+          sudo ACCEPT_EULA=Y apt-get install -y -qq msodbcsql18 unixodbc
+          odbcinst -q -d
+
       - name: Create server-specific Laravel environment
         shell: bash
         env:
@@ -172,6 +199,7 @@ jobs:
           php -v | head -n 1
           echo "PDO drivers: $(php -r 'echo implode(", ", PDO::getAvailableDrivers());')"
           echo "Xdebug loaded: $(php -r 'echo extension_loaded("xdebug") ? "yes" : "no";')"
+          echo "ODBC drivers: $(odbcinst -q -d | tr '\n' ' ')"
           php artisan config:clear
           php artisan about --only=drivers
 

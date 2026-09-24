@@ -134,8 +134,16 @@ class PublicAccountDeletionController extends Controller
     public function confirm(Request $request): RedirectResponse
     {
         $email = $request->session()->get('account_deletion.email');
-        if (! $email || $request->session()->get('account_deletion.step') !== 'code') {
-            return $this->restart($request);
+        $step = $request->session()->get('account_deletion.step');
+        if ($step === 'done') {
+            // A double-submit after success: show the filed reference again.
+            return redirect()->to(route('public.account-deletion').'#request');
+        }
+        if (! $email || $step !== 'code') {
+            // The session lapsed between sending the code and confirming it.
+            return $this->restart($request)->withErrors([
+                'email' => 'Your session expired before the request was confirmed. Enter your email again to get a new code.',
+            ]);
         }
 
         $validated = $request->validate([
@@ -222,7 +230,7 @@ class PublicAccountDeletionController extends Controller
             $lines[] = 'Reason given: '.trim($reason);
         }
         $lines[] = '';
-        $lines[] = 'Process it on Settings → Account Archive (archive now, purge after the retention period).';
+        $lines[] = 'Process it on Settings → Account Archive → Deletion Requests (archive now, purge after the retention period).';
 
         // Same defaults an emailed request to the support mailbox gets
         // (EmailTicketService): TGI entity, shared intake pool, the sender's

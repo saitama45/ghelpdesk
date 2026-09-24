@@ -169,10 +169,11 @@ class PublicAccountDeletionTest extends TestCase
     public function test_confirming_without_requesting_a_code_starts_over(): void
     {
         $this->post('/account-deletion/confirm', ['code' => '123456', 'confirm' => '1'])
-            ->assertRedirect();
+            ->assertRedirect()
+            ->assertSessionHasErrors('email');
 
         $this->assertSame(0, $this->deletionTickets()->count());
-        $this->get('/account-deletion')->assertSee('Send code');
+        $this->get('/account-deletion')->assertSee('Send code')->assertSee('session expired');
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────

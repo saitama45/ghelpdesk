@@ -521,6 +521,8 @@ Route::middleware('auth')->group(function () {
     // Accounts deleted from /users or /stamps → Customers land here (soft-deleted).
     // Restore and purge both act on the whole user↔customer pair.
     Route::get('settings/account-archive', [\App\Http\Controllers\AccountArchiveController::class, 'index'])->name('account-archive.index');
+    // Stage 1 of a member's request from the public /account-deletion page.
+    Route::post('settings/account-archive/archive', [\App\Http\Controllers\AccountArchiveController::class, 'archive'])->name('account-archive.archive');
     Route::post('settings/account-archive/restore', [\App\Http\Controllers\AccountArchiveController::class, 'restore'])->name('account-archive.restore');
     Route::delete('settings/account-archive/purge', [\App\Http\Controllers\AccountArchiveController::class, 'purge'])->name('account-archive.purge');
 

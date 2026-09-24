@@ -42,6 +42,29 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // The public account-deletion form is used by signed-out members who
+        // leave the page to read the emailed code. By the time they come back,
+        // the page's CSRF token can be stale (expired session, or another tab
+        // logging in/out rotated it). A bare "419 Page Expired" is a dead end
+        // for them, so send them back to the form, which now carries a fresh
+        // token, with a note to retry. CSRF itself stays enforced.
+        // By the time render callbacks run, the TokenMismatchException has been
+        // wrapped in a 419 HttpException, so match on its cause.
+        $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\HttpException $e, Request $request) {
+            if (! $e->getPrevious() instanceof \Illuminate\Session\TokenMismatchException
+                || ! $request->routeIs('public.account-deletion.*')) {
+                return null;
+            }
+
+            $onCodeStep = $request->session()->get('account_deletion.step') === 'code';
+
+            return redirect()->to(route('public.account-deletion').'#request')
+                ->withInput($request->except(['_token', 'code']))
+                ->withErrors($onCodeStep
+                    ? ['code' => 'This page expired. Please enter the code again.']
+                    : ['email' => 'This page expired. Please enter your email again.']);
+        });
+
         // When a session expires mid-request, an exception (e.g. auth) renders a 302
         // redirect to /login outside Inertia's middleware, so it never gets converted
         // to a 303. The browser then re-sends a PUT/PATCH/DELETE to /login and Laravel

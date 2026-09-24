@@ -35,11 +35,14 @@ let searchTimer = null;
 
 const rows = computed(() => props.records?.data || []);
 const isCustomers = computed(() => props.tab === 'customers');
+const isRequests = computed(() => props.tab === 'requests');
 
-const canRestore = computed(() => (isCustomers.value ? props.can?.restore_customers : props.can?.restore_users));
-const canPurge = computed(() => (isCustomers.value ? props.can?.purge_customers : props.can?.purge_users));
+const canArchive = computed(() => isRequests.value && props.can?.archive_requests);
+const canRestore = computed(() => !isRequests.value && (isCustomers.value ? props.can?.restore_customers : props.can?.restore_users));
+const canPurge = computed(() => !isRequests.value && (isCustomers.value ? props.can?.purge_customers : props.can?.purge_users));
 
 const tabs = computed(() => [
+    { id: 'requests', label: 'Deletion Requests', count: props.counts?.requests || 0 },
     { id: 'users', label: 'Users', count: props.counts?.users || 0 },
     { id: 'customers', label: 'Loyalty Customers', count: props.counts?.customers || 0 },
 ]);
@@ -57,10 +60,11 @@ const clearSelection = () => {
 
 const showingText = computed(() => {
     if (!props.records || props.records.total === 0) {
-        return 'Showing 0 archived accounts';
+        return isRequests.value ? 'Showing 0 pending requests' : 'Showing 0 archived accounts';
     }
 
-    return `Showing ${props.records.from} to ${props.records.to} of ${props.records.total} archived accounts`;
+    const noun = isRequests.value ? 'pending requests' : 'archived accounts';
+    return `Showing ${props.records.from} to ${props.records.to} of ${props.records.total} ${noun}`;
 });
 
 // Tab lives in the URL so a restore or purge redirect comes back to the tab the
@@ -111,6 +115,51 @@ const linkedNote = (record) => {
     return record.linked.archived
         ? `${record.linked.label} "${record.linked.name}" is archived with it and will be restored too.`
         : `${record.linked.label} "${record.linked.name}" is still active.`;
+};
+
+/* ------------------------------------------------------------------ *
+ | Archive — Stage 1 of a member's deletion request
+ * ------------------------------------------------------------------ */
+
+const submitArchive = (ids, message) => {
+    post(route('account-archive.archive'), { ids }, {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => { selectedIds.value = []; },
+        onError: (errors) => showError(Object.values(errors).flat().join(', ') || message),
+    });
+};
+
+const archiveRecord = async (record) => {
+    if (!canArchive.value) return;
+
+    const confirmed = await confirm({
+        title: 'Archive Account',
+        message: `Archive "${record.name}"? Their app login and loyalty customer record are closed together: they can no longer sign in and their QR code stops working. It can be restored until it is purged.`,
+        confirmLabel: 'Archive',
+        cancelLabel: 'Cancel',
+        variant: 'danger',
+    });
+
+    if (!confirmed) return;
+
+    submitArchive([record.id], 'Cannot archive account');
+};
+
+const archiveSelected = async () => {
+    if (!canArchive.value || selectedIds.value.length === 0) return;
+
+    const confirmed = await confirm({
+        title: 'Archive Selected Accounts',
+        message: `Archive ${selectedIds.value.length} account(s)? Each app login is closed together with its loyalty customer record.`,
+        confirmLabel: 'Archive Selected',
+        cancelLabel: 'Cancel',
+        variant: 'danger',
+    });
+
+    if (!confirmed) return;
+
+    submitArchive([...selectedIds.value], 'Cannot archive accounts');
 };
 
 /* ------------------------------------------------------------------ *
@@ -297,11 +346,20 @@ const purgeSelected = async () => {
                 <div v-if="selectedIds.length > 0" class="rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
                     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
-                            <div class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Selected Archived Accounts</div>
+                            <div class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">{{ isRequests ? 'Selected Requests' : 'Selected Archived Accounts' }}</div>
                             <div class="mt-1 text-xl font-black text-blue-900">{{ selectedIds.length }}</div>
-                            <div class="mt-1 text-xs text-blue-700">Restore or purge the selected records in one action.</div>
+                            <div class="mt-1 text-xs text-blue-700">{{ isRequests ? 'Archive the selected accounts in one action.' : 'Restore or purge the selected records in one action.' }}</div>
                         </div>
                         <div class="flex flex-col gap-2 sm:flex-row">
+                            <button
+                                v-if="canArchive"
+                                type="button"
+                                @click="archiveSelected"
+                                class="inline-flex min-h-[40px] items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-bold text-red-700 transition-colors hover:bg-red-50 dark:bg-gray-800"
+                            >
+                                <ArchiveBoxIcon class="h-4 w-4" />
+                                Archive Selected
+                            </button>
                             <button
                                 v-if="canRestore"
                                 type="button"
@@ -336,10 +394,14 @@ const purgeSelected = async () => {
             </Transition>
 
             <DataTable
-                :title="isCustomers ? 'Archived Loyalty Customers' : 'Archived Users'"
-                subtitle="Archived accounts can be restored, or permanently purged once retention is reached."
-                :search-placeholder="isCustomers ? 'Search name, email, or phone...' : 'Search name, email, or employee ID...'"
-                empty-message="No archived accounts match the current filters."
+                :title="isRequests ? 'Deletion Requests' : (isCustomers ? 'Archived Loyalty Customers' : 'Archived Users')"
+                :subtitle="isRequests
+                    ? 'Members who asked to delete their account on the public deletion page. Archiving closes their app login and loyalty record together.'
+                    : (isCustomers
+                        ? 'Loyalty customers, with the app login of members who registered in the mobile app. Restore or purge acts on both.'
+                        : 'Staff logins. Mobile-app members are listed under Loyalty Customers.')"
+                :search-placeholder="isRequests ? 'Search name or email...' : (isCustomers ? 'Search name, email, or phone...' : 'Search name, email, or employee ID...')"
+                :empty-message="isRequests ? 'No pending deletion requests.' : 'No archived accounts match the current filters.'"
                 :search="search"
                 :data="rows"
                 :current-page="records.current_page"
@@ -363,8 +425,8 @@ const purgeSelected = async () => {
                         </th>
                         <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Account</th>
                         <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Linked Record</th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Archived</th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Purge Status</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">{{ isRequests ? 'Requested' : 'Archived' }}</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">{{ isRequests ? 'Request Ticket' : 'Purge Status' }}</th>
                         <th class="px-4 py-3 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Actions</th>
                     </tr>
                 </template>
@@ -408,6 +470,7 @@ const purgeSelected = async () => {
                                     </div>
                                     <div class="break-all font-semibold text-gray-900 dark:text-gray-100">{{ record.linked.name }}</div>
                                     <span
+                                        v-if="!isRequests"
                                         class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold"
                                         :class="record.linked.archived
                                             ? 'border-slate-300 bg-slate-50 text-slate-600'
@@ -419,14 +482,31 @@ const purgeSelected = async () => {
                                 <span v-else class="text-xs text-gray-400 dark:text-gray-500">None</span>
                             </div>
                         </td>
-                        <td class="px-4 py-4 text-sm text-gray-900 dark:text-gray-100">
+                        <td v-if="isRequests" class="px-4 py-4 text-sm text-gray-900 dark:text-gray-100">
+                            <div class="min-w-[150px]">
+                                <div class="font-semibold">{{ record.ticket?.requested_at || '—' }}</div>
+                                <div class="mt-1 text-xs text-gray-500 dark:text-gray-300">Member since {{ record.created_at }}</div>
+                            </div>
+                        </td>
+                        <td v-if="isRequests" class="px-4 py-4">
+                            <div v-if="record.ticket" class="min-w-[200px]">
+                                <Link
+                                    :href="route('tickets.edit', record.ticket.key)"
+                                    class="font-bold text-blue-600 hover:underline dark:text-blue-400"
+                                >
+                                    {{ record.ticket.key }}
+                                </Link>
+                                <div class="mt-1 text-xs text-gray-500 dark:text-gray-300">{{ record.ticket.status }}</div>
+                            </div>
+                        </td>
+                        <td v-if="!isRequests" class="px-4 py-4 text-sm text-gray-900 dark:text-gray-100">
                             <div class="min-w-[150px]">
                                 <div class="font-semibold">{{ record.deleted_at }}</div>
                                 <div v-if="record.deleted_by" class="mt-1 text-xs text-gray-500 dark:text-gray-300">by {{ record.deleted_by }}</div>
                                 <div class="mt-1 text-xs text-gray-500 dark:text-gray-300">Created {{ record.created_at }}</div>
                             </div>
                         </td>
-                        <td class="px-4 py-4">
+                        <td v-if="!isRequests" class="px-4 py-4">
                             <div class="min-w-[200px]">
                                 <span
                                     class="inline-flex rounded-full border px-3 py-1 text-xs font-bold"
@@ -445,6 +525,15 @@ const purgeSelected = async () => {
                         </td>
                         <td class="px-4 py-4">
                             <div class="flex min-w-[110px] justify-end space-x-1">
+                                <button
+                                    v-if="canArchive"
+                                    type="button"
+                                    @click="archiveRecord(record)"
+                                    title="Archive this account (Stage 1)"
+                                    class="rounded-full p-2 text-red-600 transition-colors hover:bg-red-50 hover:text-red-900"
+                                >
+                                    <ArchiveBoxIcon class="h-5 w-5" />
+                                </button>
                                 <button
                                     v-if="canRestore"
                                     type="button"
