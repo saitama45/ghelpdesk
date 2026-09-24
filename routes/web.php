@@ -814,6 +814,19 @@ Route::get('/account-deletion', function () {
 // Convenience alias — the wording people guess most often.
 Route::redirect('/delete-account', '/account-deletion');
 
+// Privacy policy for the mobile loyalty app. Both stores require a publicly
+// reachable, login-free privacy policy URL before a build can be submitted,
+// and the app's Profile tab links here. Plain Blade for the same reason as
+// /account-deletion above: readable with no JS and no built assets.
+Route::get('/privacy-policy', function () {
+    return response()
+        ->view('public.privacy-policy')
+        ->header('Cache-Control', 'public, max-age=3600');
+})->name('public.privacy-policy');
+
+// Convenience alias — the other spelling people guess.
+Route::redirect('/privacy', '/privacy-policy');
+
 Route::get('/public/survey-thank-you', function () {
     return Inertia::render('Public/SurveyThankYou');
 })->name('public.survey.thankyou');

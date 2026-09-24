@@ -21,6 +21,7 @@ Session, cache and queue all use the `database` driver in dev/prod (`sessions`, 
 
 ## Migrations
 - 294 files in `database/migrations/`. Migrations **auto-run on Azure deploy** via `startup.sh` (`php artisan migrate --force`) — never instruct the user to run `migrate` manually and never hand out ad-hoc `ALTER TABLE` SQL for schema changes; write a migration.
+- Historical migrations that query Eloquent models must suppress any current global scope whose required columns are added by later migrations. For example, use `User::withoutGlobalScope(SoftDeletingScope::class)` before `users.deleted_at` exists, or a fresh database migration will fail even though incremental production migrations succeed.
 - Seeders: `DatabaseSeeder`, `RolesAndPermissionSeeder` (permissions catalogue), `PhilippineHolidaySeeder`, `StoreReferenceOptionSeeder`. Seeders must be idempotent (`firstOrCreate`, `Schema::hasColumn` guards).
 
 ## Table map (≈140 tables)
