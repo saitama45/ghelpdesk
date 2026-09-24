@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\PasswordResetCodeMail;
 use App\Models\OtpCode;
 use App\Models\User;
+use App\Services\EmailCodeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,18 +27,18 @@ use Illuminate\Validation\Rules\Password;
  * active account, so the endpoint cannot be used to discover who is a
  * member. `/verify` only checks the code (so the app can move to the
  * new-password step); `/reset` checks it again and consumes it, and that is
- * the only call that changes anything. Codes share `otp_codes` with the
- * post-login step but carry their own purpose, so neither flow can retire
- * the other's code. Mirrors the Flutter client in
+ * the only call that changes anything. Codes come from [EmailCodeService]
+ * under their own purpose, so neither this flow nor the post-login step can
+ * retire the other's code. Mirrors the Flutter client in
  * `lib/data/datasources/remote/password_reset_remote_datasource.dart`.
  */
 class PasswordResetOtpController extends Controller
 {
-    private const CODE_LENGTH = 6;
     private const VALID_MINUTES = 10;
-    private const MAX_ATTEMPTS = 5;
     private const RESEND_COOLDOWN_SECONDS = 30;
     private const HOURLY_SEND_LIMIT = 5;
+
+    public function __construct(private readonly EmailCodeService $codes) {}
 
     public function forgot(Request $request): JsonResponse
     {
@@ -69,20 +70,7 @@ class PasswordResetOtpController extends Controller
         $user = $this->findActiveUser($email);
 
         if ($user) {
-            OtpCode::where('user_id', $user->id)
-                ->purpose(OtpCode::PURPOSE_PASSWORD_RESET)
-                ->whereNull('consumed_at')
-                ->delete();
-
-            $code = str_pad((string) random_int(0, 999999), self::CODE_LENGTH, '0', STR_PAD_LEFT);
-
-            OtpCode::create([
-                'user_id' => $user->id,
-                'purpose' => OtpCode::PURPOSE_PASSWORD_RESET,
-                'code_hash' => Hash::make($code),
-                'attempts' => 0,
-                'expires_at' => now()->addMinutes(self::VALID_MINUTES),
-            ]);
+            $code = $this->codes->issue($user, OtpCode::PURPOSE_PASSWORD_RESET, self::VALID_MINUTES);
 
             Mail::to($user->email)->send(new PasswordResetCodeMail($user, $code, self::VALID_MINUTES));
         }
@@ -146,52 +134,21 @@ class PasswordResetOtpController extends Controller
     private function checkCode(string $email, string $code): array
     {
         $user = $this->findActiveUser(mb_strtolower(trim($email)));
+        $result = $this->codes->check($user, OtpCode::PURPOSE_PASSWORD_RESET, $code);
 
-        $otp = $user
-            ? OtpCode::where('user_id', $user->id)
-                ->purpose(OtpCode::PURPOSE_PASSWORD_RESET)
-                ->whereNull('consumed_at')
-                ->latest('created_at')
-                ->first()
-            : null;
-
-        if (! $otp) {
-            return [null, response()->json([
-                'message' => 'That code has expired. Request a new one.',
-            ], 410)];
-        }
-
-        if ($otp->isExpired()) {
-            $otp->delete();
-
-            return [null, response()->json([
-                'message' => 'That code has expired. Request a new one.',
-            ], 410)];
-        }
-
-        if ($otp->attempts >= self::MAX_ATTEMPTS) {
-            return [null, response()->json([
-                'message' => 'Too many attempts. Request a new code.',
-            ], 429)];
-        }
-
-        if (! Hash::check($code, $otp->code_hash)) {
-            $otp->increment('attempts');
-            $remaining = max(0, self::MAX_ATTEMPTS - $otp->attempts);
-
-            if ($remaining <= 0) {
-                return [null, response()->json([
-                    'message' => 'Too many attempts. Request a new code.',
-                ], 429)];
-            }
-
-            return [null, response()->json([
+        return match ($result['status']) {
+            EmailCodeService::OK => [$result['otp'], null],
+            EmailCodeService::WRONG => [null, response()->json([
                 'message' => 'Incorrect code.',
-                'attempts_remaining' => $remaining,
-            ], 422)];
-        }
-
-        return [$otp, null];
+                'attempts_remaining' => $result['remaining'],
+            ], 422)],
+            EmailCodeService::LOCKED => [null, response()->json([
+                'message' => 'Too many attempts. Request a new code.',
+            ], 429)],
+            default => [null, response()->json([
+                'message' => 'That code has expired. Request a new one.',
+            ], 410)],
+        };
     }
 
     private function findActiveUser(string $email): ?User

@@ -10,6 +10,8 @@ class OtpCode extends Model
 
     public const PURPOSE_PASSWORD_RESET = 'password_reset';
 
+    public const PURPOSE_ACCOUNT_DELETION = 'account_deletion';
+
     protected $fillable = [
         'user_id',
         'purpose',

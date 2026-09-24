@@ -4,8 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="index, follow">
-    <title>Delete Your Account — Coffee Bean &amp; Tea Leaf Rewards</title>
-    <meta name="description" content="How to request deletion of your Coffee Bean &amp; Tea Leaf Rewards account and associated data.">
+    <title>Delete Your Account — The Coffee Bean &amp; Tea Leaf Rewards</title>
+    <meta name="description" content="Request deletion of your Coffee Bean &amp; Tea Leaf Rewards account and associated data.">
     <style>
         :root {
             --espresso: #3b2416;
@@ -116,6 +116,30 @@
             tr { border-bottom: 1px solid var(--line); padding: 10px 0; }
             td:first-child { font-weight: 700; width: auto; }
         }
+        .form label { display: block; font-weight: 600; font-size: 14px; margin: 12px 0 4px; }
+        .form .optional { font-weight: 400; color: var(--muted); }
+        .form input[type=email], .form input[type=text], .form textarea {
+            width: 100%; font: inherit; padding: 10px 12px;
+            border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--espresso);
+        }
+        .form input:focus, .form textarea:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+        .form input.invalid { border-color: #b3261e; }
+        .form #code { max-width: 180px; font-size: 22px; letter-spacing: 6px; font-weight: 700; }
+        .form .check { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; margin-top: 16px; }
+        .form .check input { margin-top: 5px; width: 18px; height: 18px; flex: none; }
+        .btn {
+            display: inline-block; margin-top: 16px; padding: 12px 22px; border: 0; border-radius: 999px;
+            background: var(--espresso); color: #fff; font: inherit; font-weight: 700; cursor: pointer;
+        }
+        .btn.danger { background: #b3261e; }
+        .btn:hover { filter: brightness(1.12); }
+        .error { color: #b3261e; font-size: 14px; margin: 6px 0 0; }
+        form.inline { margin: 10px 0 0; }
+        .link { background: none; border: 0; padding: 0; font: inherit; font-size: 14px; color: var(--amber); text-decoration: underline; cursor: pointer; }
+        .notice.ok { border-left: 4px solid #2e7d4f; }
+        .ref { font-weight: 700; font-size: 18px; background: #f3ece2; padding: 2px 8px; border-radius: 6px; }
+        p.meta { font-size: 14px; color: var(--muted); margin-top: 18px; }
+        ol.steps > li.done::before { content: "\2713"; background: #2e7d4f; }
     </style>
 </head>
 <body>
@@ -123,44 +147,76 @@
         <div class="wrap">
             <span class="badge">Account &amp; Data Deletion</span>
             <h1>Delete your account and associated data</h1>
-            <p>App: <strong>Coffee Bean &amp; Tea Leaf Rewards</strong> (shown on your phone as <strong>CBTL</strong>) &middot; Developer: <strong>{{ $developer }}</strong></p>
+            <p>App: <strong>The Coffee Bean &amp; Tea Leaf Rewards</strong> (shown on your phone as <strong>CBTL</strong>) &middot; Developer: <strong>{{ $developer }}</strong></p>
         </div>
     </header>
 
     <div class="wrap">
         <div class="card accent">
             <p style="margin:0 0 6px"><strong>You can ask us to delete your account at any time.</strong></p>
-            <p style="margin:0">Send a deletion request to the address below. There is no charge, and you do not need to give a reason. Deletion happens in two stages, explained below: your account is closed first, then permanently deleted.</p>
+            <p style="margin:0">Request it with the form below &mdash; it takes about a minute. There is no charge, and you do not need to give a reason. Deletion happens in two stages, explained below: your account is closed first, then permanently deleted.</p>
         </div>
 
-        <h2>How to request deletion</h2>
-        <ol class="steps">
-            <li>
-                <h3>Open your email app</h3>
-                <p style="margin:0">Use the same email address you registered with in the app &mdash; this is how we confirm the request is really yours.</p>
-            </li>
-            <li>
-                <h3>Address it to our support mailbox</h3>
-                <p class="mail" style="margin:4px 0"><a href="mailto:{{ $supportEmail }}?subject=Account%20Deletion%20Request">{{ $supportEmail }}</a></p>
-            </li>
-            <li>
-                <h3>Use this exact subject line</h3>
-                <p style="margin:0"><code>Account Deletion Request</code></p>
-            </li>
-            <li>
-                <h3>Include these details in the message</h3>
-                <ul class="plain">
-                    <li>Your full name as registered in the app</li>
-                    <li>The email address registered to the account</li>
-                    <li>The mobile number registered to the account, if you provided one</li>
-                    <li>State clearly: <em>&ldquo;Please delete my account and all associated data.&rdquo;</em></li>
-                </ul>
-            </li>
-            <li>
-                <h3>Wait for confirmation</h3>
-                <p style="margin:0">Your request is logged as a support ticket and acknowledged within <strong>3 business days</strong>. We may reply once to verify your identity. Your account is closed within <strong>30 days</strong> of verification, and we email you when that is done.</p>
-            </li>
-        </ol>
+        <h2 id="request">Request deletion</h2>
+
+        @if ($step === 'done')
+            <div class="card notice ok">
+                <p style="margin:0 0 6px"><strong>Your request has been filed.</strong></p>
+                <p style="margin:0 0 8px">Your reference number is <span class="ref">{{ $ticketKey }}</span>. We also emailed it to you.</p>
+                <p style="margin:0">Your account will be closed within <strong>30 days</strong>, and we will email you when that is done. Changed your mind? Reply to that email quoting the reference number while your account is still open.</p>
+            </div>
+        @elseif ($step === 'code')
+            <ol class="steps">
+                <li class="done">
+                    <h3>Code sent</h3>
+                    <p style="margin:0">If <strong>{{ $requestEmail }}</strong> belongs to a member account, we just emailed it a 6-digit code. It expires in {{ $codeMinutes }} minutes &mdash; check your spam folder too.</p>
+                </li>
+                <li>
+                    <h3>Confirm your request</h3>
+                    <form method="POST" action="{{ route('public.account-deletion.confirm') }}" class="form">
+                        @csrf
+                        <label for="code">6-digit code</label>
+                        <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="\d{6}" maxlength="6" required autofocus class="{{ $errors->has('code') ? 'invalid' : '' }}">
+                        @error('code')<p class="error">{{ $message }}</p>@enderror
+
+                        <label for="reason">Reason <span class="optional">(optional)</span></label>
+                        <textarea id="reason" name="reason" rows="3" maxlength="1000">{{ old('reason') }}</textarea>
+
+                        <label class="check">
+                            <input type="checkbox" name="confirm" value="1" {{ old('confirm') ? 'checked' : '' }} required>
+                            <span>I understand my account will be closed and then permanently deleted, and any unredeemed stamps will be lost.</span>
+                        </label>
+                        @error('confirm')<p class="error">{{ $message }}</p>@enderror
+
+                        <button type="submit" class="btn danger">Delete my account</button>
+                    </form>
+                    <form method="POST" action="{{ route('public.account-deletion.restart') }}" class="inline">
+                        @csrf
+                        <button type="submit" class="link">Use a different email or send a new code</button>
+                    </form>
+                </li>
+            </ol>
+        @else
+            <ol class="steps">
+                <li>
+                    <h3>Enter the email you registered with</h3>
+                    <p style="margin:0 0 10px">We&rsquo;ll send a one-time code to it. This is how we confirm the request is really yours.</p>
+                    <form method="POST" action="{{ route('public.account-deletion.code') }}" class="form">
+                        @csrf
+                        <label for="email">Email address</label>
+                        <input id="email" name="email" type="email" autocomplete="email" value="{{ old('email') }}" required class="{{ $errors->has('email') ? 'invalid' : '' }}">
+                        @error('email')<p class="error">{{ $message }}</p>@enderror
+                        <button type="submit" class="btn">Send code</button>
+                    </form>
+                </li>
+                <li>
+                    <h3>Enter the code and confirm</h3>
+                    <p style="margin:0">Your request is filed with our support team straight away, and we email you a reference number. Your account is closed within <strong>30 days</strong>, and we email you again when that is done.</p>
+                </li>
+            </ol>
+        @endif
+
+        <p class="meta">Can&rsquo;t receive email at that address any more? Write to <a href="mailto:{{ $supportEmail }}?subject=Account%20Deletion%20Request">{{ $supportEmail }}</a> with your full name and registered mobile number and we&rsquo;ll verify you another way.</p>
 
         <h2>What happens after you ask</h2>
 
@@ -231,7 +287,7 @@
         <p>For anything about this process, or to follow up on a request you already sent, email <a href="mailto:{{ $supportEmail }}">{{ $supportEmail }}</a>.</p>
 
         <footer>
-            <p style="margin:0 0 4px">Coffee Bean &amp; Tea Leaf Rewards is operated by {{ $developer }}</p>
+            <p style="margin:0 0 4px">The Coffee Bean &amp; Tea Leaf Rewards is operated by {{ $developer }}</p>
             <p style="margin:0">Last updated {{ $updatedAt }}.</p>
         </footer>
     </div>

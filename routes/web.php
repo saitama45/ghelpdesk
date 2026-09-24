@@ -776,40 +776,20 @@ Route::post('/public/uat/{token}/signoff', [App\Http\Controllers\PublicUatContro
 
 // Google Play data-safety requirement for the mobile loyalty app
 // ("Coffee Bean & Tea Leaf Rewards"): a publicly reachable, login-free page
-// describing how a member requests deletion of their account and data.
-// Deliberately a plain Blade view, not an Inertia page — Google's reviewer and
-// crawlers must be able to read it with no JS and no built assets.
-Route::get('/account-deletion', function () {
-    // The contact address is whatever mailbox is configured on /settings → Mail:
-    // the IMAP account is the one whose inbound mail becomes tickets, so a request
-    // sent there is filed automatically. Falls back to the "from" address.
-    $supportEmail = config('imap.accounts.default.username')
-        ?: config('mail.from.address')
-        ?: 'tgiservices@tablegroup.com';
-
-    // Quotes the same window AccountArchiveController::retention() enforces: an
-    // archived account can't be purged before it passes, so the page must state
-    // the live value. A settings failure must not take this public page down.
-    try {
-        $retentionValue = max(1, (int) \App\Models\Setting::get('account_retention_value', 6));
-        $retentionUnit = \App\Models\Setting::get('account_retention_unit', 'months');
-    } catch (\Throwable $e) {
-        [$retentionValue, $retentionUnit] = [6, 'months'];
-    }
-    $retentionUnit = in_array($retentionUnit, ['months', 'years'], true) ? $retentionUnit : 'months';
-    $retention = $retentionValue.' '.($retentionValue === 1 ? rtrim($retentionUnit, 's') : $retentionUnit);
-
-    $view = resource_path('views/public/account-deletion.blade.php');
-
-    return response()
-        ->view('public.account-deletion', [
-            'supportEmail' => $supportEmail,
-            'developer' => 'Table Group Inc.',
-            'retention' => $retention,
-            'updatedAt' => date('F j, Y', is_file($view) ? filemtime($view) : time()),
-        ])
-        ->header('Cache-Control', 'public, max-age=3600');
-})->name('public.account-deletion');
+// where a member requests deletion of their account and data. The page files
+// the request as a ticket itself, after an emailed one-time code proves the
+// requester owns the account. Deliberately plain Blade forms, not Inertia —
+// Google's reviewer and crawlers must be able to use it with no JS.
+Route::get('/account-deletion', [App\Http\Controllers\PublicAccountDeletionController::class, 'show'])
+    ->name('public.account-deletion');
+Route::middleware('throttle:10,1')->group(function () {
+    Route::post('/account-deletion/code', [App\Http\Controllers\PublicAccountDeletionController::class, 'sendCode'])
+        ->name('public.account-deletion.code');
+    Route::post('/account-deletion/confirm', [App\Http\Controllers\PublicAccountDeletionController::class, 'confirm'])
+        ->name('public.account-deletion.confirm');
+    Route::post('/account-deletion/restart', [App\Http\Controllers\PublicAccountDeletionController::class, 'restart'])
+        ->name('public.account-deletion.restart');
+});
 
 // Convenience alias — the wording people guess most often.
 Route::redirect('/delete-account', '/account-deletion');
