@@ -88,7 +88,13 @@ class StoreExportTest extends TestCase
         $sheet->getActiveSheet()->fromArray([
             ['Code', 'Name', 'Email', 'Sector', 'Area', 'Brand', 'Class', 'Cluster', 'Latitude', 'Longitude', 'Radius (m)', 'Is Active', 'Users'],
             ['IMP1', 'Imported Store', '', '1', 'A', 'B', 'Regular', '', '', '', '', '', ''],
+            ['IMP2', 'DS Store', '', '2', 'A', 'B', 'Department Store (DS)', '', '', '', '', '1', ''],
         ], null, 'A1', true);
+        // is_active filled down far past the data, as Excel's fill handle does.
+        for ($r = 4; $r <= 3000; $r++) {
+            $sheet->getActiveSheet()->setCellValue("L{$r}", 1);
+        }
+        \App\Models\ReferenceOption::firstOrCreate(['type' => 'store_class', 'value' => 'Department Store (DS)'], ['label' => 'Department Store (DS)', 'sort_order' => 5]);
         $path = tempnam(sys_get_temp_dir(), 'imp').'.xlsx';
         (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($sheet))->save($path);
         $file = new \Illuminate\Http\UploadedFile($path, 'stores-import-template.xlsx', null, null, true);
@@ -96,10 +102,11 @@ class StoreExportTest extends TestCase
         $this->actingAs($this->user(['stores.view', 'stores.create']))
             ->withSession([CompanyContext::SESSION_KEY => $this->tgi->id])
             ->post(route('stores.import'), ['file' => $file])
-            ->assertOk()->assertJson(['imported' => 1, 'errors' => []]);
+            ->assertOk()->assertJson(['imported' => 2, 'errors' => []]);
 
         $this->assertDatabaseHas('stores', ['code' => 'IMP1', 'latitude' => null, 'longitude' => null,
             'radius_meters' => 150, 'is_active' => true]);
+        $this->assertDatabaseHas('stores', ['code' => 'IMP2', 'class' => 'Department Store (DS)']);
     }
 
     public function test_export_requires_stores_view(): void

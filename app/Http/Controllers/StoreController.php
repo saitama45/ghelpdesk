@@ -554,27 +554,12 @@ class StoreController extends Controller implements HasMiddleware
         // easily pass 5 MB, so allow 50 MB and read values only.
         $request->validate(['file' => 'required|file|mimes:xlsx,csv,txt|max:51200']);
 
-        $path = $request->file('file')->getRealPath();
-        $reader = IOFactory::createReaderForFile($path);
-        $reader->setReadDataOnly(true);
-        $reader->setReadEmptyCells(false);
-        $sheet = $reader->load($path)->getActiveSheet();
-
-        // Stop at the last cell holding data, not the last formatted one.
-        $rows = $sheet->rangeToArray(
-            'A1:' . $sheet->getHighestDataColumn() . $sheet->getHighestDataRow(),
-            null, true, true, false
-        );
-
-        // Accept headers however they were typed ("Latitude", "Radius (m)", "Assigned Users")
-        // by folding them onto the template's keys.
-        $headerAliases = ['clusters' => 'cluster', 'radius_(m)' => 'radius_meters', 'radius_m' => 'radius_meters',
-            'radius' => 'radius_meters', 'assigned_users' => 'users', 'active' => 'is_active', 'status' => 'is_active'];
-        $header = array_map(function ($v) use ($headerAliases) {
-            $key = preg_replace('/\s+/', '_', mb_strtolower(trim((string) $v)));
-
-            return $headerAliases[$key] ?? $key;
-        }, array_shift($rows) ?? []);
+        $rows = $this->readImportRows($request->file('file')->getRealPath());
+        $header = array_map(fn ($v) => $this->importHeaderKey($v), array_shift($rows) ?? []);
+        // Class is the configurable store_class catalogue; match its value or label.
+        $classLookup = ReferenceOption::ofType('store_class')
+            ->flatMap(fn ($o) => [mb_strtolower(trim($o->value)) => $o->value, mb_strtolower(trim($o->label)) => $o->value])
+            ->all() + ['regular' => 'Regular', 'kitchen' => 'Kitchen', 'office' => 'Office'];
         $userMap = User::pluck('id', 'email')->toArray();
         $clusters = EntityReferenceScope::visible(Cluster::query())->where('department_id', DepartmentReferences::viewedId())->get(['id', 'code', 'name']);
         $clusterLookup = $clusters->flatMap(function (Cluster $cluster) {
@@ -591,10 +576,6 @@ class StoreController extends Controller implements HasMiddleware
         foreach ($rows as $line) {
             $rowNum++;
 
-            if (empty(array_filter($line, fn($v) => $v !== null && $v !== ''))) {
-                continue;
-            }
-
             if (count($line) !== count($header)) {
                 $errors[] = "Row {$rowNum}: column count mismatch, skipped.";
                 continue;
@@ -606,6 +587,14 @@ class StoreController extends Controller implements HasMiddleware
                 'code', 'name', 'email', 'sector', 'area', 'brand', 'class', 'cluster',
                 'latitude', 'longitude', 'radius_meters', 'is_active', 'users',
             ], '');
+
+            // A row with no code and no name is empty, even when a filled-down
+            // column (is_active = 1 down the sheet) still carries a value.
+            if ($data['code'] === '' && $data['name'] === '') {
+                continue;
+            }
+
+            $data['class'] = $classLookup[mb_strtolower($data['class'])] ?? $data['class'];
             $activeFlag = mb_strtolower($data['is_active']);
             $data['is_active'] = match (true) {
                 $activeFlag === '' => '1',
@@ -613,13 +602,17 @@ class StoreController extends Controller implements HasMiddleware
                 in_array($activeFlag, ['0', 'no', 'false', 'inactive'], true) => '0',
                 default => $data['is_active'],
             };
-            $clusterValues = isset($data['cluster']) ? explode(';', $data['cluster']) : [];
+            // Clusters are listed with ";" or ","; a name that itself holds a comma still
+            // matches as a whole.
+            $clusterText = mb_strtolower($data['cluster']);
+            $clusterValues = $clusterText === '' ? []
+                : (isset($clusterLookup[$clusterText]) ? [$clusterText] : preg_split('/[;,]/', $clusterText));
             $clusterIds = [];
+            $unknownClusters = [];
             foreach ($clusterValues as $cv) {
-                $cv = mb_strtolower(trim($cv));
-                if (isset($clusterLookup[$cv])) {
-                    $clusterIds[] = $clusterLookup[$cv];
-                }
+                $cv = trim($cv);
+                if ($cv === '') continue;
+                isset($clusterLookup[$cv]) ? $clusterIds[] = $clusterLookup[$cv] : $unknownClusters[] = $cv;
             }
 
             $validator = \Validator::make([
@@ -643,7 +636,7 @@ class StoreController extends Controller implements HasMiddleware
                 'sector'        => 'required|integer|min:0',
                 'area'          => 'required|string|max:255',
                 'brand'         => 'required|string|max:255',
-                'class'         => 'required|in:Regular,Kitchen,Office',
+                'class'         => ['required', Rule::in(array_unique(array_values($classLookup)))],
                 'cluster'       => 'nullable|string|max:255',
                 // Optional, but a cluster that was named must be a known one.
                 'cluster_ids'    => 'required_with:cluster|array',
@@ -653,6 +646,7 @@ class StoreController extends Controller implements HasMiddleware
                 'is_active'     => 'nullable|in:0,1',
             ], [
                 'cluster_ids.required_with' => 'No matching cluster was found for the cluster column.',
+                'class.in' => "Class '{$data['class']}' is not one of: ".implode(', ', array_unique(array_values($classLookup))).'.',
             ]);
 
             if ($validator->fails()) {
@@ -676,7 +670,10 @@ class StoreController extends Controller implements HasMiddleware
             ]);
 
             if ($clusterIds) {
-                $this->syncDepartmentClusters($store, $clusterIds);
+                $this->syncDepartmentClusters($store, array_values(array_unique($clusterIds)));
+            }
+            foreach ($unknownClusters as $cv) {
+                $errors[] = "Row {$rowNum}: cluster '{$cv}' not found — store imported without this cluster.";
             }
 
             // Resolve user emails → IDs and sync
@@ -702,6 +699,65 @@ class StoreController extends Controller implements HasMiddleware
         return response()->json(['imported' => $imported, 'errors' => $errors]);
     }
 
+    /**
+     * Reads only the rows that hold stores. A column filled down to Excel's last row
+     * (is_active = 1 on all 1,048,576 rows) makes the "highest data row" meaningless and
+     * would load a million rows, so the last row with a code or name bounds the read.
+     */
+    private function readImportRows(string $path): array
+    {
+        $load = function (callable $keep) use ($path) {
+            $reader = IOFactory::createReaderForFile($path);
+            $reader->setReadDataOnly(true);
+            $reader->setReadEmptyCells(false);
+            $reader->setReadFilter(new class($keep) implements \PhpOffice\PhpSpreadsheet\Reader\IReadFilter {
+                public function __construct(private $keep) {}
+
+                public function readCell($columnAddress, $row, $worksheetName = ''): bool
+                {
+                    return ($this->keep)($columnAddress, $row);
+                }
+            });
+
+            return $reader->load($path)->getActiveSheet();
+        };
+
+        // The template keeps code/name in A/B, so the header pass also reads those columns.
+        $headerSheet = $load(fn ($col, $row) => $row === 1 || in_array($col, ['A', 'B'], true));
+        $lastCol = $headerSheet->getHighestDataColumn('1');
+        $header = $headerSheet->rangeToArray("A1:{$lastCol}1", null, true, false, true)[1] ?? [];
+        $keyColumns = array_keys(array_filter($header, fn ($v) => in_array($this->importHeaderKey($v), ['code', 'name'], true)));
+        if (! $keyColumns) {
+            return $headerSheet->rangeToArray("A1:{$lastCol}1", null, true, true, false);
+        }
+
+        $keySheet = array_diff($keyColumns, ['A', 'B'])
+            ? $load(fn ($col, $row) => $row > 1 && in_array($col, $keyColumns, true))
+            : $headerSheet;
+        $lastRow = 1;
+        foreach ($keySheet->getCellCollection()->getCoordinates() as $coordinate) {
+            [$col, $row] = [preg_replace('/\d/', '', $coordinate), (int) preg_replace('/\D/', '', $coordinate)];
+            if ($row > $lastRow && in_array($col, $keyColumns, true) && trim((string) $keySheet->getCell($coordinate)->getValue()) !== '') {
+                $lastRow = $row;
+            }
+        }
+
+        $sheet = $load(fn ($col, $row) => $row <= $lastRow);
+
+        return $sheet->rangeToArray("A1:{$lastCol}{$lastRow}", null, true, true, false);
+    }
+
+    /** Folds a header however it was typed ("Latitude", "Radius (m)") onto the template key. */
+    private function importHeaderKey($value): string
+    {
+        $key = preg_replace('/\s+/', '_', mb_strtolower(trim((string) $value)));
+
+        return [
+            'clusters' => 'cluster', 'radius_(m)' => 'radius_meters', 'radius_m' => 'radius_meters',
+            'radius' => 'radius_meters', 'assigned_users' => 'users', 'active' => 'is_active', 'status' => 'is_active',
+        ][$key] ?? $key;
+    }
+
     public function template()
     {
         $users = User::active()->orderBy('name')->get(['id', 'name', 'email']);
@@ -714,10 +770,14 @@ class StoreController extends Controller implements HasMiddleware
         $listsSheet->setTitle('Lists');
         $listsSheet->setSheetState(Worksheet::SHEETSTATE_HIDDEN);
 
+        $classes = ReferenceOption::ofType('store_class')->pluck('value');
+        if ($classes->isEmpty()) {
+            $classes = collect(['Regular', 'Kitchen', 'Office']);
+        }
         $listsSheet->setCellValue('A1', 'Class');
-        $listsSheet->setCellValue('A2', 'Regular');
-        $listsSheet->setCellValue('A3', 'Kitchen');
-        $listsSheet->setCellValue('A4', 'Office');
+        foreach ($classes as $i => $class) {
+            $listsSheet->setCellValue('A' . ($i + 2), $class);
+        }
 
         $listsSheet->setCellValue('B1', 'Available Users (email)');
         foreach ($users as $i => $user) {
@@ -779,7 +839,7 @@ class StoreController extends Controller implements HasMiddleware
             ->setErrorStyle(DataValidation::STYLE_INFORMATION)
             ->setAllowBlank(false)
             ->setShowDropDown(false)
-            ->setFormula1('Lists!$A$2:$A$4')
+            ->setFormula1(sprintf('Lists!$A$2:$A$%d', $classes->count() + 1))
             ->setSqref('G2:G1001');
 
         if ($clusters->isNotEmpty()) {
