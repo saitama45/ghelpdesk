@@ -6,8 +6,13 @@ use Illuminate\Database\Eloquent\Model;
 
 class OtpCode extends Model
 {
+    public const PURPOSE_LOGIN = 'login';
+
+    public const PURPOSE_PASSWORD_RESET = 'password_reset';
+
     protected $fillable = [
         'user_id',
+        'purpose',
         'code_hash',
         'attempts',
         'expires_at',
@@ -26,6 +31,11 @@ class OtpCode extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function scopePurpose($query, string $purpose)
+    {
+        return $query->where('purpose', $purpose);
     }
 
     public function isExpired(): bool

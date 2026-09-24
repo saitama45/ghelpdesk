@@ -55,7 +55,7 @@ class OtpControllerTest extends TestCase
         $this->withHeaders($this->bearerHeaders($user))->postJson('/api/otp/send');
 
         Mail::assertSent(OtpCodeMail::class, function (OtpCodeMail $mail) {
-            return $mail->hasFrom(config('mail.from.address'), 'Coffee Bean & Tea Leaf')
+            return $mail->hasFrom(config('mail.from.address'), 'The Coffee Bean & Tea Leaf')
                 && ! $mail->hasFrom(config('mail.from.address'), 'TAS Service Center');
         });
     }

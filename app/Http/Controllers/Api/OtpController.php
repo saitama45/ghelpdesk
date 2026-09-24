@@ -50,12 +50,16 @@ class OtpController extends Controller
 
         // Only the newest code a member requested is ever valid — issuing a
         // fresh one retires whatever was sent before it.
-        OtpCode::where('user_id', $user->id)->whereNull('consumed_at')->delete();
+        OtpCode::where('user_id', $user->id)
+            ->purpose(OtpCode::PURPOSE_LOGIN)
+            ->whereNull('consumed_at')
+            ->delete();
 
         $code = str_pad((string) random_int(0, 999999), self::CODE_LENGTH, '0', STR_PAD_LEFT);
 
         OtpCode::create([
             'user_id' => $user->id,
+            'purpose' => OtpCode::PURPOSE_LOGIN,
             'code_hash' => Hash::make($code),
             'attempts' => 0,
             'expires_at' => now()->addMinutes(self::VALID_MINUTES),
@@ -82,6 +86,7 @@ class OtpController extends Controller
         $user = $request->user();
 
         $otp = OtpCode::where('user_id', $user->id)
+            ->purpose(OtpCode::PURPOSE_LOGIN)
             ->whereNull('consumed_at')
             ->latest('created_at')
             ->first();

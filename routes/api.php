@@ -10,6 +10,7 @@ use App\Models\Garden;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\OtpController;
+use App\Http\Controllers\Api\PasswordResetOtpController;
 use App\Http\Controllers\Api\CampaignsController;
 use App\Http\Controllers\Api\RegisterController;
 
@@ -31,6 +32,15 @@ Route::post('/login', [AuthController::class, 'login']);
 // expensive to abuse than a login attempt.
 Route::post('/register', [RegisterController::class, 'register'])
     ->middleware('throttle:5,1');
+
+// Mobile app in-app "Forgot Password": emailed one-time code, then a new
+// password. Signed out by nature, so throttled per IP on top of the
+// controller's own per-email limits and per-code attempt cap.
+Route::prefix('password')->middleware('throttle:10,1')->group(function () {
+    Route::post('/forgot', [PasswordResetOtpController::class, 'forgot']);
+    Route::post('/verify', [PasswordResetOtpController::class, 'verify']);
+    Route::post('/reset', [PasswordResetOtpController::class, 'reset']);
+});
 
 // Server-to-server: DAVID Success Rate tab pulls weekly ticket counts.
 Route::get('/integrations/david/ticket-tally', \App\Http\Controllers\Api\DavidTicketTallyController::class)
