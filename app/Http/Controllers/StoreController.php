@@ -566,7 +566,15 @@ class StoreController extends Controller implements HasMiddleware
             null, true, true, false
         );
 
-        $header = array_map(fn($v) => trim((string) $v), array_shift($rows) ?? []);
+        // Accept headers however they were typed ("Latitude", "Radius (m)", "Assigned Users")
+        // by folding them onto the template's keys.
+        $headerAliases = ['clusters' => 'cluster', 'radius_(m)' => 'radius_meters', 'radius_m' => 'radius_meters',
+            'radius' => 'radius_meters', 'assigned_users' => 'users', 'active' => 'is_active', 'status' => 'is_active'];
+        $header = array_map(function ($v) use ($headerAliases) {
+            $key = preg_replace('/\s+/', '_', mb_strtolower(trim((string) $v)));
+
+            return $headerAliases[$key] ?? $key;
+        }, array_shift($rows) ?? []);
         $userMap = User::pluck('id', 'email')->toArray();
         $clusters = EntityReferenceScope::visible(Cluster::query())->where('department_id', DepartmentReferences::viewedId())->get(['id', 'code', 'name']);
         $clusterLookup = $clusters->flatMap(function (Cluster $cluster) {
@@ -593,6 +601,18 @@ class StoreController extends Controller implements HasMiddleware
             }
 
             $data = array_combine($header, array_map(fn($v) => trim((string) $v), $line));
+            // A column left out of the sheet reads as blank instead of an undefined key.
+            $data += array_fill_keys([
+                'code', 'name', 'email', 'sector', 'area', 'brand', 'class', 'cluster',
+                'latitude', 'longitude', 'radius_meters', 'is_active', 'users',
+            ], '');
+            $activeFlag = mb_strtolower($data['is_active']);
+            $data['is_active'] = match (true) {
+                $activeFlag === '' => '1',
+                in_array($activeFlag, ['1', 'yes', 'true', 'active'], true) => '1',
+                in_array($activeFlag, ['0', 'no', 'false', 'inactive'], true) => '0',
+                default => $data['is_active'],
+            };
             $clusterValues = isset($data['cluster']) ? explode(';', $data['cluster']) : [];
             $clusterIds = [];
             foreach ($clusterValues as $cv) {
