@@ -122,30 +122,104 @@ class AccountArchiveService
         // Stamped before the delete so the archive page can say who did it —
         // saving after the row is trashed would need an unscoped write.
         $row->forceFill(['deleted_by' => $actorId])->saveQuietly();
+
+        if ($row instanceof User) {
+            $this->releaseEmail($row);
+        }
+
         $row->delete();
+    }
+
+    /**
+     * Park the login's address in `archived_email` and leave a tombstone in
+     * `email`.
+     *
+     * `users.email` is UNIQUE and an archive is only a soft delete, so without
+     * this the row goes on owning the address for ever: a member who deleted
+     * their account could never sign up again with it, and `Api\RegisterController`
+     * would answer "The email has already been taken". Deleting and re-registering
+     * is exactly what an App Store reviewer does after testing 5.1.1(v).
+     *
+     * `.invalid` is reserved by RFC 2606 and can never resolve, so a tombstone
+     * cannot accidentally be mailed; the id keeps it unique against the index.
+     */
+    private function releaseEmail(User $user): void
+    {
+        if ($user->archived_email !== null || $user->email === null) {
+            return; // Already parked — archiving twice must not lose the original.
+        }
+
+        $user->forceFill([
+            'archived_email' => $user->email,
+            'email' => "deleted-{$user->id}@archived.invalid",
+        ])->saveQuietly();
+    }
+
+    /**
+     * Give a restored login its address back, unless somebody has taken it in
+     * the meantime.
+     *
+     * The gap is real: the member deletes, registers again with the same email,
+     * and only then is the old account restored. The live account owns the
+     * address, and the unique index would refuse the write — so the tombstone
+     * stays and the caller is told, rather than the restore half-failing.
+     *
+     * @return bool whether the original address was reclaimed
+     */
+    private function reclaimEmail(User $user): bool
+    {
+        if ($user->archived_email === null) {
+            return true; // Archived before this existed; nothing was parked.
+        }
+
+        $taken = User::withTrashed()
+            ->where('email', $user->archived_email)
+            ->whereKeyNot($user->getKey())
+            ->exists();
+
+        if ($taken) {
+            Log::warning('Account restore could not reclaim the original email', [
+                'user_id' => $user->id,
+                'email' => $user->archived_email,
+            ]);
+
+            return false;
+        }
+
+        $user->forceFill([
+            'email' => $user->archived_email,
+            'archived_email' => null,
+        ])->saveQuietly();
+
+        return true;
     }
 
     /* ----------------------------------------------------------------------
      | Restore
      * ------------------------------------------------------------------- */
 
-    /** @return array{user: ?string, customer: ?string} */
+    /** @return array{user: ?string, customer: ?string, email_reclaimed: bool} */
     public function restoreUser(User $user): array
     {
         return DB::transaction(function () use ($user) {
             $customer = $this->customerFor($user);
 
             $this->restoreRow($user);
+            $reclaimed = $this->reclaimEmail($user);
 
             if ($customer && $customer->trashed()) {
                 $this->restoreRow($customer);
             }
 
-            return ['user' => $user->name, 'customer' => $customer?->name];
+            return [
+                'user' => $user->name,
+                'customer' => $customer?->name,
+                'email_reclaimed' => $reclaimed,
+            ];
         });
     }
 
-    /** @return array{user: ?string, customer: ?string} */
+    /** @return array{user: ?string, customer: ?string, email_reclaimed: bool} */
     public function restoreCustomer(Customer $customer): array
     {
         return DB::transaction(function () use ($customer) {
@@ -153,11 +227,17 @@ class AccountArchiveService
 
             $this->restoreRow($customer);
 
+            $reclaimed = true;
             if ($user && $user->trashed()) {
                 $this->restoreRow($user);
+                $reclaimed = $this->reclaimEmail($user);
             }
 
-            return ['user' => $user?->name, 'customer' => $customer->name];
+            return [
+                'user' => $user?->name,
+                'customer' => $customer->name,
+                'email_reclaimed' => $reclaimed,
+            ];
         });
     }
 

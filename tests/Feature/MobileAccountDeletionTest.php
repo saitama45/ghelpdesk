@@ -9,6 +9,7 @@ use App\Models\Company;
 use App\Models\Customer;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\AccountArchiveService;
 use App\Services\AccountDeletionRequestService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -134,7 +135,30 @@ class MobileAccountDeletionTest extends TestCase
         $this->assertSame(0, $this->requestTickets());
     }
 
-    public function test_staff_accounts_cannot_be_deleted_from_the_app(): void
+    public function test_a_login_with_no_loyalty_record_cannot_be_deleted_from_the_app(): void
+    {
+        Mail::fake();
+        $staff = User::factory()->create([
+            'email' => 'staff@example.test',
+            'password' => Hash::make('Str0ng!pass'),
+            'customer_id' => null,
+            'is_active' => true,
+        ]);
+        Sanctum::actingAs($staff);
+
+        $this->deleteJson('/api/account', ['password' => 'Str0ng!pass'])
+            ->assertStatus(403);
+
+        $this->assertNotSoftDeleted('users', ['id' => $staff->id]);
+        $this->assertSame(0, $this->requestTickets());
+    }
+
+    /**
+     * Regression: the guard used to be "has no roles", which 403'd a real
+     * member who also held a role — an unrelated permission grant silently
+     * removing the deletion right App Store Review Guideline 5.1.1(v) requires.
+     */
+    public function test_a_member_who_also_holds_a_role_can_still_delete_their_account(): void
     {
         Mail::fake();
         $user = $this->member();
@@ -142,10 +166,9 @@ class MobileAccountDeletionTest extends TestCase
         Sanctum::actingAs($user);
 
         $this->deleteJson('/api/account', ['password' => 'Str0ng!pass'])
-            ->assertStatus(403);
+            ->assertOk();
 
-        $this->assertNotSoftDeleted('users', ['id' => $user->id]);
-        $this->assertSame(0, $this->requestTickets());
+        $this->assertSoftDeleted('users', ['id' => $user->id]);
     }
 
     public function test_an_open_web_request_is_reused_rather_than_duplicated(): void
@@ -163,6 +186,76 @@ class MobileAccountDeletionTest extends TestCase
 
         $this->assertSame(1, $this->requestTickets());
         $this->assertSoftDeleted('users', ['id' => $user->id]);
+    }
+
+    /**
+     * `users.email` is UNIQUE and an archive is only a soft delete, so before
+     * this the archived row owned the address for ever and registering again
+     * answered "The email has already been taken" — which is precisely what an
+     * App Store reviewer does straight after testing account deletion.
+     */
+    public function test_the_email_is_free_to_register_again_after_deletion(): void
+    {
+        Mail::fake();
+        $user = $this->member();
+        Sanctum::actingAs($user);
+
+        $this->deleteJson('/api/account', ['password' => 'Str0ng!pass'])->assertOk();
+
+        // The archived row kept the address somewhere it can be read back.
+        $archived = User::withTrashed()->find($user->id);
+        $this->assertSame('member@example.test', $archived->archived_email);
+        $this->assertSame("deleted-{$user->id}@archived.invalid", $archived->email);
+
+        $this->postJson('/api/register', [
+            'name' => 'Member One',
+            'email' => 'member@example.test',
+            'phone' => '09171234567',
+            'password' => 'An0ther!pass',
+        ])->assertCreated();
+
+        // The new login owns the address; the old one is still archived.
+        $this->assertSame(1, User::where('email', 'member@example.test')->count());
+        $this->assertSoftDeleted('users', ['id' => $user->id]);
+    }
+
+    public function test_restoring_an_account_gives_the_address_back(): void
+    {
+        Mail::fake();
+        $user = $this->member();
+        Sanctum::actingAs($user);
+        $this->deleteJson('/api/account', ['password' => 'Str0ng!pass'])->assertOk();
+
+        $archived = User::withTrashed()->find($user->id);
+        $result = app(AccountArchiveService::class)->restoreUser($archived);
+
+        $this->assertTrue($result['email_reclaimed']);
+        $this->assertSame('member@example.test', $archived->fresh()->email);
+        $this->assertNull($archived->fresh()->archived_email);
+    }
+
+    public function test_a_restore_will_not_steal_an_address_someone_else_now_owns(): void
+    {
+        Mail::fake();
+        $user = $this->member();
+        Sanctum::actingAs($user);
+        $this->deleteJson('/api/account', ['password' => 'Str0ng!pass'])->assertOk();
+
+        // Someone registers again with the freed address before the restore.
+        $this->postJson('/api/register', [
+            'name' => 'Member One',
+            'email' => 'member@example.test',
+            'phone' => '09171234567',
+            'password' => 'An0ther!pass',
+        ])->assertCreated();
+
+        $archived = User::withTrashed()->find($user->id);
+        $result = app(AccountArchiveService::class)->restoreUser($archived);
+
+        // Restored, but the tombstone stays rather than breaking the unique index.
+        $this->assertFalse($result['email_reclaimed']);
+        $this->assertSame("deleted-{$user->id}@archived.invalid", $archived->fresh()->email);
+        $this->assertSame(1, User::where('email', 'member@example.test')->count());
     }
 
     public function test_review_account_gets_the_fixed_code_and_no_email(): void

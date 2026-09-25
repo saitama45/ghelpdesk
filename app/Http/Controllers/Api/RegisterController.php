@@ -68,7 +68,11 @@ class RegisterController extends Controller
                 $customer->forceFill(['created_by' => $user->id, 'updated_by' => $user->id])->save();
             }
 
-            $deviceName = $validated['device_name'] ?: 'mobile-app';
+            // `device_name` is nullable, so `validated()` omits the key entirely
+            // when a client leaves it out — reading it directly raised an
+            // "Undefined array key" 500 on an unauthenticated public endpoint.
+            // Same defensive read `Api\AuthController::login` already uses.
+            $deviceName = $validated['device_name'] ?? null ?: 'mobile-app';
             $token = $user->createToken($deviceName)->plainTextToken;
 
             return [$token, $user];

@@ -50,13 +50,19 @@ class AccountController extends Controller
 
         $user = $request->user();
 
-        // Self-deletion is for app members only. A staff login that reached
-        // this endpoint would archive an employee out of tickets, DTR and the
-        // task board with one tap and no approval; those are removed by an
-        // administrator from /users instead.
-        if ($user->roles()->exists()) {
+        // Self-deletion is for loyalty members only, and a member is a login
+        // with a `customers` row behind it — the same definition the public
+        // page (`PublicAccountDeletionController::findMember`) and the archive
+        // desk (`AccountArchiveController::deletionRequestsQuery`) both use.
+        //
+        // Deliberately NOT "has no roles": a member who also holds a role is
+        // still a member, and refusing them here would let an unrelated
+        // permission grant silently take away a deletion right Apple requires.
+        // A pure staff login has no `customers` row and is closed from /users
+        // by an administrator instead.
+        if ($user->customer_id === null) {
             return response()->json([
-                'message' => 'Staff accounts are closed by your administrator, not from the app.',
+                'message' => 'This account is not a loyalty membership. Staff accounts are closed by your administrator.',
             ], 403);
         }
 

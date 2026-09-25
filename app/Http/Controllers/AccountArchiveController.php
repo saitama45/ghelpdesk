@@ -266,13 +266,17 @@ class AccountArchiveController extends Controller implements HasMiddleware
     {
         $query = User::onlyTrashed()
             ->whereNull('customer_id')
-            ->select(['id', 'name', 'email', 'employee_id_no', 'department', 'position', 'customer_id', 'deleted_at', 'deleted_by', 'created_at'])
+            ->select(['id', 'name', 'email', 'archived_email', 'employee_id_no', 'department', 'position', 'customer_id', 'deleted_at', 'deleted_by', 'created_at'])
             ->with(['customer' => fn ($q) => $q->withTrashed()->select('id', 'name', 'email', 'deleted_at')]);
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%")
+                    // Archiving parks the real address here and leaves a
+                    // tombstone in `email`, so searching by the address a
+                    // colleague actually remembers has to look at both.
+                    ->orWhere('archived_email', 'like', "%{$search}%")
                     ->orWhere('employee_id_no', 'like', "%{$search}%");
             });
         }
@@ -285,7 +289,7 @@ class AccountArchiveController extends Controller implements HasMiddleware
             'id' => $user->id,
             'type' => 'users',
             'name' => $user->name,
-            'subtitle' => $user->email,
+            'subtitle' => $user->archived_email ?? $user->email,
             'meta' => array_values(array_filter([
                 $user->employee_id_no ? "ID {$user->employee_id_no}" : null,
                 $user->position,
@@ -339,7 +343,7 @@ class AccountArchiveController extends Controller implements HasMiddleware
                 ])),
                 'linked' => $user ? [
                     'label' => 'App login',
-                    'name' => $user->email,
+                    'name' => $user->archived_email ?? $user->email,
                     'archived' => (bool) $user->deleted_at,
                 ] : null,
                 'deleted_at' => $this->formatDate($customer->deleted_at),

@@ -94,6 +94,25 @@ Permanent removal is still Stage 2 for both: Settings → Account Archive, after
 retention window, which is what `/account-deletion` promises. Keep the endpoint, that page and
 `AccountClosedMail` in step.
 
+### Archiving frees the email address
+
+`users.email` carries a **UNIQUE index** and an archive is only a soft delete, so an archived
+row would go on owning the address for ever — a member who deleted their account could never
+sign up again with it (`Api\RegisterController` answered *"The email has already been taken"*),
+which is exactly what an App Store reviewer does straight after testing deletion.
+
+`AccountArchiveService::releaseEmail()` therefore parks the real address in the new
+**`users.archived_email`** column and writes `deleted-{id}@archived.invalid` into `email`
+(`.invalid` is reserved by RFC 2606, so a tombstone can never be mailed). `reclaimEmail()`
+puts it back on restore — **unless somebody has taken the address in the meantime**, in which
+case the tombstone stays, `restoreUser()`/`restoreCustomer()` return `email_reclaimed => false`
+and it is logged, rather than the restore breaking the unique index. That gap is real: delete,
+re-register, then restore the old account.
+
+Anything displaying an archived login's address reads `archived_email ?? email` — see the
+Users tab and the linked-login line on the Loyalty Customers tab in `AccountArchiveController`,
+which also searches both columns.
+
 ### Letting a store reviewer sign in
 
 **`APP_REVIEW_EMAIL` + `APP_REVIEW_OTP`** (`services.app_review.*`) name one demo account that
