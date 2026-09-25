@@ -60,4 +60,17 @@ return [
         ],
     ],
 
+    // App Store / Play Store review accounts. A reviewer signs in with demo
+    // credentials on a device whose mailbox they cannot read, so the post-login
+    // email OTP would lock them out of the app entirely. Naming the demo
+    // account here makes `Api\OtpController` issue the FIXED code below instead
+    // of mailing a random one — the verification step still runs exactly as it
+    // does for a member, it just has a code the reviewer was given in App Store
+    // Connect. Leave either value unset in production-for-members deployments
+    // and the allowlist is off.
+    'app_review' => [
+        'email' => env('APP_REVIEW_EMAIL'),
+        'otp' => env('APP_REVIEW_OTP'),
+    ],
+
 ];

@@ -4,15 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Mail\AccountDeletionCodeMail;
 use App\Mail\AccountDeletionRequestedMail;
-use App\Models\Company;
 use App\Models\OtpCode;
-use App\Models\Scopes\ActiveEntityScope;
 use App\Models\Setting;
-use App\Models\Ticket;
 use App\Models\User;
-use App\Services\AutoAssigneeService;
+use App\Services\AccountDeletionRequestService;
 use App\Services\EmailCodeService;
-use App\Support\CompanyContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -42,9 +38,13 @@ class PublicAccountDeletionController extends Controller
     private const RESEND_COOLDOWN_SECONDS = 30;
     private const HOURLY_SEND_LIMIT = 5;
 
-    public const TICKET_TITLE = 'Account Deletion Request';
+    /** Kept as the name the rest of the app already refers to. */
+    public const TICKET_TITLE = AccountDeletionRequestService::TICKET_TITLE;
 
-    public function __construct(private readonly EmailCodeService $codes) {}
+    public function __construct(
+        private readonly EmailCodeService $codes,
+        private readonly AccountDeletionRequestService $requests,
+    ) {}
 
     public function show(Request $request)
     {
@@ -172,7 +172,12 @@ class PublicAccountDeletionController extends Controller
         $ticket = DB::transaction(function () use ($result, $member, $validated, $request) {
             $result['otp']->update(['consumed_at' => now()]);
 
-            return $this->openTicketFor($member, $validated['reason'] ?? null, $request->ip());
+            return $this->requests->openFor(
+                $member,
+                $validated['reason'] ?? null,
+                $request->ip(),
+                AccountDeletionRequestService::CHANNEL_WEB,
+            );
         });
 
         try {
@@ -194,76 +199,6 @@ class PublicAccountDeletionController extends Controller
         $request->session()->forget(['account_deletion.step', 'account_deletion.email', 'account_deletion.ticket_key']);
 
         return redirect()->to(route('public.account-deletion').'#request');
-    }
-
-    /**
-     * Reuses the member's still-open request instead of stacking duplicates —
-     * a member who submits twice should see one ticket on the desk.
-     */
-    private function openTicketFor(User $member, ?string $reason, ?string $ip): Ticket
-    {
-        $existing = Ticket::withoutGlobalScope(ActiveEntityScope::class)
-            ->where('sender_email', $member->email)
-            ->where('title', self::TICKET_TITLE)
-            ->whereNotIn('status', ['resolved', 'closed'])
-            ->latest('created_at')
-            ->first();
-
-        if ($existing) {
-            return $existing;
-        }
-
-        $customer = $member->customer;
-        $lines = [
-            'A member requested deletion of their loyalty app account and all associated data.',
-            'The request was verified with a one-time code sent to the registered email address.',
-            '',
-            'Name: '.$member->name,
-            'Email: '.$member->email,
-            'Mobile: '.($customer?->phone ?: '—'),
-            'User ID: '.$member->id,
-            'Customer ID: '.($customer?->id ?? '—'),
-            'Submitted: '.now('Asia/Manila')->format('M j, Y g:i A').' (Asia/Manila) from '.($ip ?: 'unknown IP'),
-        ];
-        if ($reason !== null && trim($reason) !== '') {
-            $lines[] = '';
-            $lines[] = 'Reason given: '.trim($reason);
-        }
-        $lines[] = '';
-        $lines[] = 'Process it on Settings → Account Archive → Deletion Requests (archive now, purge after the retention period).';
-
-        // Same defaults an emailed request to the support mailbox gets
-        // (EmailTicketService): TGI entity, shared intake pool, the sender's
-        // auto-assign rules. Key generation is left to TicketObserver.
-        $companyId = Company::where('code', CompanyContext::DEFAULT_COMPANY_CODE)->value('id')
-            ?? Company::orderBy('id')->value('id');
-
-        $ticket = Ticket::create([
-            'title' => self::TICKET_TITLE,
-            'description' => implode("\n", $lines),
-            'type' => 'task',
-            'status' => 'open',
-            'priority' => 'medium',
-            'severity' => 'minor',
-            'reporter_id' => $member->id,
-            'sender_email' => $member->email,
-            'sender_name' => mb_substr($member->name, 0, 255),
-            'company_id' => $companyId,
-        ]);
-
-        $resolved = app(AutoAssigneeService::class)->resolveAssignee($member->email);
-        $update = [];
-        if ($resolved['assignee_id'] && User::whereKey($resolved['assignee_id'])->exists()) {
-            $update['assignee_id'] = $resolved['assignee_id'];
-        }
-        if ($resolved['company_id']) {
-            $update['company_id'] = $resolved['company_id'];
-        }
-        if ($update) {
-            $ticket->update($update);
-        }
-
-        return $ticket->refresh();
     }
 
     /** Loyalty members only — staff accounts are closed through HR, not this page. */

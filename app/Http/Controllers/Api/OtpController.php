@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Mail\OtpCodeMail;
 use App\Models\OtpCode;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -55,7 +56,13 @@ class OtpController extends Controller
             ->whereNull('consumed_at')
             ->delete();
 
-        $code = str_pad((string) random_int(0, 999999), self::CODE_LENGTH, '0', STR_PAD_LEFT);
+        // An app-store reviewer signs in on a device with no access to the demo
+        // account's inbox, so a mailed code would end the review at this screen.
+        // The allowlisted account gets the fixed code from config instead; every
+        // other account, and every deployment that leaves the config unset, is
+        // unaffected.
+        $reviewCode = $this->reviewCodeFor($user);
+        $code = $reviewCode ?? str_pad((string) random_int(0, 999999), self::CODE_LENGTH, '0', STR_PAD_LEFT);
 
         OtpCode::create([
             'user_id' => $user->id,
@@ -65,7 +72,9 @@ class OtpController extends Controller
             'expires_at' => now()->addMinutes(self::VALID_MINUTES),
         ]);
 
-        Mail::to($user->email)->send(new OtpCodeMail($user, $code, self::VALID_MINUTES));
+        if ($reviewCode === null) {
+            Mail::to($user->email)->send(new OtpCodeMail($user, $code, self::VALID_MINUTES));
+        }
 
         RateLimiter::hit($cooldownKey, self::RESEND_COOLDOWN_SECONDS);
         RateLimiter::hit($hourlyKey, 3600);
@@ -130,6 +139,32 @@ class OtpController extends Controller
         $otp->update(['consumed_at' => now()]);
 
         return response()->json(['verified' => true]);
+    }
+
+    /**
+     * The fixed verification code for a store-review demo account, or null for
+     * everyone else.
+     *
+     * Both halves must be configured (`APP_REVIEW_EMAIL` + `APP_REVIEW_OTP`),
+     * the address must match exactly one account, and the code must be the same
+     * length as a real one so the entry screen behaves identically.
+     */
+    private function reviewCodeFor(User $user): ?string
+    {
+        $email = config('services.app_review.email');
+        $code = config('services.app_review.otp');
+
+        if (! $email || ! $code) {
+            return null;
+        }
+
+        if (! hash_equals(mb_strtolower((string) $email), mb_strtolower((string) $user->email))) {
+            return null;
+        }
+
+        $code = str_pad((string) $code, self::CODE_LENGTH, '0', STR_PAD_LEFT);
+
+        return strlen($code) === self::CODE_LENGTH ? $code : null;
     }
 
     /**

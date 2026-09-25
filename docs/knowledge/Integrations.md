@@ -8,7 +8,8 @@
 | Google Maps | REST key | `services.google.maps_api_key` (store/trip location UI) |
 | linkportal (sister app) | Sanctum in + HTTP callback out | in: `app/Http/Controllers/Api/AccountingDocumentReviewController.php`; out: `app/Jobs/SendDecisionCallbackJob.php`; config `services.linkportal.*` |
 | DAVID app (sister app) | Shared key in (`X-Integration-Key`, `integration.key:david` middleware) | `GET /api/integrations/david/ticket-tally` → `app/Services/DavidTicketTallyService.php`; config `services.integrations.david.key` (`DAVID_INTEGRATION_KEY`). Weekly per-module Incoming (created that week) / Closed (those now `closed`) for one entity (`companies.code` = DAVID `entities.code`); items opt in via `items.report_key = david.{order,commit,receiving,wastage,mec,sales_upload,admin}`; child tickets excluded |
-| Mobile app | Capacitor 7 + Sanctum | `capacitor.config.ts`, `android/`, `ios/`, `routes/api.php` DTR endpoints, `@capacitor/geolocation` |
+| Mobile app (staff, Capacitor) | Capacitor 7 + Sanctum | `capacitor.config.ts`, `android/`, `ios/`, `routes/api.php` DTR endpoints, `@capacitor/geolocation` |
+| Mobile app (members, Flutter) | Sanctum | separate repo `service_center_mobile` (pubspec `cbtl`, store name "CBTL"); consumes `routes/api.php` register / login / otp / loyalty / account endpoints |
 | PDF export | `barryvdh/laravel-dompdf` | report/PDF controllers |
 | Excel import/export | `phpoffice/phpspreadsheet` | `app/Services/UatWorkbook.php`, activity-template import, roles/users export |
 | Barcodes / QR | `milon/barcode` (PHP), `jsbarcode` + `qrcode` (JS) | asset labels, queue tickets |
@@ -62,6 +63,48 @@ The portal's /vendor/documents uploads land in **`portal_vendor_documents`** (sh
 - **Document accreditation** — `PUT /vendors/{vendor}/documents/{document}/review` (`approved` | `rejected`, remarks required on a refusal), gated on **`vendor-documents.approve`**: the portal's own permission, reused because the permissions table is shared and it is the same decision. Mirrors `Admin\VendorController@reviewDocument` — pending only (a second decision returns 409; re-accrediting means a new upload), stamps `reviewed_by`/`reviewed_at`/`review_remarks`, and writes a `document_approved`/`document_rejected` row into `portal_notifications`.
 - **Two different approvals, deliberately.** `vendors.approve` decides on the ACCOUNT (portal access, `vendors.status`); `vendor-documents.approve` decides on a FILE. Reviewing a document never touches the vendor's status or `is_active`, and approving an account never accredits a document. The account buttons are labelled "Approve/Reject **Account**" because the documents listed above them carry their own Approve/Reject.
 - **Where the panel appears.** `VendorDocumentsPanel.vue` renders in two places off one store (`vendorDocuments`, keyed by `vendorId`): full in the edit modal (search, type tabs, footer) and `compact` inside the account approval modal, where it is the evidence for that decision — with a summary of awaiting/approved/rejected/expired counts above it. A document decision is an axios call that patches the row in place: **the modal never closes, the result is a toast.**
+
+## Mobile member app — store-review requirements
+
+The Flutter member app (`service_center_mobile`, App Store name **CBTL**) is reviewed by
+Apple and Google, and two of their requirements are served by this backend.
+
+### Two ways to ask for deletion, and they are not the same request
+
+Both file the SAME `Account Deletion Request` ticket, through
+**`app/Services/AccountDeletionRequestService.php`** — the single definition of that ticket,
+reused rather than duplicated when a member asks twice.
+
+| | Public `/account-deletion` page | `DELETE /api/account` (in-app) |
+|---|---|---|
+| Proves ownership with | a one-time code emailed to the address (the requester is anonymous) | the caller's Sanctum token **plus** a re-entered password |
+| Account afterwards | still **open** — the desk archives it | already **archived**, every token revoked |
+| Desk sees it in | Settings → Account Archive → **Deletion Requests** (Stage 1) | nothing to action; the ticket is the record, the pair is under **Loyalty Customers** awaiting purge |
+| Member is emailed | `AccountDeletionRequestedMail` ("closed within 30 days, reply to cancel") | `AccountClosedMail` ("already closed, reply if this was not you") |
+
+The in-app path closes immediately on purpose: a password re-entered on an authenticated
+session is stronger proof than the emailed code, so there is nothing left for a human to
+verify, and App Store Review Guideline 5.1.1(v) expects the deletion to take effect rather
+than queue. `Api\AccountController` raises the ticket **before** archiving — the body quotes
+the member's phone and customer id, and archiving soft-deletes that row out from under the
+relation — and refuses any account holding a role, because a staff login must not archive
+itself out of tickets, DTR and the task board with one tap.
+
+Permanent removal is still Stage 2 for both: Settings → Account Archive, after the published
+retention window, which is what `/account-deletion` promises. Keep the endpoint, that page and
+`AccountClosedMail` in step.
+
+### Letting a store reviewer sign in
+
+**`APP_REVIEW_EMAIL` + `APP_REVIEW_OTP`** (`services.app_review.*`) name one demo account that
+receives the fixed code instead of a mailed one at `POST /api/otp/send`. A reviewer signs in on
+a device with no access to the demo mailbox, so without this the review ends at the
+verification screen. Everything else about the step is unchanged — the code is still stored
+hashed, still scoped to `OtpCode::PURPOSE_LOGIN`, still expires in 5 minutes, still counts
+attempts — and leaving either value unset turns the allowlist off.
+
+Covered by `tests/Feature/MobileAccountDeletionTest.php`. The login-free public pages the
+stores require are `/privacy-policy` and `/account-deletion` (`routes/web.php`).
 
 ## Mail configuration — important
 SMTP and IMAP credentials are read from the **`settings` table**, not `.env`. `AppServiceProvider::boot()` overwrites `mail.*` and `imap.accounts.default.*` from `Setting::where('group','mail')`, cached as `app_mail_settings` for 1 hour (skipped when `APP_ENV=testing`).

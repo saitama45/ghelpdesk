@@ -7,6 +7,7 @@ use App\Models\AmortizationTerm;
 use App\Models\ApplicablePercentage;
 use App\Models\Garden;
 
+use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\OtpController;
@@ -53,6 +54,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // Mobile app post-login verification (bms / TAS Service Center)
     Route::post('/otp/send', [OtpController::class, 'send']);
     Route::post('/otp/verify', [OtpController::class, 'verify']);
+
+    // Mobile app in-app account deletion (App Store guideline 5.1.1(v)).
+    // Files the same request ticket the public page does, archives the
+    // users + customers pair, and revokes every token.
+    Route::delete('/account', [AccountController::class, 'destroy'])
+        ->middleware('throttle:5,1');
 
     // Mobile app campaign catalogue sync (mirrors stamp_programs read-only)
     Route::get('/campaigns', [CampaignsController::class, 'index']);
