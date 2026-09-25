@@ -27,17 +27,19 @@ use Inertia\Inertia;
  * blockers, and different audiences.
  *
  * Tabs:
- *  - Deletion Requests: members who asked to be deleted from the public
- *    /account-deletion page (an open "Account Deletion Request" ticket) and are
- *    still active. Archiving here is Stage 1 of that process.
- *  - Users: archived staff logins only.
- *  - Loyalty Customers: archived customers. A mobile-app member is a customer
- *    plus an app login, and is listed here once, not also under Users; acting on
- *    it operates on the pair.
+ *  - Loyalty Customers: one list for the whole member lifecycle, filtered by
+ *    status. "Pending request" rows are still-active members with an open
+ *    "Account Deletion Request" ticket (public /account-deletion page or the
+ *    app); archiving them is Stage 1. "Archived" rows are archived customers,
+ *    restored or purged from here. A mobile-app member is a customer plus an
+ *    app login, listed once by its customer id; every action works on the pair.
+ *  - Users: archived staff logins only (soft deleted from User Management).
  */
 class AccountArchiveController extends Controller implements HasMiddleware
 {
-    private const TABS = ['requests', 'users', 'customers'];
+    private const TABS = ['customers', 'users'];
+
+    private const STATUSES = ['all', 'pending', 'archived'];
 
     public function __construct(private AccountArchiveService $archive) {}
 
@@ -50,27 +52,30 @@ class AccountArchiveController extends Controller implements HasMiddleware
 
     public function index(Request $request)
     {
-        $tab = in_array($request->query('tab'), self::TABS, true) ? $request->query('tab') : 'requests';
+        [$tab, $status] = $this->resolveView($request);
         $retention = $this->retention();
         $search = trim((string) $request->query('search', ''));
         $perPage = $request->integer('per_page', 10);
 
-        $records = match ($tab) {
-            'requests' => $this->deletionRequests($search, $perPage),
-            'customers' => $this->archivedCustomers($search, $perPage, $retention),
-            default => $this->archivedUsers($search, $perPage, $retention),
-        };
+        $records = $tab === 'customers'
+            ? $this->loyaltyCustomers($search, $status, $perPage, $retention)
+            : $this->archivedUsers($search, $perPage, $retention);
+
+        $pending = $this->loyaltyCustomersQuery('pending')->count();
+        $archived = Customer::onlyTrashed()->count();
 
         return Inertia::render('Settings/AccountArchive', [
             'tab' => $tab,
             'records' => $records,
             'counts' => [
-                'requests' => $this->deletionRequestsQuery()->count(),
+                'customers' => $pending + $archived,
+                'pending' => $pending,
+                'archived' => $archived,
                 'users' => User::onlyTrashed()->whereNull('customer_id')->count(),
-                'customers' => Customer::onlyTrashed()->count(),
             ],
             'filters' => [
                 'search' => $search,
+                'status' => $status,
                 'per_page' => $perPage,
             ],
             'retention' => [
@@ -104,19 +109,20 @@ class AccountArchiveController extends Controller implements HasMiddleware
         // the same pair.
         abort_unless($request->user()->can('stamps.delete'), 403);
 
+        // The ids are customer ids, like every row on the Loyalty Customers tab.
         // Only members with an open deletion request: this desk acts on requests,
         // it is not a back door for archiving arbitrary accounts.
-        $members = $this->deletionRequestsQuery()->whereIn('id', $validated['ids'])->get();
+        $members = $this->deletionRequestsQuery()->whereIn('customer_id', $validated['ids'])->get();
 
         if ($members->isEmpty()) {
-            return $this->toTab($request, 'requests')->withErrors(['archive' => 'No pending deletion requests were selected.']);
+            return $this->toTab($request, 'customers')->withErrors(['archive' => 'No pending deletion requests were selected.']);
         }
 
         foreach ($members as $member) {
             $this->archive->archiveUser($member, $request->user()->id);
         }
 
-        return $this->toTab($request, 'requests')->with('success', $members->count().' account(s) archived with their loyalty customer record. Reply on the request ticket to let the member know.');
+        return $this->toTab($request, 'customers')->with('success', $members->count().' account(s) archived with their loyalty customer record. Reply on the request ticket to let the member know.');
     }
 
     /* ----------------------------------------------------------------------
@@ -208,59 +214,6 @@ class AccountArchiveController extends Controller implements HasMiddleware
             ->whereNotIn('status', TicketStatuses::like(['resolved', 'closed']));
     }
 
-    private function deletionRequests(string $search, int $perPage)
-    {
-        $query = $this->deletionRequestsQuery()
-            ->select(['id', 'name', 'email', 'customer_id', 'created_at'])
-            ->with(['customer' => fn ($q) => $q->select('id', 'name', 'email', 'phone')->withCount('redemptions')]);
-
-        if ($search !== '') {
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
-            });
-        }
-
-        $members = $query->orderBy('name')->paginate($perPage)->withQueryString();
-
-        // Latest open request per member, fetched for this page only.
-        $tickets = $this->openRequestTickets()
-            ->whereIn('reporter_id', $members->getCollection()->pluck('id'))
-            ->orderByDesc('created_at')
-            ->get(['id', 'ticket_key', 'status', 'reporter_id', 'created_at'])
-            ->unique('reporter_id')
-            ->keyBy('reporter_id');
-
-        $members->getCollection()->transform(function (User $member) use ($tickets) {
-            $ticket = $tickets->get($member->id);
-            $customer = $member->customer;
-
-            return [
-                'id' => $member->id,
-                'type' => 'requests',
-                'name' => $member->name,
-                'subtitle' => $member->email,
-                'meta' => array_values(array_filter([
-                    $customer?->phone,
-                    $customer?->redemptions_count ? "{$customer->redemptions_count} redemption(s), kept as financial records" : null,
-                ])),
-                'linked' => $customer ? [
-                    'label' => 'Loyalty customer',
-                    'name' => $customer->name,
-                    'archived' => false,
-                ] : null,
-                'ticket' => $ticket ? [
-                    'key' => $ticket->ticket_key,
-                    'status' => TicketStatuses::label($ticket->status),
-                    'requested_at' => $this->formatDate($ticket->created_at),
-                ] : null,
-                'created_at' => $this->formatDate($member->created_at),
-            ];
-        });
-
-        return $members;
-    }
-
     /** Staff logins only; a member's app login is listed with its customer. */
     private function archivedUsers(string $search, int $perPage, array $retention)
     {
@@ -311,9 +264,25 @@ class AccountArchiveController extends Controller implements HasMiddleware
         return $users;
     }
 
-    private function archivedCustomers(string $search, int $perPage, array $retention)
+    /**
+     * Loyalty customers that need this desk: still-active members with an open
+     * deletion request ("pending"), and archived customers ("archived").
+     */
+    private function loyaltyCustomersQuery(string $status): Builder
     {
-        $query = Customer::onlyTrashed()
+        $pending = fn (Builder $q) => $q->whereNull('deleted_at')
+            ->whereIn('id', $this->deletionRequestsQuery()->select('customer_id'));
+
+        return Customer::withTrashed()->where(fn (Builder $q) => match ($status) {
+            'pending' => $pending($q),
+            'archived' => $q->whereNotNull('deleted_at'),
+            default => $q->whereNotNull('deleted_at')->orWhere(fn (Builder $q) => $pending($q)),
+        });
+    }
+
+    private function loyaltyCustomers(string $search, string $status, int $perPage, array $retention)
+    {
+        $query = $this->loyaltyCustomersQuery($status)
             ->select(['id', 'name', 'email', 'phone', 'deleted_at', 'deleted_by', 'created_at'])
             ->withCount(['stampCards', 'redemptions']);
 
@@ -325,16 +294,27 @@ class AccountArchiveController extends Controller implements HasMiddleware
             });
         }
 
-        $customers = $query->orderByDesc('deleted_at')->paginate($perPage)->withQueryString();
+        // Pending requests first: they are the rows waiting on someone.
+        $customers = $query
+            ->orderByRaw('CASE WHEN deleted_at IS NULL THEN 0 ELSE 1 END')
+            ->orderByDesc('deleted_at')
+            ->orderBy('name')
+            ->paginate($perPage)
+            ->withQueryString();
 
         $actors = $this->actorNames($customers->getCollection()->pluck('deleted_by'));
+        $users = $customers->getCollection()->mapWithKeys(fn (Customer $c) => [$c->id => $this->archive->userFor($c)]);
+        $tickets = $this->requestTicketsFor($users->filter()->pluck('id'));
 
-        $customers->getCollection()->transform(function (Customer $customer) use ($retention, $actors) {
-            $user = $this->archive->userFor($customer);
+        $customers->getCollection()->transform(function (Customer $customer) use ($retention, $actors, $users, $tickets) {
+            $user = $users->get($customer->id);
+            $ticket = $user ? $tickets->get($user->id) : null;
+            $archived = $customer->trashed();
 
             return [
                 'id' => $customer->id,
                 'type' => 'customers',
+                'state' => $archived ? 'archived' : 'pending',
                 'name' => $customer->name,
                 'subtitle' => $customer->email ?: $customer->phone ?: 'Walk-in customer',
                 'meta' => array_values(array_filter([
@@ -346,16 +326,50 @@ class AccountArchiveController extends Controller implements HasMiddleware
                     'name' => $user->archived_email ?? $user->email,
                     'archived' => (bool) $user->deleted_at,
                 ] : null,
-                'deleted_at' => $this->formatDate($customer->deleted_at),
+                'ticket' => $ticket ? [
+                    'key' => $ticket->ticket_key,
+                    'status' => TicketStatuses::label($ticket->status),
+                    'open' => $ticket->is_open,
+                    'requested_at' => $this->formatDate($ticket->created_at),
+                ] : null,
+                'deleted_at' => $archived ? $this->formatDate($customer->deleted_at) : null,
                 'deleted_by' => $actors[$customer->deleted_by] ?? null,
                 'created_at' => $this->formatDate($customer->created_at),
-                'purge_eligible' => $this->isPurgeEligible($customer->deleted_at, $retention),
-                'purge_available_at' => $this->formatDate($this->purgeAvailableAt($customer->deleted_at, $retention)),
-                'purge_blocker' => $this->archive->customerPurgeBlocker($customer),
+                'purge_eligible' => $archived && $this->isPurgeEligible($customer->deleted_at, $retention),
+                'purge_available_at' => $archived ? $this->formatDate($this->purgeAvailableAt($customer->deleted_at, $retention)) : null,
+                'purge_blocker' => $archived ? $this->archive->customerPurgeBlocker($customer) : null,
             ];
         });
 
         return $customers;
+    }
+
+    /**
+     * The deletion-request ticket to show per member: the latest open one, or,
+     * once every request is closed, the latest closed one, so an archived row
+     * still links to the request that led to it.
+     */
+    private function requestTicketsFor(Collection $userIds): Collection
+    {
+        if ($userIds->isEmpty()) {
+            return collect();
+        }
+
+        $closed = TicketStatuses::like(['resolved', 'closed']);
+
+        return Ticket::withoutGlobalScope(ActiveEntityScope::class)
+            ->where('title', PublicAccountDeletionController::TICKET_TITLE)
+            ->whereIn('reporter_id', $userIds)
+            ->orderByDesc('created_at')
+            ->get(['id', 'ticket_key', 'status', 'reporter_id', 'created_at'])
+            ->groupBy('reporter_id')
+            ->map(function (Collection $group) use ($closed) {
+                $open = $group->first(fn (Ticket $t) => ! in_array($t->status, $closed, true));
+                $ticket = $open ?? $group->first();
+                $ticket->setAttribute('is_open', $open !== null);
+
+                return $ticket;
+            });
     }
 
     /** Names for the `deleted_by` ids on this page, archived actors included. */
@@ -390,6 +404,27 @@ class AccountArchiveController extends Controller implements HasMiddleware
     }
 
     /**
+     * The tab and the Loyalty Customers status filter. The old standalone
+     * "Deletion Requests" tab is now that filter, so its links still land there.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function resolveView(Request $request): array
+    {
+        $tab = $request->query('tab');
+        $status = $request->query('status');
+
+        if ($tab === 'requests') {
+            [$tab, $status] = ['customers', 'pending'];
+        }
+
+        return [
+            in_array($tab, self::TABS, true) ? $tab : 'customers',
+            in_array($status, self::STATUSES, true) ? $status : 'all',
+        ];
+    }
+
+    /**
      * Return to the tab the action was taken on. Not back(): when the browser
      * sends no Referer, back() falls to the session's last full page load, which
      * is often the Deletion Requests tab, not the tab currently open.
@@ -398,6 +433,9 @@ class AccountArchiveController extends Controller implements HasMiddleware
     {
         return redirect()->route('account-archive.index', array_filter([
             'tab' => $tab,
+            'status' => $tab === 'customers' && in_array($request->input('status'), ['pending', 'archived'], true)
+                ? $request->input('status')
+                : null,
             'search' => trim((string) $request->input('search', '')),
             'per_page' => $request->integer('per_page') ?: null,
             'page' => $request->integer('page') > 1 ? $request->integer('page') : null,

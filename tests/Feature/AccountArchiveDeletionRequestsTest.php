@@ -13,8 +13,9 @@ use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 /**
- * Settings → Account Archive → Deletion Requests: members who filed a request on
- * the public /account-deletion page show up for staff to archive.
+ * Settings → Account Archive → Loyalty Customers, "Pending request" status:
+ * members who filed a deletion request show up for staff to archive, in the same
+ * list as the archived customers (there is no separate Deletion Requests tab).
  *
  * The archive itself (a soft delete of the pair) is deliberately not executed
  * here; only the listing and the authorization in front of it are.
@@ -43,13 +44,50 @@ class AccountArchiveDeletionRequestsTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Settings/AccountArchive')
-                ->where('tab', 'requests')
-                ->where('counts.requests', 1)
+                ->where('tab', 'customers')
+                ->where('filters.status', 'all')
+                ->where('counts.pending', 1)
+                ->where('counts.customers', 1)
                 ->where('can.archive_requests', false)
                 ->has('records.data', 1)
-                ->where('records.data.0.id', $member->id)
+                ->where('records.data.0.id', $member->customer_id)
+                ->where('records.data.0.state', 'pending')
+                ->where('records.data.0.name', 'Member jane@example.com')
                 ->where('records.data.0.ticket.key', $ticket->refresh()->ticket_key)
-                ->where('records.data.0.linked.name', 'Member jane@example.com'));
+                ->where('records.data.0.ticket.open', true)
+                ->where('records.data.0.linked.name', 'jane@example.com'));
+    }
+
+    public function test_the_old_deletion_requests_link_opens_the_pending_filter(): void
+    {
+        $this->requestTicket($this->member('jane@example.com'));
+
+        $this->actingAs($this->staff(['settings.view']))
+            ->get('/settings/account-archive?tab=requests')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tab', 'customers')
+                ->where('filters.status', 'pending')
+                ->has('records.data', 1));
+
+        // Archived-only view: no archived customers exist, so the pending member is not in it.
+        $this->actingAs($this->staff(['settings.view']))
+            ->get('/settings/account-archive?tab=customers&status=archived')
+            ->assertInertia(fn (Assert $page) => $page->has('records.data', 0));
+    }
+
+    public function test_archive_refuses_a_customer_without_an_open_request(): void
+    {
+        // The closed request makes this member ineligible, so nothing is
+        // archived and only the refusal and its redirect are exercised.
+        $member = $this->member('jane@example.com');
+        $this->requestTicket($member, 'closed');
+
+        $this->actingAs($this->staff(['settings.view', 'stamps.delete']))
+            ->post('/settings/account-archive/archive', ['ids' => [$member->customer_id], 'status' => 'pending'])
+            ->assertRedirect(route('account-archive.index', ['tab' => 'customers', 'status' => 'pending']))
+            ->assertSessionHasErrors('archive');
+
+        $this->assertFalse($member->fresh()->trashed());
     }
 
     public function test_archiving_a_request_needs_the_stamps_delete_permission(): void
@@ -58,7 +96,7 @@ class AccountArchiveDeletionRequestsTest extends TestCase
         $this->requestTicket($member);
 
         $this->actingAs($this->staff(['settings.view']))
-            ->post('/settings/account-archive/archive', ['ids' => [$member->id]])
+            ->post('/settings/account-archive/archive', ['ids' => [$member->customer_id]])
             ->assertForbidden();
 
         $this->assertFalse($member->fresh()->trashed());

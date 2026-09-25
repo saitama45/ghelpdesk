@@ -28,6 +28,7 @@ const { post, destroy } = useErrorHandler();
 const { showError } = useToast();
 
 const search = ref(props.filters?.search || '');
+const status = ref(props.filters?.status || 'all');
 const perPage = ref(props.filters?.per_page || props.records?.per_page || 10);
 const isLoading = ref(false);
 const selectedIds = ref([]);
@@ -35,19 +36,30 @@ let searchTimer = null;
 
 const rows = computed(() => props.records?.data || []);
 const isCustomers = computed(() => props.tab === 'customers');
-const isRequests = computed(() => props.tab === 'requests');
 
-const canArchive = computed(() => isRequests.value && props.can?.archive_requests);
-const canRestore = computed(() => !isRequests.value && (isCustomers.value ? props.can?.restore_customers : props.can?.restore_users));
-const canPurge = computed(() => !isRequests.value && (isCustomers.value ? props.can?.purge_customers : props.can?.purge_users));
+// Loyalty Customers mixes still-active members with a pending deletion request
+// and archived ones, so the tab-level rights below are narrowed per row by
+// `isPending()`. Users rows are always archived.
+const isPending = (record) => record.state === 'pending';
+
+const canArchive = computed(() => isCustomers.value && props.can?.archive_requests);
+const canRestore = computed(() => isCustomers.value ? props.can?.restore_customers : props.can?.restore_users);
+const canPurge = computed(() => isCustomers.value ? props.can?.purge_customers : props.can?.purge_users);
 
 const tabs = computed(() => [
-    { id: 'requests', label: 'Deletion Requests', count: props.counts?.requests || 0 },
-    { id: 'users', label: 'Users', count: props.counts?.users || 0 },
     { id: 'customers', label: 'Loyalty Customers', count: props.counts?.customers || 0 },
+    { id: 'users', label: 'Users', count: props.counts?.users || 0 },
+]);
+
+const statusOptions = computed(() => [
+    { id: 'all', label: 'All', count: props.counts?.customers || 0 },
+    { id: 'pending', label: 'Pending request', count: props.counts?.pending || 0 },
+    { id: 'archived', label: 'Archived', count: props.counts?.archived || 0 },
 ]);
 
 const selectedRows = computed(() => rows.value.filter(r => selectedIds.value.includes(r.id)));
+const selectedPendingIds = computed(() => selectedRows.value.filter(isPending).map(r => r.id));
+const selectedArchivedIds = computed(() => selectedRows.value.filter(r => !isPending(r)).map(r => r.id));
 const allSelected = computed(() => rows.value.length > 0 && rows.value.every(r => selectedIds.value.includes(r.id)));
 
 const toggleAll = () => {
@@ -59,12 +71,20 @@ const clearSelection = () => {
 };
 
 const showingText = computed(() => {
+    const noun = isCustomers.value ? 'accounts' : 'archived accounts';
+
     if (!props.records || props.records.total === 0) {
-        return isRequests.value ? 'Showing 0 pending requests' : 'Showing 0 archived accounts';
+        return `Showing 0 ${noun}`;
     }
 
-    const noun = isRequests.value ? 'pending requests' : 'archived accounts';
     return `Showing ${props.records.from} to ${props.records.to} of ${props.records.total} ${noun}`;
+});
+
+const emptyMessage = computed(() => {
+    if (!isCustomers.value) return 'No archived accounts match the current filters.';
+    if (status.value === 'pending') return 'No pending deletion requests.';
+    if (status.value === 'archived') return 'No archived loyalty customers match the current filters.';
+    return 'No pending requests or archived loyalty customers match the current filters.';
 });
 
 // Tab lives in the URL so a restore or purge redirect comes back to the tab the
@@ -73,6 +93,7 @@ const reload = (overrides = {}) => {
     isLoading.value = true;
     router.get(route('account-archive.index'), {
         tab: props.tab,
+        status: status.value,
         search: search.value,
         per_page: perPage.value,
         ...overrides,
@@ -88,7 +109,15 @@ const switchTab = (tab) => {
     if (tab === props.tab) return;
     selectedIds.value = [];
     search.value = '';
-    reload({ tab, search: '', page: 1 });
+    status.value = 'all';
+    reload({ tab, status: 'all', search: '', page: 1 });
+};
+
+const setStatus = (value) => {
+    if (value === status.value) return;
+    selectedIds.value = [];
+    status.value = value;
+    reload({ status: value, page: 1 });
 };
 
 watch(search, () => {
@@ -112,6 +141,7 @@ const changePerPage = (value) => {
 
 // Sent with every action so the server redirects back to this exact list view.
 const listState = () => ({
+    status: status.value,
     search: search.value,
     per_page: perPage.value,
     page: props.records?.current_page || 1,
@@ -138,7 +168,7 @@ const submitArchive = (ids, message) => {
 };
 
 const archiveRecord = async (record) => {
-    if (!canArchive.value) return;
+    if (!canArchive.value || !isPending(record)) return;
 
     const confirmed = await confirm({
         title: 'Archive Account',
@@ -154,11 +184,11 @@ const archiveRecord = async (record) => {
 };
 
 const archiveSelected = async () => {
-    if (!canArchive.value || selectedIds.value.length === 0) return;
+    if (!canArchive.value || selectedPendingIds.value.length === 0) return;
 
     const confirmed = await confirm({
         title: 'Archive Selected Accounts',
-        message: `Archive ${selectedIds.value.length} account(s)? Each app login is closed together with its loyalty customer record.`,
+        message: `Archive ${selectedPendingIds.value.length} account(s) with a pending request? Each app login is closed together with its loyalty customer record.`,
         confirmLabel: 'Archive Selected',
         cancelLabel: 'Cancel',
         variant: 'danger',
@@ -166,7 +196,7 @@ const archiveSelected = async () => {
 
     if (!confirmed) return;
 
-    submitArchive([...selectedIds.value], 'Cannot archive accounts');
+    submitArchive([...selectedPendingIds.value], 'Cannot archive accounts');
 };
 
 /* ------------------------------------------------------------------ *
@@ -183,7 +213,7 @@ const submitRestore = (ids, message) => {
 };
 
 const restoreRecord = async (record) => {
-    if (!canRestore.value) return;
+    if (!canRestore.value || isPending(record)) return;
 
     const confirmed = await confirm({
         title: 'Restore Account',
@@ -199,11 +229,11 @@ const restoreRecord = async (record) => {
 };
 
 const restoreSelected = async () => {
-    if (!canRestore.value || selectedIds.value.length === 0) return;
+    if (!canRestore.value || selectedArchivedIds.value.length === 0) return;
 
     const confirmed = await confirm({
         title: 'Restore Selected Accounts',
-        message: `Restore ${selectedIds.value.length} archived account(s)? Any linked user or customer record is restored with them.`,
+        message: `Restore ${selectedArchivedIds.value.length} archived account(s)? Any linked user or customer record is restored with them.`,
         confirmLabel: 'Restore Selected',
         cancelLabel: 'Cancel',
         variant: 'info',
@@ -211,7 +241,7 @@ const restoreSelected = async () => {
 
     if (!confirmed) return;
 
-    submitRestore([...selectedIds.value], 'Cannot restore accounts');
+    submitRestore([...selectedArchivedIds.value], 'Cannot restore accounts');
 };
 
 /* ------------------------------------------------------------------ *
@@ -229,7 +259,7 @@ const purgeBlockedReason = (record) => {
 };
 
 const selectedPurgeBlockedReasons = computed(() =>
-    selectedRows.value.map(r => purgeBlockedReason(r)).filter(Boolean)
+    selectedRows.value.filter(r => !isPending(r)).map(r => purgeBlockedReason(r)).filter(Boolean)
 );
 
 const submitPurge = (ids, message) => {
@@ -243,7 +273,7 @@ const submitPurge = (ids, message) => {
 };
 
 const purgeRecord = async (record) => {
-    if (!canPurge.value) return;
+    if (!canPurge.value || isPending(record)) return;
 
     const blocked = purgeBlockedReason(record);
     if (blocked) {
@@ -265,7 +295,7 @@ const purgeRecord = async (record) => {
 };
 
 const purgeSelected = async () => {
-    if (!canPurge.value || selectedIds.value.length === 0) return;
+    if (!canPurge.value || selectedArchivedIds.value.length === 0) return;
 
     if (selectedPurgeBlockedReasons.value.length > 0) {
         showError(selectedPurgeBlockedReasons.value[0]);
@@ -274,7 +304,7 @@ const purgeSelected = async () => {
 
     const confirmed = await confirm({
         title: 'Permanently Purge Selected Accounts',
-        message: `Purge ${selectedIds.value.length} archived account(s) permanently? This erases each record and every reference to it, and cannot be undone.`,
+        message: `Purge ${selectedArchivedIds.value.length} archived account(s) permanently? This erases each record and every reference to it, and cannot be undone.`,
         confirmLabel: 'Purge Permanently',
         cancelLabel: 'Cancel',
         variant: 'danger',
@@ -282,7 +312,7 @@ const purgeSelected = async () => {
 
     if (!confirmed) return;
 
-    submitPurge([...selectedIds.value], 'Cannot purge accounts');
+    submitPurge([...selectedArchivedIds.value], 'Cannot purge accounts');
 };
 </script>
 
@@ -353,31 +383,37 @@ const purgeSelected = async () => {
                 <div v-if="selectedIds.length > 0" class="rounded-xl border border-blue-200 bg-blue-50 p-4 shadow-sm">
                     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div>
-                            <div class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">{{ isRequests ? 'Selected Requests' : 'Selected Archived Accounts' }}</div>
+                            <div class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Selected Accounts</div>
                             <div class="mt-1 text-xl font-black text-blue-900">{{ selectedIds.length }}</div>
-                            <div class="mt-1 text-xs text-blue-700">{{ isRequests ? 'Archive the selected accounts in one action.' : 'Restore or purge the selected records in one action.' }}</div>
+                            <div class="mt-1 text-xs text-blue-700">
+                                <template v-if="selectedPendingIds.length && selectedArchivedIds.length">
+                                    {{ selectedPendingIds.length }} pending request(s) can be archived; {{ selectedArchivedIds.length }} archived account(s) can be restored or purged.
+                                </template>
+                                <template v-else-if="selectedPendingIds.length">Archive the selected pending requests in one action.</template>
+                                <template v-else>Restore or purge the selected records in one action.</template>
+                            </div>
                         </div>
                         <div class="flex flex-col gap-2 sm:flex-row">
                             <button
-                                v-if="canArchive"
+                                v-if="canArchive && selectedPendingIds.length"
                                 type="button"
                                 @click="archiveSelected"
                                 class="inline-flex min-h-[40px] items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-bold text-red-700 transition-colors hover:bg-red-50 dark:bg-gray-800"
                             >
                                 <ArchiveBoxIcon class="h-4 w-4" />
-                                Archive Selected
+                                Archive Selected ({{ selectedPendingIds.length }})
                             </button>
                             <button
-                                v-if="canRestore"
+                                v-if="canRestore && selectedArchivedIds.length"
                                 type="button"
                                 @click="restoreSelected"
                                 class="inline-flex min-h-[40px] items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-bold text-blue-700 transition-colors hover:bg-blue-50 dark:bg-gray-800"
                             >
                                 <ArrowPathIcon class="h-4 w-4" />
-                                Restore Selected
+                                Restore Selected ({{ selectedArchivedIds.length }})
                             </button>
                             <button
-                                v-if="canPurge"
+                                v-if="canPurge && selectedArchivedIds.length"
                                 type="button"
                                 @click="purgeSelected"
                                 :title="selectedPurgeBlockedReasons[0] || 'Purge selected accounts permanently'"
@@ -386,7 +422,7 @@ const purgeSelected = async () => {
                                 :class="selectedPurgeBlockedReasons.length ? 'cursor-help opacity-60' : ''"
                             >
                                 <TrashIcon class="h-4 w-4" />
-                                Purge Selected
+                                Purge Selected ({{ selectedArchivedIds.length }})
                             </button>
                             <button
                                 type="button"
@@ -401,14 +437,12 @@ const purgeSelected = async () => {
             </Transition>
 
             <DataTable
-                :title="isRequests ? 'Deletion Requests' : (isCustomers ? 'Archived Loyalty Customers' : 'Archived Users')"
-                :subtitle="isRequests
-                    ? 'Members who asked to delete their account on the public deletion page. Archiving closes their app login and loyalty record together.'
-                    : (isCustomers
-                        ? 'Loyalty customers, with the app login of members who registered in the mobile app. Restore or purge acts on both.'
-                        : 'Staff logins. Mobile-app members are listed under Loyalty Customers.')"
-                :search-placeholder="isRequests ? 'Search name or email...' : (isCustomers ? 'Search name, email, or phone...' : 'Search name, email, or employee ID...')"
-                :empty-message="isRequests ? 'No pending deletion requests.' : 'No archived accounts match the current filters.'"
+                :title="isCustomers ? 'Loyalty Customers' : 'Archived Users'"
+                :subtitle="isCustomers
+                    ? 'Members who asked to delete their account, and archived loyalty customers with their app login. Archive a pending request; restore or purge an archived account. Each action covers both records.'
+                    : 'Staff logins archived from User Management. Mobile-app members are listed under Loyalty Customers.'"
+                :search-placeholder="isCustomers ? 'Search name, email, or phone...' : 'Search name, email, or employee ID...'"
+                :empty-message="emptyMessage"
                 :search="search"
                 :data="rows"
                 :current-page="records.current_page"
@@ -420,6 +454,30 @@ const purgeSelected = async () => {
                 @go-to-page="goToPage"
                 @change-per-page="changePerPage"
             >
+                <template v-if="isCustomers" #filters>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="mr-1 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-400">Status</span>
+                        <button
+                            v-for="option in statusOptions"
+                            :key="option.id"
+                            type="button"
+                            @click="setStatus(option.id)"
+                            class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold transition-colors"
+                            :class="status === option.id
+                                ? 'border-blue-600 bg-blue-600 text-white'
+                                : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'"
+                        >
+                            {{ option.label }}
+                            <span
+                                class="rounded-full px-1.5 text-[11px] font-black"
+                                :class="status === option.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'"
+                            >
+                                {{ option.count }}
+                            </span>
+                        </button>
+                    </div>
+                </template>
+
                 <template #header>
                     <tr>
                         <th class="px-4 py-3 w-10">
@@ -432,8 +490,9 @@ const purgeSelected = async () => {
                         </th>
                         <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Account</th>
                         <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Linked Record</th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">{{ isRequests ? 'Requested' : 'Archived' }}</th>
-                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">{{ isRequests ? 'Request Ticket' : 'Purge Status' }}</th>
+                        <th v-if="isCustomers" class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Request Ticket</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">{{ isCustomers ? 'Status' : 'Archived' }}</th>
+                        <th class="px-4 py-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Purge Status</th>
                         <th class="px-4 py-3 text-right text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">Actions</th>
                     </tr>
                 </template>
@@ -477,7 +536,7 @@ const purgeSelected = async () => {
                                     </div>
                                     <div class="break-all font-semibold text-gray-900 dark:text-gray-100">{{ record.linked.name }}</div>
                                     <span
-                                        v-if="!isRequests"
+                                        v-if="!isPending(record)"
                                         class="inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold"
                                         :class="record.linked.archived
                                             ? 'border-slate-300 bg-slate-50 text-slate-600'
@@ -489,32 +548,40 @@ const purgeSelected = async () => {
                                 <span v-else class="text-xs text-gray-400 dark:text-gray-500">None</span>
                             </div>
                         </td>
-                        <td v-if="isRequests" class="px-4 py-4 text-sm text-gray-900 dark:text-gray-100">
-                            <div class="min-w-[150px]">
-                                <div class="font-semibold">{{ record.ticket?.requested_at || '—' }}</div>
-                                <div class="mt-1 text-xs text-gray-500 dark:text-gray-300">Member since {{ record.created_at }}</div>
+                        <td v-if="isCustomers" class="px-4 py-4">
+                            <div class="min-w-[160px]">
+                                <template v-if="record.ticket">
+                                    <Link
+                                        :href="route('tickets.edit', record.ticket.key)"
+                                        class="font-bold text-blue-600 hover:underline dark:text-blue-400"
+                                    >
+                                        {{ record.ticket.key }}
+                                    </Link>
+                                    <div class="mt-1 text-xs text-gray-500 dark:text-gray-300">{{ record.ticket.status }}</div>
+                                    <div class="mt-1 text-xs text-gray-500 dark:text-gray-300">Requested {{ record.ticket.requested_at }}</div>
+                                </template>
+                                <span v-else class="text-xs text-gray-400 dark:text-gray-500">No request</span>
                             </div>
                         </td>
-                        <td v-if="isRequests" class="px-4 py-4">
-                            <div v-if="record.ticket" class="min-w-[200px]">
-                                <Link
-                                    :href="route('tickets.edit', record.ticket.key)"
-                                    class="font-bold text-blue-600 hover:underline dark:text-blue-400"
-                                >
-                                    {{ record.ticket.key }}
-                                </Link>
-                                <div class="mt-1 text-xs text-gray-500 dark:text-gray-300">{{ record.ticket.status }}</div>
+                        <td class="px-4 py-4 text-sm text-gray-900 dark:text-gray-100">
+                            <div v-if="isPending(record)" class="min-w-[150px]">
+                                <span class="inline-flex rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
+                                    Pending request
+                                </span>
+                                <div class="mt-2 text-xs text-gray-500 dark:text-gray-300">Active. Member since {{ record.created_at }}</div>
                             </div>
-                        </td>
-                        <td v-if="!isRequests" class="px-4 py-4 text-sm text-gray-900 dark:text-gray-100">
-                            <div class="min-w-[150px]">
+                            <div v-else class="min-w-[150px]">
+                                <span v-if="isCustomers" class="mb-1 inline-flex rounded-full border border-slate-300 bg-slate-50 px-3 py-1 text-xs font-bold text-slate-600">
+                                    Archived
+                                </span>
                                 <div class="font-semibold">{{ record.deleted_at }}</div>
                                 <div v-if="record.deleted_by" class="mt-1 text-xs text-gray-500 dark:text-gray-300">by {{ record.deleted_by }}</div>
                                 <div class="mt-1 text-xs text-gray-500 dark:text-gray-300">Created {{ record.created_at }}</div>
                             </div>
                         </td>
-                        <td v-if="!isRequests" class="px-4 py-4">
-                            <div class="min-w-[200px]">
+                        <td class="px-4 py-4">
+                            <span v-if="isPending(record)" class="text-xs text-gray-400 dark:text-gray-500">Not archived yet</span>
+                            <div v-else class="min-w-[200px]">
                                 <span
                                     class="inline-flex rounded-full border px-3 py-1 text-xs font-bold"
                                     :class="!purgeBlockedReason(record)
@@ -533,7 +600,7 @@ const purgeSelected = async () => {
                         <td class="px-4 py-4">
                             <div class="flex min-w-[110px] justify-end space-x-1">
                                 <button
-                                    v-if="canArchive"
+                                    v-if="canArchive && isPending(record)"
                                     type="button"
                                     @click="archiveRecord(record)"
                                     title="Archive this account (Stage 1)"
@@ -542,7 +609,7 @@ const purgeSelected = async () => {
                                     <ArchiveBoxIcon class="h-5 w-5" />
                                 </button>
                                 <button
-                                    v-if="canRestore"
+                                    v-if="canRestore && !isPending(record)"
                                     type="button"
                                     @click="restoreRecord(record)"
                                     title="Restore this account"
@@ -551,7 +618,7 @@ const purgeSelected = async () => {
                                     <ArrowPathIcon class="h-5 w-5" />
                                 </button>
                                 <button
-                                    v-if="canPurge"
+                                    v-if="canPurge && !isPending(record)"
                                     type="button"
                                     @click="purgeRecord(record)"
                                     :title="purgeBlockedReason(record) || 'Purge this account permanently'"
