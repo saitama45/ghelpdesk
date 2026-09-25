@@ -109,14 +109,14 @@ class AccountArchiveController extends Controller implements HasMiddleware
         $members = $this->deletionRequestsQuery()->whereIn('id', $validated['ids'])->get();
 
         if ($members->isEmpty()) {
-            return back()->withErrors(['archive' => 'No pending deletion requests were selected.']);
+            return $this->toTab($request, 'requests')->withErrors(['archive' => 'No pending deletion requests were selected.']);
         }
 
         foreach ($members as $member) {
             $this->archive->archiveUser($member, $request->user()->id);
         }
 
-        return back()->with('success', $members->count().' account(s) archived with their loyalty customer record. Reply on the request ticket to let the member know.');
+        return $this->toTab($request, 'requests')->with('success', $members->count().' account(s) archived with their loyalty customer record. Reply on the request ticket to let the member know.');
     }
 
     /* ----------------------------------------------------------------------
@@ -139,10 +139,10 @@ class AccountArchiveController extends Controller implements HasMiddleware
         }
 
         if ($restored === 0) {
-            return back()->withErrors(['restore' => 'No archived accounts were selected for restore.']);
+            return $this->toTab($request, $tab)->withErrors(['restore' => 'No archived accounts were selected for restore.']);
         }
 
-        return back()->with('success', "{$restored} archived account(s) restored, together with any linked record.");
+        return $this->toTab($request, $tab)->with('success', "{$restored} archived account(s) restored, together with any linked record.");
     }
 
     /* ----------------------------------------------------------------------
@@ -158,7 +158,7 @@ class AccountArchiveController extends Controller implements HasMiddleware
         $records = $this->findArchived($tab, $ids);
 
         if ($records->isEmpty()) {
-            return back()->withErrors(['purge' => 'No archived accounts were selected for purge.']);
+            return $this->toTab($request, $tab)->withErrors(['purge' => 'No archived accounts were selected for purge.']);
         }
 
         $retention = $this->retention();
@@ -168,7 +168,7 @@ class AccountArchiveController extends Controller implements HasMiddleware
         // the fact, and this action cannot be undone.
         foreach ($records as $record) {
             if ($blocker = $this->purgeBlocker($tab, $record, $retention)) {
-                return back()->withErrors(['purge' => $blocker]);
+                return $this->toTab($request, $tab)->withErrors(['purge' => $blocker]);
             }
         }
 
@@ -179,10 +179,10 @@ class AccountArchiveController extends Controller implements HasMiddleware
                     : $this->archive->purgeUser($record, $request->user()->id);
             }
         } catch (ValidationException $e) {
-            return back()->withErrors(['purge' => collect($e->errors())->flatten()->first()]);
+            return $this->toTab($request, $tab)->withErrors(['purge' => collect($e->errors())->flatten()->first()]);
         }
 
-        return back()->with('success', $records->count().' archived account(s) purged permanently.');
+        return $this->toTab($request, $tab)->with('success', $records->count().' archived account(s) purged permanently.');
     }
 
     /* ----------------------------------------------------------------------
@@ -387,6 +387,21 @@ class AccountArchiveController extends Controller implements HasMiddleware
         ]);
 
         return [$validated['type'], $validated['ids']];
+    }
+
+    /**
+     * Return to the tab the action was taken on. Not back(): when the browser
+     * sends no Referer, back() falls to the session's last full page load, which
+     * is often the Deletion Requests tab, not the tab currently open.
+     */
+    private function toTab(Request $request, string $tab)
+    {
+        return redirect()->route('account-archive.index', array_filter([
+            'tab' => $tab,
+            'search' => trim((string) $request->input('search', '')),
+            'per_page' => $request->integer('per_page') ?: null,
+            'page' => $request->integer('page') > 1 ? $request->integer('page') : null,
+        ]));
     }
 
     private function authorizeAction(Request $request, string $tab, string $action): void

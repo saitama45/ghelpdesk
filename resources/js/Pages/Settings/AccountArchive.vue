@@ -110,6 +110,13 @@ const changePerPage = (value) => {
     reload({ page: 1 });
 };
 
+// Sent with every action so the server redirects back to this exact list view.
+const listState = () => ({
+    search: search.value,
+    per_page: perPage.value,
+    page: props.records?.current_page || 1,
+});
+
 const linkedNote = (record) => {
     if (!record.linked) return '';
     return record.linked.archived
@@ -122,7 +129,7 @@ const linkedNote = (record) => {
  * ------------------------------------------------------------------ */
 
 const submitArchive = (ids, message) => {
-    post(route('account-archive.archive'), { ids }, {
+    post(route('account-archive.archive'), { ids, ...listState() }, {
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => { selectedIds.value = []; },
@@ -167,7 +174,7 @@ const archiveSelected = async () => {
  * ------------------------------------------------------------------ */
 
 const submitRestore = (ids, message) => {
-    post(route('account-archive.restore'), { type: props.tab, ids }, {
+    post(route('account-archive.restore'), { type: props.tab, ids, ...listState() }, {
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => { selectedIds.value = []; },
@@ -227,7 +234,7 @@ const selectedPurgeBlockedReasons = computed(() =>
 
 const submitPurge = (ids, message) => {
     destroy(route('account-archive.purge'), {
-        data: { type: props.tab, ids },
+        data: { type: props.tab, ids, ...listState() },
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => { selectedIds.value = []; },

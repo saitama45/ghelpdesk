@@ -71,6 +71,23 @@ class AccountArchiveDeletionRequestsTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->where('can.archive_requests', true));
     }
 
+    public function test_a_restore_returns_to_the_tab_it_was_made_on_not_the_referer(): void
+    {
+        // Nothing is archived, so the restore finds no record and only its
+        // redirect is exercised. The Referer points at Deletion Requests, which
+        // is where back() used to bounce a Loyalty Customers restore.
+        $this->actingAs($this->staff(['settings.view', 'stamps.edit']))
+            ->withHeader('Referer', url('/settings/account-archive?tab=requests'))
+            ->post('/settings/account-archive/restore', [
+                'type' => 'customers',
+                'ids' => [999999],
+                'search' => 'harold',
+                'per_page' => 25,
+                'page' => 1,
+            ])
+            ->assertRedirect(route('account-archive.index', ['tab' => 'customers', 'search' => 'harold', 'per_page' => 25]));
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────
 
     private function staff(array $permissions): User
