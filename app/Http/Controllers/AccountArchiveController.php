@@ -136,16 +136,29 @@ class AccountArchiveController extends Controller implements HasMiddleware
         $this->authorizeAction($request, $tab, 'restore');
 
         $restored = 0;
+        $stranded = [];
 
         foreach ($this->findArchived($tab, $ids) as $record) {
-            $tab === 'customers'
+            $result = $tab === 'customers'
                 ? $this->archive->restoreCustomer($record)
                 : $this->archive->restoreUser($record);
             $restored++;
+
+            // Archiving frees the login's email so it can be registered again.
+            // If somebody took it in the meantime the address cannot come back,
+            // and the restored login therefore cannot sign in — say so, rather
+            // than reporting a success that leaves an unusable account behind.
+            if (($result['email_reclaimed'] ?? true) === false) {
+                $stranded[] = $result['user'] ?? $result['customer'];
+            }
         }
 
         if ($restored === 0) {
             return $this->toTab($request, $tab)->withErrors(['restore' => 'No archived accounts were selected for restore.']);
+        }
+
+        if ($stranded !== []) {
+            return $this->toTab($request, $tab)->with('warning', "{$restored} archived account(s) restored, but ".implode(', ', $stranded).' could not get their original email address back — another account is using it now, so they cannot sign in until that account is archived and this one is restored again.');
         }
 
         return $this->toTab($request, $tab)->with('success', "{$restored} archived account(s) restored, together with any linked record.");

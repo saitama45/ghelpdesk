@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\Customer;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\AccountArchiveService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
@@ -150,6 +151,27 @@ class AccountArchiveDeletionRequestsTest extends TestCase
             'email' => $email,
             'customer_id' => $customer->id,
         ]);
+    }
+
+    public function test_restore_warns_when_the_email_cannot_come_back(): void
+    {
+        $member = $this->member('taken@example.com');
+        app(AccountArchiveService::class)->archiveUser($member, null);
+
+        // Somebody registers with the freed address before the restore.
+        User::factory()->create(['email' => 'taken@example.com', 'customer_id' => null]);
+
+        $customer = Customer::withTrashed()->find($member->customer_id);
+
+        $this->actingAs($this->staff(['settings.view', 'stamps.edit']))
+            ->post('/settings/account-archive/restore', [
+                'type' => 'customers',
+                'ids' => [$customer->id],
+            ])
+            ->assertRedirect(route('account-archive.index', ['tab' => 'customers']))
+            ->assertSessionHas('warning');
+
+        $this->assertFalse(session()->has('success'));
     }
 
     private function requestTicket(User $member, string $status = 'open'): Ticket
