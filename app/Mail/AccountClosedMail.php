@@ -23,9 +23,14 @@ class AccountClosedMail extends Mailable
 {
     use Queueable, SerializesModels;
 
+    /**
+     * @param  string  $retention  how long until the account is deleted for
+     *                             good, e.g. "1 month" (Account Retention)
+     */
     public function __construct(
         public User $user,
         public string $ticketKey,
+        public string $retention,
     ) {}
 
     public function envelope(): Envelope

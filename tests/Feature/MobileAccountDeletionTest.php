@@ -15,6 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\Sanctum;
+use Mockery\MockInterface;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -108,6 +109,38 @@ class MobileAccountDeletionTest extends TestCase
 
         Mail::assertSent(AccountClosedMail::class);
         Mail::assertNotSent(AccountDeletionRequestedMail::class);
+    }
+
+    public function test_the_closure_email_goes_to_the_members_address_not_the_archive_tombstone(): void
+    {
+        Mail::fake();
+        $user = $this->member();
+        Sanctum::actingAs($user);
+
+        // Only what the archive does to the model in hand — releaseEmail's
+        // tombstone — without the soft delete itself.
+        $this->mock(AccountArchiveService::class, function (MockInterface $mock) {
+            $mock->shouldReceive('archiveUser')->once()->andReturnUsing(function (User $member) {
+                $member->email = "deleted-{$member->id}@archived.invalid";
+
+                return ['user' => $member->name, 'customer' => null];
+            });
+            $mock->shouldReceive('retention')->andReturn(['label' => '1 month']);
+        });
+
+        $this->deleteJson('/api/account', ['password' => 'Str0ng!pass'])->assertOk();
+
+        Mail::assertSent(AccountClosedMail::class, fn (AccountClosedMail $mail) => $mail->hasTo('member@example.test'));
+        Mail::assertNotSent(AccountClosedMail::class, fn (AccountClosedMail $mail) => $mail->hasTo("deleted-{$user->id}@archived.invalid"));
+    }
+
+    public function test_the_closure_email_states_when_the_account_is_deleted_for_good(): void
+    {
+        $html = (new AccountClosedMail($this->member(), 'TGI-5404', '1 month'))->render();
+
+        $this->assertStringContainsString('permanently deleted after 1 month', $html);
+        $this->assertStringContainsString('reply to this email and we can restore it', $html);
+        $this->assertStringContainsString('TGI-5404', $html);
     }
 
     public function test_every_token_is_revoked_not_just_the_calling_one(): void

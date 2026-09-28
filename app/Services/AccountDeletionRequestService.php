@@ -126,8 +126,8 @@ class AccountDeletionRequestService
 
         $lines[] = '';
         $lines[] = $inApp
-            ? 'ALREADY CLOSED — the account and its loyalty customer record were archived and every session revoked at the moment the member confirmed. Nothing to archive here. It becomes purge-eligible after the retention period, from Settings → Account Archive → Loyalty Customers.'
-            : 'Process it on Settings → Account Archive → Deletion Requests (archive now, purge after the retention period).';
+            ? 'ALREADY CLOSED — the account and its loyalty customer record were archived and every session revoked at the moment the member confirmed. Nothing to archive here. It is deleted automatically once the retention period passes (anonymized instead if it holds reward redemptions). To undo it before then, restore it from Settings → Account Archive → Loyalty Customers.'
+            : 'Archive it on Settings → Account Archive → Loyalty Customers (Pending request). It is then deleted automatically once the retention period passes.';
 
         return implode("\n", $lines);
     }

@@ -3,9 +3,12 @@
 namespace App\Services;
 
 use App\Models\Customer;
+use App\Models\Setting;
 use App\Models\User;
 use App\Support\UserDeletionBlockers;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -22,12 +25,16 @@ use Illuminate\Validation\ValidationException;
  * no customer (invisible in Stamps but still able to sign in) or a customer with
  * a dangling login.
  *
- * Nothing here is destructive except `purge*`, which is reachable only from
- * Settings → Account Archive, only after the retention window, and only with
- * both `settings.edit` and the module's own delete permission.
+ * Nothing here is destructive except `purge*` and `anonymizeCustomer`. Both run
+ * only after the retention window: by hand from Settings → Account Archive
+ * (with `settings.edit` and the module's own delete permission), and for
+ * loyalty customers nightly from `accounts:purge-expired`.
  */
 class AccountArchiveService
 {
+    /** What an anonymized customer row is called once the person is erased. */
+    public const ANONYMIZED_NAME = 'Deleted member';
+
     public function __construct(private UserDeletionBlockers $blockers) {}
 
     /* ----------------------------------------------------------------------
@@ -53,6 +60,52 @@ class AccountArchiveService
     public function userFor(Customer $customer): ?User
     {
         return User::withTrashed()->where('customer_id', $customer->id)->first();
+    }
+
+    /* ----------------------------------------------------------------------
+     | Retention
+     * ------------------------------------------------------------------- */
+
+    /**
+     * How long an archived account is kept before it is deleted for good
+     * (Settings → Account Retention). `cutoff` is the latest archive time that
+     * has already served it.
+     *
+     * @return array{value: int, unit: string, label: string, cutoff: Carbon}
+     */
+    public function retention(): array
+    {
+        $value = max(1, (int) Setting::get('account_retention_value', 6));
+        $unit = Setting::get('account_retention_unit', 'months');
+        $unit = in_array($unit, ['months', 'years'], true) ? $unit : 'months';
+
+        $cutoff = now('Asia/Manila');
+        $cutoff = $unit === 'years' ? $cutoff->subYears($value) : $cutoff->subMonths($value);
+
+        $unitLabel = $value === 1 ? rtrim($unit, 's') : $unit;
+
+        return [
+            'value' => $value,
+            'unit' => $unit,
+            'label' => "{$value} {$unitLabel}",
+            'cutoff' => $cutoff,
+        ];
+    }
+
+    /**
+     * Archived customers past the retention window that still hold personal
+     * data — the queue `accounts:purge-expired` works through each night.
+     * Anonymized rows are left out: they have nothing personal left to remove.
+     *
+     * @return Collection<int, Customer>
+     */
+    public function expiredArchivedCustomers(\DateTimeInterface $cutoff): Collection
+    {
+        return Customer::onlyTrashed()
+            ->whereNull('anonymized_at')
+            ->where('deleted_at', '<=', $cutoff)
+            ->orderBy('deleted_at')
+            ->get();
     }
 
     /* ----------------------------------------------------------------------
@@ -304,17 +357,23 @@ class AccountArchiveService
     {
         $redemptions = $customer->redemptions()->count();
         if ($redemptions > 0) {
-            return "\"{$customer->name}\" has {$redemptions} reward redemption(s), which are kept as financial records. This account can stay archived but cannot be purged.";
+            return "\"{$customer->name}\" has {$redemptions} reward redemption(s), which are kept as financial records, so it cannot be purged. Once the retention period passes, its name, email and phone are erased automatically instead.";
         }
 
         if (Schema::hasTable('voucher_redemptions')) {
             $voucherRedemptions = $customer->voucherRedemptions()->count();
             if ($voucherRedemptions > 0) {
-                return "\"{$customer->name}\" has {$voucherRedemptions} voucher payment(s), which are kept as financial records. This account can stay archived but cannot be purged.";
+                return "\"{$customer->name}\" has {$voucherRedemptions} voucher payment(s), which are kept as financial records, so it cannot be purged. Once the retention period passes, its name, email and phone are erased automatically instead.";
             }
         }
 
         return null;
+    }
+
+    /** Whether this customer holds rows that must outlive them (see above). */
+    public function holdsFinancialRecords(Customer $customer): bool
+    {
+        return $this->customerDataBlocker($customer) !== null;
     }
 
     /**
@@ -329,30 +388,85 @@ class AccountArchiveService
         DB::transaction(function () use ($user, $actorId) {
             $customer = $this->customerFor($user);
 
-            $this->releaseUserReferences($user);
-
-            $remaining = $this->blockers->for($user);
-
-            if (! empty($remaining)) {
-                throw ValidationException::withMessages([
-                    'purge' => $this->blockers->message($user, $remaining),
-                ]);
-            }
-
-            Log::warning('User account purged permanently', [
-                'user_id' => $user->id,
-                'email' => $user->email,
-                'customer_id' => $customer?->id,
-                'purged_by' => $actorId,
-            ]);
-
             // The login holds the FK into customers, so it must go first.
-            $user->forceDelete();
+            $this->forceDeleteLogin($user, $actorId);
 
             if ($customer && $customer->trashed()) {
                 $this->purgeCustomerRow($customer, $actorId);
             }
         });
+    }
+
+    /**
+     * Erase the person from a customer record that has to outlive them.
+     *
+     * Reward redemptions and voucher payments are financial records, so a
+     * customer holding any cannot be purged (`customerDataBlocker`). Keeping
+     * their name, email and phone alongside those rows for ever would make the
+     * deletion the app promises a mere deactivation, though — so once retention
+     * passes the login is removed for good and the customer row keeps only what
+     * the records hang off: its id, and the stamp cards the redemptions came
+     * from, none of which identify the member any more.
+     */
+    public function anonymizeCustomer(Customer $customer, ?int $actorId): void
+    {
+        if (! $customer->trashed()) {
+            throw ValidationException::withMessages([
+                'anonymize' => "\"{$customer->name}\" is not archived.",
+            ]);
+        }
+
+        DB::transaction(function () use ($customer, $actorId) {
+            $user = $this->userFor($customer);
+
+            if ($user && ! $user->trashed()) {
+                throw ValidationException::withMessages([
+                    'anonymize' => "\"{$customer->name}\" is linked to the active login \"{$user->email}\". Archive the user first.",
+                ]);
+            }
+
+            if ($user) {
+                $this->forceDeleteLogin($user, $actorId);
+            }
+
+            $customer->forceFill([
+                'name' => self::ANONYMIZED_NAME,
+                'email' => null,
+                'phone' => null,
+                'anonymized_at' => now(),
+            ])->saveQuietly();
+
+            Log::warning('Customer record anonymized; its financial records are kept', [
+                'customer_id' => $customer->id,
+                'purged_by' => $actorId,
+            ]);
+        });
+    }
+
+    /**
+     * Remove a login for good: clear what points at it, refuse if anything is
+     * still in the way, then delete the row. Shared by purge and anonymize.
+     */
+    private function forceDeleteLogin(User $user, ?int $actorId): void
+    {
+        $this->releaseUserReferences($user);
+
+        $remaining = $this->blockers->for($user);
+
+        if (! empty($remaining)) {
+            throw ValidationException::withMessages([
+                'purge' => $this->blockers->message($user, $remaining),
+            ]);
+        }
+
+        Log::warning('User account purged permanently', [
+            'user_id' => $user->id,
+            'email' => $user->archived_email ?? $user->email,
+            'customer_id' => $user->customer_id,
+            'purged_by' => $actorId,
+        ]);
+
+        $user->forceDelete();
     }
 
     /** Permanently remove a customer record and its paired login. */
@@ -457,6 +571,15 @@ class AccountArchiveService
         }
 
         DB::table('manager_user')->where('manager_id', $user->id)->delete();
+
+        // A self-registered member is stamped as the creator of their own
+        // customer row (Api\RegisterController), which the blocker scan then
+        // counts — so no app member could ever be purged. Only that row: any
+        // other customer an account created stays a blocker, as it is for staff.
+        if ($user->customer_id) {
+            DB::table('customers')->where('id', $user->customer_id)->where('created_by', $user->id)->update(['created_by' => null]);
+            DB::table('customers')->where('id', $user->customer_id)->where('updated_by', $user->id)->update(['updated_by' => null]);
+        }
 
         DB::table('users')->where('created_by', $user->id)->update(['created_by' => null]);
         DB::table('users')->where('updated_by', $user->id)->update(['updated_by' => null]);

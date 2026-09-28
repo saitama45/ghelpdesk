@@ -79,7 +79,7 @@ reused rather than duplicated when a member asks twice.
 |---|---|---|
 | Proves ownership with | a one-time code emailed to the address (the requester is anonymous) | the caller's Sanctum token **plus** a re-entered password |
 | Account afterwards | still **open** — the desk archives it | already **archived**, every token revoked |
-| Desk sees it in | Settings → Account Archive → **Deletion Requests** (Stage 1) | nothing to action; the ticket is the record, the pair is under **Loyalty Customers** awaiting purge |
+| Desk sees it in | Settings → Account Archive → Loyalty Customers → **Pending request** (Stage 1) | nothing to action; the ticket is the record, the pair is under **Loyalty Customers → Archived** until Stage 2 |
 | Member is emailed | `AccountDeletionRequestedMail` ("closed within 30 days, reply to cancel") | `AccountClosedMail` ("already closed, reply if this was not you") |
 
 The in-app path closes immediately on purpose: a password re-entered on an authenticated
@@ -90,9 +90,39 @@ the member's phone and customer id, and archiving soft-deletes that row out from
 relation — and refuses any account holding a role, because a staff login must not archive
 itself out of tickets, DTR and the task board with one tap.
 
-Permanent removal is still Stage 2 for both: Settings → Account Archive, after the published
-retention window, which is what `/account-deletion` promises. Keep the endpoint, that page and
-`AccountClosedMail` in step.
+### Stage 2 is automatic (2026-09-28)
+
+Both stores reject a "deletion" that only deactivates, and `/account-deletion` promises
+permanent deletion after the **Account Retention** window — so Stage 2 no longer waits for
+someone to press Purge. **`accounts:purge-expired`** (`app/Console/Commands/PurgeExpiredAccounts.php`,
+scheduled daily 02:00; production runs `schedule:work` from `startup.sh`) takes every archived
+customer past the window and:
+
+- **purges** it with its app login (`AccountArchiveService::purgeCustomer`), or
+- **anonymizes** it when it holds reward redemptions or voucher payments
+  (`anonymizeCustomer`): the login is deleted for good, the customer row keeps its id and stamp
+  cards (the redemptions hang off them) but `name` becomes "Deleted member", `email`/`phone`
+  go NULL and `customers.anonymized_at` is stamped. Anonymized rows drop out of the Account
+  Archive list and out of the nightly query;
+- **skips** a customer whose login is still active (a pair out of step — fix it by hand).
+
+One account failing is logged and does not stop the rest; the run then exits non-zero. Use
+`--dry-run` to see what a run would do. Archived **staff** logins are never touched — purging
+one deletes attendance and schedules, which stays a human decision on the Users tab.
+
+`purgeUser` used to be refused for **every** self-registered member: `Api\RegisterController`
+stamps the member as `created_by`/`updated_by` of their own customer row, the blocker scan
+counted it, and `releaseUserReferences` never cleared it. It now clears exactly that row (any
+other customer the account created still blocks, as for staff).
+
+Keep the endpoint, `/account-deletion`, `AccountClosedMail` (which quotes the retention label)
+and the Account Retention setting in step: shortening the window deletes sooner.
+
+**Deliberately NOT done:** refusing sign-up for an email whose account is archived, or an
+in-app "request restore" button (considered and reverted 2026-09-28). A reviewer tests
+5.1.1(v) by deleting and signing up again with the same address, and a restore offer reads as
+"it was never deleted". A member who changes their mind replies to the closure email and the
+desk restores within the window — before they re-register, or the email cannot be reclaimed.
 
 ### Archiving frees the email address
 

@@ -51,7 +51,7 @@ const tabs = [
     { id: 'business_hours', name: 'Business Hours', icon: ClockIcon, description: 'Define operational hours and working days for SLA calculations.' },
     { id: 'sla_targets', name: 'SLA Targets', icon: ShieldCheckIcon, description: 'Configure response and resolution targets per ticket priority.' },
     { id: 'ticket_retention', name: 'Ticket Retention', icon: ArchiveBoxIcon, description: 'Control when archived tickets become eligible for permanent purge.' },
-    { id: 'account_retention', name: 'Account Retention', icon: ArchiveBoxIcon, description: 'Control when archived users and loyalty customers become eligible for permanent purge.' },
+    { id: 'account_retention', name: 'Account Retention', icon: ArchiveBoxIcon, description: 'Control when archived loyalty customers are deleted automatically, and when archived users become eligible for purge.' },
     { id: 'integrations', name: 'Integrations', icon: MapIcon, description: 'External API keys and third-party services.' },
     { id: 'thresholds', name: 'Health Thresholds', icon: ChartBarIcon, description: 'Ticket count limits and status labels.' },
     { id: 'sidebar_layout', name: 'Sidebar Layout', icon: Bars3BottomLeftIcon, description: 'Drag to reorder sidebar sections and sub-menu items.' },
@@ -1227,14 +1227,14 @@ const syncEmails = () => {
                                 <section>
                                     <h3 class="text-xs font-black text-red-600 uppercase tracking-widest mb-6 flex items-center">
                                         <ArchiveBoxIcon class="w-4 h-4 mr-2" />
-                                        Archived Account Purge Eligibility
+                                        Archived Account Retention
                                     </h3>
 
                                     <div class="max-w-xl space-y-6">
                                         <div class="p-4 bg-red-50 rounded-xl border border-red-100">
-                                            <p class="text-sm font-black text-red-900">Manual purge retention</p>
+                                            <p class="text-sm font-black text-red-900">Loyalty customers are deleted automatically</p>
                                             <p class="mt-1 text-xs text-red-700 leading-relaxed">
-                                                Deleting a user or a loyalty customer archives them instead of removing the record, and archives the linked account on the other page too. They stay restorable until they are older than this window. Purging is always manual and confirmed from the Account Archive page.
+                                                Deleting a user or a loyalty customer archives them instead of removing the record, and archives the linked account on the other page too. They stay restorable until they are older than this window. After that, archived loyalty customers and their app logins are deleted by a nightly job &mdash; or anonymized when they hold reward redemptions or voucher payments. This is the period the public account-deletion page and the app's closure email promise, so shortening it deletes sooner. Archived staff logins are only ever purged by hand from the Account Archive page.
                                             </p>
                                         </div>
 

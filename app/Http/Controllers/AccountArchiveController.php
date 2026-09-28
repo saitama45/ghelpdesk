@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use App\Models\Scopes\ActiveEntityScope;
-use App\Models\Setting;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Services\AccountArchiveService;
@@ -33,7 +32,11 @@ use Inertia\Inertia;
  *    app); archiving them is Stage 1. "Archived" rows are archived customers,
  *    restored or purged from here. A mobile-app member is a customer plus an
  *    app login, listed once by its customer id; every action works on the pair.
+ *    Stage 2 no longer waits for this page: `accounts:purge-expired` purges
+ *    (or anonymizes) them nightly once retention passes, and anonymized rows
+ *    drop out of the list.
  *  - Users: archived staff logins only (soft deleted from User Management).
+ *    These are still purged only by hand.
  */
 class AccountArchiveController extends Controller implements HasMiddleware
 {
@@ -53,7 +56,7 @@ class AccountArchiveController extends Controller implements HasMiddleware
     public function index(Request $request)
     {
         [$tab, $status] = $this->resolveView($request);
-        $retention = $this->retention();
+        $retention = $this->archive->retention();
         $search = trim((string) $request->query('search', ''));
         $perPage = $request->integer('per_page', 10);
 
@@ -62,7 +65,7 @@ class AccountArchiveController extends Controller implements HasMiddleware
             : $this->archivedUsers($search, $perPage, $retention);
 
         $pending = $this->loyaltyCustomersQuery('pending')->count();
-        $archived = Customer::onlyTrashed()->count();
+        $archived = $this->loyaltyCustomersQuery('archived')->count();
 
         return Inertia::render('Settings/AccountArchive', [
             'tab' => $tab,
@@ -180,7 +183,7 @@ class AccountArchiveController extends Controller implements HasMiddleware
             return $this->toTab($request, $tab)->withErrors(['purge' => 'No archived accounts were selected for purge.']);
         }
 
-        $retention = $this->retention();
+        $retention = $this->archive->retention();
 
         // Refuse the whole batch when any row is blocked, the way the ticket
         // archive does — a partial purge is impossible to reason about after
@@ -286,10 +289,14 @@ class AccountArchiveController extends Controller implements HasMiddleware
         $pending = fn (Builder $q) => $q->whereNull('deleted_at')
             ->whereIn('id', $this->deletionRequestsQuery()->select('customer_id'));
 
+        // An anonymized row is no longer anyone's account — only the anchor for
+        // financial records (AccountArchiveService::anonymizeCustomer).
+        $archived = fn (Builder $q) => $q->whereNotNull('deleted_at')->whereNull('anonymized_at');
+
         return Customer::withTrashed()->where(fn (Builder $q) => match ($status) {
             'pending' => $pending($q),
-            'archived' => $q->whereNotNull('deleted_at'),
-            default => $q->whereNotNull('deleted_at')->orWhere(fn (Builder $q) => $pending($q)),
+            'archived' => $archived($q),
+            default => $q->where(fn (Builder $q) => $archived($q))->orWhere(fn (Builder $q) => $pending($q)),
         });
     }
 
@@ -474,7 +481,7 @@ class AccountArchiveController extends Controller implements HasMiddleware
     private function findArchived(string $tab, array $ids): Collection
     {
         return $tab === 'customers'
-            ? Customer::onlyTrashed()->whereIn('id', $ids)->get()
+            ? Customer::onlyTrashed()->whereNull('anonymized_at')->whereIn('id', $ids)->get()
             : User::onlyTrashed()->whereNull('customer_id')->whereIn('id', $ids)->get();
     }
 
@@ -495,25 +502,6 @@ class AccountArchiveController extends Controller implements HasMiddleware
         }
 
         return null;
-    }
-
-    private function retention(): array
-    {
-        $value = max(1, (int) Setting::get('account_retention_value', 6));
-        $unit = Setting::get('account_retention_unit', 'months');
-        $unit = in_array($unit, ['months', 'years'], true) ? $unit : 'months';
-
-        $cutoff = now('Asia/Manila');
-        $cutoff = $unit === 'years' ? $cutoff->subYears($value) : $cutoff->subMonths($value);
-
-        $unitLabel = $value === 1 ? rtrim($unit, 's') : $unit;
-
-        return [
-            'value' => $value,
-            'unit' => $unit,
-            'label' => "{$value} {$unitLabel}",
-            'cutoff' => $cutoff,
-        ];
     }
 
     private function purgeAvailableAt($deletedAt, array $retention)

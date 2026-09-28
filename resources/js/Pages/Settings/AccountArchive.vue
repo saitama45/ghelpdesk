@@ -333,13 +333,13 @@ const purgeSelected = async () => {
                     <div>
                         <div class="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-red-600">
                             <ExclamationTriangleIcon class="h-4 w-4" />
-                            Manual Purge Retention
+                            Account Retention
                         </div>
                         <h2 class="mt-2 text-xl font-black text-gray-900 dark:text-gray-100">
-                            Archived accounts become purge-eligible after {{ retention.label }}.
+                            Archived loyalty customers are deleted automatically after {{ retention.label }}.
                         </h2>
                         <p class="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                            Current cutoff: archived on or before {{ retention.cutoff }}. Deleting a user or a loyalty customer archives both sides of the pair, and restoring either side brings both back.
+                            Current cutoff: archived on or before {{ retention.cutoff }}. Each night they are purged with their app login &mdash; or, when they hold reward redemptions or voucher payments, anonymized so the financial records stay without the name, email or phone. Archived staff logins are purged only by hand. Deleting a user or a loyalty customer archives both sides of the pair, and restoring either side brings both back.
                         </p>
                     </div>
                     <Link
@@ -592,8 +592,8 @@ const purgeSelected = async () => {
                                 </span>
                                 <div class="mt-2 text-xs text-gray-500 dark:text-gray-300">
                                     <span v-if="record.purge_blocker">{{ record.purge_blocker }}</span>
-                                    <span v-else-if="!record.purge_eligible">Available {{ record.purge_available_at }}</span>
-                                    <span v-else>Permanent purge is available.</span>
+                                    <span v-else-if="!record.purge_eligible">{{ isCustomers ? 'Deleted automatically' : 'Available' }} {{ record.purge_available_at }}</span>
+                                    <span v-else>{{ isCustomers ? 'Due for tonight\'s automatic deletion. ' : '' }}Permanent purge is available.</span>
                                 </div>
                             </div>
                         </td>

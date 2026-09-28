@@ -28,6 +28,7 @@ class Customer extends Model
         'updated_by' => 'integer',
         'deleted_by' => 'integer',
         'deleted_at' => 'datetime',
+        'anonymized_at' => 'datetime',
     ];
 
     public function stampCards()

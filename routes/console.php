@@ -21,3 +21,7 @@ Schedule::command('tickets:process-scheduled')->everyMinute();
 Schedule::command('presence:update-stale')->everyMinute();
 Schedule::command('payments:send-due-reminders')->dailyAt('08:00');
 Schedule::command('notifications:due-soon')->dailyAt('07:30');
+// Stage 2 of a member's account deletion: archived loyalty customers past the
+// Account Retention window are purged (or anonymized, if they hold financial
+// records). The store listings and /account-deletion promise this happens.
+Schedule::command('accounts:purge-expired')->dailyAt('02:00')->withoutOverlapping();

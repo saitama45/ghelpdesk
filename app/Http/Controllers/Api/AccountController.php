@@ -72,6 +72,11 @@ class AccountController extends Controller
             ], 422);
         }
 
+        // Read before the archive, which parks the address in `archived_email`
+        // and writes a `deleted-{id}@archived.invalid` tombstone into `email`
+        // on this same model — mailing `$user->email` afterwards lands nowhere.
+        $email = $user->email;
+
         // The ticket is raised BEFORE the archive: it reads the member's
         // customer record for the phone number and customer id, and archiving
         // soft-deletes that row out from under the relation.
@@ -93,7 +98,7 @@ class AccountController extends Controller
         $user->tokens()->delete();
 
         try {
-            Mail::to($user->email)->send(new AccountClosedMail($user, $ticket->ticket_key));
+            Mail::to($email)->send(new AccountClosedMail($user, $ticket->ticket_key, $archive->retention()['label']));
         } catch (\Throwable $e) {
             // The account really is closed; a failed notification must not turn
             // that into an error the member sees and retries.

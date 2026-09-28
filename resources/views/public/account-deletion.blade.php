@@ -228,7 +228,7 @@
         </ul>
 
         <h3>Stage 2 &mdash; your account is permanently deleted (after {{ $retention }})</h3>
-        <p style="margin:0 0 8px">Once your account has been closed for <strong>{{ $retention }}</strong>, our team permanently deletes it and the data listed below, unless one of the exceptions further down applies. The waiting period protects you against a mistaken or fraudulent request: if you change your mind before then, contact us and we can reopen your account with your stamps intact.</p>
+        <p style="margin:0 0 8px">Once your account has been closed for <strong>{{ $retention }}</strong>, it is permanently deleted automatically, together with the data listed below, unless the exception further down applies. The waiting period protects you against a mistaken or fraudulent request: if you change your mind before then, contact us and we can reopen your account with your stamps intact.</p>
 
         <div class="card">
             <p style="margin:0"><strong>Important:</strong> once your account is permanently deleted, any unredeemed stamps and any reward on a partially filled card are lost. They cannot be restored, and a new account starts from zero.</p>
@@ -250,7 +250,7 @@
         </table>
 
         <h3>Exception: accounts that have redeemed a reward</h3>
-        <p>A redeemed reward, or a voucher used as payment, is a settled financial transaction &mdash; an item left a store's inventory &mdash; and we keep it as a financial record. If your account has any, it is still <strong>closed</strong> exactly as described in Stage 1: you cannot sign in and your member QR code stops working. But it is <strong>not permanently deleted</strong>. The archived account, including your name, email address, mobile number and redemption history, stays in the restricted archive and is not erased.</p>
+        <p>A redeemed reward, or a voucher used as payment, is a settled financial transaction &mdash; an item left a store's inventory &mdash; and we keep it as a financial record. If your account has any, it is still <strong>closed</strong> exactly as described in Stage 1: you cannot sign in and your member QR code stops working. At Stage 2 your login and password are deleted and your <strong>name, email address and mobile number are erased</strong>. What remains is the redemption history and the stamp cards those rewards were redeemed from, kept as financial records and no longer linked to you.</p>
 
         <h3>Kept, and for how long</h3>
         <table>
@@ -261,8 +261,8 @@
                     <td>{{ ucfirst($retention) }} from the date it was closed, in the restricted archive. Then permanently deleted.</td>
                 </tr>
                 <tr>
-                    <td>Accounts with reward redemptions or voucher payments, including the member&rsquo;s name, email address, mobile number and redemption history</td>
-                    <td>Kept in the restricted archive as financial records. They are not erased.</td>
+                    <td>Reward redemptions and voucher payments, with the stamp cards they came from</td>
+                    <td>Kept as financial records. At Stage 2 your name, email address and mobile number are erased from them, so they no longer identify you.</td>
                 </tr>
                 <tr>
                     <td>A server log entry recording that your account was permanently deleted, including the email address it was registered with</td>
