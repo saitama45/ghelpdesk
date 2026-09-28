@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\OtpCodeMail;
 use App\Models\OtpCode;
 use App\Models\User;
+use App\Support\AppReviewAccounts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -146,19 +147,15 @@ class OtpController extends Controller
      * everyone else.
      *
      * Both halves must be configured (`APP_REVIEW_EMAIL` + `APP_REVIEW_OTP`),
-     * the address must match exactly one account, and the code must be the same
-     * length as a real one so the entry screen behaves identically.
+     * the member's address must be one of the listed review accounts (see
+     * `AppReviewAccounts`), and the code must be the same length as a real one
+     * so the entry screen behaves identically.
      */
     private function reviewCodeFor(User $user): ?string
     {
-        $email = config('services.app_review.email');
         $code = config('services.app_review.otp');
 
-        if (! $email || ! $code) {
-            return null;
-        }
-
-        if (! hash_equals(mb_strtolower((string) $email), mb_strtolower((string) $user->email))) {
+        if (! $code || ! AppReviewAccounts::includes($user->email)) {
             return null;
         }
 

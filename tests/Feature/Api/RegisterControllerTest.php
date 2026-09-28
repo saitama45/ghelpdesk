@@ -129,6 +129,26 @@ class RegisterControllerTest extends TestCase
         $this->assertSame(1, User::where('email', 'jane@example.com')->count());
     }
 
+    public function test_any_listed_review_account_may_register_again_after_deletion(): void
+    {
+        config(['services.app_review.email' => 'keeper@example.com, Jane@Example.com']);
+        $this->archivedMember('jane@example.com');
+
+        $this->postJson('/api/register', $this->validPayload)->assertStatus(201);
+        $this->assertSame(1, User::where('email', 'jane@example.com')->count());
+    }
+
+    public function test_a_list_that_only_mentions_the_address_in_passing_does_not_exempt_it(): void
+    {
+        // Exact entries only — no substring or partial matches.
+        config(['services.app_review.email' => 'notjane@example.com,jane@example.com.ph']);
+        $this->archivedMember('jane@example.com');
+
+        $this->postJson('/api/register', $this->validPayload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['email' => RegisterController::CLOSED_ACCOUNT_MESSAGE]);
+    }
+
     private function archivedWalkIn(string $address): Customer
     {
         $customer = (new Customer())->forceFill([

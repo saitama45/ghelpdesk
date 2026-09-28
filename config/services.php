@@ -66,8 +66,10 @@ return [
     // account here makes `Api\OtpController` issue the FIXED code below instead
     // of mailing a random one — the verification step still runs exactly as it
     // does for a member, it just has a code the reviewer was given in App Store
-    // Connect. Leave either value unset in production-for-members deployments
-    // and the allowlist is off.
+    // Connect. `email` may list several accounts separated by commas — the
+    // review notes give one to keep and one to delete (`AppReviewAccounts`).
+    // Leave either value unset in production-for-members deployments and the
+    // allowlist is off.
     'app_review' => [
         'email' => env('APP_REVIEW_EMAIL'),
         'otp' => env('APP_REVIEW_OTP'),

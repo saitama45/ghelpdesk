@@ -133,8 +133,8 @@ login after the retention window (both force-delete it). A member who changes th
 replies to the closure email, which now says the address cannot sign up until then, and the
 desk restores within the window.
 
-The one exemption is the store-review demo account (`services.app_review.email`): a reviewer
-tests 5.1.1(v) by deleting and signing up again. The accepted risk is that a reviewer who
+The one exemption is the store-review demo accounts (`services.app_review.email`, read through
+`AppReviewAccounts`): a reviewer tests 5.1.1(v) by deleting and signing up again. The accepted risk is that a reviewer who
 deletes an account under their **own** address and tries it again is refused. Code cannot
 tell that reviewer from a member, so the mitigation is the App Review notes: point reviewers
 at the demo account and state that a deleted account's email is held for the retention
@@ -169,14 +169,22 @@ which also searches both columns.
 
 ### Letting a store reviewer sign in
 
-**`APP_REVIEW_EMAIL` + `APP_REVIEW_OTP`** (`services.app_review.*`) name one demo account that
-receives the fixed code instead of a mailed one at `POST /api/otp/send`. A reviewer signs in on
+**`APP_REVIEW_EMAIL` + `APP_REVIEW_OTP`** (`services.app_review.*`) name the demo accounts that
+receive the fixed code instead of a mailed one at `POST /api/otp/send`. A reviewer signs in on
 a device with no access to the demo mailbox, so without this the review ends at the
 verification screen. Everything else about the step is unchanged — the code is still stored
 hashed, still scoped to `OtpCode::PURPOSE_LOGIN`, still expires in 5 minutes, still counts
 attempts — and leaving either value unset turns the allowlist off.
 
-Covered by `tests/Feature/MobileAccountDeletionTest.php`. The login-free public pages the
+`APP_REVIEW_EMAIL` takes a **comma-separated list** (2026-09-28). Read it only through
+`App\Support\AppReviewAccounts` (trimmed, case-insensitive, exact entries — never a substring
+match), which both `Api\OtpController` and `Api\RegisterController` use. The review notes name
+two accounts: one pre-loaded with stamps that must not be deleted (a reviewer cannot earn
+stamps, only counter staff can), and one for the 5.1.1(v) deletion test. That keeps a
+reviewer's deletion from wiping the demo data the next review depends on.
+
+Covered by `tests/Feature/MobileAccountDeletionTest.php` and
+`tests/Feature/Api/RegisterControllerTest.php`. The login-free public pages the
 stores require are `/privacy-policy` and `/account-deletion` (`routes/web.php`).
 
 ## Mail configuration — important

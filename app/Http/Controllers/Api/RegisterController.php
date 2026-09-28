@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\User;
 use App\Services\AccountArchiveService;
+use App\Support\AppReviewAccounts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -124,13 +125,12 @@ class RegisterController extends Controller
      * while it is archived; `accounts:purge-expired` purges or anonymizes it
      * once retention passes, and the address is free again after that.
      *
-     * The store-review demo account (`services.app_review.email`) is exempt: a
-     * reviewer tests 5.1.1(v) by deleting it and signing up again.
+     * The store-review demo accounts (`AppReviewAccounts`) are exempt: a
+     * reviewer tests 5.1.1(v) by deleting one and signing up again.
      */
     private function closedAccountExists(string $email): bool
     {
-        $reviewEmail = config('services.app_review.email');
-        if ($reviewEmail && strcasecmp($reviewEmail, $email) === 0) {
+        if (AppReviewAccounts::includes($email)) {
             return false;
         }
 

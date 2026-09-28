@@ -306,6 +306,26 @@ class MobileAccountDeletionTest extends TestCase
             ->assertJsonPath('verified', true);
     }
 
+    public function test_every_listed_review_account_gets_the_fixed_code(): void
+    {
+        Mail::fake();
+        // The review notes name two accounts — one to keep, one to delete.
+        config([
+            'services.app_review.email' => 'keeper@example.test , Member@Example.test',
+            'services.app_review.otp' => '424242',
+        ]);
+
+        $user = $this->member();
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/otp/send')->assertOk();
+        Mail::assertNothingSent();
+
+        $this->postJson('/api/otp/verify', ['code' => '424242'])
+            ->assertOk()
+            ->assertJsonPath('verified', true);
+    }
+
     public function test_ordinary_members_still_get_a_mailed_random_code(): void
     {
         Mail::fake();
