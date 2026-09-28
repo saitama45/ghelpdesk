@@ -366,7 +366,8 @@ class DefaultFormService implements FormServiceContract
                 "Request #{$record->id} is awaiting your approval (Level {$targetLevel}).",
                 route('dynamic-form.show', ['slug' => $formDefinition->slug, 'id' => $record->id], false),
                 'form_record:' . $record->id,
-                'warning'
+                'warning',
+                (int) $targetLevel
             );
         }
 

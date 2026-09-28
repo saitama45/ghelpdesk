@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\AttendanceLog;
 use App\Models\Schedule;
+use App\Models\ScheduleChangeRequest;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Tests\TestCase;
@@ -180,6 +182,102 @@ class NotificationSummaryTest extends TestCase
         $this->assertSame(2, $reminders['sla_due_2d']['count']);
         $this->assertSame('GH-1004,GH-1005', $reminders['sla_due_2d']['params']['ticket_keys']);
         $this->assertStringNotContainsString('GH-200', $response->getContent());
+    }
+
+    public function test_mark_all_read_clears_reminders_until_a_new_ticket_joins_them(): void
+    {
+        $user = User::factory()->create();
+        $this->scheduledOff($user);
+        $actor = User::factory()->create();
+        $this->ticketWithSla('GH-1001', $user, $this->now->copy()->subHour());
+        app(NotificationService::class)->dispatch([$user->id], $actor->id, [
+            'domain' => 'ticket', 'event' => 'assigned', 'title' => 'Ticket assigned', 'message' => 'GH-1001', 'url' => '/tickets',
+        ]);
+
+        $before = $this->actingAs($user)->getJson(route('notifications.summary'))->assertOk();
+        $this->assertSame(1, $before->json('unread'));
+        $this->assertSame(2, $before->json('unread_reminders'));   // Assigned Tickets + SLA Breached
+        $this->assertSame(3, $before->json('total'));
+
+        $this->actingAs($user)->postJson(route('notifications.read-all'))->assertOk();
+
+        $after = $this->actingAs($user)->getJson(route('notifications.summary'))->assertOk();
+        $this->assertSame(0, $after->json('total'));
+        $this->assertTrue($after->json('notifications.0.read'));
+        $reminders = collect($after->json('reminders'))->keyBy('type');
+        $this->assertTrue($reminders['tickets']['read']);
+        $this->assertTrue($reminders['sla_breached']['read']);
+        $this->assertArrayNotHasKey('items', $reminders['sla_breached']);
+
+        $this->ticketWithSla('GH-1002', $user, $this->now->copy()->subMinutes(5));
+
+        $reminders = collect($this->actingAs($user)->getJson(route('notifications.summary'))->json('reminders'))->keyBy('type');
+        $this->assertFalse($reminders['tickets']['read']);
+        $this->assertFalse($reminders['sla_breached']['read']);
+    }
+
+    public function test_opening_one_reminder_marks_only_that_reminder_read(): void
+    {
+        $user = User::factory()->create();
+        $this->scheduledOff($user);
+        $this->ticketWithSla('GH-1001', $user, $this->now->copy()->subHour());
+
+        $this->actingAs($user)
+            ->postJson(route('notifications.reminders.read', 'sla_breached'))
+            ->assertOk();
+
+        $response = $this->actingAs($user)->getJson(route('notifications.summary'))->assertOk();
+        $reminders = collect($response->json('reminders'))->keyBy('type');
+        $this->assertTrue($reminders['sla_breached']['read']);
+        $this->assertFalse($reminders['tickets']['read']);
+        $this->assertSame(1, $response->json('total'));
+    }
+
+    public function test_schedule_approval_leaves_the_bell_once_the_request_is_decided(): void
+    {
+        $approver = User::factory()->create();
+        $requester = User::factory()->create();
+        $this->scheduledOff($approver);
+        $decided = $this->changeRequest($requester, $approver);
+        $open = $this->changeRequest($requester, $approver);
+
+        foreach ([$decided, $open] as $changeRequest) {
+            app(NotificationService::class)->notifyApproval(
+                [$approver->id], $requester->id, 'pending', 'Schedule request needs approval',
+                'Awaiting your approval.', '/schedules?tab=pending-requests',
+                'schedule_change_request:' . $changeRequest->id, 'warning'
+            );
+        }
+
+        $this->assertSame(2, $this->actingAs($approver)->getJson(route('notifications.summary'))->json('unread'));
+
+        // Decided by another approver: this approver's copy is stale.
+        $decided->update(['status' => 'approved']);
+
+        $response = $this->actingAs($approver)->getJson(route('notifications.summary'))->assertOk();
+        $this->assertSame(1, $response->json('unread'));
+        $this->assertCount(1, $response->json('notifications'));
+        $this->assertSame(1, $response->json('total'));
+    }
+
+    // A Holiday today keeps the schedule reminders out of the counts under test.
+    private function scheduledOff(User $user): void
+    {
+        $this->schedule($user, '2026-07-06 00:00:00', '2026-07-06 23:59:59', 'Holiday');
+    }
+
+    private function changeRequest(User $requester, User $approver): ScheduleChangeRequest
+    {
+        $schedule = $this->schedule($requester, '2026-07-07 08:00:00', '2026-07-07 17:00:00', 'On-site');
+
+        return ScheduleChangeRequest::create([
+            'schedule_id' => $schedule->id,
+            'requester_id' => $requester->id,
+            'assigned_approver_ids' => [$approver->id],
+            'status' => 'pending',
+            'original_payload' => [],
+            'requested_payload' => [],
+        ]);
     }
 
     private function schedule(

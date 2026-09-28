@@ -9,7 +9,9 @@
 | App-to-app | Sanctum service account | `php artisan integration:issue-token linkportal` (`app/Console/Commands/IssueIntegrationToken.php`) |
 | Public pages | Opaque per-record tokens, no login | `PublicTicketController`, `PublicQueueController`, `PublicUatController` (all `throttle:*`) |
 
-**Google sign-up is gated**: a first-time Google user is created with `is_active = false` and admins get `GoogleRegistrationPending` mail; access starts only after activation (`GoogleRegistrationApproved`). An email already linked to a different `google_id` is rejected. Config lives under `services.google.*` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`).
+**Google sign-up is gated**: a first-time Google user is created with `is_active = false` and admins get `GoogleRegistrationPending` mail; access starts only after activation (`GoogleRegistrationApproved`). An email already linked to a different `google_id` is rejected. Config lives under `services.google.*` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`). Recipients are **every active user holding a role with `notify_on_user_registration`** — nothing excludes loyalty members, so a member given such a role (e.g. Admin) gets these mails.
+
+**Loyalty members are roleless**: `/api/register` creates the `users` row (with `customer_id`) and no role. The /users edit form requires a role and an employee ID for staff, but a member (`customer_id` set) may be saved with neither: "No role (loyalty member)" runs `syncRoles([])`, which is how to take back a role granted by mistake. Blank employee IDs are safe because `users_employee_id_no_unique` is filtered `WHERE employee_id_no IS NOT NULL`.
 
 Session config: `SESSION_DRIVER=database`, 120-minute lifetime. `bootstrap/app.php` rewrites Inertia 302s on PUT/PATCH/DELETE to 303 so an expired session redirects as a GET instead of throwing `MethodNotAllowedHttpException`.
 

@@ -4,31 +4,39 @@ namespace App\Http\Controllers;
 
 use App\Models\AgentPointTransaction;
 use App\Models\AttendanceLog;
+use App\Models\NotificationReminderRead;
 use App\Models\Schedule;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\ApprovalNotificationResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class NotificationController extends Controller
 {
     /**
      * Recent activity notifications (tickets / task boards / project tracker)
      * plus the ambient "reminders" (no schedule today, etc.). The bell badge
-     * counts unread activity + active reminders.
+     * counts unread activity + unread reminders.
      */
     public function summary(): JsonResponse
     {
         $user = auth()->user();
 
-        $unread = $user->unreadNotifications()->count();
-
         // NB: the notifications() relation is already ordered latest-first.
         // Adding ->latest() here produces a duplicate ORDER BY that SQL Server rejects.
-        $notifications = $user->notifications()
-            ->limit(20)
-            ->get()
+        $listed = $user->notifications()->limit(20)->get();
+        $resolved = $this->resolvedApprovals($user, $listed);
+        $resolvedIds = $resolved->pluck('id')->flip();
+
+        $unread = $user->unreadNotifications()->count()
+            - $resolved->whereNull('read_at')->count();
+
+        $notifications = $listed
+            ->reject(fn ($n) => $resolvedIds->has($n->id))
+            ->values()
             ->map(fn ($n) => [
                 'id'         => $n->id,
                 'domain'     => $n->data['domain'] ?? 'general',
@@ -42,13 +50,15 @@ class NotificationController extends Controller
                 'created_at' => $n->created_at,
             ]);
 
-        $reminders = $this->reminders($user);
+        $reminders = $this->withReadState($user, $this->reminders($user));
+        $unreadReminders = collect($reminders)->where('read', false)->count();
 
         return response()->json([
-            'notifications' => $notifications,
-            'reminders'     => $reminders,
-            'unread'        => $unread,
-            'total'         => $unread + count($reminders),
+            'notifications'    => $notifications,
+            'reminders'        => $reminders,
+            'unread'           => $unread,
+            'unread_reminders' => $unreadReminders,
+            'total'            => $unread + $unreadReminders,
         ]);
     }
 
@@ -65,15 +75,85 @@ class NotificationController extends Controller
         ]);
     }
 
+    /**
+     * Marks every activity notification read and acknowledges every reminder
+     * showing right now (Assigned Tickets, SLA Breached…), so the badge clears.
+     */
     public function markAllRead(Request $request): JsonResponse
     {
-        $request->user()->unreadNotifications->markAsRead();
+        $user = $request->user();
+
+        // One UPDATE, not a load-and-save round trip per unread row.
+        $user->unreadNotifications()->update(['read_at' => now()]);
+        $this->acknowledgeReminders($user, $this->reminders($user));
 
         return response()->json(['unread' => 0]);
     }
 
+    public function markReminderRead(Request $request, string $type): JsonResponse
+    {
+        $user = $request->user();
+        $reminder = collect($this->reminders($user))->firstWhere('type', $type);
+
+        if ($reminder) {
+            $this->acknowledgeReminders($user, [$reminder]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
     /**
-     * Ambient, always-recomputed reminders (not stored, not "read/unread").
+     * "Needs approval" notifications that no longer need this user — see
+     * ApprovalNotificationResolver. Candidates are the listed rows plus every
+     * unread approval, so the count stays exact even when a stale one sits
+     * below the first 20.
+     */
+    private function resolvedApprovals($user, Collection $listed): Collection
+    {
+        $candidates = $listed->merge(
+            $user->unreadNotifications()
+                ->where('data->domain', 'approval')
+                // `received`: accounting review pings sent before they used `pending`.
+                ->whereIn('data->event', ['pending', 'received'])
+                ->get()
+        );
+
+        return app(ApprovalNotificationResolver::class)->resolved($candidates);
+    }
+
+    /**
+     * A reminder reads as read once the user has acknowledged every item it
+     * lists now; a ticket or date outside that set makes it unread again.
+     * `items` is internal and dropped from the response.
+     */
+    private function withReadState($user, array $reminders): array
+    {
+        $acknowledged = NotificationReminderRead::where('user_id', $user->id)
+            ->get(['type', 'items'])
+            ->keyBy('type');
+
+        return array_map(function (array $reminder) use ($acknowledged) {
+            $seen = $acknowledged->get($reminder['type'])?->items;
+            $reminder['read'] = is_array($seen) && array_diff($reminder['items'], $seen) === [];
+            unset($reminder['items']);
+
+            return $reminder;
+        }, $reminders);
+    }
+
+    private function acknowledgeReminders($user, array $reminders): void
+    {
+        foreach ($reminders as $reminder) {
+            NotificationReminderRead::updateOrCreate(
+                ['user_id' => $user->id, 'type' => $reminder['type']],
+                ['items' => array_values($reminder['items']), 'read_at' => now()]
+            );
+        }
+    }
+
+    /**
+     * Ambient, always-recomputed reminders (not stored). Each carries `items` —
+     * the tickets / user-dates it covers — which drive its read state.
      */
     private function reminders($user): array
     {
@@ -101,9 +181,10 @@ class NotificationController extends Controller
 
         $this->scheduleReminders($reminders, $scopeUserIds);
 
-        $openTickets = Ticket::where('assignee_id', $user->id)
+        $openTicketIds = Ticket::where('assignee_id', $user->id)
             ->whereNotIn('status', ['resolved', 'closed'])
-            ->count();
+            ->pluck('id');
+        $openTickets = $openTicketIds->count();
 
         if ($openTickets > 0) {
             $reminders[] = [
@@ -113,6 +194,7 @@ class NotificationController extends Controller
                 'severity' => 'info',
                 'route'   => 'tickets.index',
                 'count'   => $openTickets,
+                'items'   => $openTicketIds->map(fn ($id) => (string) $id)->all(),
             ];
         }
 
@@ -131,6 +213,7 @@ class NotificationController extends Controller
                 'severity' => 'success',
                 'route'   => 'dashboard',
                 'count'   => $pointsToday,
+                'items'   => [$today->toDateString() . ':' . $pointsToday],
             ];
         }
 
@@ -243,6 +326,7 @@ class NotificationController extends Controller
                 'route'    => 'schedules.index',
                 'params'   => ['tab' => 'missing-schedules'],
                 'count'    => $missingScheduleUserIds->count(),
+                'items'    => $missingScheduleUserIds->map(fn ($id) => $id . '|' . $todayStr)->all(),
             ];
         }
 
@@ -269,6 +353,7 @@ class NotificationController extends Controller
                 'route'    => 'schedules.index',
                 'params'   => ['tab' => 'missing-schedules'],
                 'count'    => count($missingTimeIn),
+                'items'    => array_map('strval', array_keys($missingTimeIn)),
             ];
         }
 
@@ -286,6 +371,7 @@ class NotificationController extends Controller
                 'route'    => 'schedules.index',
                 'params'   => ['tab' => 'missing-schedules'],
                 'count'    => count($missingTimeOut),
+                'items'    => array_map('strval', array_keys($missingTimeOut)),
             ];
         }
     }
@@ -337,6 +423,7 @@ class NotificationController extends Controller
                 'route'    => 'tickets.index',
                 'params'   => $this->slaTicketParams($breached),
                 'count'    => $breached->count(),
+                'items'    => $breached->map(fn ($key) => (string) $key)->all(),
             ];
         }
 
@@ -349,6 +436,7 @@ class NotificationController extends Controller
                 'route'    => 'tickets.index',
                 'params'   => $this->slaTicketParams($dueIn1Day),
                 'count'    => $dueIn1Day->count(),
+                'items'    => $dueIn1Day->map(fn ($key) => (string) $key)->all(),
             ];
         }
 
@@ -361,6 +449,7 @@ class NotificationController extends Controller
                 'route'    => 'tickets.index',
                 'params'   => $this->slaTicketParams($dueIn2Days),
                 'count'    => $dueIn2Days->count(),
+                'items'    => $dueIn2Days->map(fn ($key) => (string) $key)->all(),
             ];
         }
     }

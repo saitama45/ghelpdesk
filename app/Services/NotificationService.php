@@ -208,9 +208,10 @@ class NotificationService
         string $message,
         string $url,
         string $subject,
-        string $severity = 'info'
+        string $severity = 'info',
+        ?int $level = null
     ): void {
-        $this->dispatch($recipientIds, $actorId, [
+        $this->dispatch($recipientIds, $actorId, array_filter([
             'domain' => 'approval',
             'event' => $event,
             'title' => $title,
@@ -218,7 +219,10 @@ class NotificationService
             'severity' => $severity,
             'subject' => $subject,
             'url' => $url,
-        ]);
+            // The approval level a "pending" ping is for, so the bell can drop it
+            // once that level is acted on (ApprovalNotificationResolver).
+            'level' => $level,
+        ], fn ($value) => $value !== null));
     }
 
     /**

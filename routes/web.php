@@ -601,6 +601,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/notifications/summary', [\App\Http\Controllers\NotificationController::class, 'summary'])->name('notifications.summary');
     Route::post('/notifications/read-all', [\App\Http\Controllers\NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+    Route::post('/notifications/reminders/{type}/read', [\App\Http\Controllers\NotificationController::class, 'markReminderRead'])
+        ->where('type', '[a-z0-9_]+')->name('notifications.reminders.read');
     Route::post('/notifications/{id}/read', [\App\Http\Controllers\NotificationController::class, 'markRead'])->name('notifications.read');
 
     // NSO Project Tracker

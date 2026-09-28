@@ -114,6 +114,19 @@ intake → TicketObserver (key/company/SLA) → assignment → work → resolve 
 
 ## 3. Notifications (bell + email)
 - In-app: `app/Services/NotificationService.php` → `App\Notifications\ActivityNotification` → `notifications` table; the bell polls every 30s (`NotificationController`).
+- Ambient reminders (Assigned Tickets, SLA Breached/Due, Missing Schedule/Time-In/Out, Points) are recomputed each poll but have read state: each carries internal `items` (ticket ids/keys, `userId|date`), and `notification_reminder_reads` stores the items a user acknowledged (Mark all read, or clicking the reminder). A reminder turns unread again only when a new item joins it. Badge `total` = unread activity + unread reminders. Stored in a table, not cache, because `startup.sh` runs `cache:clear` on every Azure start.
+- "Needs approval" pings (domain `approval`, event `pending`) are hidden and uncounted once they no longer need the recipient: `App\Services\ApprovalNotificationResolver`, checked at read time, nothing deleted. A ping is stale when its request left the pending state, or when the level it was sent for already has an approval/rejection row (someone at that level acted). Covered, all keyed by `subject = {workflow}:{id}`:
+  - multi-level: `pos_request`, `sap_request`, `form_record`, `payment_record`
+  - single-stage: `schedule_change_request`, `service_vehicle_trip`
+  - `user_registration`: pending = `google_id` set and no role
+  - `qat_cycle`: status `for_approval`
+  - `acct_document_review`: status `pending`/`in_review`
+
+  Details:
+  - **Level:** read from `data.level` (passed as `notifyApproval(..., $level)`), or for older rows from the "(Stage N)"/"(Level N)" in the message. Old payment pings have neither, so they clear only when the record is decided.
+  - **Resubmission:** QAT cycles and accounting reviews are resubmitted under the same id. A `since` column (`submitted_at` / `received_at`) marks pings from an earlier round stale, with a 5s margin for SQL Server datetime rounding.
+  - **Legacy accounting pings** used event `received` and subject "Document {ref}"; the id is taken from the `/accounting-documents/{id}` link. New ones send `pending` + `acct_document_review:{id}`.
+  - **Entity scope:** request lookups drop `ActiveEntityScope`, or approvers viewing another entity would lose live pings.
 - Recipients are resolved per domain (ticket: assignee + reporter + CC; task card: assignees/watchers/board members; project task: assigned/support + team) with the actor removed.
 - Email: 18 mailables in `app/Mail/`. SMTP credentials come from the `settings` table (cached as `app_mail_settings`) — **`MAIL_MAILER` in `.env` does not control the driver**, and ticket actions send synchronously.
 

@@ -159,7 +159,8 @@ class SapRequestService
                 "SAP Request #{$sapRequest->id} is awaiting your approval (Stage {$level}).",
                 route('sap-requests.show', $sapRequest->id, false),
                 'sap_request:' . $sapRequest->id,
-                'warning'
+                'warning',
+                $level
             );
         }
 

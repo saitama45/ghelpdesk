@@ -200,7 +200,8 @@ class PosRequestService
                 "POS Request #{$posRequest->id} is awaiting your approval (Stage {$level}).",
                 route('pos-requests.show', $posRequest->id, false),
                 'pos_request:' . $posRequest->id,
-                'warning'
+                'warning',
+                $level
             );
         }
 

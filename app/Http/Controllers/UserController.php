@@ -45,7 +45,7 @@ class UserController extends Controller
             ->select([
                 'id', 'name', 'employee_id_no', 'email', 'department', 'org_path', 'department_id',
                 'department_node_id', 'position', 'date_hired', 'is_active',
-                'is_manager', 'google_id',
+                'is_manager', 'google_id', 'customer_id',
             ])
             ->with([
                 'roles:id,name',
@@ -318,9 +318,12 @@ class UserController extends Controller
 
         $request->validate([
             'name' => 'required|string|max:255',
-            'employee_id_no' => 'required|string|max:255|unique:users,employee_id_no,' . $user->id,
+            // A loyalty member (mobile-app sign-up, `customer_id` set) is not staff:
+            // it has no employee ID and is roleless by design, so both may be left
+            // blank. Staff logins still need both. The unique index skips NULLs.
+            'employee_id_no' => [$user->customer_id ? 'nullable' : 'required', 'string', 'max:255', 'unique:users,employee_id_no,' . $user->id],
             'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
-            'role' => 'required|string|exists:roles,name',
+            'role' => [$user->customer_id ? 'nullable' : 'required', 'string', 'exists:roles,name'],
             'department_id' => 'nullable|integer|exists:departments,id',
             'department_node_id' => 'nullable|integer|exists:department_nodes,id',
             'position' => 'nullable|string|max:255',
@@ -348,7 +351,7 @@ class UserController extends Controller
         $user->updated_by = auth()->id();
         $user->save();
 
-        $user->syncRoles([$request->role]);
+        $user->syncRoles($request->filled('role') ? [$request->role] : []);
         Cache::forget('user_permissions_' . $user->id . '_' . ($user->updated_at?->timestamp ?? 0));
 
         // Update stores assignment

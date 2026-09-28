@@ -86,14 +86,16 @@ class AccountingDocumentReviewController extends Controller
             $review->recordEvent('received', null, null, ['submitted_at' => $validated['submitted_at'] ?? null]);
         }
 
+        // `pending` + an id subject, like every other approval ping, so the bell
+        // drops it once the review is decided (ApprovalNotificationResolver).
         $notifications->notifyApproval(
             $notifications->usersWithPermission('accounting-documents.review'),
             null,
-            'received',
+            'pending',
             $isResubmission ? 'Vendor document resubmitted for review' : 'Vendor document for review',
             "{$review->vendor_name}: {$review->source_reference_no} ({$review->document_type})",
             $notifications->relativeRoute('accounting-documents.show', $review->id),
-            "Document {$review->source_reference_no}",
+            'acct_document_review:' . $review->id,
         );
 
         return response()->json([

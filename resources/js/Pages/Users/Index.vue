@@ -958,7 +958,7 @@ const sortRolePermissions = (permissions) => {
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Employee ID No</label>
-                            <input v-model="editForm.employee_id_no" type="text" required maxlength="255" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
+                            <input v-model="editForm.employee_id_no" type="text" :required="!editingUser?.customer_id" :placeholder="editingUser?.customer_id ? 'Optional for loyalty members' : ''" maxlength="255" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Email</label>
@@ -966,8 +966,8 @@ const sortRolePermissions = (permissions) => {
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Role</label>
-                            <select v-model="editForm.role" required class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
-                                <option value="">Select Role</option>
+                            <select v-model="editForm.role" :required="!editingUser?.customer_id" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm dark:border-gray-600">
+                                <option value="">{{ editingUser?.customer_id ? 'No role (loyalty member)' : 'Select Role' }}</option>
                                 <option v-for="role in roles" :key="role.id" :value="role.name">{{ role.name }}</option>
                             </select>
                         </div>

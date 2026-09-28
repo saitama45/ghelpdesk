@@ -167,12 +167,23 @@ const openNotification = async (n) => {
     }
 };
 
+// Reminders are recomputed each poll; reading one records the tickets/dates it
+// covers now, so it only turns unread again when something new joins it.
+const openReminder = (r) => {
+    isOpen.value = false;
+    if (r.read) return;
+    r.read = true;
+    total.value = Math.max(0, total.value - 1);
+    axios.post(route('notifications.reminders.read', r.type)).catch(() => {});
+};
+
 const markAllRead = async () => {
     try {
         await axios.post(route('notifications.read-all'));
         notifications.value.forEach((n) => { n.read = true; });
+        reminders.value.forEach((r) => { r.read = true; });
         unread.value = 0;
-        total.value = reminders.value.length;
+        total.value = 0;
     } catch {
         // ignore
     }
@@ -251,13 +262,13 @@ const domainIcon = {
             <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50 dark:bg-gray-900/50 dark:border-gray-700">
                 <span class="text-sm font-bold text-gray-700 dark:text-gray-300">Notifications</span>
                 <button
-                    v-if="unread > 0"
+                    v-if="total > 0"
                     @click.stop="markAllRead"
                     class="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline dark:text-blue-400"
                 >
                     Mark all read
                 </button>
-                <span v-else class="text-xs text-gray-400 font-medium dark:text-gray-400">{{ total }} active</span>
+                <span v-else class="text-xs text-gray-400 font-medium dark:text-gray-400">{{ reminders.length }} active</span>
             </div>
 
             <!-- Empty state -->
@@ -325,8 +336,9 @@ const domainIcon = {
                                 <Link
                                     v-else
                                     :href="route(item.data.route, item.data.params || {})"
-                                    @click="isOpen = false"
+                                    @click="openReminder(item.data)"
                                     class="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors dark:hover:bg-gray-700"
+                                    :class="!item.data.read ? 'bg-blue-50/40 dark:bg-blue-500/10' : ''"
                                 >
                                     <div
                                         class="shrink-0 mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center border"
@@ -360,6 +372,7 @@ const domainIcon = {
                                     >
                                         {{ item.data.count }}
                                     </span>
+                                    <span v-if="!item.data.read" class="shrink-0 mt-2 h-2 w-2 rounded-full bg-blue-500"></span>
                                 </Link>
                             </template>
                         </div>

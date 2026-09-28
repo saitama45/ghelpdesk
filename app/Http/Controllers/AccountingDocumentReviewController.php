@@ -146,7 +146,7 @@ class AccountingDocumentReviewController extends Controller implements HasMiddle
             "Document {$status}",
             "{$review->source_reference_no} ({$review->vendor_name}) was {$status} by ".auth()->user()->name,
             $notifications->relativeRoute('accounting-documents.show', $review->id),
-            "Document {$review->source_reference_no}",
+            'acct_document_review:' . $review->id,
             $decision === 'approve' ? 'success' : 'warning',
         );
 

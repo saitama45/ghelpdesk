@@ -2447,7 +2447,9 @@ class PaymentMonitoringController extends Controller implements HasMiddleware
             "Payment record #{$record->id} (₱" . number_format((float) $record->amount, 2) . ") is awaiting your approval.",
             route('payments.index', [], false),
             'payment_record:' . $record->id,
-            'warning'
+            'warning',
+            // `current_approval_level` counts levels already approved.
+            (int) $record->current_approval_level + 1
         );
     }
 
