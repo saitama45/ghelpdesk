@@ -248,10 +248,12 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
-        // Runs before validation on purpose: `unique:users` queries the table
-        // directly, so an ARCHIVED account still owns its email and employee ID,
-        // and its "already been taken" would point at a row that is nowhere to be
-        // seen on this page. Name the archive instead.
+        // Runs before validation on purpose: an ARCHIVED account still owns its
+        // employee ID (and, if archived before `archived_email` existed, its
+        // email), so `unique:users` would say "already been taken" about a row
+        // nowhere to be seen on this page. A newer archive has moved its email
+        // out of `email`, so `unique:users` would not refuse it at all. Name the
+        // archive instead.
         $this->rejectArchivedIdentityClash($request->input('email'), $request->input('employee_id_no'));
 
         $request->validate([
@@ -304,6 +306,16 @@ class UserController extends Controller
 
     public function update(Request $request, User $user)
     {
+        // Same guard as `store()`, for values actually being changed — an
+        // unchanged address may legitimately match an archived row (the review
+        // account re-registered after deletion, say) and must still save.
+        $newEmail = $request->input('email');
+        $newEmployeeId = $request->input('employee_id_no');
+        $this->rejectArchivedIdentityClash(
+            is_string($newEmail) && strcasecmp($newEmail, (string) $user->email) !== 0 ? $newEmail : null,
+            is_string($newEmployeeId) && $newEmployeeId !== $user->employee_id_no ? $newEmployeeId : null,
+        );
+
         $request->validate([
             'name' => 'required|string|max:255',
             'employee_id_no' => 'required|string|max:255|unique:users,employee_id_no,' . $user->id,
@@ -392,29 +404,28 @@ class UserController extends Controller
     }
 
     /**
-     * Refuse a new account whose email or employee ID is still held by an
-     * archived one, and say where that row is so the admin can restore or purge
-     * it instead of guessing at a phantom duplicate.
+     * Refuse an email or employee ID still held by an archived account, and say
+     * where that row is so the admin can restore or purge it instead of
+     * guessing at a phantom duplicate. The email is looked up through
+     * `AccountArchiveService::archivedLoginHolding()`, which knows an archive
+     * parks the address in `archived_email`.
      */
-    private function rejectArchivedIdentityClash(?string $email, ?string $employeeId): void
+    private function rejectArchivedIdentityClash(mixed $email, mixed $employeeId): void
     {
-        $archived = User::onlyTrashed()
-            ->where(function ($query) use ($email, $employeeId) {
-                if ($email) {
-                    $query->orWhere('email', $email);
-                }
-                if ($employeeId) {
-                    $query->orWhere('employee_id_no', $employeeId);
-                }
-            })
-            ->when(!$email && !$employeeId, fn ($query) => $query->whereRaw('1 = 0'))
-            ->first();
+        $archived = is_string($email) && $email !== ''
+            ? app(AccountArchiveService::class)->archivedLoginHolding($email)
+            : null;
+        $field = 'email';
+
+        if (!$archived && is_string($employeeId) && $employeeId !== '') {
+            $archived = User::onlyTrashed()->where('employee_id_no', $employeeId)->first();
+            $field = 'employee_id_no';
+        }
 
         if (!$archived) {
             return;
         }
 
-        $field = ($email && $archived->email === $email) ? 'email' : 'employee_id_no';
         $label = $field === 'email' ? 'email address' : 'employee ID';
 
         throw ValidationException::withMessages([
@@ -663,8 +674,17 @@ class UserController extends Controller
         foreach (User::pluck('email') as $e) {
             $existingEmails[mb_strtolower(trim($e))] = true;
         }
+        // Archived logins are hidden from the query above, but still own their
+        // address (parked in `archived_email`, or in `email` if archived before
+        // that column existed) — see AccountArchiveService::archivedLoginHolding.
+        $archivedEmails = [];
+        foreach (User::onlyTrashed()->get(['email', 'archived_email']) as $archivedUser) {
+            $archivedEmails[mb_strtolower(trim($archivedUser->archived_email ?? $archivedUser->email))] = true;
+        }
+        // withTrashed: an archived login keeps its employee ID, and the unique
+        // index would otherwise abort the import partway through.
         $existingEmployeeIds = [];
-        foreach (User::whereNotNull('employee_id_no')->pluck('employee_id_no') as $employeeIdNo) {
+        foreach (User::withTrashed()->whereNotNull('employee_id_no')->pluck('employee_id_no') as $employeeIdNo) {
             $existingEmployeeIds[mb_strtolower(trim($employeeIdNo))] = true;
         }
 
@@ -703,6 +723,10 @@ class UserController extends Controller
             $emailKey = mb_strtolower($email);
             if (isset($existingEmails[$emailKey])) {
                 $errors[] = "Row {$rowNum}: email '{$email}' already exists — skipped.";
+                continue;
+            }
+            if (isset($archivedEmails[$emailKey])) {
+                $errors[] = "Row {$rowNum}: email '{$email}' belongs to an archived account — restore or purge it from Settings → Account Archive first. Skipped.";
                 continue;
             }
 

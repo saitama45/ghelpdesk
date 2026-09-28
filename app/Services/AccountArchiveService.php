@@ -63,6 +63,51 @@ class AccountArchiveService
     }
 
     /* ----------------------------------------------------------------------
+     | Archived identities — what a new or renamed login may not take
+     * ------------------------------------------------------------------- */
+
+    /**
+     * The archived login that still owns this address, if any.
+     *
+     * `releaseEmail()` moves the address out of `email`, so `unique:users` no
+     * longer sees it: every path that creates a login or changes its address
+     * has to ask here instead, or it hands the address to someone new and a
+     * later restore cannot reclaim it. Rows archived before `archived_email`
+     * existed still hold it in `email`, so both columns are checked.
+     */
+    public function archivedLoginHolding(string $email): ?User
+    {
+        $email = mb_strtolower(trim($email));
+
+        return User::onlyTrashed()
+            ->where(function ($query) use ($email) {
+                $query->whereRaw('LOWER(archived_email) = ?', [$email])
+                    ->orWhereRaw('LOWER(email) = ?', [$email]);
+            })
+            ->first();
+    }
+
+    /**
+     * An archived customer record holding this address when no live one does —
+     * a walk-in with no login that staff closed from Stamps → Customers.
+     *
+     * `customers.email` is not unique, so an archived row that shares its
+     * address with a live one was a duplicate being tidied away, not a closure:
+     * that case is ignored, and sign-up goes on to reuse the live record.
+     */
+    public function archivedCustomerHolding(string $email): ?Customer
+    {
+        $email = mb_strtolower(trim($email));
+        $matches = fn ($query) => $query->whereRaw('LOWER(email) = ?', [$email]);
+
+        if (Customer::query()->where($matches)->exists()) {
+            return null;
+        }
+
+        return Customer::onlyTrashed()->where($matches)->first();
+    }
+
+    /* ----------------------------------------------------------------------
      | Retention
      * ------------------------------------------------------------------- */
 
@@ -188,10 +233,11 @@ class AccountArchiveService
      * `email`.
      *
      * `users.email` is UNIQUE and an archive is only a soft delete, so without
-     * this the row goes on owning the address for ever: a member who deleted
-     * their account could never sign up again with it, and `Api\RegisterController`
-     * would answer "The email has already been taken". Deleting and re-registering
-     * is exactly what an App Store reviewer does after testing 5.1.1(v).
+     * this the archived row would hold the address at the index level until it
+     * is purged — and the store-review demo account could not sign up again
+     * after a reviewer tests 5.1.1(v). Every other self sign-up with the address
+     * is still refused while the login is archived: that is a policy check in
+     * `Api\RegisterController::closedAccountExists()`, not the index.
      *
      * `.invalid` is reserved by RFC 2606 and can never resolve, so a tombstone
      * cannot accidentally be mailed; the id keeps it unique against the index.
@@ -212,8 +258,9 @@ class AccountArchiveService
      * Give a restored login its address back, unless somebody has taken it in
      * the meantime.
      *
-     * The gap is real: the member deletes, registers again with the same email,
-     * and only then is the old account restored. The live account owns the
+     * The gap is real, though sign-up no longer opens it: staff create a login
+     * with the address on /users (or the review account re-registers), and only
+     * then is the old account restored. The live account owns the
      * address, and the unique index would refuse the write — so the tombstone
      * stays and the caller is told, rather than the restore half-failing.
      *

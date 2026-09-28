@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\AccountArchiveService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,7 +33,17 @@ class RegisteredUserController extends Controller
     {
         $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
+            // An archive moves the address out of `email`, so `unique` alone would
+            // let an archived account sign up again as someone new.
+            'email' => [
+                'bail', 'required', 'string', 'lowercase', 'email', 'max:255',
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    if (app(AccountArchiveService::class)->archivedLoginHolding($value)) {
+                        $fail('This email address belongs to an archived account. Please contact the administrator to restore it.');
+                    }
+                },
+                'unique:'.User::class,
+            ],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 

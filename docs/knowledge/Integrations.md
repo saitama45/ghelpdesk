@@ -118,26 +118,50 @@ other customer the account created still blocks, as for staff).
 Keep the endpoint, `/account-deletion`, `AccountClosedMail` (which quotes the retention label)
 and the Account Retention setting in step: shortening the window deletes sooner.
 
-**Deliberately NOT done:** refusing sign-up for an email whose account is archived, or an
-in-app "request restore" button (considered and reverted 2026-09-28). A reviewer tests
-5.1.1(v) by deleting and signing up again with the same address, and a restore offer reads as
-"it was never deleted". A member who changes their mind replies to the closure email and the
-desk restores within the window — before they re-register, or the email cannot be reclaimed.
+**Sign-up is refused while an account is archived** (decided 2026-09-28, reversing the same
+morning's "deliberately not done"). `Api\RegisterController::closedAccountExists()` answers
+`422` with `CLOSED_ACCOUNT_MESSAGE` for any address an archived login holds, in
+`archived_email` or, for rows archived before that column existed, `email`, compared
+case-insensitively. It also refuses an address held only by an archived walk-in `customers`
+row (no login ever), **unless a live customer shares the address**: `customers.email` is not
+unique, so that case is a tidied-away duplicate and sign-up reuses the live record. It applies
+whoever archived it: a self-deletion, a desk-processed web request, or staff closing a member
+from `/users` or Stamps → Customers. Before this, a member
+staff had shut down could sign straight back up, and a restore could no longer reclaim the
+address. The block lifts by itself when `accounts:purge-expired` purges or anonymizes the
+login after the retention window (both force-delete it). A member who changes their mind
+replies to the closure email, which now says the address cannot sign up until then, and the
+desk restores within the window.
 
-### Archiving frees the email address
+The one exemption is the store-review demo account (`services.app_review.email`): a reviewer
+tests 5.1.1(v) by deleting and signing up again. The accepted risk is that a reviewer who
+deletes an account under their **own** address and tries it again is refused. Code cannot
+tell that reviewer from a member, so the mitigation is the App Review notes: point reviewers
+at the demo account and state that a deleted account's email is held for the retention
+window. There is still no in-app "request restore" button: a restore offer reads as "it was
+never deleted".
+
+**Every other path that creates a login or changes its address** asks the same question
+through `AccountArchiveService::archivedLoginHolding()`: `/users` create and edit
+(`UserController::rejectArchivedIdentityClash`, edit only for a changed value), the `/users`
+CSV import, Google sign-in (`SocialAuthController`) and web `/register`. Each would
+otherwise have handed the parked address to a new login, because `unique:users` no longer
+sees it. Covered by `tests/Feature/ArchivedEmailReuseTest.php`.
+
+### Archiving parks the email address
 
 `users.email` carries a **UNIQUE index** and an archive is only a soft delete, so an archived
-row would go on owning the address for ever — a member who deleted their account could never
-sign up again with it (`Api\RegisterController` answered *"The email has already been taken"*),
-which is exactly what an App Store reviewer does straight after testing deletion.
+row would go on owning the address at the index level until it is purged.
 
 `AccountArchiveService::releaseEmail()` therefore parks the real address in the new
 **`users.archived_email`** column and writes `deleted-{id}@archived.invalid` into `email`
-(`.invalid` is reserved by RFC 2606, so a tombstone can never be mailed). `reclaimEmail()`
-puts it back on restore — **unless somebody has taken the address in the meantime**, in which
-case the tombstone stays, `restoreUser()`/`restoreCustomer()` return `email_reclaimed => false`
-and it is logged, rather than the restore breaking the unique index. That gap is real: delete,
-re-register, then restore the old account.
+(`.invalid` is reserved by RFC 2606, so a tombstone can never be mailed). The index is then
+free, which is what lets the review account re-register; every other sign-up is refused by
+the policy check above, not by the index. `reclaimEmail()` puts it back on restore —
+**unless somebody has taken the address in the meantime**, in which case the tombstone stays,
+`restoreUser()`/`restoreCustomer()` return `email_reclaimed => false` and it is logged, rather
+than the restore breaking the unique index. Only the review account's exempt re-registration
+can still open that gap; every other path is refused above.
 
 Anything displaying an archived login's address reads `archived_email ?? email` — see the
 Users tab and the linked-login line on the Loyalty Customers tab in `AccountArchiveController`,

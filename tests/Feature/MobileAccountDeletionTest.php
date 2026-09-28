@@ -222,12 +222,13 @@ class MobileAccountDeletionTest extends TestCase
     }
 
     /**
-     * `users.email` is UNIQUE and an archive is only a soft delete, so before
-     * this the archived row owned the address for ever and registering again
-     * answered "The email has already been taken" — which is precisely what an
-     * App Store reviewer does straight after testing account deletion.
+     * The archive parks the address and tombstones `email`, but registering
+     * with it again is refused while the account is archived — otherwise a
+     * member staff closed could sign straight back up, and a restore could no
+     * longer reclaim the address. The review account's exemption is covered in
+     * `RegisterControllerTest`.
      */
-    public function test_the_email_is_free_to_register_again_after_deletion(): void
+    public function test_a_closed_accounts_email_cannot_register_again(): void
     {
         Mail::fake();
         $user = $this->member();
@@ -245,10 +246,9 @@ class MobileAccountDeletionTest extends TestCase
             'email' => 'member@example.test',
             'phone' => '09171234567',
             'password' => 'An0ther!pass',
-        ])->assertCreated();
+        ])->assertStatus(422)->assertJsonValidationErrors('email');
 
-        // The new login owns the address; the old one is still archived.
-        $this->assertSame(1, User::where('email', 'member@example.test')->count());
+        $this->assertSame(0, User::where('email', 'member@example.test')->count());
         $this->assertSoftDeleted('users', ['id' => $user->id]);
     }
 
@@ -274,13 +274,9 @@ class MobileAccountDeletionTest extends TestCase
         Sanctum::actingAs($user);
         $this->deleteJson('/api/account', ['password' => 'Str0ng!pass'])->assertOk();
 
-        // Someone registers again with the freed address before the restore.
-        $this->postJson('/api/register', [
-            'name' => 'Member One',
-            'email' => 'member@example.test',
-            'phone' => '09171234567',
-            'password' => 'An0ther!pass',
-        ])->assertCreated();
+        // Sign-up is refused for the address, but staff can still create a
+        // login with it on /users, since the tombstone freed the unique index.
+        User::factory()->create(['email' => 'member@example.test']);
 
         $archived = User::withTrashed()->find($user->id);
         $result = app(AccountArchiveService::class)->restoreUser($archived);

@@ -28,7 +28,7 @@
             <div class="ref">{{ $ticketKey }}</div>
 
             <p>You can no longer sign in, and your member QR code has stopped working.</p>
-            <p>Your account will be <strong>permanently deleted after {{ $retention }}</strong>, together with your personal details and any unredeemed stamps and rewards. If you change your mind before then, reply to this email and we can restore it.</p>
+            <p>Your account will be <strong>permanently deleted after {{ $retention }}</strong>, together with your personal details and any unredeemed stamps and rewards. If you change your mind before then, reply to this email and we can restore it. Until then, this email address cannot be used to sign up for a new account.</p>
             <p class="meta">Rewards you had already redeemed are financial records, so they are kept &mdash; but your name, email address and mobile number are erased from them when the account is deleted.</p>
             <p class="meta"><strong>If this was not you</strong>, reply to this email and quote the reference number above as soon as possible.</p>
         </div>

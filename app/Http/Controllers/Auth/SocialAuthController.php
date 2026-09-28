@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Mail\GoogleRegistrationPending;
 use App\Models\User;
+use App\Services\AccountArchiveService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
@@ -66,6 +67,13 @@ class SocialAuthController extends Controller
                     'google_id' => $googleUser->getId(),
                     'email_verified_at' => $user->email_verified_at ?? now(),
                 ])->save();
+            } elseif (app(AccountArchiveService::class)->archivedLoginHolding($googleUser->getEmail())) {
+                // Both lookups above skip archived rows, and an archive moves the
+                // address out of `email` — without this an archived account would
+                // come back as a fresh pending registration under its own address.
+                return redirect()
+                    ->route('login')
+                    ->with('error', 'This email address belongs to an archived account. Please contact the administrator to restore it.');
             } else {
                 $user = User::create([
                     'name' => $googleUser->getName() ?: $googleUser->getEmail(),

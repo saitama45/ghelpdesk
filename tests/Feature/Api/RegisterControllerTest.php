@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Http\Controllers\Api\RegisterController;
 use App\Models\Customer;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -64,6 +65,109 @@ class RegisterControllerTest extends TestCase
 
         $response->assertStatus(422);
         $response->assertJsonValidationErrors('email');
+    }
+
+    /**
+     * An account as `AccountArchiveService` leaves it — address parked in
+     * `archived_email`, tombstone in `email` — inserted in that state rather
+     * than archived here.
+     */
+    private function archivedMember(string $address, bool $parked = true): User
+    {
+        $customer = (new Customer())->forceFill([
+            'name' => 'Jane Doe',
+            'email' => strtolower($address),
+            'is_active' => true,
+            'deleted_at' => now(),
+        ]);
+        $customer->save();
+
+        return User::factory()->create([
+            'email' => $parked ? 'deleted-900@archived.invalid' : $address,
+            'archived_email' => $parked ? $address : null,
+            'customer_id' => $customer->id,
+            'deleted_at' => now(),
+        ]);
+    }
+
+    public function test_refuses_an_email_whose_account_is_archived(): void
+    {
+        $this->archivedMember('jane@example.com');
+
+        $response = $this->postJson('/api/register', $this->validPayload);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['email' => RegisterController::CLOSED_ACCOUNT_MESSAGE]);
+        $this->assertSame(0, User::where('email', 'jane@example.com')->count());
+        $this->assertSame(0, Customer::where('email', 'jane@example.com')->count());
+    }
+
+    public function test_the_archived_address_is_matched_whatever_its_case(): void
+    {
+        $this->archivedMember('Jane@Example.com');
+
+        $this->postJson('/api/register', $this->validPayload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['email' => RegisterController::CLOSED_ACCOUNT_MESSAGE]);
+    }
+
+    public function test_an_account_archived_before_the_address_was_parked_gets_the_same_answer(): void
+    {
+        $this->archivedMember('jane@example.com', parked: false);
+
+        $this->postJson('/api/register', $this->validPayload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['email' => RegisterController::CLOSED_ACCOUNT_MESSAGE]);
+    }
+
+    public function test_the_store_review_account_may_register_again_after_deletion(): void
+    {
+        config(['services.app_review.email' => 'jane@example.com']);
+        $this->archivedMember('jane@example.com');
+
+        $this->postJson('/api/register', $this->validPayload)->assertStatus(201);
+        $this->assertSame(1, User::where('email', 'jane@example.com')->count());
+    }
+
+    private function archivedWalkIn(string $address): Customer
+    {
+        $customer = (new Customer())->forceFill([
+            'name' => 'Jane D.',
+            'email' => $address,
+            'is_active' => true,
+            'deleted_at' => now(),
+        ]);
+        $customer->save();
+
+        return $customer;
+    }
+
+    public function test_refuses_an_email_only_an_archived_walk_in_customer_holds(): void
+    {
+        // Staff closed this customer from Stamps → Customers; they never had a login.
+        $this->archivedWalkIn('Jane@Example.com');
+
+        $this->postJson('/api/register', $this->validPayload)
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['email' => RegisterController::CLOSED_ACCOUNT_MESSAGE]);
+        $this->assertSame(0, User::where('email', 'jane@example.com')->count());
+    }
+
+    public function test_an_archived_duplicate_does_not_block_when_a_live_customer_shares_the_address(): void
+    {
+        $this->archivedWalkIn('jane@example.com');
+        $live = Customer::create(['name' => 'Jane D.', 'email' => 'jane@example.com', 'is_active' => true]);
+
+        $this->postJson('/api/register', $this->validPayload)->assertStatus(201);
+
+        $this->assertSame($live->id, User::where('email', 'jane@example.com')->value('customer_id'));
+    }
+
+    public function test_an_archived_account_does_not_block_other_addresses(): void
+    {
+        $this->archivedMember('someone.else@example.com');
+
+        $this->postJson('/api/register', $this->validPayload)->assertStatus(201);
     }
 
     public function test_reuses_an_existing_customer_record_with_the_same_email(): void
