@@ -16,6 +16,7 @@ use App\Models\NpcStatusWorkflowStep;
 use App\Models\Store;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Services\PortalDocumentStorage;
 use Carbon\Carbon;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
@@ -1672,7 +1673,7 @@ class NpcStatusController extends Controller implements HasMiddleware
         return redirect()->back()->with('success', 'Proof uploaded successfully');
     }
 
-    public function downloadStoreProof(NpcStatus $npcStatus, Store $store, string $type)
+    public function downloadStoreProof(NpcStatus $npcStatus, Store $store, string $type, PortalDocumentStorage $portalStorage)
     {
         $proof = NpcStoreProof::where('npc_status_id', $npcStatus->id)
             ->where('store_id', $store->id)
@@ -1680,6 +1681,21 @@ class NpcStatusController extends Controller implements HasMiddleware
             ->first();
 
         abort_if(!$proof, 404, 'No proof uploaded for this seal.');
+
+        // A cashier's proof uploaded through linkportal stays on the portal's
+        // disk when the two apps do not share storage.
+        if ($proof->file_path && !Storage::disk('public')->exists($proof->file_path)) {
+            $contents = $portalStorage->contentsFor($proof->file_path, ['npc_store_proof_id' => $proof->id]);
+
+            abort_if($contents === null, 404, 'File not found.');
+
+            return response($contents, 200, [
+                'Content-Type' => $proof->mime_type ?: 'application/octet-stream',
+                'Content-Disposition' => 'attachment; filename="' . addslashes($proof->file_name ?: basename($proof->file_path)) . '"',
+                'Cache-Control' => 'private, max-age=0, no-store',
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        }
 
         return $this->downloadStoredFile($proof->file_path, $proof->file_name);
     }

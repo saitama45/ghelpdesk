@@ -31,14 +31,35 @@ class PortalDocumentStorage
     /** Absolute path to the file on a shared filesystem, when it is there. */
     public function localPath(VendorDocument $document): ?string
     {
+        return $this->localPathFor($document->file_path);
+    }
+
+    /** The portal's public URL for the file, for the HTTP fallback. */
+    public function remoteUrl(VendorDocument $document): ?string
+    {
+        return $this->remoteUrlFor($document->file_path);
+    }
+
+    /**
+     * The file's bytes, or null when neither route can produce them (portal
+     * unreachable, file deleted, nothing configured). Callers 404 on null.
+     */
+    public function contents(VendorDocument $document): ?string
+    {
+        return $this->contentsFor($document->file_path, ['document_id' => $document->id]);
+    }
+
+    /** Absolute path to any portal-relative file on a shared filesystem. */
+    public function localPathFor(?string $filePath): ?string
+    {
         $root = config('services.linkportal.documents_root');
 
-        if (! $root || ! $document->file_path) {
+        if (! $root || ! $filePath) {
             return null;
         }
 
         // The stored path is portal-relative and always uses forward slashes.
-        $relative = ltrim(str_replace('\\', '/', $document->file_path), '/');
+        $relative = ltrim(str_replace('\\', '/', $filePath), '/');
 
         // Traversal guard: a crafted row must not be able to walk out of the
         // portal's storage root and read arbitrary files off the server.
@@ -51,16 +72,16 @@ class PortalDocumentStorage
         return is_file($path) ? $path : null;
     }
 
-    /** The portal's public URL for the file, for the HTTP fallback. */
-    public function remoteUrl(VendorDocument $document): ?string
+    /** The portal's public URL for any portal-relative file. */
+    public function remoteUrlFor(?string $filePath): ?string
     {
         $baseUrl = config('services.linkportal.base_url');
 
-        if (! $baseUrl || ! $document->file_path) {
+        if (! $baseUrl || ! $filePath) {
             return null;
         }
 
-        $relative = ltrim(str_replace('\\', '/', $document->file_path), '/');
+        $relative = ltrim(str_replace('\\', '/', $filePath), '/');
 
         if (str_contains($relative, '..')) {
             return null;
@@ -70,12 +91,12 @@ class PortalDocumentStorage
     }
 
     /**
-     * The file's bytes, or null when neither route can produce them (portal
-     * unreachable, file deleted, nothing configured). Callers 404 on null.
+     * Bytes of any portal-relative file: a vendor document, or an NPC proof a
+     * cashier uploaded through the portal. `$context` identifies it in logs.
      */
-    public function contents(VendorDocument $document): ?string
+    public function contentsFor(?string $filePath, array $context = []): ?string
     {
-        $path = $this->localPath($document);
+        $path = $this->localPathFor($filePath);
 
         if ($path !== null) {
             $contents = @file_get_contents($path);
@@ -83,7 +104,7 @@ class PortalDocumentStorage
             return $contents === false ? null : $contents;
         }
 
-        $url = $this->remoteUrl($document);
+        $url = $this->remoteUrlFor($filePath);
 
         if ($url === null) {
             return null;
@@ -92,8 +113,7 @@ class PortalDocumentStorage
         try {
             $response = Http::timeout(20)->get($url);
         } catch (\Throwable $e) {
-            Log::warning('Vendor document fetch failed', [
-                'document_id' => $document->id,
+            Log::warning('Portal file fetch failed', $context + [
                 'error' => $e->getMessage(),
             ]);
 
@@ -101,8 +121,7 @@ class PortalDocumentStorage
         }
 
         if (! $response->successful()) {
-            Log::warning('Vendor document fetch returned an error', [
-                'document_id' => $document->id,
+            Log::warning('Portal file fetch returned an error', $context + [
                 'status' => $response->status(),
             ]);
 

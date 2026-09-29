@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Support\CompanyContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
@@ -1387,6 +1388,44 @@ class NpcStatusTest extends TestCase
                 'confirmed' => true,
             ])
             ->assertOk();
+    }
+
+    public function test_admin_downloads_a_portal_uploaded_proof_from_linkportal(): void
+    {
+        // Separate App Services: the cashier's proof is on the portal's disk.
+        config([
+            'services.linkportal.documents_root' => null,
+            'services.linkportal.base_url' => 'https://portal.test',
+        ]);
+        $admin = User::factory()->create();
+        $admin->givePermissionTo('npc_status.edit');
+        $npcStatus = $this->npcStatus();
+        $store = $this->store();
+        $proof = NpcStoreProof::create([
+            'npc_status_id' => $npcStatus->id,
+            'store_id' => $store->id,
+            'seal_type' => NpcStatusAttachment::TYPE_DPO_SEAL,
+            'file_path' => "npc-store-proofs/{$npcStatus->id}/{$store->id}/proof-dpo_seal-abc.png",
+            'file_name' => 'proof.png',
+            'mime_type' => 'image/png',
+            'uploaded_at' => now(),
+        ]);
+        Http::preventStrayRequests();
+        Http::fake([
+            "portal.test/storage/{$proof->file_path}" => Http::response('proof-bytes', 200),
+            'portal.test/*' => Http::response('', 404),
+        ]);
+
+        $response = $this->actingAs($admin)
+            ->get(route('npc-statuses.stores.proof.download', [$npcStatus, $store, NpcStatusAttachment::TYPE_DPO_SEAL]))
+            ->assertOk()
+            ->assertDownload('proof.png');
+        $this->assertSame('proof-bytes', $response->getContent());
+
+        $proof->update(['file_path' => "npc-store-proofs/{$npcStatus->id}/{$store->id}/gone.png"]);
+        $this->actingAs($admin)
+            ->get(route('npc-statuses.stores.proof.download', [$npcStatus, $store, NpcStatusAttachment::TYPE_DPO_SEAL]))
+            ->assertNotFound();
     }
 
     public function test_store_user_cannot_upload_proof_for_unassigned_store(): void
