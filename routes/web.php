@@ -119,6 +119,9 @@ Route::middleware('auth')->group(function () {
         ->name('npc-statuses.stores.proof.download');
     Route::get('npc-statuses/companies/{company}', [NpcStatusController::class, 'showCompany'])
         ->name('npc-statuses.companies.show');
+    // Declared before the resource so `{npcStatus}` cannot swallow "settings".
+    Route::put('npc-statuses/settings', [NpcStatusController::class, 'updateSettings'])
+        ->name('npc-statuses.settings.update');
     Route::post('stores/{store}/cctv-seal-notice', [NpcStatusController::class, 'storeCctvSealNotice'])->name('stores.cctv-seal-notice.store');
     Route::get('stores/{store}/cctv-seal-notice', [NpcStatusController::class, 'downloadCctvSealNotice'])->name('stores.cctv-seal-notice.download');
     Route::resource('npc-statuses', NpcStatusController::class)

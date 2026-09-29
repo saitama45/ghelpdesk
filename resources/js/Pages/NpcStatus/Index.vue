@@ -25,15 +25,20 @@
                 </div>
 
                 <div
-                    v-if="canDownloadAssignedSeals"
+                    v-if="canDownloadAssignedSeals || canManageNpcSettings"
                     class="rounded-xl border border-gray-200 bg-gray-50 p-3 shadow-sm dark:border-gray-700 dark:bg-gray-900/50"
                 >
                     <div class="mb-3 flex flex-wrap items-center justify-between gap-1 px-1">
                         <p class="text-xs font-black uppercase tracking-widest text-gray-600 dark:text-gray-300">Choose a section</p>
-                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Click either tab to switch views</p>
+                        <p class="text-xs font-medium text-gray-500 dark:text-gray-400">Click a tab to switch views</p>
                     </div>
 
-                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2" role="tablist" aria-label="NPC sections">
+                    <div
+                        class="grid grid-cols-1 gap-3"
+                        :class="canDownloadAssignedSeals && canManageNpcSettings ? 'sm:grid-cols-3' : 'sm:grid-cols-2'"
+                        role="tablist"
+                        aria-label="NPC sections"
+                    >
                         <button
                             type="button"
                             role="tab"
@@ -67,6 +72,7 @@
                         </button>
 
                         <button
+                            v-if="canDownloadAssignedSeals"
                             type="button"
                             role="tab"
                             :aria-selected="adminSection === 'downloads'"
@@ -97,6 +103,40 @@
                                 Active
                             </span>
                         </button>
+
+                        <button
+                            v-if="canManageNpcSettings"
+                            type="button"
+                            role="tab"
+                            :aria-selected="adminSection === 'settings'"
+                            class="group relative flex cursor-pointer items-center gap-4 rounded-xl border-2 p-4 text-left transition-all duration-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-slate-200"
+                            :class="adminSection === 'settings'
+                                ? 'border-slate-700 bg-slate-700 text-white shadow-lg shadow-slate-200/70 dark:shadow-none'
+                                : 'border-gray-200 bg-white text-gray-800 hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-md dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100'"
+                            @click="adminSection = 'settings'"
+                        >
+                            <span
+                                class="flex h-11 w-11 flex-none items-center justify-center rounded-lg"
+                                :class="adminSection === 'settings' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600 dark:bg-slate-900/40 dark:text-slate-300'"
+                            >
+                                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                            </span>
+                            <span class="min-w-0">
+                                <span class="block text-sm font-black uppercase tracking-wide">Settings</span>
+                                <span
+                                    class="mt-1 block text-xs font-medium"
+                                    :class="adminSection === 'settings' ? 'text-slate-200' : 'text-gray-500 dark:text-gray-400'"
+                                >
+                                    Choose entities to hide from the list
+                                </span>
+                            </span>
+                            <span v-if="adminSection === 'settings'" class="ml-auto rounded-full bg-white px-2.5 py-1 text-[10px] font-black uppercase text-slate-700">
+                                Active
+                            </span>
+                        </button>
                     </div>
                 </div>
 
@@ -107,6 +147,11 @@
                     @download-error="onStoreDownloadError"
                     @uploaded="onStoreDownload"
                     @upload-error="onStoreDownloadError"
+                />
+
+                <NpcEntitySettings
+                    v-else-if="adminSection === 'settings' && canManageNpcSettings"
+                    :settings="npcSettings"
                 />
 
                 <template v-else>
@@ -795,6 +840,7 @@ import axios from 'axios'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import AssignedStoreSeals from '@/Components/NpcStatus/AssignedStoreSeals.vue'
 import NpcRegistrationStep from '@/Components/NpcStatus/NpcRegistrationStep.vue'
+import NpcEntitySettings from '@/Components/NpcStatus/NpcEntitySettings.vue'
 import DataTable from '@/Components/DataTable.vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { usePagination } from '@/Composables/usePagination'
@@ -811,8 +857,12 @@ const props = defineProps({
     stores: Array,
     storeSeals: { type: Array, default: () => [] },
     canDownloadAssignedSeals: { type: Boolean, default: false },
+    // Sent only to npc_status.settings holders: { entities, hidden_company_ids }.
+    npcSettings: { type: Object, default: null },
     defaultNpcSection: { type: String, default: 'monitoring' },
 })
+
+const canManageNpcSettings = computed(() => !!props.npcSettings)
 
 const { confirm } = useConfirm()
 const { hasPermission } = usePermission()

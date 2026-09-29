@@ -13,6 +13,7 @@ use App\Models\NpcStatus;
 use App\Models\NpcStoreProof;
 use App\Models\NpcStatusAttachment;
 use App\Models\NpcStatusWorkflowStep;
+use App\Models\Setting;
 use App\Models\Store;
 use App\Models\User;
 use App\Services\NotificationService;
@@ -41,6 +42,9 @@ class NpcStatusController extends Controller implements HasMiddleware
     // `mimes` (content-sniffed extension match) so a mislabeled .jpg that is
     // really e.g. HEIC still resolves to an allowed type.
     private const UPLOAD_FILE_RULE = 'required|file|mimes:pdf,jpg,jpeg,png,webp,gif,bmp,heic,heif|max:';
+
+    /** Setting holding the entity (company) ids left out of the Monitoring list. */
+    private const HIDDEN_ENTITIES_SETTING = 'npc_hidden_company_ids';
 
     private const STATUS_GROUPS = [
         'active' => ['Active'],
@@ -79,6 +83,7 @@ class NpcStatusController extends Controller implements HasMiddleware
                 'confirmStoreSeal',
             ]),
             new Middleware('can:npc_status.reveal_password', only: ['revealPassword']),
+            new Middleware('can:npc_status.settings', only: ['updateSettings']),
             new Middleware('can:npc_status.delete', only: ['destroy']),
             new Middleware('can:npc_status.download', only: ['downloadStoreSeal', 'uploadStoreProof']),
         ];
@@ -118,9 +123,12 @@ class NpcStatusController extends Controller implements HasMiddleware
         $perPage = (int) ($validated['per_page'] ?? 10);
         $page = (int) ($validated['page'] ?? 1);
 
+        $hiddenCompanyIds = $this->hiddenCompanyIds();
+
         $rows = Company::query()
             // Only Entity-type companies are tracked for NPC statuses.
             ->where('type', 'Entity')
+            ->when($hiddenCompanyIds, fn ($query) => $query->whereNotIn('id', $hiddenCompanyIds))
             ->when($restrictedStoreIds !== null, function ($query) use ($year, $restrictedStoreIds) {
                 $query->whereHas('npcStatuses', function ($npcQuery) use ($year, $restrictedStoreIds) {
                     $npcQuery->where('year', $year)
@@ -198,13 +206,69 @@ class NpcStatusController extends Controller implements HasMiddleware
                 'per_page' => $perPage,
             ],
             'currentYear' => $year,
-            'statusCounts' => $this->statusCounts($year, $restrictedStoreIds),
+            'statusCounts' => $this->statusCounts($year, $restrictedStoreIds, $hiddenCompanyIds),
             'workflowSteps' => NpcStatus::WORKFLOW_STEPS,
             'stores' => $this->storeOptions($year, $restrictedStoreIds),
             'storeSeals' => $canDownload ? $this->storeDownloadPayload($user) : [],
             'canDownloadAssignedSeals' => $canDownload,
+            'npcSettings' => $user->can('npc_status.settings') ? $this->settingsPayload($hiddenCompanyIds) : null,
             'defaultNpcSection' => $restrictedStoreIds !== null ? 'downloads' : 'monitoring',
         ]);
+    }
+
+    /**
+     * Save which entities the Monitoring list leaves out. Hiding only filters
+     * the list and its counts: records, seals and store downloads are untouched,
+     * and an entity reappears as soon as it is unchecked.
+     */
+    public function updateSettings(Request $request)
+    {
+        $validated = $request->validate([
+            'hidden_company_ids' => 'present|array',
+            'hidden_company_ids.*' => [
+                'integer',
+                'distinct',
+                Rule::exists('companies', 'id')->where('type', 'Entity'),
+            ],
+        ]);
+
+        $ids = collect($validated['hidden_company_ids'])->map(fn ($id) => (int) $id)->sort()->values()->all();
+        Setting::set(self::HIDDEN_ENTITIES_SETTING, json_encode($ids), 'npc_status');
+
+        $count = count($ids);
+
+        // Back to page 1, not the referrer: the list scrolls infinitely and only
+        // page 1 replaces its buffer, so a later page would keep hidden rows.
+        return redirect()->route('npc-statuses.index')->with('success', $count === 0
+            ? 'All entities are shown in the NPC list.'
+            : ($count === 1 ? '1 entity is hidden from the NPC list.' : "{$count} entities are hidden from the NPC list."));
+    }
+
+    /** @return int[] */
+    private function hiddenCompanyIds(): array
+    {
+        $ids = json_decode((string) Setting::get(self::HIDDEN_ENTITIES_SETTING, '[]'), true);
+
+        return is_array($ids) ? array_values(array_map('intval', $ids)) : [];
+    }
+
+    private function settingsPayload(array $hiddenCompanyIds): array
+    {
+        return [
+            'entities' => Company::query()
+                ->where('type', 'Entity')
+                ->orderBy('name')
+                ->get(['id', 'name', 'code', 'is_active'])
+                ->map(fn (Company $company) => [
+                    'id' => $company->id,
+                    'name' => $company->name,
+                    'code' => $company->code,
+                    'is_active' => (bool) $company->is_active,
+                ])
+                ->values()
+                ->all(),
+            'hidden_company_ids' => $hiddenCompanyIds,
+        ];
     }
 
     public function showCompany(Request $request, Company $company)
@@ -1403,11 +1467,12 @@ class NpcStatusController extends Controller implements HasMiddleware
             ->all();
     }
 
-    private function statusCounts(int $year, ?array $restrictedStoreIds = null): array
+    private function statusCounts(int $year, ?array $restrictedStoreIds = null, array $hiddenCompanyIds = []): array
     {
         $rows = Company::query()
             // Only Entity-type companies are tracked for NPC statuses.
             ->where('type', 'Entity')
+            ->when($hiddenCompanyIds, fn ($query) => $query->whereNotIn('id', $hiddenCompanyIds))
             ->when($restrictedStoreIds !== null, function ($query) use ($year, $restrictedStoreIds) {
                 $query->whereHas('npcStatuses', function ($npcQuery) use ($year, $restrictedStoreIds) {
                     $npcQuery->where('year', $year)

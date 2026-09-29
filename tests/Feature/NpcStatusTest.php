@@ -28,6 +28,8 @@ class NpcStatusTest extends TestCase
         parent::setUp();
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+        // Setting keeps a static per-process cache; the hidden-entity list must not leak between tests.
+        \App\Models\Setting::flushCache();
 
         foreach (['npc_status.view', 'npc_status.create', 'npc_status.edit', 'npc_status.delete', 'npc_status.download', 'npc_status.reveal_password'] as $permission) {
             Permission::findOrCreate($permission);
@@ -102,6 +104,76 @@ class NpcStatusTest extends TestCase
                 ->has('stores', 1)
                 ->where('stores.0.assigned_company_id', $companyWithStatus->id)
             );
+    }
+
+    public function test_hidden_entities_are_left_out_of_the_list_and_counts(): void
+    {
+        Permission::findOrCreate('npc_status.settings');
+        $user = User::factory()->create();
+        $user->givePermissionTo(['npc_status.view', 'npc_status.settings']);
+        $shown = $this->company(['code' => 'SHOWN']);
+        $hidden = $this->company(['code' => 'HIDDEN']);
+        $this->npcStatus(['company_id' => $hidden->id]);
+
+        $this->actingAs($user)
+            ->put(route('npc-statuses.settings.update'), ['hidden_company_ids' => [$hidden->id]])
+            ->assertRedirect(route('npc-statuses.index'))
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($user)
+            ->get(route('npc-statuses.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('npcStatuses.data', 1)
+                ->where('npcStatuses.data.0.id', $shown->id)
+                ->where('statusCounts.all.entities', 1)
+                ->has('npcSettings.entities', 2)
+                ->where('npcSettings.hidden_company_ids', [$hidden->id])
+            );
+
+        // Unchecking brings the entity and its record straight back.
+        $this->actingAs($user)
+            ->put(route('npc-statuses.settings.update'), ['hidden_company_ids' => []])
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($user)
+            ->get(route('npc-statuses.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('npcStatuses.data', 2)
+                ->where('npcSettings.hidden_company_ids', [])
+            );
+    }
+
+    public function test_npc_settings_require_the_settings_permission(): void
+    {
+        Permission::findOrCreate('npc_status.settings');
+        $editor = User::factory()->create();
+        $editor->givePermissionTo(['npc_status.view', 'npc_status.edit']);
+        $company = $this->company();
+
+        $this->actingAs($editor)
+            ->get(route('npc-statuses.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('npcSettings', null));
+
+        $this->actingAs($editor)
+            ->put(route('npc-statuses.settings.update'), ['hidden_company_ids' => [$company->id]])
+            ->assertForbidden();
+
+        $this->assertNull(\App\Models\Setting::where('key', 'npc_hidden_company_ids')->value('value'));
+    }
+
+    public function test_npc_settings_only_accept_entity_companies(): void
+    {
+        Permission::findOrCreate('npc_status.settings');
+        $user = User::factory()->create();
+        $user->givePermissionTo(['npc_status.view', 'npc_status.settings']);
+        $brand = $this->company(['type' => 'Brand']);
+
+        $this->actingAs($user)
+            ->from(route('npc-statuses.index'))
+            ->put(route('npc-statuses.settings.update'), ['hidden_company_ids' => [$brand->id]])
+            ->assertSessionHasErrors('hidden_company_ids.0');
     }
 
     public function test_dedicated_dpo_uploads_are_kept_as_file_history(): void

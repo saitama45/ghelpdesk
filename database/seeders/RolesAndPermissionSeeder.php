@@ -190,6 +190,7 @@ class RolesAndPermissionSeeder extends Seeder
             'npc_status.delete' => 'Delete NPC Status records',
             'npc_status.download' => 'Download assigned store seals (store users)',
             'npc_status.reveal_password' => 'Reveal registered account passwords',
+            'npc_status.settings' => 'Manage NPC Status settings (entities hidden from the list)',
 
             // CCTV Monitoring
             'cctv_monitoring.view' => 'View CCTV Monitoring',
