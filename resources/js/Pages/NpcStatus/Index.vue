@@ -304,10 +304,6 @@
                             <!-- Finalized or permission-restricted record -->
                             <div v-if="isModalReadOnly" class="rounded-lg border border-gray-200 bg-gray-50 p-5 dark:bg-gray-900/50 dark:border-gray-700">
                                 <div v-if="modalNpcStatus" class="grid grid-cols-2 gap-6">
-                                    <div class="col-span-2">
-                                        <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400">Application Type</div>
-                                        <span class="mt-0.5 inline-flex rounded-full px-2.5 py-1 text-xs font-black uppercase tracking-wide" :class="computedEntryType === 'Renewal' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'">{{ computedEntryType }}</span>
-                                    </div>
                                     <div>
                                         <div class="text-[10px] font-bold uppercase tracking-wide text-gray-400">From</div>
                                         <div class="mt-0.5 text-base font-bold text-gray-900 dark:text-gray-100">{{ formatDate(modalNpcStatus.validity_from) }}</div>
@@ -322,14 +318,9 @@
 
                             <!-- Editable current or historical record -->
                             <div v-else class="space-y-4">
-                                <div>
-                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Application Type</label>
-                                    <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-black uppercase tracking-wide" :class="computedEntryType === 'Renewal' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'">{{ computedEntryType }}</span>
-                                    <p class="mt-1 text-[11px] font-medium text-gray-400">Set automatically — <strong>Renewal</strong> when the entity has an earlier record, otherwise <strong>New</strong>.</p>
-                                    <p v-if="computedEntryType === 'Renewal' && !modalNpcStatus && priorRecord" class="mt-1 text-xs font-medium text-blue-600 dark:text-blue-300">
-                                        Recent details from {{ priorRecord.year }} will be pre-filled after you save.
-                                    </p>
-                                </div>
+                                <p v-if="!modalNpcStatus && priorRecord" class="text-xs font-medium text-blue-600 dark:text-blue-300">
+                                    Recent details from {{ priorRecord.year }} will be pre-filled after you save.
+                                </p>
                                 <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
                                     <div>
                                         <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Validity From</label>
