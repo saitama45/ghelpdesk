@@ -422,6 +422,48 @@ class NpcStatusTest extends TestCase
         $this->assertSame(2026, $npcStatus->fresh()->year);
     }
 
+    public function test_validity_starting_in_prior_calendar_year_can_be_saved_on_same_record(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo('npc_status.edit');
+        $npcStatus = $this->npcStatus();
+
+        $this->actingAs($user)
+            ->putJson(route('npc-statuses.update', $npcStatus), [
+                'validity_from' => '2025-09-16',
+                'validity_to' => '2026-09-16',
+            ])
+            ->assertOk()
+            ->assertJsonMissingValidationErrors('validity_from');
+
+        $npcStatus->refresh();
+        $this->assertSame(2026, (int) $npcStatus->year);
+        $this->assertSame('2025-09-16', $npcStatus->validity_from->format('Y-m-d'));
+        $this->assertSame('2026-09-16', $npcStatus->validity_to->format('Y-m-d'));
+    }
+
+    public function test_attachment_for_validity_starting_in_prior_year_is_stamped_into_record_year(): void
+    {
+        Storage::fake('public');
+        $user = User::factory()->create();
+        $user->givePermissionTo('npc_status.edit');
+        $npcStatus = $this->npcStatus([
+            'validity_from' => '2025-09-16',
+            'validity_to' => '2026-09-16',
+        ]);
+
+        $this->actingAs($user)
+            ->postJson(route('npc-statuses.attachments.store', $npcStatus), [
+                'type' => NpcStatusAttachment::TYPE_DPO_SEAL,
+                'validity_from' => '2025-09-16',
+                'file' => UploadedFile::fake()->create('seal.pdf', 100, 'application/pdf'),
+            ])
+            ->assertOk()
+            ->assertJsonPath('company.npc_status.attachments.dpo_seal.0.validity_from', '2026-01-01');
+
+        $this->assertSame('2026-01-01', $npcStatus->attachments()->first()->validity_from->format('Y-m-d'));
+    }
+
     public function test_automatic_renewal_statuses_are_returned_for_selected_year(): void
     {
         $this->travelTo('2026-05-22');

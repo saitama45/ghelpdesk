@@ -373,11 +373,10 @@ class NpcStatusController extends Controller implements HasMiddleware
     {
         $this->ensureNpcStatusIsEditable($npcStatus);
         $validated = $this->validatePayload($request, false);
-        $year = Carbon::parse($validated['validity_from'])->year;
 
-        if ($year !== (int) $npcStatus->year) {
+        if (! $this->validityCoversYear($validated['validity_from'], $validated['validity_to'], (int) $npcStatus->year)) {
             throw ValidationException::withMessages([
-                'validity_from' => 'Use Add Renewal to create a new validity year instead of moving this historical record.',
+                'validity_from' => "The validity period must include {$npcStatus->year}. Use Add Renewal to create a new validity year instead of moving this historical record.",
             ]);
         }
 
@@ -478,10 +477,20 @@ class NpcStatusController extends Controller implements HasMiddleware
             'file' => self::UPLOAD_FILE_RULE . self::MAX_ATTACHMENT_KILOBYTES,
         ]);
 
-        if (Carbon::parse($validated['validity_from'])->year !== (int) $npcStatus->year) {
-            throw ValidationException::withMessages([
-                'validity_from' => 'Attachment validity from must be within the parent renewal year.',
-            ]);
+        $year = (int) $npcStatus->year;
+        $validityFrom = Carbon::parse($validated['validity_from']);
+
+        // Attachments are matched to their record by the year of this stamp
+        // (attachmentsPayloadFromCollection). A window that starts in the prior
+        // calendar year still belongs to this record, so stamp it into the year.
+        if ($validityFrom->year !== $year) {
+            if (! $npcStatus->validity_to || ! $this->validityCoversYear($validityFrom, $npcStatus->validity_to, $year)) {
+                throw ValidationException::withMessages([
+                    'validity_from' => 'Attachment validity from must be within the parent renewal year.',
+                ]);
+            }
+
+            $validityFrom = Carbon::create($year, 1, 1);
         }
 
         $storeId = $validated['type'] === NpcStatusAttachment::TYPE_CCTV_SEAL
@@ -497,7 +506,7 @@ class NpcStatusController extends Controller implements HasMiddleware
         $duplicate = $npcStatus->attachments()
             ->where('type', $validated['type'])
             ->where('store_id', $storeId)
-            ->whereYear('validity_from', Carbon::parse($validated['validity_from'])->year)
+            ->whereYear('validity_from', $year)
             ->exists();
 
         if ($duplicate) {
@@ -511,7 +520,7 @@ class NpcStatusController extends Controller implements HasMiddleware
         $this->storeStatusAttachment(
             $npcStatus,
             $validated['type'],
-            $validated['validity_from'],
+            $validityFrom->toDateString(),
             $request->file('file'),
             $request->user()->id,
             $storeId
@@ -901,6 +910,17 @@ class NpcStatusController extends Controller implements HasMiddleware
         $npcStatus->entry_type = $this->defaultEntryType($npcStatus->company_id, (int) $npcStatus->year);
 
         $npcStatus->updated_by = $userId;
+    }
+
+    /**
+     * A record's validity window belongs to its year when it includes that
+     * year, so a certificate running 2025-09-16 to 2026-09-16 stays the 2026
+     * record's validity instead of counting as a move to 2025.
+     */
+    private function validityCoversYear($validityFrom, $validityTo, int $year): bool
+    {
+        return Carbon::parse($validityFrom)->year <= $year
+            && Carbon::parse($validityTo)->year >= $year;
     }
 
     private function defaultEntryType(int $companyId, int $year): string
