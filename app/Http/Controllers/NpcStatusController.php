@@ -207,6 +207,7 @@ class NpcStatusController extends Controller implements HasMiddleware
             ],
             'currentYear' => $year,
             'statusCounts' => $this->statusCounts($year, $restrictedStoreIds, $hiddenCompanyIds),
+            'analytics' => $this->analyticsPayload($rows),
             'workflowSteps' => NpcStatus::WORKFLOW_STEPS,
             'stores' => $this->storeOptions($year, $restrictedStoreIds),
             'storeSeals' => $canDownload ? $this->storeDownloadPayload($user) : [],
@@ -242,6 +243,82 @@ class NpcStatusController extends Controller implements HasMiddleware
         return redirect()->route('npc-statuses.index')->with('success', $count === 0
             ? 'All entities are shown in the NPC list.'
             : ($count === 1 ? '1 entity is hidden from the NPC list.' : "{$count} entities are hidden from the NPC list."));
+    }
+
+    /**
+     * Monitoring dashboard: how far the listed entities (hidden ones excluded,
+     * status tab and search ignored) have come this year. Built from the rows
+     * the list already serialized, so it adds no queries. Every entity share
+     * uses the same denominator — all listed entities — so an entity without
+     * a record counts as not started rather than dropping out.
+     */
+    private function analyticsPayload(Collection $rows): array
+    {
+        $total = $rows->count();
+        $records = $rows->filter(fn (array $row) => $row['npc_status'] !== null);
+        $namesWhere = fn (callable $test) => $rows->filter($test)->pluck('name')->values()->all();
+        $stepsOf = fn (array $row) => collect($row['npc_status']['workflow_steps'] ?? []);
+
+        // "Due Today" is folded into "Critical Renewal": one day rarely has members.
+        $statusOf = function (array $row) {
+            $status = $row['npc_status']['renewal_status'] ?? 'No Record';
+
+            return $status === 'Due Today' ? 'Critical Renewal' : $status;
+        };
+        $renewal = collect(['Active', 'Renewal Window', 'Critical Renewal', 'Overdue', 'No Record'])
+            ->map(fn (string $status) => [
+                'status' => $status,
+                'count' => $rows->filter(fn (array $row) => $statusOf($row) === $status)->count(),
+                'entities' => $namesWhere(fn (array $row) => $statusOf($row) === $status),
+            ])
+            ->values()
+            ->all();
+
+        $isApproved = fn (array $row) => ($row['npc_status']['approval_status'] ?? null) === 'Approved';
+        $isComplete = fn (array $row) => $row['npc_status'] !== null && $stepsOf($row)->isNotEmpty() && $stepsOf($row)->every(fn ($step) => $step['is_done']);
+        $sealsReleased = fn (array $row) => $row['npc_status'] !== null
+            && collect($row['npc_status']['seals'] ?? [])->isNotEmpty()
+            && collect($row['npc_status']['seals'])->every(fn ($seal) => $seal['available']);
+
+        $steps = collect(NpcStatus::WORKFLOW_STEPS)
+            ->map(function (array $definition) use ($rows, $stepsOf, $namesWhere) {
+                $isDone = fn (array $row) => (bool) ($stepsOf($row)->firstWhere('key', $definition['key'])['is_done'] ?? false);
+
+                return [
+                    'key' => $definition['key'],
+                    'label' => $definition['label'],
+                    'done' => $rows->filter($isDone)->count(),
+                    'pending' => $namesWhere(fn (array $row) => ! $isDone($row)),
+                ];
+            })
+            ->values()
+            ->all();
+
+        // A store is through a stage only when every seal it receives is.
+        $storeSeals = $records->flatMap(fn (array $row) => $row['npc_status']['store_receipts'] ?? [])
+            ->map(fn (array $store) => collect($store['seals'] ?? []));
+        $storesWhere = fn (callable $test) => $storeSeals->filter(fn ($seals) => $seals->isNotEmpty() && $seals->every($test))->count();
+
+        return [
+            'total_entities' => $total,
+            'overall_progress' => $total > 0
+                ? (int) round($records->sum(fn (array $row) => $row['npc_status']['workflow_progress'] ?? 0) / $total)
+                : 0,
+            'kpis' => [
+                'with_record' => $records->count(),
+                'approved' => $rows->filter($isApproved)->count(),
+                'seals_released' => $rows->filter($sealsReleased)->count(),
+                'workflow_complete' => $rows->filter($isComplete)->count(),
+            ],
+            'renewal' => $renewal,
+            'steps' => $steps,
+            'stores' => [
+                'assigned' => $storeSeals->count(),
+                'downloaded' => $storesWhere(fn ($seal) => filled($seal['downloaded_at'] ?? null)),
+                'proof' => $storesWhere(fn ($seal) => ! empty($seal['proof'])),
+                'confirmed' => $storesWhere(fn ($seal) => filled($seal['confirmed_at'] ?? null)),
+            ],
+        ];
     }
 
     /** @return int[] */

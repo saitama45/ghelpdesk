@@ -144,6 +144,56 @@ class NpcStatusTest extends TestCase
             );
     }
 
+    public function test_analytics_summarize_every_listed_entity_on_one_denominator(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo('npc_status.view');
+        $approved = $this->company(['name' => 'Alpha Entity']);
+        $overdue = $this->company(['name' => 'Beta Entity']);
+        $this->company(['name' => 'Gamma Entity']); // no record this year
+
+        $done = $this->npcStatus([
+            'company_id' => $approved->id,
+            'validity_from' => now()->startOfYear()->toDateString(),
+            'validity_to' => now()->addYear()->toDateString(),
+            'approval_status' => 'Approved',
+            'year' => (int) now()->year,
+        ]);
+        foreach (array_slice(NpcStatus::WORKFLOW_STEPS, 0, 4) as $step) {
+            \App\Models\NpcStatusWorkflowStep::create([
+                'npc_status_id' => $done->id, 'key' => $step['key'], 'label' => $step['label'],
+                'sort_order' => $step['sort_order'], 'is_done' => true,
+            ]);
+        }
+        $this->npcStatus([
+            'company_id' => $overdue->id,
+            'validity_from' => now()->startOfYear()->toDateString(),
+            'validity_to' => now()->subDay()->toDateString(),
+            'year' => (int) now()->year,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('npc-statuses.index', ['status' => 'active']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                // The status tab filters the list, never the dashboard.
+                ->has('npcStatuses.data', 1)
+                ->where('analytics.total_entities', 3)
+                ->where('analytics.kpis.with_record', 2)
+                ->where('analytics.kpis.approved', 1)
+                ->where('analytics.kpis.workflow_complete', 0)
+                // (4/6 = 67% + 0% + 0%) / 3 entities
+                ->where('analytics.overall_progress', 22)
+                ->where('analytics.renewal.0', ['status' => 'Active', 'count' => 1, 'entities' => ['Alpha Entity']])
+                ->where('analytics.renewal.3', ['status' => 'Overdue', 'count' => 1, 'entities' => ['Beta Entity']])
+                ->where('analytics.renewal.4', ['status' => 'No Record', 'count' => 1, 'entities' => ['Gamma Entity']])
+                ->where('analytics.steps.0.done', 1)
+                ->where('analytics.steps.0.pending', ['Beta Entity', 'Gamma Entity'])
+                ->where('analytics.steps.4.done', 0)
+                ->where('analytics.stores.assigned', 0)
+            );
+    }
+
     public function test_npc_settings_require_the_settings_permission(): void
     {
         Permission::findOrCreate('npc_status.settings');

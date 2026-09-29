@@ -155,6 +155,8 @@
                 />
 
                 <template v-else>
+                <NpcAnalytics v-if="analytics" :analytics="analytics" :year="currentYear" />
+
                 <!-- Status Tabs -->
                 <div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm dark:bg-gray-800 dark:border-gray-700">
                     <div class="flex justify-center gap-2 overflow-x-auto custom-scrollbar">
@@ -841,6 +843,7 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import AssignedStoreSeals from '@/Components/NpcStatus/AssignedStoreSeals.vue'
 import NpcRegistrationStep from '@/Components/NpcStatus/NpcRegistrationStep.vue'
 import NpcEntitySettings from '@/Components/NpcStatus/NpcEntitySettings.vue'
+import NpcAnalytics from '@/Components/NpcStatus/NpcAnalytics.vue'
 import DataTable from '@/Components/DataTable.vue'
 import { useConfirm } from '@/Composables/useConfirm'
 import { usePagination } from '@/Composables/usePagination'
@@ -853,6 +856,8 @@ const props = defineProps({
     filters: Object,
     currentYear: Number,
     statusCounts: Object,
+    // Monitoring dashboard figures (NpcStatusController::analyticsPayload).
+    analytics: { type: Object, default: null },
     workflowSteps: Array,
     stores: Array,
     storeSeals: { type: Array, default: () => [] },
