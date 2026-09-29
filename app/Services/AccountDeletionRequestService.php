@@ -90,6 +90,7 @@ class AccountDeletionRequestService
         }
         if ($update) {
             $ticket->update($update);
+            $this->assignees->recordReason($ticket, $resolved);
         }
 
         return $ticket->refresh();

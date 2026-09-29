@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
-import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/24/outline';
+import { ChevronLeftIcon, ChevronRightIcon, TicketIcon } from '@heroicons/vue/24/outline';
 import { APP_TIMEZONE, addDaysToKey, dateKeyIn, formatIn, localDateKey, minutesOfDayIn } from '@/lib/timezone';
 
 const props = defineProps({
@@ -41,10 +41,23 @@ const props = defineProps({
     heightClass: {
         type: String,
         default: 'h-[850px]'
+    },
+    // Ticket Duty: { [userId]: active ticket count } for tagged people.
+    ticketDutyLoads: {
+        type: Object,
+        default: () => ({})
+    },
+    ticketDutyEnabled: {
+        type: Boolean,
+        default: false
+    },
+    canTagTicketDuty: {
+        type: Boolean,
+        default: false
     }
 });
 
-const emit = defineEmits(['date-click', 'event-click', 'visible-range-change', 'update:statusFilter', 'update:concernTypeFilter', 'update:priorityFilter', 'add-schedule-for-user']);
+const emit = defineEmits(['date-click', 'event-click', 'visible-range-change', 'update:statusFilter', 'update:concernTypeFilter', 'update:priorityFilter', 'add-schedule-for-user', 'toggle-ticket-duty']);
 
 const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const currentDate = ref(new Date());
@@ -666,12 +679,20 @@ const buildStatusGroups = (events) => {
 // duty status.
 const daySearch = ref('');
 
+// Only a working status can carry Ticket Duty; a stale flag on leave is ignored
+// here exactly as the auto-assigner ignores it.
+const TICKET_DUTY_STATUSES = new Set(['On-site', 'Off-site', 'WFH']);
+const canCarryTicketDuty = (event) => TICKET_DUTY_STATUSES.has(event.status);
+const isOnTicketDuty = (event) => Boolean(event.ticket_duty) && canCarryTicketDuty(event);
+const ticketDutyLoad = (event) => Number(props.ticketDutyLoads?.[event.user_id] ?? 0);
+
 const eventSearchText = (event) => {
     const parts = [
         event.user?.name || '',
         event.status || '',
         resolveUserTeam(event).code || '',
         event.store?.name || '',
+        isOnTicketDuty(event) ? 'ticket duty' : '',
     ];
     if (Array.isArray(event.day_segments)) {
         for (const seg of event.day_segments) {
@@ -702,6 +723,18 @@ const filteredUnscheduledUsers = computed(() => {
 const hasDayMatches = computed(
     () => filteredDayEvents.value.length > 0 || filteredUnscheduledUsers.value.length > 0
 );
+
+// Pinned at the top of the day modal: who receives new tickets that day.
+const dutyDayEvents = computed(() => filteredDayEvents.value
+    .filter(isOnTicketDuty)
+    .sort((a, b) => new Date(a.start_time) - new Date(b.start_time)));
+
+// The modal holds a snapshot of the day; refresh it when a toggle reloads events.
+watch(() => props.events, () => {
+    if (showDayModal.value && selectedDayDate.value) {
+        selectedDayEvents.value = getEventsForDate(selectedDayDate.value);
+    }
+});
 
 // Outer grouping: by the user's Setup Hierarchy team (shown as its code only),
 // each holding the existing duty-status/location subgroups.
@@ -1081,6 +1114,38 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                             <p class="text-sm font-medium text-gray-400 dark:text-gray-400">No matches for "{{ daySearch }}"</p>
                         </div>
 
+                        <!-- On Ticket Duty: who new tickets are auto-assigned to this day -->
+                        <div
+                            v-if="dutyDayEvents.length > 0 || (canTagTicketDuty && !daySearch)"
+                            class="mb-3 pb-3 border-b border-dashed border-gray-200 dark:border-gray-700"
+                            data-testid="ticket-duty-group"
+                        >
+                            <p class="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-1.5 dark:text-emerald-400">
+                                <TicketIcon class="w-3.5 h-3.5 shrink-0" />
+                                On Ticket Duty ({{ dutyDayEvents.length }})
+                            </p>
+                            <p v-if="dutyDayEvents.length === 0" class="px-2 text-[11px] text-gray-400 dark:text-gray-400">
+                                Nobody is on ticket duty this day. Use the ticket button on a schedule below to tag someone.
+                            </p>
+                            <div class="space-y-1">
+                                <div
+                                    v-for="event in dutyDayEvents"
+                                    :key="`duty-${event.id}`"
+                                    class="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-emerald-50/70 dark:bg-emerald-900/20"
+                                >
+                                    <span class="text-xs font-semibold text-gray-800 flex-1 truncate dark:text-gray-100">{{ event.user?.name }}</span>
+                                    <span class="text-[10px] font-medium text-gray-500 shrink-0 dark:text-gray-400">{{ formatTime(event.start_time) }} - {{ formatTime(event.end_time) }}</span>
+                                    <span
+                                        class="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded shrink-0 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                        title="Open and in-progress tickets assigned right now. The person with the fewest gets the next ticket."
+                                    >{{ ticketDutyLoad(event) }} active</span>
+                                </div>
+                            </div>
+                            <p v-if="canTagTicketDuty && !ticketDutyEnabled" class="mt-1.5 px-2 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                                Assigning by ticket duty is off. Turn it on in Settings → Auto Assignee.
+                            </p>
+                        </div>
+
                         <!-- Unscheduled Users (No Schedule Plotted) -->
                         <div v-if="filteredUnscheduledUsers.length > 0" class="mb-3 pb-3 border-b border-dashed border-gray-200 dark:border-gray-700">
                             <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5 dark:text-gray-400">
@@ -1179,8 +1244,28 @@ const shouldShowTime = (status) => !hideTimeStatuses.has(status);
                                                 class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold text-white"
                                                 :class="getChipColor(event).split(' ')[0]"
                                             >{{ String(event.ticket.priority).toUpperCase() }}</span>
+                                            <span
+                                                v-if="isOnTicketDuty(event) && !canTagTicketDuty"
+                                                class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                            ><TicketIcon class="w-3 h-3" /> TICKET DUTY</span>
                                         </div>
-                                        <span v-if="shouldShowTime(event.status)" class="text-[10px] font-medium text-gray-400 shrink-0 ml-2 dark:text-gray-400">{{ formatTime(event.start_time) }} - {{ formatTime(event.end_time) }}</span>
+                                        <div class="flex items-center gap-1.5 shrink-0 ml-2">
+                                            <span v-if="shouldShowTime(event.status)" class="text-[10px] font-medium text-gray-400 dark:text-gray-400">{{ formatTime(event.start_time) }} - {{ formatTime(event.end_time) }}</span>
+                                            <button
+                                                v-if="canTagTicketDuty && canCarryTicketDuty(event)"
+                                                type="button"
+                                                @click.stop="emit('toggle-ticket-duty', { event })"
+                                                class="w-6 h-6 rounded-full flex items-center justify-center transition-colors"
+                                                :class="isOnTicketDuty(event)
+                                                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                                    : 'bg-gray-100 text-gray-400 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-gray-700 dark:text-gray-400'"
+                                                :title="isOnTicketDuty(event) ? 'On ticket duty: click to remove' : 'Put on ticket duty (auto-assign new tickets)'"
+                                                :aria-pressed="isOnTicketDuty(event) ? 'true' : 'false'"
+                                                data-testid="ticket-duty-toggle"
+                                            >
+                                                <TicketIcon class="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
                                     </div>
                                     <p class="text-xs text-gray-500 font-medium dark:text-gray-300">
                                         {{ event.status || 'Unknown' }}<span v-if="event.ticket" class="ml-1 text-gray-400 dark:text-gray-400">[{{ event.ticket.ticket_key }}]</span>

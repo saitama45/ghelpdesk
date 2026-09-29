@@ -78,6 +78,7 @@ class ScheduleController extends Controller implements HasMiddleware
             new Middleware('can:schedules.edit', only: ['update']),
             new Middleware('can:schedules.approve', only: ['approveChangeRequest', 'rejectChangeRequest']),
             new Middleware('can:schedules.delete', only: ['destroy', 'duplicates', 'destroyDuplicates']),
+            new Middleware('can:schedules.ticket_duty', only: ['updateTicketDuty']),
         ];
     }
 
@@ -185,6 +186,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 'backlogs_start'  => $schedule->backlogs_start ? substr($schedule->backlogs_start, 0, 5) : null,
                 'backlogs_end'    => $schedule->backlogs_end   ? substr($schedule->backlogs_end,   0, 5) : null,
                 'remarks'         => $schedule->remarks,
+                'ticket_duty'     => (bool) $schedule->ticket_duty,
                 'created_by'      => $schedule->created_by,
                 'created_by_name' => $schedule->creator?->name,
                 'updated_by'      => $schedule->updated_by,
@@ -269,8 +271,16 @@ class ScheduleController extends Controller implements HasMiddleware
 
         $pivotStatuses = ['On-site', 'Off-site', 'WFH', 'SL', 'VL', 'Restday', 'Offset', 'Holiday', 'N/A'];
 
+        // Current workload of everyone tagged for Ticket Duty in range, shown in
+        // the day modal so an admin can see who the auto-assigner will favour.
+        $ticketDutyLoads = app(\App\Services\TicketDutyAssigner::class)->activeTicketCounts(
+            $rawSchedules->where('ticket_duty', true)->pluck('user_id')->map(fn ($id) => (int) $id)->unique()->values()->all()
+        );
+
         return Inertia::render('Schedules/Index', [
             'schedules'      => $schedules,
+            'ticketDutyLoads' => (object) $ticketDutyLoads,
+            'ticketDutyEnabled' => app(\App\Services\TicketDutyAssigner::class)->enabled(),
             'users'          => $users,
             'stores'         => $stores,
             'departmentNodes'=> $departmentNodes,
@@ -326,9 +336,14 @@ class ScheduleController extends Controller implements HasMiddleware
         $startTime = Carbon::parse(collect($storeEntries)->min('start_time'));
         $endTime   = Carbon::parse(collect($storeEntries)->max('end_time'));
 
+        $ticketDuty = $this->ticketDutyFor(
+            $request->status,
+            $request->user()->can('schedules.ticket_duty') && $request->boolean('ticket_duty')
+        );
+
         // The duplicate check and the insert share one transaction so a double-click
         // (or two approvers saving at once) cannot land two schedules on the same day.
-        $conflictDate = DB::transaction(function () use ($request, $expandedStoreEntries, $startTime, $endTime) {
+        $conflictDate = DB::transaction(function () use ($request, $expandedStoreEntries, $startTime, $endTime, $ticketDuty) {
             $conflictDate = $this->conflictingScheduleDate(
                 (int) $request->user_id,
                 $expandedStoreEntries,
@@ -351,6 +366,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 'pickup_end'     => $request->pickup_end,
                 'backlogs_start' => $request->backlogs_start,
                 'backlogs_end'   => $request->backlogs_end,
+                'ticket_duty'    => $ticketDuty,
             ]);
 
             foreach ($expandedStoreEntries as $entry) {
@@ -433,9 +449,45 @@ class ScheduleController extends Controller implements HasMiddleware
             'You can only edit schedules for users under your org chart level.'
         );
 
-        $this->applyScheduleUpdate($payload, $schedule, auth()->id());
+        // Only a Ticket Duty tagger may change the tag; everyone else keeps it as is.
+        $ticketDuty = $request->user()->can('schedules.ticket_duty') && $request->has('ticket_duty')
+            ? $request->boolean('ticket_duty')
+            : null;
+
+        $this->applyScheduleUpdate($payload, $schedule, auth()->id(), $ticketDuty);
 
         return redirect()->back()->with('success', 'Schedule updated successfully');
+    }
+
+    /**
+     * Quick Ticket Duty toggle from the day modal. A tagged schedule makes its
+     * owner eligible for ticket auto-assignment during that shift.
+     */
+    public function updateTicketDuty(Request $request, Schedule $schedule)
+    {
+        $validated = $request->validate(['ticket_duty' => 'required|boolean']);
+        $ticketDuty = (bool) $validated['ticket_duty'];
+
+        if ($ticketDuty && ! in_array($schedule->status, Schedule::TICKET_DUTY_STATUSES, true)) {
+            return redirect()->back()->withErrors([
+                'ticket_duty' => "Only On-site, Off-site or WFH schedules can be tagged for ticket duty (this one is {$schedule->status}).",
+            ]);
+        }
+
+        $schedule->update(['ticket_duty' => $ticketDuty, 'updated_by' => auth()->id()]);
+
+        $name = $schedule->user?->name ?? 'This person';
+        $day = $schedule->start_time->format('M j');
+
+        return redirect()->back()->with('success', $ticketDuty
+            ? "{$name} is on ticket duty for {$day}."
+            : "{$name} is no longer on ticket duty for {$day}.");
+    }
+
+    /** A schedule keeps Ticket Duty only while its status means the person is working. */
+    private function ticketDutyFor(?string $status, bool $requested): bool
+    {
+        return $requested && in_array($status, Schedule::TICKET_DUTY_STATUSES, true);
     }
 
     public function storeChangeRequest(Request $request, Schedule $schedule)
@@ -863,9 +915,14 @@ class ScheduleController extends Controller implements HasMiddleware
         ])->validate();
     }
 
-    private function applyScheduleUpdate(array $payload, Schedule $schedule, int $updaterId): void
+    /**
+     * $ticketDuty: the tag to set, or null to keep the schedule's current one
+     * (change requests never carry it). Either way a non-working status clears it.
+     */
+    private function applyScheduleUpdate(array $payload, Schedule $schedule, int $updaterId, ?bool $ticketDuty = null): void
     {
         $payload = $this->validateScheduleUpdatePayload($payload);
+        $ticketDuty = $this->ticketDutyFor($payload['status'], $ticketDuty ?? (bool) $schedule->ticket_duty);
         $storeEntries = $payload['stores'];
         $expandedStoreEntries = $this->expandStoreEntries($storeEntries, $this->scheduleTimezoneFor((int) $payload['user_id']));
         $startTime = Carbon::parse(collect($storeEntries)->min('start_time'));
@@ -903,9 +960,9 @@ class ScheduleController extends Controller implements HasMiddleware
             ]);
         }
 
-        DB::transaction(function () use ($payload, $schedule, $startTime, $endTime, $expandedStoreEntries, $scopeDate, $updaterId) {
+        DB::transaction(function () use ($payload, $schedule, $startTime, $endTime, $expandedStoreEntries, $scopeDate, $updaterId, $ticketDuty) {
             if ($scopeDate && $this->scheduleHasEntriesOutsideScope($schedule, $scopeDate)) {
-                $this->splitScopedSchedule($payload, $schedule, $expandedStoreEntries, $scopeDate, $updaterId);
+                $this->splitScopedSchedule($payload, $schedule, $expandedStoreEntries, $scopeDate, $updaterId, $ticketDuty);
 
                 return;
             }
@@ -920,6 +977,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 'pickup_end'     => $payload['pickup_end'] ?? null,
                 'backlogs_start' => $payload['backlogs_start'] ?? null,
                 'backlogs_end'   => $payload['backlogs_end'] ?? null,
+                'ticket_duty'    => $ticketDuty,
             ]);
 
             if ($scopeDate) {
@@ -1523,7 +1581,7 @@ class ScheduleController extends Controller implements HasMiddleware
         $this->syncScheduleStoreRows($schedule, $existingRows, $entries);
     }
 
-    private function splitScopedSchedule(array $payload, Schedule $schedule, array $entries, string $scopeDate, int $updaterId): void
+    private function splitScopedSchedule(array $payload, Schedule $schedule, array $entries, string $scopeDate, int $updaterId, bool $ticketDuty = false): void
     {
         $newSchedule = Schedule::create([
             'user_id'        => $payload['user_id'],
@@ -1536,6 +1594,7 @@ class ScheduleController extends Controller implements HasMiddleware
             'pickup_end'     => $payload['pickup_end'] ?? null,
             'backlogs_start' => $payload['backlogs_start'] ?? null,
             'backlogs_end'   => $payload['backlogs_end'] ?? null,
+            'ticket_duty'    => $ticketDuty,
         ]);
 
         $existingRows = $this->scopedScheduleStoreRows($schedule, $scopeDate);

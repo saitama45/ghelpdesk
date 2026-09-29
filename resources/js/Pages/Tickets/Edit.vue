@@ -3415,13 +3415,14 @@ const linkify = (text) => {
                                     <div class="absolute -left-[25px] top-0 w-6 h-6 rounded-full border-2 border-white shadow-sm overflow-hidden bg-white dark:bg-gray-800">
                                         <img v-if="activity.user && activity.user.profile_photo" :src="'/serve-storage/' + activity.user.profile_photo" class="w-full h-full object-cover" :alt="activity.user.name">
                                         <div v-else class="w-full h-full bg-gray-400 flex items-center justify-center text-[10px] font-bold text-white">
-                                            {{ activity.user ? activity.user.name.charAt(0) : '?' }}
+                                            {{ activity.user ? activity.user.name.charAt(0) : (activity.column_changed === 'assignee_id' ? 'S' : '?') }}
                                         </div>
                                     </div>
-                                    
+
                                     <div class="flex items-center space-x-2 mb-1">
+                                        <!-- A userless assignee change is the auto-assigner: requesters never assign. -->
                                         <span class="font-bold text-gray-900 text-sm dark:text-gray-100">
-                                            {{ activity.user ? activity.user.name : (ticket.reporter ? ticket.reporter.name : (ticket.sender_name || 'Customer')) }}
+                                            {{ activity.user ? activity.user.name : (activity.column_changed === 'assignee_id' ? 'System' : (ticket.reporter ? ticket.reporter.name : (ticket.sender_name || 'Customer'))) }}
                                         </span>
                                         <span class="text-[10px] text-gray-500 dark:text-gray-300">{{ formatDate(activity.date) }}</span>
                                     </div>

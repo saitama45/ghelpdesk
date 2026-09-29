@@ -234,12 +234,18 @@ class SapRequestService
             }
         }
 
+        // Shared intake pool: no serving desk, so the Ticket Duty roster's intake
+        // department decides (no-op while the roster is off).
+        $autoAssignee = app(\App\Services\AutoAssigneeService::class);
+        $resolved = $autoAssignee->resolveFromDuty(['store_id' => $ticketStore->id]);
+
         $ticket = Ticket::create([
             'title'        => $subject,
             'description'  => $description,
             'status'       => 'open',
             'priority'     => 'medium',
             'severity'     => 'minor',
+            'assignee_id'  => $resolved['assignee_id'],
             'reporter_id'  => $sapRequest->user_id,
             'sender_name'  => $sapRequest->user ? $sapRequest->user->name : $sapRequest->requester_name,
             'sender_email' => $sapRequest->user ? $sapRequest->user->email : $sapRequest->requester_email,
@@ -248,6 +254,7 @@ class SapRequestService
             'type'         => 'task',
             'created_at'   => now('Asia/Manila'),
         ]);
+        $autoAssignee->recordReason($ticket, $resolved);
 
         $sapRequest->update(['ticket_id' => $ticket->id]);
     }

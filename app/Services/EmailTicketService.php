@@ -713,8 +713,12 @@ class EmailTicketService
                 'department_id' => $user?->department_id,
             ]);
 
-            // Auto-assign based on sender email rules (may also set company/entity)
-            $resolved = app(\App\Services\AutoAssigneeService::class)->resolveAssignee($senderEmail);
+            // Auto-assign: sender email rules (may also set company/entity), then
+            // the Ticket Duty roster of the desk the mail was routed to.
+            $autoAssignee = app(\App\Services\AutoAssigneeService::class);
+            $resolved = $autoAssignee->resolveAssignee($senderEmail, [
+                'serving_department_id' => $servingDepartmentId,
+            ]);
             $autoUpdateData = [];
             if ($resolved['assignee_id'] && \App\Models\User::where('id', $resolved['assignee_id'])->exists()) {
                 $autoUpdateData['assignee_id'] = $resolved['assignee_id'];
@@ -734,6 +738,7 @@ class EmailTicketService
             }
             if (!empty($autoUpdateData)) {
                 $ticket->update($autoUpdateData);
+                $autoAssignee->recordReason($ticket, $resolved);
             }
 
             // Add the email's To/CC recipients to the ticket CC list so replies notify them.

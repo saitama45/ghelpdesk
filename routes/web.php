@@ -473,6 +473,7 @@ Route::middleware('auth')->group(function () {
     Route::post('schedules/{schedule}/actual-times', [\App\Http\Controllers\ScheduleController::class, 'updateActualTimes'])->name('schedules.actual-times.update');
     Route::post('schedules/{schedule}/actual-time-requests', [\App\Http\Controllers\ScheduleController::class, 'storeActualTimeRequest'])->name('schedules.actual-time-requests.store');
     Route::post('schedules/{schedule}/change-requests', [\App\Http\Controllers\ScheduleController::class, 'storeChangeRequest'])->name('schedules.change-requests.store');
+    Route::post('schedules/{schedule}/ticket-duty', [\App\Http\Controllers\ScheduleController::class, 'updateTicketDuty'])->name('schedules.ticket-duty.update');
     Route::post('schedule-change-requests/{scheduleChangeRequest}/approve', [\App\Http\Controllers\ScheduleController::class, 'approveChangeRequest'])->name('schedule-change-requests.approve');
     Route::post('schedule-change-requests/{scheduleChangeRequest}/reject', [\App\Http\Controllers\ScheduleController::class, 'rejectChangeRequest'])->name('schedule-change-requests.reject');
     Route::delete('schedule-change-requests/{scheduleChangeRequest}', [\App\Http\Controllers\ScheduleController::class, 'cancelChangeRequest'])->name('schedule-change-requests.cancel');

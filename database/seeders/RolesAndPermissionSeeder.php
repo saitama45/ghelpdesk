@@ -218,6 +218,7 @@ class RolesAndPermissionSeeder extends Seeder
             'schedules.edit' => 'Edit schedules',
             'schedules.approve' => 'Approve schedule change requests',
             'schedules.delete' => 'Delete schedules',
+            'schedules.ticket_duty' => 'Tag schedules for ticket duty (auto-assignment)',
 
             // Administrative - Presence
             'presence.view' => 'View online users and their status history',

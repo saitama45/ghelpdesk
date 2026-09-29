@@ -209,17 +209,20 @@ class PublicQueueController extends Controller
             // Walk-ins are physically present: never let them fall below the floor.
             $data['priority'] = $this->applyPriorityFloor($data['priority']);
 
-            // Auto-assign (by email rule → defaults). Resolving an assignee also
-            // gives the ticket its department lane.
-            $lookupEmail = $data['sender_email'] ?? '';
-            if ($lookupEmail) {
-                $resolved = $this->autoAssignee->resolveAssignee($lookupEmail);
-                if ($resolved['assignee_id'] && User::whereKey($resolved['assignee_id'])->exists()) {
-                    $data['assignee_id'] = $resolved['assignee_id'];
-                }
+            // Auto-assign (email rule → Ticket Duty roster, or defaults while the
+            // roster is off). Resolving an assignee also gives the ticket its
+            // department lane.
+            $resolved = $this->autoAssignee->resolveAssignee($data['sender_email'] ?? '', [
+                'store_id' => $data['store_id'],
+            ]);
+            if ($resolved['assignee_id'] && User::whereKey($resolved['assignee_id'])->exists()) {
+                $data['assignee_id'] = $resolved['assignee_id'];
             }
 
-            return Ticket::create($data);
+            $ticket = Ticket::create($data);
+            $this->autoAssignee->recordReason($ticket, $resolved);
+
+            return $ticket;
         });
 
         // Redirect to the live "Track my ticket" page — this is the kiosk slip.

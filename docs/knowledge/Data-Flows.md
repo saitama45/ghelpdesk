@@ -110,7 +110,15 @@ intake → TicketObserver (key/company/SLA) → assignment → work → resolve 
 3. `app/Services/DepartmentMailRouter.php` decides "is this for us, and which department?" — one mailbox, per-department plus/alias addresses; a departmental hit beats the base support address.
 4. Thread matching: `source_message_id` (case-preserved) / references / `ticket_key` (incl. aliases) **plus a subject-similarity guard** — a reply with a new subject becomes a NEW ticket, not a comment on the old one.
 5. Every decision is written to `email_intake_logs`; diagnose with `php artisan tickets:diagnose-email`.
-6. Auto-assignment via `app/Services/AutoAssigneeService.php` (sender → assignee/company/store, round-robin); auto-CC unions To/CC minus assignee and noreply into `ticket_ccs`.
+6. Auto-assignment via `app/Services/AutoAssigneeService.php` (sender → assignee/company/store, round-robin, then the Ticket Duty roster — see below); auto-CC unions To/CC minus assignee and noreply into `ticket_ccs`.
+
+### Ticket Duty auto-assignment (schedule-driven)
+- An admin tags a schedule on `/schedules` for **Ticket Duty** (`schedules.ticket_duty` column; quick toggle in the calendar day modal via `POST schedules/{schedule}/ticket-duty`, or the checkbox in the schedule form). Gated by the `schedules.ticket_duty` permission; only On-site/Off-site/WFH may carry it, and any save that moves the day to SL/VL/etc. clears it.
+- Switched on in Settings → Auto Assignee (`auto_assignee_duty_enabled`, off by default). Order: **sender email rule → on duty now → next duty shift → unassigned**. While the roster is on, the global default agents are never used.
+- `app/Services/TicketDutyAssigner.php` picks: tagged schedules of active, non-vacant users in the ticket's **serving department** (deskless tickets use `auto_assignee_duty_intake_department_id`, blank = any desk); optional `auto_assignee_duty_store_first`; then fewest active tickets (`open`/`in_progress`-like, paused excluded), tie → whoever received a ticket longest ago. A `Cache::lock` per desk + a cache stamp keep simultaneous picks from landing on one person.
+- Schedule lookups bypass `ActiveEntityScope`: the requester's entity switcher must never hide the desk's roster.
+- Wired into web create, email intake, kiosk, dynamic forms, POS and SAP (the last three via `resolveFromDuty()`, so they gain no sender rules/defaults). `recordReason()` writes a userless `assignee_id` history row ("auto-assigned: on ticket duty until 5:00 PM, 1 active ticket"); Tickets/Edit labels userless assignee changes "System".
+- Tests: `tests/Feature/TicketDutyAssignmentTest.php`.
 
 ## 3. Notifications (bell + email)
 - In-app: `app/Services/NotificationService.php` → `App\Notifications\ActivityNotification` → `notifications` table; the bell polls every 30s (`NotificationController`).

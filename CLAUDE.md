@@ -66,6 +66,7 @@ Laravel 12 + Inertia v2 + Vue 3 + Tailwind v4 (Vite) on SQL Server, with Spatie 
 | Inbound email → ticket/comment | `app/Services/EmailTicketService.php` |
 | Department mail addresses | `app/Services/DepartmentMailRouter.php` |
 | SLA business-hours math | `app/Services/SlaService.php` |
+| Ticket auto-assignment (email rule → Ticket Duty roster from `/schedules` → defaults) | `app/Services/AutoAssigneeService.php`, `app/Services/TicketDutyAssigner.php` |
 | Bell notifications | `app/Services/NotificationService.php` + `app/Notifications/ActivityNotification.php` |
 | Permission catalogue / grouping | `app/Http/Services/RoleService.php` |
 | User ↔ loyalty-customer archive pair (soft delete, restore, purge; nightly `accounts:purge-expired`) | `app/Services/AccountArchiveService.php` |

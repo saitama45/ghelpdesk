@@ -63,7 +63,7 @@ Every record lives inside **an entity (company)** and, for work items, is served
 - **Per-ticket side** — `app/Support/TicketAccess.php`: a ticket served by another department renders **read-only** (customer view); only `tickets.resolve` may close the loop.
 
 ## Domain services (`app/Services/`)
-Tickets & email: `EmailTicketService`, `DepartmentMailRouter`, `SlaService`, `AutoAssigneeService`, `TicketKnowledgeBaseService`, `QueueService`, `NotificationService`, `LeadershipPointService`.
+Tickets & email: `EmailTicketService`, `DepartmentMailRouter`, `SlaService`, `AutoAssigneeService` + `TicketDutyAssigner`, `TicketKnowledgeBaseService`, `QueueService`, `NotificationService`, `LeadershipPointService`.
 Projects: `ProjectScheduler`, `ScheduleChain`, `ScheduleCalculator`, `HolidayCalendar`, `ProjectOverviewService`, `ProjectProgressChartService`, `ProjectWorkspaceService`, `ProjectTaskBoardSyncService`.
 Reporting: `StoreReportService`, `BrandHealthService`, `PartnerPerformanceService`, `AssetOperationalHealthService`.
 Requests/ops: `PosRequestService`, `SapRequestService`, `UatService`, `UatWorkbook`, `RecurringSchedulePlannerService`, `ServiceVehicleTripService`, `CctvEquipmentMatcher`, `OrganizationReferenceService`.

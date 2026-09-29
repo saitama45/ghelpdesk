@@ -6,6 +6,9 @@ use Illuminate\Database\Eloquent\Model;
 
 class Schedule extends Model
 {
+    /** Statuses that mean the person is working, so the schedule may carry Ticket Duty. */
+    public const TICKET_DUTY_STATUSES = ['On-site', 'Off-site', 'WFH'];
+
     protected $fillable = [
         'user_id',
         'created_by',
@@ -18,9 +21,11 @@ class Schedule extends Model
         'backlogs_start',
         'backlogs_end',
         'remarks',
+        'ticket_duty',
     ];
 
     protected $casts = [
+        'ticket_duty' => 'boolean',
         'user_id' => 'integer',
         'created_by' => 'integer',
         'updated_by' => 'integer',

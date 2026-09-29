@@ -319,6 +319,9 @@
                         :events="calendarSchedules"
                         :users="calendarUsers"
                         :department-nodes="departmentNodes || []"
+                        :ticket-duty-loads="ticketDutyLoads || {}"
+                        :ticket-duty-enabled="ticketDutyEnabled"
+                        :can-tag-ticket-duty="hasPermission('schedules.ticket_duty')"
                         compact
                         height-class="h-[calc(100vh-10rem)] min-h-[580px]"
                         v-model:statusFilter="filterStatus"
@@ -328,6 +331,7 @@
                         @date-click="handleDateClick"
                         @event-click="handleEventClick"
                         @add-schedule-for-user="handleAddScheduleForUser"
+                        @toggle-ticket-duty="handleToggleTicketDuty"
                     />
                 </div>
 
@@ -1418,6 +1422,29 @@
                             </div>
                         </div>
 
+                        <!-- Ticket Duty: tagged shifts receive new tickets automatically -->
+                        <div
+                            v-if="hasPermission('schedules.ticket_duty') || form.ticket_duty"
+                            class="bg-emerald-50/60 rounded-2xl p-5 border border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-800"
+                            data-testid="schedule-ticket-duty"
+                        >
+                            <label class="flex items-start gap-3" :class="{ 'opacity-60': !canTagTicketDutyInForm }">
+                                <input
+                                    v-model="form.ticket_duty"
+                                    type="checkbox"
+                                    :disabled="!canTagTicketDutyInForm"
+                                    class="mt-0.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                >
+                                <span>
+                                    <span class="block text-[10px] font-black text-emerald-700 uppercase tracking-widest dark:text-emerald-300">Ticket Duty</span>
+                                    <span class="block text-xs text-gray-600 mt-0.5 dark:text-gray-300">
+                                        New tickets for this person's desk are auto-assigned to them during this shift.
+                                        <template v-if="!isTicketDutyStatus(form.status)">Only On-site, Off-site or WFH schedules can be on duty.</template>
+                                    </span>
+                                </span>
+                            </label>
+                        </div>
+
                         <div v-if="isRequestingScheduleChange || isRequestingActualTimeAdjustment" class="bg-blue-50 rounded-2xl p-5 border border-blue-100 dark:bg-blue-900/20 dark:border-blue-800">
                             <label class="block text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2 ml-1 dark:text-blue-300">Request Remarks <span class="text-rose-500">*</span></label>
                             <textarea
@@ -1522,6 +1549,8 @@ import {
 
 const props = defineProps({
     schedules: Array,
+    ticketDutyLoads: { type: Object, default: () => ({}) },
+    ticketDutyEnabled: { type: Boolean, default: false },
     users: Array,
     stores: Array,
     departmentNodes: Array,
@@ -2697,8 +2726,31 @@ const form = reactive({
     pickup_end: '',
     backlogs_start: '',
     backlogs_end: '',
+    ticket_duty: false,
     requester_remarks: '',
 })
+
+const TICKET_DUTY_STATUSES = ['On-site', 'Off-site', 'WFH']
+const isTicketDutyStatus = (status) => TICKET_DUTY_STATUSES.includes(status)
+// Only taggers change the flag; the server ignores it from everyone else.
+const canTagTicketDutyInForm = computed(() => hasPermission('schedules.ticket_duty')
+    && !isViewingOnly.value
+    && !isRequestingScheduleChange.value
+    && isTicketDutyStatus(form.status))
+
+watch(() => form.status, (status) => {
+    if (!isTicketDutyStatus(status)) form.ticket_duty = false
+})
+
+const handleToggleTicketDuty = ({ event }) => {
+    if (!hasPermission('schedules.ticket_duty') || !event?.id) return
+
+    post(`/schedules/${event.id}/ticket-duty`, { ticket_duty: !event.ticket_duty }, {
+        preserveState: true,
+        preserveScroll: true,
+        onError: (errors) => showError(Object.values(errors).flat().join(', ') || 'Could not update ticket duty'),
+    })
+}
 
 const formatAuditDateTime = (value) => {
     if (!value) return '-'
@@ -2916,6 +2968,7 @@ const openCreateModal = () => {
     form.pickup_end = ''
     form.backlogs_start = ''
     form.backlogs_end = ''
+    form.ticket_duty = false
     form.requester_remarks = ''
 
     // "Today" in the viewer's zone; the times are typed in that zone too.
@@ -2978,6 +3031,7 @@ const handleEventClick = (payload) => {
     form.pickup_end = event.pickup_end || ''
     form.backlogs_start = event.backlogs_start || ''
     form.backlogs_end = event.backlogs_end || ''
+    form.ticket_duty = Boolean(event.ticket_duty) && isTicketDutyStatus(event.status)
     form.requester_remarks = ''
     const pendingActualTimeRequest = findPendingActualTimeRequestForSchedule(event.id)
 

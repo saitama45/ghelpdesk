@@ -930,21 +930,24 @@ class TicketController extends Controller
 
             // Apply auto-assign rule BEFORE creating so the observer generates
             // ticket_key using the correct company code from the start.
+            $resolved = [];
             if (empty($data['assignee_id'])) {
                 $lookupEmail = $isSelfRequester
                     ? (auth()->user()->email ?? '')
                     : ($data['sender_email'] ?? '');
-                if ($lookupEmail) {
-                    $resolved = $this->autoAssignee->resolveAssignee($lookupEmail);
-                    if ($resolved['assignee_id'] && User::where('id', $resolved['assignee_id'])->exists()) {
-                        $data['assignee_id'] = $resolved['assignee_id'];
-                    }
-                    if ($resolved['company_id']) {
-                        $data['company_id'] = $resolved['company_id'];
-                    }
-                    if (($resolved['store_id'] ?? null) && \App\Models\Store::where('id', $resolved['store_id'])->exists()) {
-                        $data['store_id'] = $resolved['store_id'];
-                    }
+                // Sender rules need an email; the Ticket Duty roster does not.
+                $resolved = $this->autoAssignee->resolveAssignee($lookupEmail, [
+                    'serving_department_id' => $data['serving_department_id'] ?? null,
+                    'store_id' => $data['store_id'] ?? null,
+                ]);
+                if ($resolved['assignee_id'] && User::where('id', $resolved['assignee_id'])->exists()) {
+                    $data['assignee_id'] = $resolved['assignee_id'];
+                }
+                if ($resolved['company_id']) {
+                    $data['company_id'] = $resolved['company_id'];
+                }
+                if (($resolved['store_id'] ?? null) && \App\Models\Store::where('id', $resolved['store_id'])->exists()) {
+                    $data['store_id'] = $resolved['store_id'];
                 }
             }
 
@@ -962,6 +965,7 @@ class TicketController extends Controller
             $data = $proposedTicket->getAttributes();
 
             $ticket = Ticket::create($data);
+            $this->autoAssignee->recordReason($ticket, $resolved);
 
             if ($request->hasFile('attachments')) {
                 foreach ($request->file('attachments') as $file) {

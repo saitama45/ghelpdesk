@@ -330,12 +330,18 @@ class PosRequestService
         // Create the ticket. The ticket_key is assigned by TicketObserver (single
         // source of truth) and the insert is retried on a unique-key collision so
         // concurrent ticket creation can never leave the request without a ticket.
+        // Shared intake pool: no serving desk, so the Ticket Duty roster's intake
+        // department decides (no-op while the roster is off).
+        $autoAssignee = app(\App\Services\AutoAssigneeService::class);
+        $resolved = $autoAssignee->resolveFromDuty(['store_id' => $ticketStore->id]);
+
         $ticket = $this->createTicketWithRetry([
             'title' => $subject,
             'description' => $fullDescription,
             'status' => 'open',
             'priority' => 'medium',
             'severity' => 'minor',
+            'assignee_id' => $resolved['assignee_id'],
             'reporter_id' => $posRequest->user_id,
             'sender_name' => $posRequest->user ? $posRequest->user->name : $posRequest->requester_name,
             'sender_email' => $posRequest->user ? $posRequest->user->email : $posRequest->requester_email,
@@ -344,6 +350,7 @@ class PosRequestService
             'type' => 'feature',
             'created_at' => now('Asia/Manila'),
         ]);
+        $autoAssignee->recordReason($ticket, $resolved);
 
         $posRequest->update(['ticket_id' => $ticket->id]);
 

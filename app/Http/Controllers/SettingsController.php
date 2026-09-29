@@ -179,7 +179,11 @@ class SettingsController extends Controller implements HasMiddleware
                 $group = 'queue';
             }
 
-            if ($key === 'mail_require_department_address') {
+            if (in_array($key, ['auto_assignee_duty_enabled', 'auto_assignee_duty_store_first'], true)) {
+                $value = $request->boolean($key) ? '1' : '0';
+            } elseif ($key === 'auto_assignee_duty_intake_department_id') {
+                $value = (int) $value > 0 ? (string) (int) $value : '';
+            } elseif ($key === 'mail_require_department_address') {
                 // Stored as an explicit '1'/'0' rather than a raw bool: PHP casts
                 // false to '' on the way into the text column, and (bool) '' works
                 // by luck rather than intent.

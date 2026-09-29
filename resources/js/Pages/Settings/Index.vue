@@ -165,6 +165,17 @@ const autoRules = ref(
     }))
 );
 const autoDefaults = ref(parseJsonSetting('auto_assignee_defaults', []).map(Number));
+// Ticket Duty roster: people tagged for ticket duty on /schedules take new tickets.
+const dutyEnabled = ref(String(props.settings.auto_assignee_duty_enabled ?? '0') === '1');
+const dutyStoreFirst = ref(String(props.settings.auto_assignee_duty_store_first ?? '0') === '1');
+const dutyIntakeDepartmentId = ref(Number(props.settings.auto_assignee_duty_intake_department_id) || null);
+const dutyDepartmentOptions = computed(() => [
+    { id: null, label: '— Any department —' },
+    ...(props.departmentMailboxes ?? []).map(d => ({
+        id: d.id,
+        label: d.code ? `${d.name} (${d.code})` : d.name,
+    })),
+]);
 const autoAssigneeSaved = ref(false);
 const autoAssigneeProcessing = ref(false);
 
@@ -283,6 +294,9 @@ const saveAutoAssignee = () => {
     router.put(route('settings.update'), {
         auto_assignee_rules: JSON.stringify(autoRules.value),
         auto_assignee_defaults: JSON.stringify(autoDefaults.value),
+        auto_assignee_duty_enabled: dutyEnabled.value,
+        auto_assignee_duty_store_first: dutyStoreFirst.value,
+        auto_assignee_duty_intake_department_id: dutyIntakeDepartmentId.value ?? '',
     }, {
         preserveScroll: true,
         onSuccess: () => {
@@ -1539,7 +1553,7 @@ const syncEmails = () => {
                                     <div>
                                         <p class="text-sm font-black text-blue-900">Automatic Ticket Assignment</p>
                                         <p class="text-xs text-blue-600 mt-0.5 leading-relaxed">
-                                            Match incoming tickets to agents by requester email. If no rule matches, the global default agents receive the ticket via round-robin.
+                                            Match incoming tickets to agents by requester email. If no rule matches, the Ticket Duty roster picks the agent when it is on; otherwise the global default agents receive the ticket via round-robin.
                                         </p>
                                     </div>
                                 </div>
@@ -1820,14 +1834,72 @@ const syncEmails = () => {
 
                                 <div class="border-t border-gray-100 dark:border-gray-700"></div>
 
+                                <!-- Ticket Duty Roster Section -->
+                                <section data-testid="ticket-duty-settings">
+                                    <h3 class="text-xs font-black text-emerald-600 uppercase tracking-widest mb-1 flex items-center">
+                                        <ClockIcon class="w-4 h-4 mr-1.5" />
+                                        Ticket Duty Roster
+                                    </h3>
+                                    <p class="text-xs text-gray-500 mb-3 leading-relaxed dark:text-gray-300">
+                                        Tag people for ticket duty on their shift in Schedules. A new ticket with no matching email rule goes to whoever from its desk is on duty at that moment, choosing the person with the fewest active tickets.
+                                        After hours it goes to the next person on duty; with no upcoming duty shift it stays unassigned.
+                                    </p>
+
+                                    <div class="space-y-3 max-w-2xl">
+                                        <label class="flex items-start gap-2">
+                                            <input
+                                                type="checkbox"
+                                                class="mt-0.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                                v-model="dutyEnabled"
+                                            />
+                                            <span class="text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">
+                                                <span class="font-bold">Assign tickets by the Ticket Duty roster.</span>
+                                                While on, the global default agents below are not used.
+                                            </span>
+                                        </label>
+
+                                        <label class="flex items-start gap-2" :class="{ 'opacity-50': !dutyEnabled }">
+                                            <input
+                                                type="checkbox"
+                                                class="mt-0.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                                                v-model="dutyStoreFirst"
+                                                :disabled="!dutyEnabled"
+                                            />
+                                            <span class="text-[11px] leading-relaxed text-gray-600 dark:text-gray-300">
+                                                <span class="font-bold">Same store first.</span>
+                                                When someone on duty is scheduled at the ticket's store, they get it before the others.
+                                            </span>
+                                        </label>
+
+                                        <div class="max-w-sm" :class="{ 'opacity-50': !dutyEnabled }">
+                                            <InputLabel value="Tickets with no desk go to duty staff of" class="!text-[10px] uppercase text-gray-500 dark:text-gray-300" />
+                                            <Autocomplete
+                                                class="mt-1"
+                                                :model-value="dutyIntakeDepartmentId"
+                                                @update:model-value="v => dutyIntakeDepartmentId = v === null || v === '' ? null : Number(v)"
+                                                :options="dutyDepartmentOptions"
+                                                value-key="id"
+                                                label-key="label"
+                                                placeholder="— Any department —"
+                                                size="sm"
+                                                :disabled="!dutyEnabled"
+                                            />
+                                            <p class="mt-1 text-[10px] text-gray-400 dark:text-gray-500">Applies to the shared inbox, POS, SAP and walk-in tickets, which are not routed to a desk.</p>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <div class="border-t border-gray-100 dark:border-gray-700"></div>
+
                                 <!-- Global Default Assignees Section -->
-                                <section>
+                                <section :class="{ 'opacity-60': dutyEnabled }">
                                     <h3 class="text-xs font-black text-purple-600 uppercase tracking-widest mb-1 flex items-center">
                                         <UserGroupIcon class="w-4 h-4 mr-1.5" />
                                         Global Default Assignees
                                     </h3>
                                     <p class="text-xs text-gray-500 mb-3 leading-relaxed dark:text-gray-300">
                                         Tickets with no matching rule are round-robin distributed among these agents. Leave empty to keep unmatched tickets unassigned.
+                                        <span v-if="dutyEnabled" class="font-bold text-emerald-700 dark:text-emerald-400">Not used while the Ticket Duty roster is on.</span>
                                     </p>
 
                                     <!-- Search to add default agents -->

@@ -641,12 +641,20 @@ class DefaultFormService implements FormServiceContract
             }
         }
 
+        // The owning desk's Ticket Duty roster (no-op while the roster is off).
+        $autoAssignee = app(\App\Services\AutoAssigneeService::class);
+        $resolved = $autoAssignee->resolveFromDuty([
+            'serving_department_id' => $formDefinition->department_id,
+            'store_id' => $ticketStore->id,
+        ]);
+
         $ticket = Ticket::create([
             'title'        => $subject,
             'description'  => $description,
             'status'       => 'open',
             'priority'     => 'medium',
             'severity'     => 'minor',
+            'assignee_id'  => $resolved['assignee_id'],
             'reporter_id'  => $record->created_by,
             'sender_name'  => $creator ? $creator->name : null,
             'sender_email' => $creator ? $creator->email : null,
@@ -662,6 +670,7 @@ class DefaultFormService implements FormServiceContract
             // Requester side: the department of whoever submitted the form.
             'department_id' => $creator?->department_id,
         ]);
+        $autoAssignee->recordReason($ticket, $resolved);
 
         $record->update(['ticket_id' => $ticket->id]);
     }
