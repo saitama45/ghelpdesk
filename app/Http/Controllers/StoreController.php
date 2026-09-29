@@ -34,7 +34,7 @@ class StoreController extends Controller implements HasMiddleware
         return [
             new Middleware('can:stores.view', only: ['index', 'export', 'downloadBlueprint']),
             new Middleware('can:stores.create', only: ['store']),
-            new Middleware('can:stores.edit', only: ['update', 'uploadBlueprint', 'destroyBlueprint']),
+            new Middleware('can:stores.edit', only: ['update', 'bulkMove', 'uploadBlueprint', 'destroyBlueprint']),
             new Middleware('can:stores.delete', only: ['destroy']),
         ];
     }
@@ -249,6 +249,79 @@ class StoreController extends Controller implements HasMiddleware
         });
 
         return redirect()->back()->with('success', 'Store updated successfully');
+    }
+
+    /**
+     * Move stores to another entity in one step. Only the active entity's own
+     * stores move (inherited rows stay read-only), the legacy brand label
+     * follows the entity exactly as a single edit does, and a name the target
+     * entity already uses is refused because store names are unique per entity.
+     * Tickets, teams, clusters and NPC assignments keep pointing at the store.
+     */
+    public function bulkMove(Request $request)
+    {
+        $validated = $request->validate([
+            'store_ids' => 'required|array|min:1|max:500',
+            'store_ids.*' => 'integer|distinct|exists:stores,id',
+            'company_id' => ['required', 'integer', Rule::exists('companies', 'id')->where('is_active', true)],
+        ], [
+            'store_ids.required' => 'Select at least one store to move.',
+            'company_id.required' => 'Choose the entity to move the stores to.',
+        ]);
+
+        $target = Company::findOrFail($validated['company_id']);
+        $stores = EntityReferenceScope::owned(Store::query())
+            ->whereIn('id', $validated['store_ids'])
+            ->get();
+
+        if ($stores->count() !== count($validated['store_ids'])) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'store_ids' => 'Some selected stores belong to another entity and can only be moved from there.',
+            ]);
+        }
+
+        $moving = $stores->reject(fn (Store $store) => (int) $store->company_id === $target->id);
+
+        $sameNameInBatch = $moving->toBase()
+            ->groupBy(fn (Store $store) => mb_strtolower(trim($store->name)))
+            ->filter(fn ($group) => $group->count() > 1)
+            ->map(fn ($group) => $group->first()->name);
+        $takenInTarget = Store::where('company_id', $target->id)
+            ->whereIn('name', $moving->pluck('name')->all())
+            ->pluck('name');
+        $conflicts = $sameNameInBatch->values()->concat($takenInTarget)->unique()->values();
+
+        if ($conflicts->isNotEmpty()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'company_id' => "{$target->name} would have more than one store named "
+                    . $conflicts->map(fn ($name) => "\"{$name}\"")->implode(', ')
+                    . '. Rename the store first, then move it.',
+            ]);
+        }
+
+        DB::transaction(function () use ($moving, $target) {
+            foreach ($moving as $store) {
+                $store->update([
+                    'company_id' => $target->id,
+                    'brand' => $this->brandFromCompany($target->id, $store->brand),
+                ]);
+            }
+        });
+
+        $alreadyThere = $stores->count() - $moving->count();
+
+        if ($moving->isEmpty()) {
+            $message = "The selected stores already belong to {$target->name}.";
+        } else {
+            $message = $moving->count() === 1
+                ? "Moved 1 store to {$target->name}."
+                : "Moved {$moving->count()} stores to {$target->name}.";
+            if ($alreadyThere > 0) {
+                $message .= " {$alreadyThere} already belonged to it.";
+            }
+        }
+
+        return redirect()->back()->with('success', $message);
     }
 
     /**

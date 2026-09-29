@@ -1,7 +1,7 @@
 <template>
-    <AppLayout title="Stores">
-        <div class="py-12">
-            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+    <AppLayout title="Stores" content-class="w-full max-w-none px-2 sm:px-4 lg:px-6">
+        <div class="py-8">
+            <div class="space-y-6">
                 <DataTable
                     title="Store Management"
                     subtitle="Manage physical store locations and their details"
@@ -66,8 +66,48 @@
                         </div>
                     </template>
 
+                    <template v-if="canMoveStores && selectedIds.length" #filters>
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div class="text-sm font-semibold text-blue-800 dark:text-blue-200">
+                                {{ selectedIds.length }} {{ selectedIds.length === 1 ? 'store' : 'stores' }} selected
+                                <button type="button" @click="clearSelection" class="ml-2 text-xs font-medium text-gray-500 underline hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100">Clear</button>
+                            </div>
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                <span class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">Move to entity</span>
+                                <div class="w-full sm:w-72">
+                                    <Autocomplete
+                                        v-model="moveTargetId"
+                                        :options="companies"
+                                        label-key="name"
+                                        value-key="id"
+                                        placeholder="Select entity..."
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    @click="moveSelected"
+                                    :disabled="!moveTargetId || moving"
+                                    class="bg-blue-600 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm whitespace-nowrap"
+                                >
+                                    {{ moving ? 'Moving...' : 'Move' }}
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+
                     <template #header>
                         <tr>
+                            <th v-if="canMoveStores" class="w-10 pl-6 pr-2 py-3 text-left">
+                                <input
+                                    type="checkbox"
+                                    :checked="allPageSelected"
+                                    :indeterminate="somePageSelected && !allPageSelected"
+                                    :disabled="!selectableRows.length"
+                                    @change="togglePageSelection"
+                                    class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-40 dark:border-gray-600"
+                                    title="Select all stores on this page"
+                                >
+                            </th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Store</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Classification</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-slate-300">Sector</th>
@@ -78,7 +118,17 @@
                     </template>
 
                     <template #body="{ data }">
-                        <tr v-for="store in data" :key="store.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700">
+                        <tr v-for="store in data" :key="store.id" class="hover:bg-gray-50 transition-colors dark:hover:bg-gray-700" :class="selectedIds.includes(store.id) ? 'bg-blue-50/60 dark:bg-blue-900/20' : ''">
+                            <td v-if="canMoveStores" class="w-10 pl-6 pr-2 py-4">
+                                <input
+                                    v-if="!isInherited(store)"
+                                    v-model="selectedIds"
+                                    :value="store.id"
+                                    type="checkbox"
+                                    class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600"
+                                    :title="`Select ${store.name}`"
+                                >
+                            </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex items-center">
                                     <div class="h-10 w-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center shadow-sm">
@@ -727,6 +777,54 @@ watch([filterSector, filterClass], () => {
     pagination.currentPage.value = 1
     pagination.performSearch()
 })
+
+// ── Bulk move to another entity ─────────────────────────────────────────
+// Selection survives paging so stores can be gathered from several pages.
+// Inherited rows are never selectable: they move from their own entity.
+const canMoveStores = computed(() => hasPermission('stores.edit'))
+const selectedIds = ref([])
+const moveTargetId = ref(null)
+const moving = ref(false)
+
+const selectableRows = computed(() => pagination.data.value.filter(store => !isInherited(store)))
+const allPageSelected = computed(() =>
+    selectableRows.value.length > 0 && selectableRows.value.every(store => selectedIds.value.includes(store.id))
+)
+const somePageSelected = computed(() => selectableRows.value.some(store => selectedIds.value.includes(store.id)))
+
+const togglePageSelection = () => {
+    const pageIds = selectableRows.value.map(store => store.id)
+    selectedIds.value = allPageSelected.value
+        ? selectedIds.value.filter(id => !pageIds.includes(id))
+        : [...new Set([...selectedIds.value, ...pageIds])]
+}
+
+const clearSelection = () => {
+    selectedIds.value = []
+    moveTargetId.value = null
+}
+
+const moveSelected = async () => {
+    const target = props.companies.find(company => company.id === moveTargetId.value)
+    if (!target || !selectedIds.value.length) return
+
+    const count = selectedIds.value.length
+    const confirmed = await confirm({
+        title: 'Move Stores',
+        message: `Move ${count} ${count === 1 ? 'store' : 'stores'} to ${target.name}? `
+            + 'They will be listed and managed under that entity. Existing tickets, teams and clusters stay linked to the store.',
+    })
+    if (!confirmed) return
+
+    moving.value = true
+    post(route('stores.bulk-move'), { store_ids: selectedIds.value, company_id: target.id }, {
+        preserveScroll: true,
+        preserveState: true,
+        onSuccess: () => clearSelection(),
+        onError: (errors) => showError(Object.values(errors).flat().join(', ') || 'Failed to move stores.'),
+        onFinish: () => { moving.value = false },
+    })
+}
 
 const showModal = ref(false)
 const showImportModal = ref(false)

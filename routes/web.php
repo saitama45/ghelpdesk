@@ -319,6 +319,7 @@ Route::middleware('auth')->group(function () {
     Route::get('stores/export', [\App\Http\Controllers\StoreController::class, 'export'])->name('stores.export');
     Route::get('stores/template', [\App\Http\Controllers\StoreController::class, 'template'])->name('stores.template');
     Route::post('stores/import', [\App\Http\Controllers\StoreController::class, 'import'])->name('stores.import');
+    Route::post('stores/bulk-move', [\App\Http\Controllers\StoreController::class, 'bulkMove'])->name('stores.bulk-move');
     Route::get('stores/{store}/details', [\App\Http\Controllers\StoreController::class, 'details'])->name('stores.details');
     Route::post('stores/{store}/blueprints', [\App\Http\Controllers\StoreController::class, 'uploadBlueprint'])->name('stores.blueprints.store');
     Route::get('stores/{store}/blueprints/{blueprint}', [\App\Http\Controllers\StoreController::class, 'downloadBlueprint'])->name('stores.blueprints.download');
