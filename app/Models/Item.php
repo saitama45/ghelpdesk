@@ -17,6 +17,9 @@ class Item extends Model
         'concern_type',
         'requires_rca_on_resolve',
         'is_active',
+        // "david.{module}": which DAVID Success Rate ticket type this item counts
+        // as (DavidTicketTallyService). Survives renames; null = not counted.
+        'report_key',
     ];
 
     protected $casts = [

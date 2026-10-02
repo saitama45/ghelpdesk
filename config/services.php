@@ -57,6 +57,10 @@ return [
     'integrations' => [
         'david' => [
             'key' => env('DAVID_INTEGRATION_KEY'),
+            // This entity's Success Rate tally counts every company's tickets
+            // (DAVID is only live for Nono's). Set it empty once each entity
+            // should count only its own company's tickets.
+            'all_tickets_entity' => env('DAVID_TALLY_ALL_TICKETS_ENTITY', 'NONOS'),
         ],
     ],
 

@@ -14,15 +14,54 @@ use Illuminate\Support\Facades\DB;
  *   closed   = those same tickets whose status is now "closed"
  * so closed can never exceed incoming and DAVID's Close Rate stays <= 100%.
  *
- * Scoped to one entity (companies.code, matching DAVID's entities.code).
+ * Scoped to one entity (companies.code, matching DAVID's entities.code), except
+ * the entity named in services.integrations.david.all_tickets_entity (NONOS by
+ * default): it counts every company's tickets, because DAVID is only live for
+ * Nono's and head-office / mailbox-routed tickets (TGI-*, CBTL-*) concern it too.
  * Partner-escalation child tickets (parent_id set) are excluded so one concern
  * is never counted twice, matching the dashboard's own tallies.
+ *
+ * The key is set per item on /items ("DAVID Success Rate" field), so renaming
+ * an item never drops its tickets from the tally.
  */
 class DavidTicketTallyService
 {
     public const KEY_PREFIX = 'david.';
 
     public const MODULES = ['order', 'commit', 'receiving', 'wastage', 'mec', 'sales_upload', 'admin'];
+
+    /** Labels match the ticket types on DAVID's Success Rate tab. */
+    public const MODULE_LABELS = [
+        'order' => 'Order',
+        'commit' => 'Commit',
+        'receiving' => 'Receiving',
+        'wastage' => 'Wastage',
+        'mec' => 'MEC',
+        'sales_upload' => 'Sales Upload',
+        'admin' => 'Admin / Technical Concerns',
+    ];
+
+    /** @return list<string> every valid items.report_key value */
+    public static function reportKeys(): array
+    {
+        return array_map(fn (string $module) => self::KEY_PREFIX.$module, self::MODULES);
+    }
+
+    /** @return list<array{value: string, label: string}> for the /items form */
+    public static function reportKeyOptions(): array
+    {
+        return array_map(fn (string $module) => [
+            'value' => self::KEY_PREFIX.$module,
+            'label' => self::MODULE_LABELS[$module],
+        ], self::MODULES);
+    }
+
+    private function countsEveryCompany(string $entityCode): bool
+    {
+        $allTicketsEntity = strtoupper(trim((string) config('services.integrations.david.all_tickets_entity')));
+
+        return $allTicketsEntity !== '' && $allTicketsEntity === strtoupper(trim($entityCode));
+    }
 
     /**
      * @return array{entity: array, date_from: string, date_to: string, modules: array, weeks: array}|null
@@ -51,10 +90,12 @@ class DavidTicketTallyService
             ];
         }
 
+        $everyCompany = $this->countsEveryCompany($entityCode);
+
         // Narrow columns only - never pull ticket LOB columns over the wire.
         $tickets = DB::table('tickets')
             ->join('items', 'items.id', '=', 'tickets.item_id')
-            ->where('tickets.company_id', $company->id)
+            ->when(! $everyCompany, fn ($query) => $query->where('tickets.company_id', $company->id))
             ->whereNull('tickets.deleted_at')
             ->whereNull('tickets.parent_id')
             ->where('items.report_key', 'like', self::KEY_PREFIX.'%')
@@ -78,6 +119,7 @@ class DavidTicketTallyService
 
         return [
             'entity' => ['code' => $company->code, 'name' => $company->name],
+            'scope' => $everyCompany ? 'all_companies' : 'entity',
             'date_from' => $from->toDateString(),
             'date_to' => $to->toDateString(),
             'modules' => self::MODULES,

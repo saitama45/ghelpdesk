@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Item;
 use App\Models\Category;
 use App\Models\SubCategory;
+use App\Services\DavidTicketTallyService;
 use App\Support\CompanyContext;
 use App\Support\EntityReferenceScope;
 use App\Support\DepartmentReferences;
@@ -48,6 +49,7 @@ class ItemController extends Controller implements HasMiddleware
             'categories' => $categories,
             'subCategories' => $subCategories,
             'settings' => $settings,
+            'reportKeyOptions' => DavidTicketTallyService::reportKeyOptions(),
             'filters' => $request->only(['category_id', 'sub_category_id', 'concern_type', 'priority']),
             // Rows from another company (a tagged entity) render read-only.
             'activeCompanyId' => CompanyContext::activeCompanyId(),
@@ -182,6 +184,7 @@ class ItemController extends Controller implements HasMiddleware
             'concern_type' => ['required', Rule::in(self::CONCERN_TYPES)],
             'requires_rca_on_resolve' => 'boolean',
             'is_active' => 'boolean',
+            'report_key' => ['nullable', Rule::in(DavidTicketTallyService::reportKeys())],
         ]);
 
         Item::create($validated);
@@ -211,6 +214,7 @@ class ItemController extends Controller implements HasMiddleware
             'concern_type' => ['required', Rule::in(self::CONCERN_TYPES)],
             'requires_rca_on_resolve' => 'boolean',
             'is_active' => 'boolean',
+            'report_key' => ['nullable', Rule::in(DavidTicketTallyService::reportKeys())],
         ]);
 
         $item->update($validated);

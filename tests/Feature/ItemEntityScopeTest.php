@@ -102,6 +102,35 @@ class ItemEntityScopeTest extends TestCase
         $this->assertSame('Nonos Orders', $nonosItem->fresh()->name);
     }
 
+    public function test_the_david_success_rate_type_is_set_on_the_item_and_survives_a_rename(): void
+    {
+        $item = $this->item('Orders', $this->tgi);
+        $user = $this->userWithAccessToBoth(['items.view', 'items.edit']);
+        $session = [CompanyContext::SESSION_KEY => $this->tgi->id];
+        $payload = ['name' => 'Orders', 'priority' => 'Low', 'concern_type' => 'Incident', 'is_active' => true];
+
+        $this->actingAs($user)->withSession($session)
+            ->put(route('items.update', $item), $payload + ['report_key' => 'david.order'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame('david.order', $item->fresh()->report_key);
+
+        // Renaming keeps the tag, so the item keeps counting on DAVID.
+        $this->actingAs($user)->withSession($session)
+            ->put(route('items.update', $item), ['name' => 'Order'] + $payload + ['report_key' => 'david.order'])
+            ->assertSessionHasNoErrors();
+        $this->assertSame(['Order', 'david.order'], [$item->fresh()->name, $item->fresh()->report_key]);
+
+        $this->actingAs($user)->withSession($session)
+            ->put(route('items.update', $item), $payload + ['report_key' => 'david.nope'])
+            ->assertSessionHasErrors('report_key');
+
+        // "Not counted" clears it.
+        $this->actingAs($user)->withSession($session)
+            ->put(route('items.update', $item), $payload + ['report_key' => ''])
+            ->assertSessionHasNoErrors();
+        $this->assertNull($item->fresh()->report_key);
+    }
+
     private function listedNames(User $user, Company $active): array
     {
         CompanyContext::flushMemo();

@@ -39,6 +39,9 @@ class DavidTicketTallyTest extends TestCase
 
     public function test_it_tallies_incoming_and_closed_per_week_module_and_entity(): void
     {
+        // Per-entity scoping, as it will run once no entity counts every company.
+        config(['services.integrations.david.all_tickets_entity' => '']);
+
         $nonos = Company::create(['name' => "NONO'S", 'code' => 'NONOS', 'is_active' => true]);
         $cbtl = Company::create(['name' => 'CBTL', 'code' => 'CBTL', 'is_active' => true]);
 
@@ -81,6 +84,80 @@ class DavidTicketTallyTest extends TestCase
         $this->assertSame(['incoming' => 0, 'closed' => 0], $week38['wastage']);
 
         $this->assertSame(['incoming' => 1, 'closed' => 1], $weeks['2026-09-07']['modules']['order']);
+    }
+
+    public function test_nonos_counts_every_companys_tickets_while_other_entities_count_their_own(): void
+    {
+        $nonos = Company::create(['name' => "NONO'S", 'code' => 'NONOS', 'is_active' => true]);
+        $tgi = Company::create(['name' => 'The Table Group Inc.', 'code' => 'TGI', 'is_active' => true]);
+        $cbtl = Company::create(['name' => 'CBTL', 'code' => 'CBTL', 'is_active' => true]);
+
+        $receiving = $this->item('Receiving', 'david.receiving');
+        $admin = $this->item('Admin / Technical Concerns', 'david.admin');
+
+        // Week 39 (Mon 2026-09-21), like NONOS-841 / TGI-5399 / CBTL-2811.
+        $this->ticket($nonos, $receiving, 'closed', '2026-09-23 15:02:58');
+        $this->ticket($tgi, $admin, 'closed', '2026-09-24 13:53:45');
+        $this->ticket($cbtl, $receiving, 'open', '2026-09-24 09:00:00');
+
+        $nonosWeek = $this->withHeader('X-Integration-Key', self::KEY)
+            ->getJson($this->url(['entity' => 'NONOS', 'date_from' => '2026-09-21', 'date_to' => '2026-09-27']))
+            ->assertOk()
+            ->assertJsonPath('scope', 'all_companies')
+            ->json('weeks.0.modules');
+
+        $this->assertSame(['incoming' => 2, 'closed' => 1], $nonosWeek['receiving']);
+        $this->assertSame(['incoming' => 1, 'closed' => 1], $nonosWeek['admin']);
+
+        $cbtlWeek = $this->withHeader('X-Integration-Key', self::KEY)
+            ->getJson($this->url(['entity' => 'CBTL', 'date_from' => '2026-09-21', 'date_to' => '2026-09-27']))
+            ->assertOk()
+            ->assertJsonPath('scope', 'entity')
+            ->json('weeks.0.modules');
+
+        $this->assertSame(['incoming' => 1, 'closed' => 0], $cbtlWeek['receiving']);
+        $this->assertSame(['incoming' => 0, 'closed' => 0], $cbtlWeek['admin']);
+    }
+
+    public function test_the_backfill_tags_renamed_david_items_without_overwriting_a_set_key(): void
+    {
+        $david = \App\Models\SubCategory::create(['name' => 'David', 'is_active' => true])->id;
+        $other = \App\Models\SubCategory::create(['name' => 'POS', 'is_active' => true])->id;
+
+        $expected = [
+            'Order' => 'david.order',
+            'Orders' => 'david.order',
+            'Commits' => 'david.commit',
+            'Receiving' => 'david.receiving',
+            'Wastage' => 'david.wastage',
+            'Sales  Upload ' => 'david.sales_upload',
+            'Admin / Technical Concerns' => 'david.admin',
+            'Admin / Technical Concerns -' => 'david.admin',
+            'Admin / Technical Concerns - Laptop' => 'david.admin',
+            // Left for an admin to tag on /items.
+            'Account' => null,
+            'Wastages Concern (System Issue)' => null,
+        ];
+
+        $ids = [];
+        foreach (array_keys($expected) as $name) {
+            $ids[$name] = $this->item($name, null)->id;
+            DB::table('items')->where('id', $ids[$name])->update(['sub_category_id' => $david]);
+        }
+
+        // A key set on /items wins; a same-named item outside David stays untouched.
+        $mec = $this->item('MEC', 'david.admin');
+        DB::table('items')->where('id', $mec->id)->update(['sub_category_id' => $david]);
+        $pos = $this->item('Receiving', null);
+        DB::table('items')->where('id', $pos->id)->update(['sub_category_id' => $other]);
+
+        (require database_path('migrations/2026_10_02_000001_backfill_david_report_keys_on_items.php'))->up();
+
+        foreach ($expected as $name => $key) {
+            $this->assertSame($key, DB::table('items')->where('id', $ids[$name])->value('report_key'), $name);
+        }
+        $this->assertSame('david.admin', DB::table('items')->where('id', $mec->id)->value('report_key'));
+        $this->assertNull(DB::table('items')->where('id', $pos->id)->value('report_key'));
     }
 
     public function test_it_rejects_an_unknown_entity(): void

@@ -127,6 +127,14 @@
                                             Sub: {{ item.sub_category?.name || 'N/A' }}
                                         </span>
                                     </div>
+                                    <div v-if="item.report_key" class="flex items-center">
+                                        <span
+                                            class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-teal-100 text-teal-800 border border-teal-200 uppercase tracking-wider"
+                                            title="Tickets on this item count on DAVID's Success Rate tab under this ticket type"
+                                        >
+                                            DAVID: {{ reportKeyLabel(item.report_key) }}
+                                        </span>
+                                    </div>
                                     <div v-if="isInherited(item)" class="flex items-center">
                                         <span
                                             class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 uppercase tracking-wider"
@@ -341,6 +349,11 @@
                                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Priority</label>
                                 <Autocomplete v-model="form.priority" :options="priorityOptions" placeholder="Select priority..." />
                             </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">DAVID Success Rate</label>
+                                <Autocomplete v-model="form.report_key" :options="reportKeyFormOptions" placeholder="Not counted" />
+                                <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Tickets on this item count under this ticket type on DAVID's Success Rate tab. Renaming the item keeps it.</p>
+                            </div>
                         </div>
 
                         <!-- SLA Targets Display -->
@@ -408,6 +421,7 @@ const props = defineProps({
     categories: Array,
     subCategories: Array,
     settings: Object,
+    reportKeyOptions: { type: Array, default: () => [] },
     filters: { type: Object, default: () => ({}) },
     activeCompanyId: { type: Number, default: null },
 })
@@ -426,6 +440,9 @@ const priorityOptions = ['Low', 'Medium', 'High', 'Urgent']
 // Autocomplete compares values loosely, so '' is the "All" choice in the filter bar.
 const withAll = (options, label) => [{ label, value: '' }, ...options.map(o => ({ label: o, value: o }))]
 const sortByName = (list) => [...(list || [])].sort((a, b) => a.name.localeCompare(b.name))
+
+const reportKeyFormOptions = computed(() => [{ label: 'Not counted', value: null }, ...props.reportKeyOptions])
+const reportKeyLabel = (key) => props.reportKeyOptions.find(o => o.value === key)?.label || key
 
 const categoryFilterOptions = computed(() => [{ id: '', name: 'All categories' }, ...sortByName(props.categories)])
 const subCategoryFilterOptions = computed(() => [{ id: '', name: 'All sub-categories' }, ...sortByName(props.subCategories)])
@@ -514,7 +531,8 @@ const form = reactive({
     priority: 'Medium',
     concern_type: 'Incident',
     requires_rca_on_resolve: false,
-    is_active: true
+    is_active: true,
+    report_key: null
 })
 
 onMounted(() => {
@@ -600,6 +618,7 @@ const openCreateModal = () => {
     form.concern_type = 'Incident'
     form.requires_rca_on_resolve = false
     form.is_active = true
+    form.report_key = null
     showModal.value = true
 }
 
@@ -614,6 +633,7 @@ const editItem = (item) => {
     form.concern_type = item.concern_type || 'Incident'
     form.requires_rca_on_resolve = !!item.requires_rca_on_resolve
     form.is_active = item.is_active
+    form.report_key = item.report_key || null
     showModal.value = true
 }
 
@@ -627,6 +647,7 @@ const closeModal = () => {
     form.concern_type = 'Incident'
     form.requires_rca_on_resolve = false
     form.is_active = true
+    form.report_key = null
 }
 
 const submitForm = () => {
