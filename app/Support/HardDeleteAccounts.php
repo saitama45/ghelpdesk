@@ -3,13 +3,14 @@
 namespace App\Support;
 
 /**
- * The accounts the delete icon on /users removes for GOOD instead of archiving,
- * named by `services.hard_delete_accounts.email`.
+ * The accounts the delete icon on /users and on /stamps → Customers removes for
+ * GOOD instead of archiving, named by `services.hard_delete_accounts.email`.
  *
- * Deleting a login normally archives it (Settings → Account Archive) so it can
- * be restored. This is the exception, by address: the listed account skips the
- * archive and its rows leave the database on the spot — see
- * `AccountArchiveService::deleteUserPermanently()`. Everyone else is unaffected.
+ * Deleting an account normally archives it (Settings → Account Archive) so it
+ * can be restored. This is the exception, by address: the listed account skips
+ * the archive and its rows leave the database on the spot — see
+ * `AccountArchiveService::deleteUserPermanently()` and
+ * `deleteCustomerPermanently()`. Everyone else is unaffected.
  *
  * `HARD_DELETE_ACCOUNT_EMAIL` takes one address or several separated by commas;
  * set it to an empty value to switch the exception off.

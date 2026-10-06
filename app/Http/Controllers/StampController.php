@@ -57,6 +57,8 @@ class StampController extends Controller implements HasMiddleware
         return Inertia::render('Stamps/Index', [
             'tab' => $request->get('tab', 'cards'),
             'customers' => Customer::orderBy('name')->get(),
+            // So the delete confirmation can say "permanent" for these instead of "archived".
+            'hardDeleteCustomerIds' => fn () => app(AccountArchiveService::class)->hardDeleteCustomerIds(),
             // Programs assigned to another entity are hidden; unassigned ones
             // (company_id still null — every row before this scoping existed)
             // stay visible everywhere until explicitly assigned a company, so
@@ -162,9 +164,24 @@ class StampController extends Controller implements HasMiddleware
      * A customer who registered in the mobile app is one half of a pair; their
      * login is archived in the same transaction so they cannot keep signing in
      * to an account that no longer appears in Stamps.
+     *
+     * The exception is an account named in `HardDeleteAccounts`: that one skips
+     * the archive and is removed from the database here and now, login included.
      */
     public function destroyCustomer(Customer $customer, AccountArchiveService $archive)
     {
+        if ($archive->customerDeletesPermanently($customer)) {
+            try {
+                $deleted = $archive->deleteCustomerPermanently($customer, auth()->id());
+            } catch (ValidationException $e) {
+                return back()->with('error', collect($e->errors())->flatten()->first());
+            }
+
+            return back()->with('success', $deleted['user']
+                ? "Customer permanently deleted, together with their app login \"{$deleted['user']}\"."
+                : 'Customer permanently deleted.');
+        }
+
         $archived = $archive->archiveCustomer($customer, auth()->id());
 
         $message = $archived['user']

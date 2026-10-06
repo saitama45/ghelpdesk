@@ -15,6 +15,7 @@ import VoucherWorkspace from './VoucherWorkspace.vue'
 const props = defineProps({
     tab: { type: String, default: 'dashboard' },
     customers: { type: Array, default: () => [] },
+    hardDeleteCustomerIds: { type: Array, default: () => [] },
     programs: { type: Array, default: () => [] },
     cards: { type: Array, default: () => [] },
     redemptions: { type: Array, default: () => [] },
@@ -145,14 +146,21 @@ const submitCustomer = () => {
         ? customerForm.put(route('stamps.customers.update', customerForm.id), opts)
         : customerForm.post(route('stamps.customers.store'), opts)
 }
+// The one account that skips the archive (HardDeleteAccounts on the server).
+const hardDeleteConfirm = (c) => ({
+    title: 'Permanently delete customer',
+    message: `Permanently delete ${c.name}? This record is NOT archived — it is erased from the database right away, together with its mobile app login if it has one, and cannot be restored.`,
+    confirmLabel: 'Delete permanently',
+})
+const isHardDeleteCustomer = (c) => props.hardDeleteCustomerIds.includes(Number(c.id))
 const deleteCustomer = async (c) => {
-    if (!await confirm({ title: 'Delete customer', message: `Delete ${c.name}? The record is archived, not erased — restore it any time from Settings → Account Archive. If they registered in the mobile app, their login is archived with them.`, confirmLabel: 'Delete' })) return
+    if (!await confirm(isHardDeleteCustomer(c) ? hardDeleteConfirm(c) : { title: 'Delete customer', message: `Delete ${c.name}? The record is archived, not erased — restore it any time from Settings → Account Archive. If they registered in the mobile app, their login is archived with them.`, confirmLabel: 'Delete' })) return
     router.delete(route('stamps.customers.destroy', c.id), { preserveScroll: true, preserveState: true })
 }
 const deleteCustomerInline = async () => {
     const c = props.customers.find(x => x.id === cardForm.customer_id)
     if (!c) return
-    if (!await confirm({ title: 'Delete customer', message: `Delete ${c.name}? The record is archived, not erased — restore it any time from Settings → Account Archive.`, confirmLabel: 'Delete' })) return
+    if (!await confirm(isHardDeleteCustomer(c) ? hardDeleteConfirm(c) : { title: 'Delete customer', message: `Delete ${c.name}? The record is archived, not erased — restore it any time from Settings → Account Archive.`, confirmLabel: 'Delete' })) return
     router.delete(route('stamps.customers.destroy', c.id), {
         preserveScroll: true,
         preserveState: true,

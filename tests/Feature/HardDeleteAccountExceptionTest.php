@@ -20,14 +20,15 @@ use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 /**
- * The delete icon on /users archives every login except the one named in
- * `HardDeleteAccounts`, which is removed from the database on the spot.
+ * The delete icon on /users and on /stamps → Customers archives every account
+ * except the one named in `HardDeleteAccounts`, which is removed from the
+ * database on the spot.
  *
  * No row is archived here. The permanent path is exercised for real; wherever
- * a request would reach the archive, `archiveUser` is faked so it is only
- * asserted to have been chosen, never run.
+ * a request would reach the archive, `archiveUser` / `archiveCustomer` is
+ * faked so it is only asserted to have been chosen, never run.
  */
-class UserHardDeleteExceptionTest extends TestCase
+class HardDeleteAccountExceptionTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -104,21 +105,7 @@ class UserHardDeleteExceptionTest extends TestCase
     public function test_a_customer_with_financial_records_refuses_the_permanent_delete(): void
     {
         [$member, $customer] = $this->member(self::LISTED);
-        $program = $this->program();
-        $category = Category::create(['name' => 'Consumables']);
-        $asset = Asset::create([
-            'item_code' => 'ASSET-1', 'description' => 'Free Latte', 'type' => 'Consumables',
-            'category_id' => $category->id,
-        ]);
-        $card = StampCard::create([
-            'customer_id' => $customer->id, 'stamp_program_id' => $program->id,
-            'stamps_count' => 12, 'status' => 'redeemed',
-        ]);
-        StampRedemption::create([
-            'stamp_card_id' => $card->id, 'customer_id' => $customer->id,
-            'stamp_program_id' => $program->id, 'asset_id' => $asset->id,
-            'location' => 'CBTL Ayala 30th', 'quantity' => 1,
-        ]);
+        $this->redeemARewardFor($customer);
 
         $this->actingAs($this->admin())
             ->delete(route('users.destroy', $member))
@@ -154,6 +141,107 @@ class UserHardDeleteExceptionTest extends TestCase
             ->assertJsonPath('props.hardDeleteEmails', [self::LISTED]);
     }
 
+    /* ----------------------------------------------------------------------
+     | /stamps → Customers
+     * ------------------------------------------------------------------- */
+
+    public function test_deleting_the_listed_customer_from_stamps_removes_it_with_its_app_login(): void
+    {
+        [$member, $customer] = $this->member(self::LISTED);
+        StampCard::create([
+            'customer_id' => $customer->id, 'stamp_program_id' => $this->program()->id,
+            'stamps_count' => 3, 'status' => 'active',
+        ]);
+
+        $this->actingAs($this->admin(['stamps.view', 'stamps.delete']))
+            ->delete(route('stamps.customers.destroy', $customer))
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Customer permanently deleted, together with their app login "Review Member".');
+
+        $this->assertNull(Customer::withTrashed()->find($customer->id));
+        $this->assertNull(User::withTrashed()->find($member->id));
+        $this->assertSame(0, StampCard::where('customer_id', $customer->id)->count());
+    }
+
+    public function test_a_listed_walk_in_with_no_app_login_is_removed_from_stamps_too(): void
+    {
+        $walkIn = Customer::create(['name' => 'Review Walk-in', 'email' => 'GarudaPerez45+Review@Gmail.com', 'is_active' => true]);
+
+        $this->actingAs($this->admin(['stamps.view', 'stamps.delete']))
+            ->delete(route('stamps.customers.destroy', $walkIn))
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Customer permanently deleted.');
+
+        $this->assertNull(Customer::withTrashed()->find($walkIn->id));
+    }
+
+    public function test_the_customer_behind_a_listed_login_counts_even_under_another_address(): void
+    {
+        // Staff changed the address on the Stamps side only; it is still the
+        // same account, and /users would delete this very pair for good.
+        [$member, $customer] = $this->member(self::LISTED);
+        $customer->forceFill(['email' => 'renamed@example.test'])->save();
+        $unrelated = Customer::create(['name' => 'Someone Else', 'email' => 'someone@example.test', 'is_active' => true]);
+
+        $this->assertSame([$customer->id], app(AccountArchiveService::class)->hardDeleteCustomerIds());
+
+        $this->actingAs($this->admin(['stamps.view', 'stamps.delete']))
+            ->withHeaders([
+                'X-Inertia' => 'true',
+                'X-Inertia-Version' => app(HandleInertiaRequests::class)->version(request()),
+            ])
+            ->get(route('stamps.index', ['tab' => 'customers']))
+            ->assertOk()
+            ->assertJsonPath('props.hardDeleteCustomerIds', [$customer->id]);
+
+        $this->assertNotNull(Customer::find($unrelated->id));
+        $this->assertNotNull(User::find($member->id));
+    }
+
+    public function test_every_other_customer_still_goes_to_the_archive(): void
+    {
+        $other = Customer::create(['name' => 'Regular', 'email' => 'garudaperez45@gmail.com', 'is_active' => true]);
+
+        $this->partialMock(AccountArchiveService::class, function (MockInterface $mock) {
+            $mock->shouldReceive('archiveCustomer')->once()->andReturn(['customer' => 'Regular', 'user' => null]);
+            $mock->shouldNotReceive('deleteCustomerPermanently');
+        });
+
+        $this->actingAs($this->admin(['stamps.view', 'stamps.delete']))
+            ->delete(route('stamps.customers.destroy', $other))
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Customer archived. Restore it from Settings → Account Archive.');
+
+        $this->assertNotNull(Customer::find($other->id));
+    }
+
+    public function test_financial_records_refuse_the_permanent_delete_from_stamps(): void
+    {
+        [$member, $customer] = $this->member(self::LISTED);
+        $this->redeemARewardFor($customer);
+
+        $this->actingAs($this->admin(['stamps.view', 'stamps.delete']))
+            ->delete(route('stamps.customers.destroy', $customer))
+            ->assertRedirect()
+            ->assertSessionHas('error', 'Review Member cannot be deleted permanently: their customer record "Review Member" has reward redemptions or voucher payments, which are kept as financial records.');
+
+        $this->assertNotNull(Customer::find($customer->id));
+        $this->assertNotNull(User::find($member->id));
+        $this->assertSame(1, StampRedemption::where('customer_id', $customer->id)->count());
+    }
+
+    public function test_the_listed_customer_cannot_be_deleted_without_stamps_delete(): void
+    {
+        [$member, $customer] = $this->member(self::LISTED);
+
+        $this->actingAs($this->admin(['stamps.view']))
+            ->delete(route('stamps.customers.destroy', $customer))
+            ->assertForbidden();
+
+        $this->assertNotNull(Customer::find($customer->id));
+        $this->assertNotNull(User::find($member->id));
+    }
+
     /** The archive is asserted to be chosen, and faked so no row is soft-deleted. */
     private function expectArchiveInsteadOfPermanentDelete(): void
     {
@@ -161,6 +249,26 @@ class UserHardDeleteExceptionTest extends TestCase
             $mock->shouldReceive('archiveUser')->once()->andReturn(['user' => 'Someone', 'customer' => null]);
             $mock->shouldNotReceive('deleteUserPermanently');
         });
+    }
+
+    /** A reward redemption: the financial record that must outlive the customer. */
+    private function redeemARewardFor(Customer $customer): void
+    {
+        $program = $this->program();
+        $category = Category::create(['name' => 'Consumables']);
+        $asset = Asset::create([
+            'item_code' => 'ASSET-1', 'description' => 'Free Latte', 'type' => 'Consumables',
+            'category_id' => $category->id,
+        ]);
+        $card = StampCard::create([
+            'customer_id' => $customer->id, 'stamp_program_id' => $program->id,
+            'stamps_count' => 12, 'status' => 'redeemed',
+        ]);
+        StampRedemption::create([
+            'stamp_card_id' => $card->id, 'customer_id' => $customer->id,
+            'stamp_program_id' => $program->id, 'asset_id' => $asset->id,
+            'location' => 'CBTL Ayala 30th', 'quantity' => 1,
+        ]);
     }
 
     /** @return array{0: User, 1: Customer} */

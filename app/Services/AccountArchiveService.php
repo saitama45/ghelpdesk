@@ -31,9 +31,10 @@ use Illuminate\Validation\ValidationException;
  * (with `settings.edit` and the module's own delete permission), and for
  * loyalty customers nightly from `accounts:purge-expired`.
  *
- * One exception, by address: `deleteUserPermanently()` skips the archive for
- * the accounts named in `HardDeleteAccounts` and removes them straight from
- * the /users delete icon.
+ * One exception, by address: `deleteUserPermanently()` and
+ * `deleteCustomerPermanently()` skip the archive for the accounts named in
+ * `HardDeleteAccounts` and remove them straight from the delete icon on
+ * /users and on /stamps → Customers.
  */
 class AccountArchiveService
 {
@@ -489,6 +490,70 @@ class AccountArchiveService
             }
 
             return $deleted;
+        });
+    }
+
+    /**
+     * The customer records the delete icon on /stamps → Customers removes for
+     * good: those holding a `HardDeleteAccounts` address themselves, and the
+     * one behind a login that does. The page reads this list too, so what the
+     * confirmation says and what the delete does cannot disagree.
+     *
+     * @return list<int>
+     */
+    public function hardDeleteCustomerIds(): array
+    {
+        $emails = HardDeleteAccounts::emails();
+
+        if ($emails === []) {
+            return [];
+        }
+
+        $listed = fn ($query) => $query->whereIn(DB::raw('LOWER(email)'), $emails);
+
+        return Customer::query()->where($listed)->pluck('id')
+            ->merge(User::query()->whereNotNull('customer_id')->where($listed)->pluck('customer_id'))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public function customerDeletesPermanently(Customer $customer): bool
+    {
+        return in_array((int) $customer->id, $this->hardDeleteCustomerIds(), true);
+    }
+
+    /**
+     * The /stamps → Customers side of `deleteUserPermanently()`: remove the
+     * customer record and, when they registered in the mobile app, their login.
+     *
+     * @return array{customer: string, user: ?string} names of what was deleted
+     */
+    public function deleteCustomerPermanently(Customer $customer, ?int $actorId): array
+    {
+        return DB::transaction(function () use ($customer, $actorId) {
+            $user = $this->userFor($customer);
+
+            if ($user) {
+                // Through the login path, so the reference cleanup and blocker
+                // scan run exactly once, in the right order.
+                $deleted = $this->deleteUserPermanently($user, $actorId);
+
+                return ['customer' => $customer->name, 'user' => $deleted['user']];
+            }
+
+            if ($this->holdsFinancialRecords($customer)) {
+                throw ValidationException::withMessages([
+                    'customer' => "\"{$customer->name}\" cannot be deleted permanently: it has reward redemptions or voucher payments, which are kept as financial records.",
+                ]);
+            }
+
+            $name = $customer->name;
+
+            $this->purgeCustomerRow($customer, $actorId);
+
+            return ['customer' => $name, 'user' => null];
         });
     }
 
