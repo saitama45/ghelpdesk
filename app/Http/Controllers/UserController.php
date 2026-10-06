@@ -60,6 +60,8 @@ class UserController extends Controller
         return Inertia::render('Users/Index', [
             'users' => $users,
             'roles' => fn () => Role::query()->orderBy('name')->get(['id', 'name']),
+            // So the delete confirmation can say "permanent" for these instead of "archived".
+            'hardDeleteEmails' => \App\Support\HardDeleteAccounts::emails(),
             'filters' => [
                 'search' => $request->input('search', ''),
                 'status' => $request->input('status', ''),
@@ -388,6 +390,9 @@ class UserController extends Controller
      * The reference cleanup this method used to perform now runs at purge time
      * in AccountArchiveService — clearing tickets and attendance up front would
      * have made the archive unrecoverable.
+     *
+     * The exception is an account named in `HardDeleteAccounts`: that one skips
+     * the archive and is removed from the database here and now.
      */
     public function destroy(User $user, AccountArchiveService $archive)
     {
@@ -395,6 +400,16 @@ class UserController extends Controller
             throw ValidationException::withMessages([
                 'user' => 'You cannot delete the account you are signed in with.',
             ]);
+        }
+
+        if ($archive->deletesPermanently($user)) {
+            $deleted = $archive->deleteUserPermanently($user, auth()->id());
+
+            $message = $deleted['customer']
+                ? "User permanently deleted, together with their loyalty customer record \"{$deleted['customer']}\"."
+                : 'User permanently deleted.';
+
+            return redirect()->back()->with('success', $message);
         }
 
         $archived = $archive->archiveUser($user, auth()->id());

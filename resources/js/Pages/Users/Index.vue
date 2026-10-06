@@ -18,6 +18,7 @@ import { usePermission } from '@/Composables/usePermission';
 const props = defineProps({
     users: Object,
     roles: { type: Array, default: () => [] },
+    hardDeleteEmails: { type: Array, default: () => [] },
     filters: Object,
 });
 
@@ -340,9 +341,13 @@ const updateUser = () => {
 };
 
 const deleteUser = async (user) => {
+    // The one account that skips the archive (HardDeleteAccounts on the server).
+    const isHardDelete = props.hardDeleteEmails.includes(String(user.email || '').trim().toLowerCase());
     const confirmed = await confirm({
-        title: 'Delete User',
-        message: `Delete "${user.name}"? Their account is archived, not erased — restore it any time from Settings → Account Archive. If they are a loyalty app member, their customer record is archived with them.`
+        title: isHardDelete ? 'Permanently Delete User' : 'Delete User',
+        message: isHardDelete
+            ? `Permanently delete "${user.name}"? This account is NOT archived — it is erased from the database right away, together with its loyalty customer record, and cannot be restored.`
+            : `Delete "${user.name}"? Their account is archived, not erased — restore it any time from Settings → Account Archive. If they are a loyalty app member, their customer record is archived with them.`
     })
     
     if (confirmed) {

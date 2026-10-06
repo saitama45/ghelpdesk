@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Customer;
 use App\Models\Setting;
 use App\Models\User;
+use App\Support\HardDeleteAccounts;
 use App\Support\UserDeletionBlockers;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -29,6 +30,10 @@ use Illuminate\Validation\ValidationException;
  * only after the retention window: by hand from Settings → Account Archive
  * (with `settings.edit` and the module's own delete permission), and for
  * loyalty customers nightly from `accounts:purge-expired`.
+ *
+ * One exception, by address: `deleteUserPermanently()` skips the archive for
+ * the accounts named in `HardDeleteAccounts` and removes them straight from
+ * the /users delete icon.
  */
 class AccountArchiveService
 {
@@ -441,6 +446,49 @@ class AccountArchiveService
             if ($customer && $customer->trashed()) {
                 $this->purgeCustomerRow($customer, $actorId);
             }
+        });
+    }
+
+    /**
+     * Whether the delete icon on /users removes this login for good instead of
+     * archiving it. True only for the addresses named by `HardDeleteAccounts`.
+     */
+    public function deletesPermanently(User $user): bool
+    {
+        return HardDeleteAccounts::includes($user->archived_email ?? $user->email);
+    }
+
+    /**
+     * Remove a login and its paired customer record on the spot, with no stop
+     * in Settings → Account Archive (`deletesPermanently()` decides who).
+     *
+     * The same reference cleanup, blocker scan and financial-record rule as a
+     * purge. The one difference: nothing was archived first, so the customer
+     * row goes whether or not it is trashed.
+     *
+     * @return array{user: string, customer: ?string} names of what was deleted
+     */
+    public function deleteUserPermanently(User $user, ?int $actorId): array
+    {
+        return DB::transaction(function () use ($user, $actorId) {
+            $customer = $this->customerFor($user);
+
+            if ($customer && $this->holdsFinancialRecords($customer)) {
+                throw ValidationException::withMessages([
+                    'user' => "{$user->name} cannot be deleted permanently: their customer record \"{$customer->name}\" has reward redemptions or voucher payments, which are kept as financial records.",
+                ]);
+            }
+
+            $deleted = ['user' => $user->name, 'customer' => $customer?->name];
+
+            // The login holds the FK into customers, so it must go first.
+            $this->forceDeleteLogin($user, $actorId);
+
+            if ($customer) {
+                $this->purgeCustomerRow($customer, $actorId);
+            }
+
+            return $deleted;
         });
     }
 

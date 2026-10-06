@@ -79,4 +79,13 @@ return [
         'otp' => env('APP_REVIEW_OTP'),
     ],
 
+    // The one account the delete icon on /users removes for GOOD instead of
+    // archiving (`HardDeleteAccounts`). An exception by address, not a second
+    // delete mode: every other login still goes to Settings → Account Archive.
+    // Comma-separated if it ever needs a second address; an empty value turns
+    // the exception off.
+    'hard_delete_accounts' => [
+        'email' => env('HARD_DELETE_ACCOUNT_EMAIL', 'garudaperez45+review@gmail.com'),
+    ],
+
 ];
