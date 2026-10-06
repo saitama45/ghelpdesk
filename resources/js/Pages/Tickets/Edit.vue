@@ -885,18 +885,29 @@ const loadTaggedAssets = async () => {
     }
 };
 
+// The category / sub-category the last search was narrowed to (from the ticket's
+// item), or null when it covered every unit at the store.
+const assetCategoryFilter = ref(null);
+const assetCategoryFilterLabel = computed(() => assetCategoryFilter.value
+    ? [assetCategoryFilter.value.category, assetCategoryFilter.value.sub_category].filter(Boolean).join(' › ')
+    : '');
+
 const searchAssets = async () => {
     if (!editForm.store_id) {
         assetResults.value = [];
+        assetSearchLoading.value = false;
         return;
     }
     const term = assetQuery.value.trim();
     assetSearchLoading.value = true;
     try {
         const response = await axios.get(route('reports.inventory.assets-search'), {
-            params: { q: term, store_id: editForm.store_id },
+            // item_id narrows the results to assets filed under the item's category
+            // and sub-category on /assets.
+            params: { q: term, store_id: editForm.store_id, item_id: editForm.item_id || undefined },
         });
         assetResults.value = response.data.results || [];
+        assetCategoryFilter.value = response.data.category_filter || null;
     } catch (error) {
         console.error('Asset search failed:', error);
         assetResults.value = [];
@@ -910,15 +921,27 @@ const unitSerialLabel = (item) => item?.serial_no || item?.barcode || 'NO SERIAL
 let assetSearchTimer = null;
 const debouncedAssetSearch = () => {
     clearTimeout(assetSearchTimer);
+    // Shown as "Searching..." from the first keystroke, so an empty list is only ever
+    // read as "no match" once the search has actually come back.
+    assetSearchLoading.value = true;
     assetSearchTimer = setTimeout(searchAssets, 400);
 };
 
 watch(assetQuery, (val) => {
     if (val.trim().length === 0) {
+        clearTimeout(assetSearchTimer);
         assetResults.value = [];
+        assetSearchLoading.value = false;
         return;
     }
     debouncedAssetSearch();
+});
+
+// A different item means a different category, so the listed units are stale.
+watch(() => editForm.item_id, () => {
+    assetResults.value = [];
+    assetCategoryFilter.value = null;
+    if (assetQuery.value.trim().length > 0) debouncedAssetSearch();
 });
 
 const hideAssetDropdownSoon = () => {
@@ -2742,8 +2765,12 @@ const linkify = (text) => {
                                     placeholder="Search by serial, barcode, code, brand..."
                                     class="w-full px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 dark:border-gray-600"
                                 />
-                                <div v-if="showAssetDropdown && (assetResults.length > 0 || assetSearchLoading)" class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto dark:bg-gray-800 dark:border-gray-700">
+                                <div v-if="showAssetDropdown && assetQuery.trim().length > 0" class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto dark:bg-gray-800 dark:border-gray-700">
                                     <div v-if="assetSearchLoading" class="px-3 py-2 text-[10px] text-gray-400 dark:text-gray-400">Searching...</div>
+                                    <!-- Says why other units at the store are not listed. -->
+                                    <div v-else-if="assetCategoryFilterLabel && assetResults.length > 0" class="px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100 dark:bg-gray-900/40 dark:border-gray-700">
+                                        Only assets under {{ assetCategoryFilterLabel }}
+                                    </div>
                                     <button
                                         v-for="result in assetResults"
                                         :key="result.result_type + '-' + (result.stock_in_id || result.asset_id)"
@@ -2762,7 +2789,10 @@ const linkify = (text) => {
                                         </div>
                                         <div v-if="result.result_type === 'unit' && result.barcode" class="text-[9px] text-gray-400 truncate dark:text-gray-400">Barcode: {{ result.barcode }}</div>
                                     </button>
-                                    <div v-if="!assetSearchLoading && assetResults.length === 0" class="px-3 py-2 text-[10px] text-gray-400 dark:text-gray-400">No units found at this store.</div>
+                                    <div v-if="!assetSearchLoading && assetResults.length === 0" class="px-3 py-2 text-[10px] text-gray-400 dark:text-gray-400">
+                                        <template v-if="assetCategoryFilterLabel">No assets under <span class="font-bold text-gray-500 dark:text-gray-300">{{ assetCategoryFilterLabel }}</span> match at this store. Only assets in this ticket's item category and sub-category are listed.</template>
+                                        <template v-else>No units found at this store.</template>
+                                    </div>
                                 </div>
                             </div>
 

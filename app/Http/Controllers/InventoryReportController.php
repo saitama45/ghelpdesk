@@ -6,6 +6,8 @@ use App\Http\Controllers\Concerns\LocatesInventoryUnits;
 use App\Models\Asset;
 use App\Models\Category;
 use App\Models\InventoryTransaction;
+use App\Models\Item;
+use App\Models\Scopes\ActiveEntityScope;
 use App\Models\StampRedemption;
 use App\Models\StampRedemptionUnit;
 use App\Models\StockIn;
@@ -309,10 +311,17 @@ class InventoryReportController extends Controller implements HasMiddleware
         $variants = $this->locationVariants($storeCode);
         $like = '%' . $search . '%';
 
+        // The ticket's item pins the search to its own category + sub-category, so a
+        // ticket about an amplifier offers amplifiers rather than every unit in the store.
+        $taxonomy = $this->assetTaxonomyFor($request->integer('item_id'));
+        $inItemTaxonomy = fn ($query) => $query->when($taxonomy, fn ($q) => $q
+            ->where('category_id', $taxonomy['category_id'])
+            ->when($taxonomy['sub_category_id'], fn ($q, $subCategoryId) => $q->where('sub_category_id', $subCategoryId)));
+
         // Fixed serialized units currently located at this store.
-        $fixedUnits = $this->fixedUnitsCurrentlyAt($variants, function ($query) use ($search, $like) {
+        $fixedUnits = $this->fixedUnitsCurrentlyAt($variants, function ($query) use ($search, $like, $inItemTaxonomy) {
             $query->with('asset:id,item_code,brand,model,type')
-                ->whereHas('asset', fn ($q) => $q->where('type', 'Fixed'));
+                ->whereHas('asset', fn ($q) => $inItemTaxonomy($q->where('type', 'Fixed')));
 
             if ($search !== '') {
                 $query->where(function ($q) use ($like) {
@@ -347,6 +356,7 @@ class InventoryReportController extends Controller implements HasMiddleware
         // Consumable asset types with positive SOH at this store.
         $consumables = Asset::query()
             ->where('type', 'Consumables')
+            ->tap($inItemTaxonomy)
             ->when($search !== '', function ($query) use ($like) {
                 $query->where(function ($query) use ($like) {
                     $query->where('item_code', 'like', $like)
@@ -377,7 +387,52 @@ class InventoryReportController extends Controller implements HasMiddleware
             'results' => $fixedUnits->concat($consumables)->values(),
             'store_code' => $storeCode,
             'requires_store' => false,
+            // Named so the picker can say what it is narrowed to (null = store-wide).
+            'category_filter' => $taxonomy ? [
+                'category' => $taxonomy['category'],
+                'sub_category' => $taxonomy['sub_category'],
+            ] : null,
         ]);
+    }
+
+    /**
+     * The category / sub-category a ticket item pins the asset search to, or null when
+     * the search stays store-wide.
+     *
+     * Categories are shared by ticket items and the asset catalogue (/assets). Only a
+     * category that assets are actually filed under can narrow the search: an item in
+     * a ticket-only category (a SAP or POS request, say) would otherwise match nothing
+     * and make tagging impossible on every such ticket.
+     *
+     * @return array{category_id:int, sub_category_id:?int, category:?string, sub_category:?string}|null
+     */
+    private function assetTaxonomyFor(int $itemId): ?array
+    {
+        $item = $itemId
+            ? Item::query()->with(['category:id,name', 'subCategory:id,name'])->find($itemId)
+            : null;
+
+        if (! $item?->category_id) {
+            return null;
+        }
+
+        // Asked of the whole catalogue, not the active entity's slice of it: whether a
+        // category is an asset category is a property of the taxonomy.
+        $isAssetCategory = Asset::query()
+            ->withoutGlobalScope(ActiveEntityScope::class)
+            ->where('category_id', $item->category_id)
+            ->exists();
+
+        if (! $isAssetCategory) {
+            return null;
+        }
+
+        return [
+            'category_id' => $item->category_id,
+            'sub_category_id' => $item->sub_category_id,
+            'category' => $item->category?->name,
+            'sub_category' => $item->subCategory?->name,
+        ];
     }
 
     /**

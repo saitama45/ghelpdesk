@@ -85,6 +85,11 @@ intake → TicketObserver (key/company/SLA) → assignment → work → resolve 
 - Gated `ticket_statuses.view/.create/.edit`; labels are global (all entities), a visibility column is editable by its home-department members or `departments.edit` (`DepartmentReferences::canManage`). No delete: hide a status instead.
 - Child tickets / Escalate to Partner (`storeChild`, `bulkStoreChild`) are gated by their own `tickets.create_child` (was piggybacking on `tickets.edit`; single-child had no permission check at all). Migration `2026_09_22_100000` granted it to every role/user holding `tickets.edit`.
 
+**Affected Assets picker (Tickets/Edit → `InventoryReportController::assetsSearch`)**
+- Lists Fixed units currently at the ticket's store plus Consumables with stock there. The page sends `item_id`; `assetTaxonomyFor()` then narrows both lists to assets filed on `/assets` under the item's **category + sub-category** (category only when the item has no sub-category). Response carries `category_filter` so the dropdown can name what it is narrowed to and explain an empty list.
+- Categories are shared by ticket items and the asset catalogue, and almost every ticket item sits in a category no asset uses. The narrowing therefore applies **only when at least one asset is filed under the item's category**; otherwise the search stays store-wide, or tagging would be impossible on those tickets. Inside an asset category a sub-category with no assets lists nothing — no fallback.
+- It is a search filter only: `TicketAssetController::store` still accepts any asset at the ticket's store. Existing tags are never touched.
+
 ## 2. Inbound email → ticket / comment
 `app/Console/Commands/FetchEmails.php` (scheduled every 30s, `withoutOverlapping(5)`) → `EmailTicketService::fetchAndProcess()`:
 1. Throttled to one run per 20s (`Setting: last_email_sync_at`); IMAP config comes from the `settings` table, not `.env`.
