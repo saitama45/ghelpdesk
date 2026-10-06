@@ -2676,11 +2676,19 @@ class TicketController extends Controller
 
     private function referenceQuery($query, ?int $departmentId, $keepId = null)
     {
+        // Stores and partners carry no department tag (DepartmentReferences::selectable
+        // leaves them alone), so there is nothing to narrow here and nothing for the
+        // saved row to be exempted from. Sending them through the group below left
+        // `id = $keepId` as its ONLY condition, which shrank the picker to that one
+        // row on every ticket that already had a store or partner.
+        if (! in_array($query->getModel()->getTable(), DepartmentReferences::CATALOGS, true)) {
+            return $query;
+        }
+
         $activeCompanyId = \App\Support\CompanyContext::activeCompanyId();
         if (! $departmentId && $activeCompanyId
             && ! \App\Models\Department::whereIn('company_id', \App\Models\Company::itemSourceIds($activeCompanyId))->exists()) {
-            return in_array($query->getModel()->getTable(), DepartmentReferences::CATALOGS, true)
-                ? $query->whereNull('department_id') : $query;
+            return $query->whereNull('department_id');
         }
         return $query->where(function ($q) use ($departmentId, $keepId) {
             DepartmentReferences::selectable($q, $departmentId);

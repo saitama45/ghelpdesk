@@ -187,6 +187,49 @@ class TicketItemEntityTest extends TestCase
         $this->assertSame(['CBTL Store', 'Nonos Store'], $names($this->tgi));
     }
 
+    public function test_the_edit_pickers_keep_the_whole_list_when_the_ticket_already_has_a_store_and_partner(): void
+    {
+        $user = $this->agent();
+        // The entity having a service department is what sends the pickers through
+        // the department-scoped branch; without one this never reproduced in tests.
+        $department = \App\Models\Department::create(['name' => 'TAS', 'code' => 'TAS', 'is_active' => true, 'company_id' => $this->nonos->id]);
+        Store::create([
+            'company_id' => $this->nonos->id, 'code' => 'NON-2', 'name' => 'Nonos Second', 'sector' => 1,
+            'area' => 'A', 'brand' => 'B', 'class' => 'Regular', 'is_active' => true,
+        ]);
+        $vendor = fn (string $name) => tap(
+            \App\Models\Vendor::create(['name' => $name, 'email' => strtolower(str_replace(' ', '', $name)).'@example.com', 'is_active' => true]),
+            fn ($v) => $v->forceFill(['company_id' => $this->nonos->id])->save()
+        );
+        $saved = $vendor('Saved Partner');
+        $vendor('Other Partner');
+
+        $ticket = Ticket::create([
+            'title' => 'Picker check', 'description' => 'x', 'type' => 'task', 'status' => 'open',
+            'priority' => 'medium', 'severity' => 'minor', 'company_id' => $this->nonos->id,
+            'store_id' => $this->nonosStore->id,
+        ]);
+        $ticket->forceFill(['vendor_id' => $saved->id, 'serving_department_id' => $department->id])->save();
+
+        \App\Support\CompanyContext::flushMemo();
+        $props = $this->actingAs($user)
+            ->withSession([\App\Support\CompanyContext::SESSION_KEY => $this->nonos->id])
+            ->withHeaders([
+                'X-Inertia' => 'true',
+                'X-Inertia-Version' => app(\App\Http\Middleware\HandleInertiaRequests::class)->version(request()),
+            ])
+            ->get(route('tickets.edit', $ticket))
+            ->assertOk()
+            ->json('props');
+
+        // The saved store/partner must not be the ONLY option left to pick from.
+        $this->assertSame(['Nonos Second', 'Nonos Store'], collect($props['stores'])->pluck('name')->sort()->values()->all());
+        $this->assertSame(
+            ['Other Partner', 'Saved Partner'],
+            collect($props['vendors'])->pluck('name')->reject(fn ($name) => $name === 'None')->sort()->values()->all()
+        );
+    }
+
     public function test_accepting_a_ticket_rejects_an_item_from_another_entity(): void
     {
         $user = $this->agent();
