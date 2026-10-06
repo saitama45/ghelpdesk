@@ -27,6 +27,12 @@ const props = defineProps({
         type: Array,
         default: () => []
     },
+    // The dashboard period (year / month, or date_from / date_to), so a drill-down
+    // lists the same tickets the card counted. Empty on the standalone report page.
+    period: {
+        type: Object,
+        default: () => ({})
+    },
     showFilters: {
         type: Boolean,
         default: true
@@ -145,6 +151,7 @@ const fetchTickets = async (storeId) => {
             as_of_date: filterForm.value.as_of_date,
             user_id: filterForm.value.user_id,
             ...deptFilterParams.value,
+            ...props.period,
             ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
         };
         const response = await axios.get(route('reports.store-health.tickets', storeId, false), { params });
@@ -168,6 +175,7 @@ const fetchSectorTickets = async (sector) => {
             store_id: filterForm.value.store_id,
             user_id: filterForm.value.user_id,
             ...deptFilterParams.value,
+            ...props.period,
             ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
         };
         const response = await axios.get(route('reports.store-health.sector-tickets', sector, false), { params });

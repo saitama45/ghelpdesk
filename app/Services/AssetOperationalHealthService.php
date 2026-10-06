@@ -8,6 +8,7 @@ use App\Models\StockIn;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\TicketAsset;
+use App\Support\DashboardPeriod;
 use Illuminate\Support\Collection;
 
 /**
@@ -86,8 +87,12 @@ class AssetOperationalHealthService
      *                                  a unit outside the viewer's entity scope.
      * @param  int|string|null  $storeId  Optional single-store narrowing (dashboard store filter).
      * @param  string|null  $group  Optional asset-group narrowing.
+     * @param  DashboardPeriod|null  $period  The dashboard's Year / Month or date-range
+     *                                        filter. The fleet itself is never narrowed —
+     *                                        only which active tickets count against a
+     *                                        unit (those created in the period).
      */
-    public function build(?array $companyIds = null, $storeId = null, ?string $group = null): array
+    public function build(?array $companyIds = null, $storeId = null, ?string $group = null, ?DashboardPeriod $period = null): array
     {
         $stores = $this->storeUniverse($companyIds, $storeId);
 
@@ -96,7 +101,7 @@ class AssetOperationalHealthService
         }
 
         $units = $this->deployedUnits($stores);
-        $ticketsByUnit = $this->activeTicketsByUnit($units->pluck('id'));
+        $ticketsByUnit = $this->activeTicketsByUnit($units->pluck('id'), $period);
         $groupByCategory = $this->groupByCategoryId();
 
         $rows = $units->map(function (array $unit) use ($ticketsByUnit, $groupByCategory) {
@@ -200,8 +205,9 @@ class AssetOperationalHealthService
      * can never reach a store outside the viewer's companies.
      *
      * @param  array|null  $companyIds  Same entity selection the tab was built with.
+     * @param  DashboardPeriod|null  $period  Same period the tab was built with.
      */
-    public function units(?array $companyIds, $storeId, ?string $group = null, ?string $status = null): array
+    public function units(?array $companyIds, $storeId, ?string $group = null, ?string $status = null, ?DashboardPeriod $period = null): array
     {
         $stores = $this->storeUniverse($companyIds, $storeId);
 
@@ -210,7 +216,7 @@ class AssetOperationalHealthService
         }
 
         $units = $this->deployedUnits($stores);
-        $ticketsByUnit = $this->activeTicketsByUnit($units->pluck('id'));
+        $ticketsByUnit = $this->activeTicketsByUnit($units->pluck('id'), $period);
         $groupByCategory = $this->groupByCategoryId();
 
         $rows = $units
@@ -383,8 +389,10 @@ class AssetOperationalHealthService
      *
      * @return Collection<int, Collection>
      */
-    private function activeTicketsByUnit(Collection $unitIds): Collection
+    private function activeTicketsByUnit(Collection $unitIds, ?DashboardPeriod $period = null): Collection
     {
+        $period ??= DashboardPeriod::none();
+
         if ($unitIds->isEmpty()) {
             return collect();
         }
@@ -405,6 +413,7 @@ class AssetOperationalHealthService
             ->withoutGlobalScope(ActiveEntityScope::class)
             ->whereIn('tickets.id', $links->pluck('ticket_id')->unique()->values())
             ->whereNotIn('tickets.status', self::TERMINAL_STATUSES)
+            ->tap(fn ($q) => $period->apply($q, 'tickets.created_at'))
             // vendor + SLA target are what fill the sheet's Owner and ETA columns.
             ->with(['assignee:id,name', 'vendor:id,name', 'slaMetric:id,ticket_id,resolution_target_at'])
             ->select('id', 'ticket_key', 'title', 'status', 'priority', 'assignee_id', 'vendor_id', 'created_at')

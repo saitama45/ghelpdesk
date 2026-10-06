@@ -7,6 +7,7 @@ use App\Models\TicketHistory;
 use App\Services\BrandHealthService;
 use App\Services\NotificationService;
 use App\Support\CompanyContext;
+use App\Support\DashboardPeriod;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -40,6 +41,7 @@ class BrandHealthController extends Controller
             'concern_type' => ['nullable', 'in:Incident,Service Request,Problem'],
             'status' => ['nullable', Rule::in(BrandHealthService::STATUS_BUCKETS)],
             'as_of_date' => ['nullable', 'date'],
+            ...DashboardPeriod::RULES,
             'entity_ids' => ['nullable', 'array'],
             'entity_ids.*' => ['integer'],
         ]);
@@ -61,6 +63,7 @@ class BrandHealthController extends Controller
             'concern_type' => ['nullable', 'in:Incident,Service Request,Problem'],
             'status' => ['nullable', Rule::in(BrandHealthService::STATUS_BUCKETS)],
             'as_of_date' => ['nullable', 'date'],
+            ...DashboardPeriod::RULES,
             'entity_ids' => ['nullable', 'array'],
             'entity_ids.*' => ['integer'],
         ]);

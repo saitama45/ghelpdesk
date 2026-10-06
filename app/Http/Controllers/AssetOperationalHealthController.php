@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\AssetOperationalHealthService;
 use App\Support\CompanyContext;
+use App\Support\DashboardPeriod;
 use Illuminate\Http\Request;
 
 /**
@@ -28,6 +29,7 @@ class AssetOperationalHealthController extends Controller
             'store_id' => ['nullable', 'integer'],
             'group' => ['nullable', 'string', 'max:100'],
             'status' => ['nullable', 'in:operational,impacted'],
+            ...DashboardPeriod::RULES,
             'entity_ids' => ['nullable', 'array'],
             'entity_ids.*' => ['integer'],
         ]);
@@ -43,6 +45,7 @@ class AssetOperationalHealthController extends Controller
             $validated['store_id'] ?? null,
             $validated['group'] ?? null,
             $validated['status'] ?? null,
+            DashboardPeriod::fromArray($validated),
         ));
     }
 }

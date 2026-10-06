@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Setting;
 use App\Models\Ticket;
 use App\Services\OrganizationReferenceService;
+use App\Support\DashboardPeriod;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -195,6 +196,8 @@ class StoreReportController extends Controller implements HasMiddleware
         if ($asOfDate) {
             $query->whereDate('tickets.created_at', '<=', $asOfDate);
         }
+        // Dashboard period filter, so the modal lists what the card counted.
+        DashboardPeriod::fromRequest($request)->apply($query, 'tickets.created_at');
 
         if ($departmentId) {
             $query->whereHas('assignee', function($q) use ($departmentId) {
@@ -247,6 +250,7 @@ class StoreReportController extends Controller implements HasMiddleware
         if ($asOfDate) {
             $query->whereDate('tickets.created_at', '<=', $asOfDate);
         }
+        DashboardPeriod::fromRequest($request)->apply($query, 'tickets.created_at');
 
         if ($storeId && $storeId !== 'all') {
             $query->where('tickets.store_id', $storeId);

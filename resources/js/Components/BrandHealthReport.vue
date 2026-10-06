@@ -14,6 +14,9 @@ const props = defineProps({
     // this selection, so the drill-down has to carry it too or a click could reach
     // brands the filter excluded.
     entityIds: { type: Array, default: () => [] },
+    // The dashboard period (year / month, or date_from / date_to). The tab is built
+    // from it, so the Top 10 re-rank and the drill-down carry it as well.
+    period: { type: Object, default: () => ({}) },
 });
 const emit = defineEmits(['changed']);
 
@@ -140,6 +143,7 @@ const loadTopLists = async () => {
             params: {
                 ...(activeBrand.value ? { brand_id: activeBrand.value.id } : {}),
                 ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
+                ...props.period,
                 ...topFilterParams(),
             },
         });
@@ -187,6 +191,7 @@ const openDrill = async ({ title, subtitle, params }) => {
             params: {
                 ...(activeBrand.value ? { brand_id: activeBrand.value.id } : {}),
                 ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
+                ...props.period,
                 ...topFilterParams(),
                 ...params,
             },
@@ -283,6 +288,10 @@ const runAction = async (row, kind) => {
             <p v-if="data.entity_scoped" class="text-[11px] text-gray-400 dark:text-gray-500">
                 Scoped to the dashboard Entity filter — {{ brands.length }} brand{{ brands.length === 1 ? '' : 's' }} in view<span v-if="data.brands_outside_scope"> ({{ data.brands_outside_scope }} outside the selection)</span>.
             </p>
+            <!-- Says out loud that the period filter is narrowing every number below. -->
+            <span v-if="data.period_label" class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                Tickets created: {{ data.period_label }}
+            </span>
         </div>
 
         <!-- Brand sub-tabs: Summary + one per brand -->

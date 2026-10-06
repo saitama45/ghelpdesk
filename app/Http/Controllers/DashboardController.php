@@ -11,6 +11,7 @@ use App\Services\BrandHealthService;
 use App\Services\OrganizationReferenceService;
 use App\Services\PartnerPerformanceService;
 use App\Support\CompanyContext;
+use App\Support\DashboardPeriod;
 use App\Models\Project;
 use App\Models\Store;
 use App\Models\Ticket;
@@ -49,8 +50,9 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
-        $year = $request->input('year');
-        $month = $request->input('month');
+        // Year / Month, or a From–To date range — one object shared by every tab so
+        // they all narrow tickets the same way.
+        $period = DashboardPeriod::fromRequest($request);
         // Department filtering was removed from the dashboard — every widget spans all
         // departments. Any incoming department params are intentionally ignored so the
         // results are never narrowed by the viewer's (or a selected) department.
@@ -90,13 +92,7 @@ class DashboardController extends Controller
             $this->applyEntityScope($query, $allowedCompanyIds);
         }
 
-        $filteredQuery = clone $query;
-        if ($year) {
-            $filteredQuery->whereYear('created_at', $year);
-        }
-        if ($month) {
-            $filteredQuery->whereMonth('created_at', $month);
-        }
+        $filteredQuery = $period->apply(clone $query);
 
         $currentYear = date('Y');
         $years = range($currentYear, $currentYear - 3);
@@ -131,8 +127,7 @@ class DashboardController extends Controller
             'years' => $years,
             'months' => $months,
             'filters' => [
-                'year' => (int)$year ?: null,
-                'month' => (int)$month ?: null,
+                ...$period->toArray(),
                 'department_id' => $departmentIdFilter ? (int) $departmentIdFilter : null,
                 'department_node_id' => $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null,
                 'user_id' => $userIdFilter,
@@ -155,27 +150,22 @@ class DashboardController extends Controller
             'kanbanProjects' => fn () => $kanbanData()['projects'],
 
             // Lazy tabs — excluded from the initial load, fetched on first tab click.
-            'storeHealth' => Inertia::optional(fn () => $this->buildStoreHealth($selectedSubUnitLabel, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter, $effectiveCompanyIds)),
+            'storeHealth' => Inertia::optional(fn () => $this->buildStoreHealth($selectedSubUnitLabel, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter, $effectiveCompanyIds, $period)),
             // Live Brand Health — the Brand companies inside the Entity/Company filter,
             // so its store population matches Open vs Closed and Live Store Health
             // instead of silently spanning brands outside the selection.
-            'brandHealth' => Inertia::optional(fn () => $this->brandHealthService->build($user, null, $effectiveCompanyIds)),
+            'brandHealth' => Inertia::optional(fn () => $this->brandHealthService->build($user, null, $effectiveCompanyIds, $period)),
             // Partner Performance — the escalation children we hand to external partners.
-            // Shares the Entity filter and the year/month filter bar with every other tab.
-            'partnerPerformance' => Inertia::optional(fn () => $this->partnerPerformanceService->build(
-                $user,
-                $effectiveCompanyIds,
-                $year ? (int) $year : null,
-                $month ? (int) $month : null
-            )),
+            // Shares the Entity filter and the period filter with every other tab.
+            'partnerPerformance' => Inertia::optional(fn () => $this->partnerPerformanceService->build($user, $effectiveCompanyIds, $period)),
             // Asset Operational Health — per physical unit, derived live from linked
             // tickets. A different metric from Live Store/Brand Health (which count
             // open tickets per store), so it gets its own tab rather than changing theirs.
             'assetHealth' => Inertia::optional(fn () => $user->can('stock_ins.view')
-                ? $this->assetHealthService->build($effectiveCompanyIds, $storeIdFilter, $assetHealthGroup ?: null)
+                ? $this->assetHealthService->build($effectiveCompanyIds, $storeIdFilter, $assetHealthGroup ?: null, $period)
                 : null),
             'ticketCharts' => Inertia::optional(fn () => $this->buildTicketCharts($filteredQuery, $user, $effectiveCompanyIds, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter)),
-            'leaderboard' => Inertia::optional(fn () => $this->buildLeaderboard($filteredQuery, $year ? (int) $year : null, $month ? (int) $month : null, $departmentIdFilter, $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null, $userIdFilter, $storeIdFilter, $effectiveCompanyIds)),
+            'leaderboard' => Inertia::optional(fn () => $this->buildLeaderboard($filteredQuery, $period, $departmentIdFilter, $departmentNodeIdFilter ? (int) $departmentNodeIdFilter : null, $userIdFilter, $storeIdFilter, $effectiveCompanyIds)),
             'stats' => Inertia::optional(fn () => $overviewData()['stats']),
             'recentTickets' => Inertia::optional(fn () => $overviewData()['recentTickets']),
             'myTickets' => Inertia::optional(fn () => $overviewData()['myTickets']),
@@ -271,8 +261,7 @@ class DashboardController extends Controller
         $validated = $request->validate([
             'bucket' => ['required', 'in:all,open,closed'],
             'concern_type' => ['nullable', 'in:Incident,Service Request,Problem'],
-            'year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
-            'month' => ['nullable', 'integer', 'between:1,12'],
+            ...DashboardPeriod::RULES,
             'department_id' => ['nullable', 'integer'],
             'department_node_id' => ['nullable', 'integer'],
             'user_id' => ['nullable'],
@@ -297,8 +286,7 @@ class DashboardController extends Controller
             $this->applyEntityScope($query, $effectiveCompanyIds);
         }
 
-        $query->when($validated['year'] ?? null, fn ($q, $year) => $q->whereYear('created_at', $year))
-            ->when($validated['month'] ?? null, fn ($q, $month) => $q->whereMonth('created_at', $month));
+        DashboardPeriod::fromArray($validated)->apply($query);
 
         $this->applyAssigneeScopeFilters(
             $query,
@@ -437,10 +425,11 @@ class DashboardController extends Controller
     /**
      * Live Store Health data (lazy dashboard tab).
      */
-    private function buildStoreHealth($selectedSubUnitLabel, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter, array $effectiveCompanyIds)
+    private function buildStoreHealth($selectedSubUnitLabel, $departmentIdFilter, $departmentNodeIdFilter, $userIdFilter, $storeIdFilter, array $effectiveCompanyIds, DashboardPeriod $period)
     {
         return $this->reportService->getStoreHealthData([
             'as_of_date' => Carbon::now()->format('Y-m-d'),
+            'period' => $period,
             'sub_unit' => $selectedSubUnitLabel,
             'department_id' => $departmentIdFilter,
             'department_node_id' => $departmentNodeIdFilter,
@@ -1269,8 +1258,7 @@ class DashboardController extends Controller
 
     private function buildLeaderboard(
         $filteredQuery,
-        ?int $year = null,
-        ?int $month = null,
+        DashboardPeriod $period,
         ?string $departmentIdFilter = null,
         ?int $departmentNodeIdFilter = null,
         string|int|null $userIdFilter = 'all',
@@ -1278,9 +1266,9 @@ class DashboardController extends Controller
         array $companyIds = []
     ): array
     {
-        $now = \Carbon\Carbon::now();
-        $filterYear  = $year  ?? $now->year;
-        $filterMonth = $month ?? $now->month;
+        // Points are ranked for one month at a time — the current one when nothing is
+        // picked — or across the whole date range when the filter bar is in range mode.
+        $pointPeriod = $period->orCurrentMonth();
 
         $userQuery = \App\Models\User::active()
             ->whereHas('roles', fn ($q) => $q->where('is_assignable', true));
@@ -1309,9 +1297,8 @@ class DashboardController extends Controller
 
         $pointBaseQuery = \App\Models\AgentPointTransaction::query()
             ->leftJoin('tickets as pt', 'pt.id', '=', 'agent_point_transactions.ticket_id')
-            ->whereYear('agent_point_transactions.awarded_at', $filterYear)
-            ->whereMonth('agent_point_transactions.awarded_at', $filterMonth)
             ->whereIn('agent_point_transactions.agent_id', $eligibleAgentIds);
+        $pointPeriod->apply($pointBaseQuery, 'agent_point_transactions.awarded_at');
 
         // Entity/Company scope: only count points earned on tickets of the
         // selected entities (the joined ticket carries the company_id).
@@ -1389,9 +1376,9 @@ class DashboardController extends Controller
                 'avg_close_min' => $row['avg_resolution_min'],
             ]);
 
-        // Monthly trophies (top agent per category)
+        // Trophies (top agent per category) for the same period as the rankings.
         $trophies = $this->buildTrophies(
-            \Carbon\Carbon::create($filterYear, $filterMonth, 1),
+            $pointPeriod,
             $departmentIdFilter,
             $departmentNodeIdFilter,
             $userIdFilter,
@@ -1531,7 +1518,7 @@ class DashboardController extends Controller
     }
 
     private function buildTrophies(
-        \Carbon\Carbon $now,
+        DashboardPeriod $period,
         ?string $departmentIdFilter = null,
         ?int $departmentNodeIdFilter = null,
         string|int|null $userIdFilter = 'all',
@@ -1564,12 +1551,11 @@ class DashboardController extends Controller
             $allowedAgentIds = $userQuery->pluck('id')->toArray();
         }
 
-        $byType = function (array $types) use ($now, $allowedAgentIds, $storeIdFilter, $companyIds) {
+        $byType = function (array $types) use ($period, $allowedAgentIds, $storeIdFilter, $companyIds) {
             $query = \App\Models\AgentPointTransaction::query()
                 ->leftJoin('tickets as pt', 'pt.id', '=', 'agent_point_transactions.ticket_id')
-                ->whereYear('agent_point_transactions.awarded_at', $now->year)
-                ->whereMonth('agent_point_transactions.awarded_at', $now->month)
                 ->whereIn('agent_point_transactions.type', $types);
+            $period->apply($query, 'agent_point_transactions.awarded_at');
 
             if ($allowedAgentIds !== null) {
                 $query->whereIn('agent_point_transactions.agent_id', $allowedAgentIds);
@@ -1650,8 +1636,6 @@ class DashboardController extends Controller
     {
         $type = $request->input('type', 'total');
         $user = Auth::user();
-        $year = $request->input('year');
-        $month = $request->input('month');
 
         // Reuse company filtering logic
         $user->load('roles.companies');
@@ -1670,8 +1654,7 @@ class DashboardController extends Controller
         else $query->whereIn('company_id', $allowedCompanyIds);
 
         // Apply filters
-        if ($year) $query->whereYear('created_at', $year);
-        if ($month) $query->whereMonth('created_at', $month);
+        DashboardPeriod::fromRequest($request)->apply($query);
 
         switch ($type) {
             case 'waiting_alarm':

@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\Vendor;
+use App\Support\DashboardPeriod;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -42,17 +43,18 @@ class PartnerPerformanceService
     /**
      * @param  array|null  $companyIds  Effective Entity/Company selection from the dashboard
      *                                  filter. Null means "unscoped" (never used by the tab).
-     * @param  int|null  $year   Escalation-date year filter (shared dashboard filter bar).
-     * @param  int|null  $month  Escalation-date month filter.
+     * @param  DashboardPeriod|null  $period  Escalation-date period (the shared dashboard
+     *                                        filter bar: Year / Month or a date range).
      */
-    public function build($user, ?array $companyIds = null, ?int $year = null, ?int $month = null): array
+    public function build($user, ?array $companyIds = null, ?DashboardPeriod $period = null): array
     {
+        $period ??= DashboardPeriod::none();
         $agingDays = (int) Setting::get('waiting_aging_alarm_days', 3);
-        $facts = $this->facts($user, $companyIds, $year, $month, $agingDays);
+        $facts = $this->facts($user, $companyIds, $period, $agingDays);
 
         $base = [
             'as_of' => Carbon::now('Asia/Manila')->format('M j, Y'),
-            'period_label' => $this->periodLabel($year, $month),
+            'period_label' => $period->label() ?? 'All time',
             'aging_days' => $agingDays,
             'entity_scoped' => $companyIds !== null,
         ];
@@ -104,7 +106,7 @@ class PartnerPerformanceService
      * Drill-down behind every clickable number on the tab: the escalation children
      * for one partner / brand / state slice.
      *
-     * @param array{vendor_id?:int|null, brand_id?:int|string|null, state?:string|null, year?:int|null, month?:int|null} $filters
+     * @param array{vendor_id?:int|null, brand_id?:int|string|null, state?:string|null, year?:int|null, month?:int|null, date_from?:string|null, date_to?:string|null} $filters
      * @param  array|null  $companyIds  Same entity selection the tab was built with, so a
      *                                  drill-down can never reach outside it.
      */
@@ -114,7 +116,7 @@ class PartnerPerformanceService
         $state = $filters['state'] ?? 'all';
         $brandId = $filters['brand_id'] ?? null;
 
-        $facts = $this->facts($user, $companyIds, $filters['year'] ?? null, $filters['month'] ?? null, $agingDays)
+        $facts = $this->facts($user, $companyIds, DashboardPeriod::fromArray($filters), $agingDays)
             ->when(!empty($filters['vendor_id']), fn (Collection $rows) => $rows->where('vendor_id', (int) $filters['vendor_id']))
             // 'none' is a real bucket (escalations with no store), distinct from "no filter".
             ->when($brandId !== null && $brandId !== '', fn (Collection $rows) => $rows->where(
@@ -139,7 +141,7 @@ class PartnerPerformanceService
      * Every partner escalation in scope, decorated once with the derived fields each
      * roll-up needs (closed?, days to close, age, brand, partner).
      */
-    private function facts($user, ?array $companyIds, ?int $year, ?int $month, int $agingDays): Collection
+    private function facts($user, ?array $companyIds, DashboardPeriod $period, int $agingDays): Collection
     {
         $query = Ticket::query()
             ->withoutGlobalScope(ActiveEntityScope::class)
@@ -152,12 +154,7 @@ class PartnerPerformanceService
                 'parent:id,ticket_key,title',
             ]);
 
-        if ($year) {
-            $query->whereYear('created_at', $year);
-        }
-        if ($month) {
-            $query->whereMonth('created_at', $month);
-        }
+        $period->apply($query);
 
         if ($user?->hasRole('User')) {
             // A plain requester only ever sees escalations raised off their own tickets.
@@ -347,14 +344,5 @@ class PartnerPerformanceService
             'closed_at' => $row['closed_at'],
             'url' => route('tickets.edit', $row['key']),
         ];
-    }
-
-    private function periodLabel(?int $year, ?int $month): string
-    {
-        if ($year && $month) {
-            return Carbon::create($year, $month, 1)->format('F Y');
-        }
-
-        return $year ? (string) $year : 'All time';
     }
 }

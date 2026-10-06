@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Models\Store;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Support\DashboardPeriod;
 use Carbon\Carbon;
 
 class StoreReportService
@@ -34,6 +35,9 @@ class StoreReportService
         $departmentId = $filters['department_id'] ?? null;
         $departmentNodeId = $filters['department_node_id'] ?? null;
         $asOfDate = $filters['as_of_date'] ?? Carbon::now()->format('Y-m-d');
+        // The dashboard's Year / Month or date-range filter. Absent on the standalone
+        // report page, which only has its as-of date.
+        $period = $filters['period'] ?? DashboardPeriod::none();
         // Optional explicit entity scope (Entity/Company filter). When provided we
         // bypass the active-entity global scope and use exactly these companies.
         $companyIds = $filters['company_ids'] ?? null;
@@ -72,6 +76,7 @@ class StoreReportService
         if ($asOfDate) {
             $baseTicketsQuery->whereDate('tickets.created_at', '<=', $asOfDate);
         }
+        $period->apply($baseTicketsQuery, 'tickets.created_at');
 
         if ($storeId && $storeId !== 'all') {
             $baseTicketsQuery->where('tickets.store_id', $storeId);
@@ -205,12 +210,13 @@ class StoreReportService
             $storeId,
             $asOfDate,
             $thresholdBands,
-            $splitOffice ? 'exclude_office' : null
+            $splitOffice ? 'exclude_office' : null,
+            $period
         );
 
         // Corporate-office block (per-office cards + detail table + office-only heatmap).
         $office = $splitOffice
-            ? $this->buildOfficeHealth($companyIds, $storeId, $asOfDate, $thresholdBands)
+            ? $this->buildOfficeHealth($companyIds, $storeId, $asOfDate, $thresholdBands, $period)
             : null;
 
         // Summary logic
@@ -354,8 +360,10 @@ class StoreReportService
      * the store filter and the as-of date, but NOT the assignee dept/user/sector
      * (an entity's health spans every sector).
      */
-    private function buildEntityHealthHeatmap($companyIds, $storeId, $asOfDate, array $thresholdBands, ?string $classScope = null): array
+    private function buildEntityHealthHeatmap($companyIds, $storeId, $asOfDate, array $thresholdBands, ?string $classScope = null, ?DashboardPeriod $period = null): array
     {
+        $period ??= DashboardPeriod::none();
+
         $storesQuery = Store::query()
             ->where('is_active', true)
             ->with('company:id,name,code');
@@ -391,6 +399,7 @@ class StoreReportService
         if ($asOfDate) {
             $ticketQuery->whereDate('tickets.created_at', '<=', $asOfDate);
         }
+        $period->apply($ticketQuery, 'tickets.created_at');
 
         $openCountsByStore = $ticketQuery
             ->selectRaw('store_id, COUNT(*) as c')
@@ -436,8 +445,10 @@ class StoreReportService
      * store is shown as its own health card (0 open tickets = Healthy), plus a
      * per-entity detail table and an office-only entity heatmap.
      */
-    private function buildOfficeHealth($companyIds, $storeId, $asOfDate, array $thresholdBands): array
+    private function buildOfficeHealth($companyIds, $storeId, $asOfDate, array $thresholdBands, ?DashboardPeriod $period = null): array
     {
+        $period ??= DashboardPeriod::none();
+
         $storesQuery = Store::query()
             ->where('is_active', true)
             ->where('class', 'Office')
@@ -478,6 +489,7 @@ class StoreReportService
         if ($asOfDate) {
             $ticketQuery->whereDate('tickets.created_at', '<=', $asOfDate);
         }
+        $period->apply($ticketQuery, 'tickets.created_at');
 
         // Open count broken down by status, so the detail table can show the same
         // Open / WCF / WSP split as the sector tables. Cloned before the pluck below,
@@ -506,6 +518,7 @@ class StoreReportService
         if ($asOfDate) {
             $volumeQuery->whereDate('tickets.created_at', '<=', $asOfDate);
         }
+        $period->apply($volumeQuery, 'tickets.created_at');
 
         $allCountsByStore = $volumeQuery
             ->selectRaw('store_id, COUNT(*) as c')
@@ -580,7 +593,7 @@ class StoreReportService
         return [
             'summary' => ['office' => $cards, 'is_office_mode' => true, 'office_totals' => $officeTotals],
             'reportData' => $reportData,
-            'entityHealth' => $this->buildEntityHealthHeatmap($companyIds, $storeId, $asOfDate, $thresholdBands, 'only_office'),
+            'entityHealth' => $this->buildEntityHealthHeatmap($companyIds, $storeId, $asOfDate, $thresholdBands, 'only_office', $period),
         ];
     }
 

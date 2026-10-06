@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\PartnerPerformanceService;
 use App\Support\CompanyContext;
+use App\Support\DashboardPeriod;
 use Illuminate\Http\Request;
 
 /**
@@ -24,8 +25,7 @@ class PartnerPerformanceController extends Controller
             // bucket on the tab, distinct from "no brand filter".
             'brand_id' => ['nullable', 'string'],
             'state' => ['nullable', 'in:all,open,closed,aging,breached'],
-            'year' => ['nullable', 'integer'],
-            'month' => ['nullable', 'integer', 'between:1,12'],
+            ...DashboardPeriod::RULES,
             'entity_ids' => ['nullable', 'array'],
             'entity_ids.*' => ['integer'],
         ]);

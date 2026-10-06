@@ -11,8 +11,9 @@ const props = defineProps({
     // Effective Entity/Company ids from the dashboard filter. The tab is built from
     // this selection, so every drill-down has to carry it too.
     entityIds: { type: Array, default: () => [] },
-    // Year/month from the dashboard filter bar, so a drill-down covers the same period.
-    filters: { type: Object, default: () => ({}) },
+    // The dashboard period (year / month, or date_from / date_to), so a drill-down
+    // covers the same period as the tab.
+    period: { type: Object, default: () => ({}) },
 });
 
 const { showError } = useToast();
@@ -117,8 +118,7 @@ const openDrill = async ({ title, subtitle, params }) => {
         const { data } = await axios.get(route('dashboard.partner-performance.tickets', {}, false), {
             params: {
                 ...(brandParam.value ? { brand_id: brandParam.value } : {}),
-                ...(props.filters?.year ? { year: props.filters.year } : {}),
-                ...(props.filters?.month ? { month: props.filters.month } : {}),
+                ...props.period,
                 ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
                 ...params,
             },

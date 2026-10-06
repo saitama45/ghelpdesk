@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Models\Store;
 use App\Models\SubCategory;
 use App\Models\Ticket;
+use App\Support\DashboardPeriod;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -62,9 +63,14 @@ class BrandHealthService
      *                                  dashboard filter. The tab counts only brands
      *                                  inside it, so Live Brand Health and every other
      *                                  entity-scoped widget describe the same stores.
+     * @param  DashboardPeriod|null  $period  The dashboard's Year / Month or date-range
+     *                                        filter. When set, the tab counts only the
+     *                                        tickets created in that period — the same
+     *                                        rule every other dashboard tab applies.
      */
-    public function build($user, ?string $asOfDate = null, ?array $companyIds = null): array
+    public function build($user, ?string $asOfDate = null, ?array $companyIds = null, ?DashboardPeriod $period = null): array
     {
+        $period ??= DashboardPeriod::none();
         $asOfDate = $asOfDate ?: Carbon::now()->format('Y-m-d');
         $agingDays = (int) Setting::get('waiting_aging_alarm_days', 3);
         $bands = $this->thresholdBands();
@@ -85,6 +91,7 @@ class BrandHealthService
         if ($brands->isEmpty()) {
             return [
                 'as_of' => Carbon::parse($asOfDate)->format('M j, Y'),
+                'period_label' => $period->label(),
                 'aging_days' => $agingDays,
                 'thresholds' => $this->thresholdLabels($bands),
                 'can_close' => (bool) $user?->can('tickets.close'),
@@ -118,6 +125,7 @@ class BrandHealthService
                 ->whereNotIn('tickets.status', self::TERMINAL_STATUSES)
                 ->whereIn('tickets.store_id', $allStoreIds)
                 ->whereDate('tickets.created_at', '<=', $asOfDate)
+                ->tap(fn ($q) => $period->apply($q, 'tickets.created_at'))
                 ->selectRaw('store_id, status, COUNT(*) as c')
                 ->groupBy('store_id', 'status')
                 ->get()
@@ -136,6 +144,7 @@ class BrandHealthService
                 ->whereNotIn('tickets.status', self::TERMINAL_STATUSES)
                 ->whereIn('tickets.store_id', $allStoreIds)
                 ->whereDate('tickets.created_at', '<=', $asOfDate)
+                ->tap(fn ($q) => $period->apply($q, 'tickets.created_at'))
                 ->selectRaw('store_id, sub_category_id, COUNT(*) as c')
                 ->groupBy('store_id', 'sub_category_id')
                 ->get()
@@ -146,7 +155,7 @@ class BrandHealthService
         $subCategoryNames = $this->subCategoryNames($subCategoryCountsByStore);
 
         // The WCF confirmation register: the actual tickets awaiting brand confirmation.
-        $wcfByBrand = $this->wcfRegister($allStoreIds, $storesByBrand, $asOfDate, $agingDays);
+        $wcfByBrand = $this->wcfRegister($allStoreIds, $storesByBrand, $asOfDate, $agingDays, $period);
 
         $brandLabels = $brands->mapWithKeys(fn (Company $brand) => [
             (int) $brand->id => $brand->code ?: $brand->name,
@@ -200,6 +209,7 @@ class BrandHealthService
 
         return [
             'as_of' => Carbon::parse($asOfDate)->format('M j, Y'),
+            'period_label' => $period->label(),
             'aging_days' => $agingDays,
             'thresholds' => $this->thresholdLabels($bands),
             'can_close' => (bool) $user?->can('tickets.close'),
@@ -222,11 +232,12 @@ class BrandHealthService
      * closed / all tickets, the two lists come from here instead — everything else
      * on the tab (health bands, WCF register) stays an open-backlog read.
      *
-     * @param  array{brand_id?:int|null, concern_type?:string|null, status?:string|null, as_of_date?:string|null}  $filters
+     * @param  array{brand_id?:int|null, concern_type?:string|null, status?:string|null, as_of_date?:string|null, year?:int|null, month?:int|null, date_from?:string|null, date_to?:string|null}  $filters
      * @param  array|null  $companyIds  Same entity selection the tab was built with.
      */
     public function topLists(array $filters, ?array $companyIds = null): array
     {
+        $period = DashboardPeriod::fromArray($filters);
         $asOfDate = $filters['as_of_date'] ?? Carbon::now()->format('Y-m-d');
         $bucket = $this->statusBucket($filters['status'] ?? null);
         $concernType = $filters['concern_type'] ?? null;
@@ -262,6 +273,7 @@ class BrandHealthService
             ->whereNull('tickets.parent_id')
             ->whereIn('tickets.store_id', $stores->pluck('id'))
             ->whereDate('tickets.created_at', '<=', $asOfDate)
+            ->tap(fn ($q) => $period->apply($q, 'tickets.created_at'))
             // The open bucket never needs terminal rows; the others need both halves.
             ->when($bucket === 'open', fn ($q) => $q->whereNotIn('tickets.status', self::TERMINAL_STATUSES))
             ->when($concernType, fn ($q) => $q->whereHas('item', fn ($i) => $i->where('concern_type', $concernType)))
@@ -447,12 +459,13 @@ class BrandHealthService
      * It takes the same concern-type / status filters as the lists, so a click can
      * never show a different set of tickets than the row that was clicked counted.
      *
-     * @param array{brand_id?:int|null, sub_category_id?:int|string|null, store_id?:int|null, concern_type?:string|null, status?:string|null, as_of_date?:string|null} $filters
+     * @param array{brand_id?:int|null, sub_category_id?:int|string|null, store_id?:int|null, concern_type?:string|null, status?:string|null, as_of_date?:string|null, year?:int|null, month?:int|null, date_from?:string|null, date_to?:string|null} $filters
      * @param  array|null  $companyIds  Same entity selection the tab was built with, so
      *                                  a drill-down can never reach outside it.
      */
     public function tickets(array $filters, ?array $companyIds = null): array
     {
+        $period = DashboardPeriod::fromArray($filters);
         $asOfDate = $filters['as_of_date'] ?? Carbon::now()->format('Y-m-d');
         $brandId = $filters['brand_id'] ?? null;
         $storeId = $filters['store_id'] ?? null;
@@ -484,6 +497,7 @@ class BrandHealthService
             ->when($concernType, fn ($q) => $q->whereHas('item', fn ($i) => $i->where('concern_type', $concernType)))
             ->whereIn('tickets.store_id', $stores->pluck('id'))
             ->whereDate('tickets.created_at', '<=', $asOfDate)
+            ->tap(fn ($q) => $period->apply($q, 'tickets.created_at'))
             ->when($subCategory === 'none', fn ($q) => $q->whereNull('tickets.sub_category_id'))
             ->when($subCategory !== null && $subCategory !== '' && $subCategory !== 'none',
                 fn ($q) => $q->where('tickets.sub_category_id', (int) $subCategory))
@@ -534,7 +548,7 @@ class BrandHealthService
      * Build the per-brand list of tickets awaiting client (brand) confirmation —
      * i.e. tickets in the waiting_client_feedback status sitting on a brand's store.
      */
-    private function wcfRegister($allStoreIds, Collection $storesByBrand, string $asOfDate, int $agingDays): Collection
+    private function wcfRegister($allStoreIds, Collection $storesByBrand, string $asOfDate, int $agingDays, DashboardPeriod $period): Collection
     {
         if ($allStoreIds->isEmpty()) {
             return collect();
@@ -556,6 +570,7 @@ class BrandHealthService
             ->whereIn('tickets.status', \App\Support\TicketStatuses::like(['waiting_client_feedback']))
             ->whereIn('tickets.store_id', $allStoreIds)
             ->whereDate('tickets.created_at', '<=', $asOfDate)
+            ->tap(fn ($q) => $period->apply($q, 'tickets.created_at'))
             ->with(['store:id,code,name'])
             ->select('id', 'ticket_key', 'title', 'status', 'store_id', 'updated_at', 'created_at')
             ->latest('updated_at')

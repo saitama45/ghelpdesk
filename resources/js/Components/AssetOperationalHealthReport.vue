@@ -11,6 +11,9 @@ const props = defineProps({
     // Effective Entity/Company ids from the dashboard filter. The tab is built from
     // this selection, so every drill-down has to carry it too.
     entityIds: { type: Array, default: () => [] },
+    // The dashboard period (year / month, or date_from / date_to). It decides which
+    // active tickets count against a unit, so the drill-down has to match the board.
+    period: { type: Object, default: () => ({}) },
 });
 
 const emit = defineEmits(['change-group']);
@@ -123,6 +126,7 @@ const openDrill = async ({ title, subtitle, params }) => {
             params: {
                 ...(activeGroup.value ? { group: activeGroup.value } : {}),
                 ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
+                ...props.period,
                 ...params,
             },
         });

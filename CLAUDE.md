@@ -59,6 +59,7 @@ Laravel 12 + Inertia v2 + Vue 3 + Tailwind v4 (Vite) on SQL Server, with Spatie 
 | Project plan (Gantt) edit rights | `app/Support/ProjectPlanAccess.php` |
 | Attendance visibility (org chart) | `app/Support/AttendanceVisibility.php` |
 | Global entity listing filter | `app/Models/Scopes/ActiveEntityScope.php` |
+| Dashboard period filter (Year/Month or date range) — every tab, drill-down, export | `app/Support/DashboardPeriod.php` |
 | Inertia shared props (auth, permissions, entity, department, flash) | `app/Http/Middleware/HandleInertiaRequests.php` |
 | Ticket model + scopes | `app/Models/Ticket.php` |
 | Ticket key / company backfill / SLA creation | `app/Observers/TicketObserver.php` |

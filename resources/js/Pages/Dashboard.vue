@@ -77,8 +77,56 @@ const kanbanView = ref('project');
 const filterForm = reactive({
     year: props.filters.year || '',
     month: props.filters.month || '',
+    // 'month' shows the Year + Month pickers; 'range' swaps them for From / To dates.
+    period_mode: (props.filters.date_from || props.filters.date_to) ? 'range' : 'month',
+    date_from: props.filters.date_from || '',
+    date_to: props.filters.date_to || '',
     user_id: props.filters.user_id || 'all',
     store_id: props.filters.store_id || 'all',
+});
+
+// A date the server will accept: complete, and not a half-typed year such as 0002.
+const isUsableDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value || '') && Number(value.slice(0, 4)) >= 2000;
+
+// The period every tab, drill-down and export is filtered by: Year / Month, or a
+// From–To range while the filter bar is in range mode — never both.
+const periodParams = computed(() => {
+    if (filterForm.period_mode === 'range') {
+        let from = isUsableDate(filterForm.date_from) ? filterForm.date_from : '';
+        let to = isUsableDate(filterForm.date_to) ? filterForm.date_to : '';
+        if (from && to && from > to) [from, to] = [to, from];
+
+        return { ...(from ? { date_from: from } : {}), ...(to ? { date_to: to } : {}) };
+    }
+
+    return {
+        ...(filterForm.year ? { year: filterForm.year } : {}),
+        ...(filterForm.month ? { month: filterForm.month } : {}),
+    };
+});
+
+// The same period in the parameter names the Tickets list uses, for click-throughs.
+const ticketListPeriodParams = computed(() => {
+    const { date_from, date_to, ...yearMonth } = periodParams.value;
+
+    return {
+        ...yearMonth,
+        ...(date_from ? { start_date: date_from } : {}),
+        ...(date_to ? { end_date: date_to } : {}),
+    };
+});
+
+const formatPeriodDate = (value) => {
+    const [y, m, d] = value.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+// "Jun 1, 2026 – Jun 30, 2026" while a date range is applied, otherwise empty.
+const dateRangeLabel = computed(() => {
+    const { date_from: from, date_to: to } = periodParams.value;
+    if (from && to) return from === to ? formatPeriodDate(from) : `${formatPeriodDate(from)} – ${formatPeriodDate(to)}`;
+    if (from) return `From ${formatPeriodDate(from)}`;
+    return to ? `Up to ${formatPeriodDate(to)}` : '';
 });
 
 // Entity/Company filter — defaults to the active sidebar entity (server-seeded).
@@ -214,10 +262,15 @@ const switchTab = (tab) => {
     fetchTab(tab, ALWAYS_REFRESH_TABS.has(tab));
 };
 
+// The period the dashboard was last loaded with, so a date still being typed (or a
+// mode switch that changes nothing) does not trigger a reload.
+let appliedPeriodKey = JSON.stringify(periodParams.value);
+
 const applyFilters = () => {
+    appliedPeriodKey = JSON.stringify(periodParams.value);
+
     router.get(route('dashboard'), {
-        year: filterForm.year,
-        month: filterForm.month,
+        ...periodParams.value,
         user_id: filterForm.user_id,
         store_id: filterForm.store_id,
         pipeline_year: pipelineYear.value,
@@ -244,6 +297,8 @@ const applyFilters = () => {
 const clearFilters = () => {
     filterForm.year = '';
     filterForm.month = '';
+    filterForm.date_from = '';
+    filterForm.date_to = '';
     filterForm.user_id = 'all';
     filterForm.store_id = 'all';
     applyFilters();
@@ -253,10 +308,44 @@ watch(() => [filterForm.year, filterForm.month, filterForm.user_id, filterForm.s
     applyFilters();
 });
 
+// A date input emits on every keystroke that forms a valid date, so wait for the
+// typing to settle, then reload only if the effective period actually changed.
+let periodTimer = null;
+watch(() => [filterForm.period_mode, filterForm.date_from, filterForm.date_to], () => {
+    clearTimeout(periodTimer);
+    periodTimer = setTimeout(() => {
+        if (JSON.stringify(periodParams.value) !== appliedPeriodKey) applyFilters();
+    }, 400);
+});
+
+// Month ⇄ date range. Switching to a range starts from the Year / Month already
+// picked; switching back drops the range and the pickers take over again.
+const setPeriodMode = (mode) => {
+    if (filterForm.period_mode === mode) return;
+
+    if (mode === 'range') {
+        const pad = (n) => String(n).padStart(2, '0');
+        const year = Number(filterForm.year) || new Date().getFullYear();
+        const month = Number(filterForm.month);
+
+        if (month) {
+            filterForm.date_from = `${year}-${pad(month)}-01`;
+            filterForm.date_to = `${year}-${pad(month)}-${pad(new Date(year, month, 0).getDate())}`;
+        } else if (filterForm.year) {
+            filterForm.date_from = `${year}-01-01`;
+            filterForm.date_to = `${year}-12-31`;
+        }
+    } else {
+        filterForm.date_from = '';
+        filterForm.date_to = '';
+    }
+
+    filterForm.period_mode = mode;
+};
+
 const hasActiveFilters = computed(() => {
     return Boolean(
-        filterForm.year ||
-        filterForm.month ||
+        Object.keys(periodParams.value).length ||
         filterForm.user_id !== 'all' ||
         filterForm.store_id !== 'all'
     );
@@ -351,9 +440,11 @@ const concernTypeBars = computed(() => {
 });
 
 const leaderboardPeriodLabel = computed(() => {
+    if (dateRangeLabel.value) return dateRangeLabel.value;
+
     const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const y = filterForm.year || new Date().getFullYear();
-    const m = filterForm.month ? monthNames[Number(filterForm.month) - 1] : 'This Month';
+    const y = periodParams.value.year || new Date().getFullYear();
+    const m = periodParams.value.month ? monthNames[Number(periodParams.value.month) - 1] : 'This Month';
     return `${m} ${y}`;
 });
 
@@ -389,20 +480,11 @@ const formatMinutes = (minutes) => {
 };
 
 const activeTicketFilterParams = computed(() => {
-    const params = {
+    return {
         status: ACTIVE_TICKET_STATUSES.value,
         skip_default_department: 1,
+        ...ticketListPeriodParams.value,
     };
-
-    if (filterForm.year) {
-        params.year = filterForm.year;
-    }
-
-    if (filterForm.month) {
-        params.month = filterForm.month;
-    }
-
-    return params;
 });
 
 // Mirrors the Management Filters scope used to build the "Overall Open vs Closed"
@@ -414,8 +496,7 @@ const overallChartFilterParams = computed(() => ({
     ...deptFilterParams.value,
     ...(filterForm.user_id && !['all', 'unassigned'].includes(filterForm.user_id) ? { assignee_id: filterForm.user_id } : {}),
     ...(filterForm.store_id && filterForm.store_id !== 'all' ? { store_id: filterForm.store_id } : {}),
-    ...(filterForm.year ? { year: filterForm.year } : {}),
-    ...(filterForm.month ? { month: filterForm.month } : {}),
+    ...ticketListPeriodParams.value,
     ...(entityFilterEnabled.value ? { entity_ids: resolvedEntityIds() } : {}),
 }));
 
@@ -575,8 +656,7 @@ const closeSurveyModal = () => {
 const exportToExcel = (type) => {
     const params = new URLSearchParams({
         type: type,
-        year: filterForm.year,
-        month: filterForm.month
+        ...periodParams.value,
     });
     window.open(route('dashboard.export') + '?' + params.toString(), '_blank');
 };
@@ -587,8 +667,7 @@ const chartTicketParams = (bucket, concernType = null) => ({
     ...deptFilterParams.value,
     ...(filterForm.user_id && filterForm.user_id !== 'all' ? { user_id: filterForm.user_id } : {}),
     ...(filterForm.store_id && filterForm.store_id !== 'all' ? { store_id: filterForm.store_id } : {}),
-    ...(filterForm.year ? { year: filterForm.year } : {}),
-    ...(filterForm.month ? { month: filterForm.month } : {}),
+    ...periodParams.value,
     ...(entityFilterEnabled.value ? { entity_ids: resolvedEntityIds() } : {}),
 });
 
@@ -664,7 +743,7 @@ const exportChartTickets = () => {
             <div class="px-4 py-3 border-b border-gray-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3 dark:border-gray-700">
                 <div>
                     <h3 class="text-sm font-black text-gray-700 uppercase tracking-widest dark:text-gray-300">Management Filters</h3>
-                    <p class="text-xs text-gray-500 mt-0.5 dark:text-gray-300">Controls the Kanban report and Live Store Health views.</p>
+                    <p class="text-xs text-gray-500 mt-0.5 dark:text-gray-300">Applies to every ticket tab. The period filters by when a ticket was created.</p>
                 </div>
                 <button
                     v-if="hasActiveFilters"
@@ -707,9 +786,20 @@ const exportChartTickets = () => {
                         placeholder="All Stores"
                     />
                 </div>
+                <!-- Period: Year + Month, or From + To once the toggle is on "Date range"
+                     (the Year picker gives way to the From date). -->
                 <div>
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Year</label>
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">{{ filterForm.period_mode === 'range' ? 'From' : 'Year' }}</label>
+                    <input
+                        v-if="filterForm.period_mode === 'range'"
+                        v-model="filterForm.date_from"
+                        type="date"
+                        :max="filterForm.date_to || undefined"
+                        aria-label="From date"
+                        class="w-full bg-white border border-gray-300 rounded-lg shadow-sm px-3 py-2.5 sm:text-sm text-gray-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 dark:[color-scheme:dark]"
+                    />
                     <Autocomplete
+                        v-else
                         v-model="filterForm.year"
                         :options="yearsWithLabel"
                         label-key="display_name"
@@ -718,8 +808,34 @@ const exportChartTickets = () => {
                     />
                 </div>
                 <div>
-                    <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 dark:text-gray-300">Month</label>
+                    <div class="flex items-center justify-between gap-2 mb-1">
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider dark:text-gray-300">{{ filterForm.period_mode === 'range' ? 'To' : 'Month' }}</label>
+                        <div class="inline-flex rounded overflow-hidden ring-1 ring-gray-200 text-[10px] leading-[15px] font-black uppercase tracking-wider dark:ring-gray-600" role="group" aria-label="Period type">
+                            <button
+                                v-for="mode in [{ key: 'month', label: 'Month' }, { key: 'range', label: 'Date range' }]"
+                                :key="mode.key"
+                                type="button"
+                                @click="setPeriodMode(mode.key)"
+                                :aria-pressed="filterForm.period_mode === mode.key"
+                                class="px-2 transition-colors"
+                                :class="filterForm.period_mode === mode.key
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-white text-gray-500 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:text-gray-100'"
+                            >
+                                {{ mode.label }}
+                            </button>
+                        </div>
+                    </div>
+                    <input
+                        v-if="filterForm.period_mode === 'range'"
+                        v-model="filterForm.date_to"
+                        type="date"
+                        :min="filterForm.date_from || undefined"
+                        aria-label="To date"
+                        class="w-full bg-white border border-gray-300 rounded-lg shadow-sm px-3 py-2.5 sm:text-sm text-gray-900 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 dark:[color-scheme:dark]"
+                    />
                     <Autocomplete
+                        v-else
                         v-model="filterForm.month"
                         :options="monthsWithLabel"
                         label-key="display_name"
@@ -1276,6 +1392,7 @@ const exportChartTickets = () => {
                 :threshold-bands="storeHealth.thresholdBands"
                 :entity-health="storeHealth.entityHealth"
                 :entity-ids="drillEntityIds"
+                :period="periodParams"
                 :show-filters="false"
                 :filters="filters"
             />
@@ -1289,6 +1406,7 @@ const exportChartTickets = () => {
                 :threshold-bands="storeHealth.thresholdBands"
                 :entity-health="storeHealth.office.entityHealth"
                 :entity-ids="drillEntityIds"
+                :period="periodParams"
                 :show-filters="false"
                 :filters="filters"
             />
@@ -1306,6 +1424,7 @@ const exportChartTickets = () => {
                 v-else
                 :data="brandHealth"
                 :entity-ids="drillEntityIds"
+                :period="periodParams"
                 @changed="fetchTab('brandhealth', true)"
             />
         </div><!-- /brand health tab -->
@@ -1319,6 +1438,7 @@ const exportChartTickets = () => {
                 v-else
                 :data="assetHealth"
                 :entity-ids="drillEntityIds"
+                :period="periodParams"
                 @change-group="changeAssetHealthGroup"
             />
         </div><!-- /asset operational health tab -->
@@ -1332,7 +1452,7 @@ const exportChartTickets = () => {
                 v-else
                 :data="partnerPerformance"
                 :entity-ids="drillEntityIds"
-                :filters="filters"
+                :period="periodParams"
             />
         </div><!-- /partner performance tab -->
 
@@ -1451,7 +1571,7 @@ const exportChartTickets = () => {
                         </div>
                     </div>
                 </div>
-                <div v-if="!leaderboard.top3?.length" class="text-sm text-gray-400 text-center py-4 dark:text-gray-400">No points awarded yet this month.</div>
+                <div v-if="!leaderboard.top3?.length" class="text-sm text-gray-400 text-center py-4 dark:text-gray-400">No points awarded for this period.</div>
             </div>
 
             <!-- Monthly Trophies -->
@@ -1459,7 +1579,7 @@ const exportChartTickets = () => {
                 <div class="flex items-center gap-2 mb-4 [&>span.text-xl]:hidden">
                     <span class="text-xs font-black uppercase tracking-widest text-amber-600">Awards</span>
                     <span class="text-xl">ðŸ†</span>
-                    <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">Monthly Trophies</h3>
+                    <h3 class="text-base font-bold text-gray-900 dark:text-gray-100">{{ dateRangeLabel ? 'Trophies' : 'Monthly Trophies' }}</h3>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div v-for="trophy in leaderboard.trophies" :key="trophy.label"
