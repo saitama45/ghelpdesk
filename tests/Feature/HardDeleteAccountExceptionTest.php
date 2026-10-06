@@ -7,6 +7,7 @@ use App\Models\Asset;
 use App\Models\Category;
 use App\Models\Company;
 use App\Models\Customer;
+use App\Models\OtpCode;
 use App\Models\Role;
 use App\Models\StampCard;
 use App\Models\StampProgram;
@@ -59,6 +60,40 @@ class HardDeleteAccountExceptionTest extends TestCase
         $this->assertNull(User::withTrashed()->find($member->id));
         $this->assertNull(Customer::withTrashed()->find($customer->id));
         $this->assertSame(0, StampCard::where('customer_id', $customer->id)->count());
+    }
+
+    public function test_the_accounts_own_sign_in_codes_do_not_block_the_delete(): void
+    {
+        // Every app sign-in leaves a spent code behind. Reported live as
+        // "cannot be deleted yet ... 1 in Otp Codes".
+        [$member, $customer] = $this->member(self::LISTED);
+        $this->signInCodeFor($member);
+
+        $this->actingAs($this->admin())
+            ->delete(route('users.destroy', $member))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success');
+
+        $this->assertNull(User::withTrashed()->find($member->id));
+        $this->assertNull(Customer::withTrashed()->find($customer->id));
+        $this->assertSame(0, OtpCode::where('user_id', $member->id)->count());
+    }
+
+    public function test_sign_in_codes_do_not_block_the_delete_from_stamps_either(): void
+    {
+        [$member, $customer] = $this->member(self::LISTED);
+        $this->signInCodeFor($member);
+
+        $this->actingAs($this->admin(['stamps.view', 'stamps.delete']))
+            ->delete(route('stamps.customers.destroy', $customer))
+            ->assertRedirect()
+            ->assertSessionMissing('error')
+            ->assertSessionHas('success');
+
+        $this->assertNull(Customer::withTrashed()->find($customer->id));
+        $this->assertNull(User::withTrashed()->find($member->id));
+        $this->assertSame(0, OtpCode::where('user_id', $member->id)->count());
     }
 
     public function test_a_listed_staff_login_with_no_customer_record_is_removed_too(): void
@@ -249,6 +284,15 @@ class HardDeleteAccountExceptionTest extends TestCase
             $mock->shouldReceive('archiveUser')->once()->andReturn(['user' => 'Someone', 'customer' => null]);
             $mock->shouldNotReceive('deleteUserPermanently');
         });
+    }
+
+    /** A spent post-login code, as `EmailCodeService` leaves behind after every sign-in. */
+    private function signInCodeFor(User $member): void
+    {
+        OtpCode::create([
+            'user_id' => $member->id, 'purpose' => OtpCode::PURPOSE_LOGIN, 'code_hash' => 'x',
+            'attempts' => 0, 'expires_at' => now()->addMinutes(10), 'consumed_at' => now(),
+        ]);
     }
 
     /** A reward redemption: the financial record that must outlive the customer. */

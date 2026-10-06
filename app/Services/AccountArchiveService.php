@@ -732,6 +732,13 @@ class AccountArchiveService
 
         DB::table('manager_user')->where('manager_id', $user->id)->delete();
 
+        // Sign-in codes are the login's own credentials and mean nothing without
+        // it. Every app sign-in leaves a spent one behind, so without this the
+        // blocker scan refused to remove any member who had ever signed in.
+        if (Schema::hasTable('otp_codes')) {
+            DB::table('otp_codes')->where('user_id', $user->id)->delete();
+        }
+
         // A self-registered member is stamped as the creator of their own
         // customer row (Api\RegisterController), which the blocker scan then
         // counts — so no app member could ever be purged. Only that row: any

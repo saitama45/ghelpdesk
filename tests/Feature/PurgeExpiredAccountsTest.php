@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Customer;
+use App\Models\OtpCode;
 use App\Models\User;
 use App\Services\AccountArchiveService;
 use Illuminate\Database\Eloquent\Collection;
@@ -140,6 +141,24 @@ class PurgeExpiredAccountsTest extends TestCase
         $customer->refresh();
         $this->assertNull($customer->created_by);
         $this->assertNull($customer->updated_by);
+    }
+
+    public function test_a_members_spent_sign_in_codes_do_not_block_the_purge(): void
+    {
+        // Every app sign-in leaves a code in `otp_codes`; the scan counted it
+        // and refused the purge of any member who had ever signed in. Run on
+        // an ACTIVE pair, as above, so nothing is soft-deleted.
+        $customer = Customer::create(['name' => 'Member', 'email' => 'member@example.test', 'is_active' => true]);
+        $member = User::factory()->create(['email' => 'member@example.test', 'customer_id' => $customer->id]);
+        OtpCode::create([
+            'user_id' => $member->id, 'purpose' => OtpCode::PURPOSE_LOGIN, 'code_hash' => 'x',
+            'attempts' => 0, 'expires_at' => now()->addMinutes(10), 'consumed_at' => now(),
+        ]);
+
+        app(AccountArchiveService::class)->purgeUser($member, null);
+
+        $this->assertNull(User::withTrashed()->find($member->id));
+        $this->assertSame(0, OtpCode::where('user_id', $member->id)->count());
     }
 
     public function test_a_customer_someone_else_created_still_blocks_the_purge(): void
