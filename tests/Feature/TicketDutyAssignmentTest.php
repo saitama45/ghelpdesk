@@ -21,7 +21,8 @@ use Tests\TestCase;
 
 /**
  * Ticket Duty: schedules tagged on /schedules decide who is auto-assigned new
- * tickets. Order: sender rule → on duty now → next duty shift → unassigned.
+ * tickets. Order: sender rule → on duty now → next duty shift of the same day
+ * → unassigned. A ticket is never handed to tomorrow's shift.
  */
 class TicketDutyAssignmentTest extends TestCase
 {
@@ -101,24 +102,87 @@ class TicketDutyAssignmentTest extends TestCase
         $this->shift($this->agent($this->tas, ['is_active' => false]), '2026-09-29 07:00', '2026-09-29 17:00');
         $this->shift($this->agent($this->tas, ['is_vacant' => true]), '2026-09-29 07:00', '2026-09-29 17:00');
 
-        // Nobody eligible now and no upcoming duty shift: stays unassigned.
+        // Nobody eligible now and no later duty shift today: stays unassigned.
         $this->assertNull($this->resolve()['assignee_id']);
     }
 
-    public function test_after_hours_the_ticket_goes_to_the_next_duty_shift(): void
+    public function test_a_ticket_after_the_days_last_shift_is_not_handed_to_tomorrows_shift(): void
     {
-        Carbon::setTestNow(Carbon::parse('2026-09-29 20:00:00', 'Asia/Manila'));
+        // Raised at 10 PM; the only shift still ahead is tomorrow 7 AM - 5 PM.
+        Carbon::setTestNow(Carbon::parse('2026-09-29 22:00:00', 'Asia/Manila'));
+        $this->shift($this->agent($this->tas), '2026-09-29 07:00', '2026-09-29 17:00');
+        $this->shift($this->agent($this->tas), '2026-09-30 07:00', '2026-09-30 17:00');
+
+        $resolved = $this->resolve();
+
+        $this->assertNull($resolved['assignee_id']);
+        $this->assertNull($resolved['reason']);
+    }
+
+    public function test_a_ticket_before_the_days_first_shift_goes_to_that_shift(): void
+    {
+        // Raised at 12:01 AM; the day's shifts start at 7 AM and 8 AM.
+        Carbon::setTestNow(Carbon::parse('2026-09-30 00:01:00', 'Asia/Manila'));
         $early = $this->agent($this->tas);
-        $late = $this->agent($this->tas);
-        $past = $this->agent($this->tas);
-        $this->shift($past, '2026-09-29 07:00', '2026-09-29 17:00');
-        $this->shift($late, '2026-09-30 08:00', '2026-09-30 17:00');
+        $this->shift($this->agent($this->tas), '2026-09-29 07:00', '2026-09-29 17:00');
+        $this->shift($this->agent($this->tas), '2026-09-30 08:00', '2026-09-30 17:00');
         $this->shift($early, '2026-09-30 07:00', '2026-09-30 16:00');
+        // Earlier on the clock, but a day away: out of reach.
+        $this->shift($this->agent($this->tas), '2026-10-01 06:00', '2026-10-01 15:00');
 
         $resolved = $this->resolve();
 
         $this->assertSame($early->id, $resolved['assignee_id']);
         $this->assertStringStartsWith('next on ticket duty, from Wed Sep 30, 7:00 AM', $resolved['reason']);
+    }
+
+    public function test_a_gap_between_two_shifts_of_the_same_day_goes_to_the_later_one(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-29 13:00:00', 'Asia/Manila'));
+        $afternoon = $this->agent($this->tas);
+        $this->shift($this->agent($this->tas), '2026-09-29 07:00', '2026-09-29 12:00');
+        $this->shift($afternoon, '2026-09-29 14:00', '2026-09-29 22:00');
+
+        $this->assertSame($afternoon->id, $this->resolve()['assignee_id']);
+    }
+
+    public function test_a_late_ticket_goes_to_whoever_is_on_duty_until_midnight(): void
+    {
+        // "Until 12 AM" is entered as 23:59 - the form cannot say 24:00.
+        $evening = $this->agent($this->tas);
+        $this->shift($evening, '2026-09-29 14:00', '2026-09-29 23:59');
+        $this->shift($this->agent($this->tas), '2026-09-30 07:00', '2026-09-30 17:00');
+
+        Carbon::setTestNow(Carbon::parse('2026-09-29 22:00:00', 'Asia/Manila'));
+        $resolved = $this->resolve();
+        $this->assertSame($evening->id, $resolved['assignee_id']);
+        $this->assertStringStartsWith('on ticket duty until 11:59 PM', $resolved['reason']);
+
+        // The last minute of the day is still theirs, not a hole before midnight.
+        Carbon::setTestNow(Carbon::parse('2026-09-29 23:59:30', 'Asia/Manila'));
+        $this->assertSame($evening->id, $this->resolve()['assignee_id']);
+    }
+
+    public function test_a_shift_that_ends_on_the_hour_stops_covering_at_that_moment(): void
+    {
+        // Only 23:59 is read as "until midnight"; 5:00 PM means 5:00 PM.
+        Carbon::setTestNow(Carbon::parse('2026-09-29 17:00:30', 'Asia/Manila'));
+        $this->shift($this->agent($this->tas), '2026-09-29 07:00', '2026-09-29 17:00');
+
+        $this->assertNull($this->resolve()['assignee_id']);
+    }
+
+    public function test_a_shift_that_runs_past_midnight_still_covers_the_small_hours(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-30 01:00:00', 'Asia/Manila'));
+        $night = $this->agent($this->tas);
+        $this->shift($night, '2026-09-29 22:00', '2026-09-30 06:00');
+        $this->shift($this->agent($this->tas), '2026-09-30 07:00', '2026-09-30 17:00');
+
+        $resolved = $this->resolve();
+
+        $this->assertSame($night->id, $resolved['assignee_id']);
+        $this->assertStringStartsWith('on ticket duty until 6:00 AM', $resolved['reason']);
     }
 
     public function test_a_sender_email_rule_still_wins_over_the_roster(): void

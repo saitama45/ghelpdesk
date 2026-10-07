@@ -21,11 +21,16 @@ use Illuminate\Support\Facades\Cache;
  * serving department uses the intake department from Settings → Auto Assignee
  * (blank = any department).
  *
- * Who: people on duty at the moment of intake. When nobody is, the people whose
- * duty shift starts next. When nobody has a shift at all, no one (the ticket
- * stays unassigned). Among several, "same store first" (optional) narrows to
- * whoever is scheduled at the ticket's store, then the fewest active tickets
- * wins, ties going to whoever received a ticket longest ago.
+ * Who: people whose shift covers the moment of intake. When nobody's does, the
+ * people whose duty shift starts next ON THE SAME DAY — a ticket raised at
+ * 12:01 AM waits for the 7 AM shift. It never reaches into tomorrow: a ticket
+ * raised at 10 PM, after the day's last duty shift, stays unassigned rather than
+ * landing on someone who is not at work until the morning. Among several, "same
+ * store first" (optional) narrows to whoever is scheduled at the ticket's store,
+ * then the fewest active tickets wins, ties going to whoever received a ticket
+ * longest ago.
+ *
+ * Days are counted in the app timezone (Manila), the zone schedules are stored in.
  */
 class TicketDutyAssigner
 {
@@ -60,14 +65,22 @@ class TicketDutyAssigner
     private function choose(?int $departmentId, ?int $storeId, Carbon $at): ?array
     {
         $upcoming = false;
+        // Fetched a minute wide so a shift ending 23:59 is still in hand during
+        // that last minute; covers() makes the real decision.
         $schedules = $this->dutySchedules($departmentId)
             ->where('start_time', '<=', $at)
-            ->where('end_time', '>', $at)
-            ->get();
+            ->where('end_time', '>', $at->copy()->subMinute())
+            ->get()
+            ->filter(fn (Schedule $schedule) => $this->covers($schedule->start_time, $schedule->end_time, $at))
+            ->values();
 
         if ($schedules->isEmpty()) {
+            // Only the rest of TODAY. Without the upper bound a late-evening
+            // ticket was handed to tomorrow morning's shift, hours before that
+            // person was at work.
             $nextStart = $this->dutySchedules($departmentId)
                 ->where('start_time', '>', $at)
+                ->where('start_time', '<', $at->copy()->addDay()->startOfDay())
                 ->min('start_time');
 
             if (! $nextStart) {
@@ -88,7 +101,7 @@ class TicketDutyAssigner
         if ($storeId && $this->storeFirst()) {
             $scheduledHere = $schedules->filter(fn (Schedule $schedule) => $schedule->scheduleStores->contains(
                 fn ($entry) => (int) $entry->store_id === $storeId
-                    && ($upcoming || ($entry->start_time <= $at && $entry->end_time > $at))
+                    && ($upcoming || $this->covers($entry->start_time, $entry->end_time, $at))
             ));
 
             if ($scheduledHere->isNotEmpty()) {
@@ -119,6 +132,20 @@ class TicketDutyAssigner
         $reason .= ', '.$load.' active '.($load === 1 ? 'ticket' : 'tickets');
 
         return ['assignee_id' => $userId, 'reason' => $reason];
+    }
+
+    /**
+     * Whether a shift (or one of its store entries) covers the moment. The
+     * schedule form cannot say 24:00, so "until midnight" is entered as 23:59 —
+     * read literally that leaves the last minute of the day covered by no one.
+     */
+    private function covers(Carbon $start, Carbon $end, Carbon $at): bool
+    {
+        if ($end->format('H:i') === '23:59') {
+            $end = $end->copy()->addMinute()->startOfMinute();
+        }
+
+        return $start->lte($at) && $end->gt($at);
     }
 
     private function dutySchedules(?int $departmentId): Builder

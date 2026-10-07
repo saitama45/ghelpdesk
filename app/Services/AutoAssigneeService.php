@@ -20,8 +20,9 @@ class AutoAssigneeService
      *
      * Order: sender email rule → Ticket Duty roster (when switched on) → global
      * default agents (only while the roster is off). With the roster on, a ticket
-     * nobody is on duty for goes to the next shift, or stays unassigned when
-     * there is none — the default agents are not a fallback.
+     * nobody is on duty for goes to the next shift of the SAME day, or stays
+     * unassigned when there is none left that day — it is never handed to
+     * tomorrow's shift, and the default agents are not a fallback.
      *
      * $context: serving_department_id, store_id — used by the duty roster.
      *

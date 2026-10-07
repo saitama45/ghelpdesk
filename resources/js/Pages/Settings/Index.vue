@@ -1842,7 +1842,7 @@ const syncEmails = () => {
                                     </h3>
                                     <p class="text-xs text-gray-500 mb-3 leading-relaxed dark:text-gray-300">
                                         Tag people for ticket duty on their shift in Schedules. A new ticket with no matching email rule goes to whoever from its desk is on duty at that moment, choosing the person with the fewest active tickets.
-                                        After hours it goes to the next person on duty; with no upcoming duty shift it stays unassigned.
+                                        Before the first shift of the day (a ticket at 12:01 AM, shift at 7 AM) it goes to whoever starts next that day. Once the day's last duty shift has ended it stays unassigned — it is never handed to tomorrow's shift. A shift ending 11:59 PM counts as covering until midnight.
                                     </p>
 
                                     <div class="space-y-3 max-w-2xl">
