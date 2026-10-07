@@ -958,8 +958,8 @@ class TicketController extends Controller
                 $data['serving_department_id'] = User::where('id', $data['assignee_id'])->value('department_id');
             }
 
-            $this->assertVendorMatchesStoreEntity($data['vendor_id'] ?? null, $data['store_id'] ?? null, $data['company_id'] ?? null);
-            $this->assertItemMatchesStoreEntity($data['item_id'] ?? null, $data['store_id'] ?? null, $data['company_id'] ?? null);
+            $this->assertVendorMatchesStoreEntity($data['vendor_id'] ?? null, $data['store_id'] ?? null, $data['company_id'] ?? null, 'vendor_id', $data['serving_department_id'] ?? null);
+            $this->assertItemMatchesStoreEntity($data['item_id'] ?? null, $data['store_id'] ?? null, $data['company_id'] ?? null, 'item_id', $data['serving_department_id'] ?? null);
             $proposedTicket = new Ticket($data);
             DepartmentReferences::validateTicket($proposedTicket, force: true);
             $data = $proposedTicket->getAttributes();
@@ -1323,11 +1323,17 @@ class TicketController extends Controller
             $validated['department'] = $request->input('department');
         }
 
+        // The desk whose catalogue and partners apply: the ticket's own, else the
+        // one it is about to be stamped with below.
+        $deskId = TicketAccess::servingDepartmentId($ticket) ?? DepartmentReferences::viewedId();
+
         if (! empty($validated['vendor_id']) && $validated['vendor_id'] != $ticket->vendor_id) {
             $this->assertVendorMatchesStoreEntity(
                 $validated['vendor_id'],
                 array_key_exists('store_id', $validated) ? $validated['store_id'] : $ticket->store_id,
-                $validated['company_id'] ?? $ticket->company_id
+                $validated['company_id'] ?? $ticket->company_id,
+                'vendor_id',
+                $deskId
             );
         }
 
@@ -1337,7 +1343,9 @@ class TicketController extends Controller
             $this->assertItemMatchesStoreEntity(
                 $validated['item_id'],
                 array_key_exists('store_id', $validated) ? $validated['store_id'] : $ticket->store_id,
-                $validated['company_id'] ?? $ticket->company_id
+                $validated['company_id'] ?? $ticket->company_id,
+                'item_id',
+                $deskId
             );
             $item = \App\Models\Item::find($validated['item_id']);
             if ($item) {
@@ -1459,7 +1467,9 @@ class TicketController extends Controller
             'department' => ['required', 'string', 'max:255'],
         ]);
 
-        $this->assertItemMatchesStoreEntity($validated['item_id'], $validated['store_id'], $validated['company_id']);
+        // Same desk the transaction below stamps on an unrouted ticket.
+        $this->assertItemMatchesStoreEntity($validated['item_id'], $validated['store_id'], $validated['company_id'], 'item_id',
+            $ticket->serving_department_id ?: (DepartmentReferences::viewedId() ?: $request->user()->department_id));
 
         $acceptedTicket = DB::transaction(function () use ($ticket, $validated, $request) {
             // The route binding already resolved $ticket unscoped, so it may sit outside
@@ -1869,7 +1879,9 @@ class TicketController extends Controller
         $this->assertVendorMatchesStoreEntity(
             $validated['vendor_id'],
             $validated['store_id'] ?? $ticket->store_id,
-            $ticket->company_id
+            $ticket->company_id,
+            'vendor_id',
+            TicketAccess::servingDepartmentId($ticket)
         );
 
         $vendor = Vendor::find($validated['vendor_id']);
@@ -2597,8 +2609,12 @@ class TicketController extends Controller
      * ticket item pickers (resources/js/lib/entityItems.js). Without a store the
      * ticket's company is used; with neither, or for an item that has no entity,
      * nothing is enforced.
+     *
+     * $servingDepartmentId is the desk working the ticket: its own entity's items
+     * fit at any location (EntityReferenceScope::fitsCompany), so TAS can classify
+     * a ticket at another entity's office with the TAS catalogue.
      */
-    private function assertItemMatchesStoreEntity($itemId, $storeId, $fallbackCompanyId = null, string $field = 'item_id'): void
+    private function assertItemMatchesStoreEntity($itemId, $storeId, $fallbackCompanyId = null, string $field = 'item_id', $servingDepartmentId = null): void
     {
         if (! $itemId) {
             return;
@@ -2606,18 +2622,23 @@ class TicketController extends Controller
 
         $itemCompanyId = \App\Models\Item::whereKey($itemId)->value('company_id');
 
-        if (! \App\Support\EntityReferenceScope::fitsCompany($itemCompanyId, $this->storeCompanyId($storeId, $fallbackCompanyId))) {
+        if (! \App\Support\EntityReferenceScope::fitsCompany(
+            $itemCompanyId,
+            $this->storeCompanyId($storeId, $fallbackCompanyId),
+            \App\Support\EntityReferenceScope::deskCompanyId($servingDepartmentId)
+        )) {
             throw ValidationException::withMessages([
-                $field => 'This item belongs to a different entity than the selected store. Pick an item from the store\'s entity.',
+                $field => 'This item belongs to a different entity than the selected store. Pick an item from the store\'s entity or from the serving department\'s own catalogue.',
             ]);
         }
     }
 
     /**
      * A ticket's partner (vendor) follows the same rule as its item: the store's
-     * company, the entities it is tagged to, or a vendor with no company (shared).
+     * company, the entities it is tagged to, the serving desk's own entity, or a
+     * vendor with no company (shared).
      */
-    private function assertVendorMatchesStoreEntity($vendorId, $storeId, $fallbackCompanyId = null, string $field = 'vendor_id'): void
+    private function assertVendorMatchesStoreEntity($vendorId, $storeId, $fallbackCompanyId = null, string $field = 'vendor_id', $servingDepartmentId = null): void
     {
         if (! $vendorId) {
             return;
@@ -2625,9 +2646,13 @@ class TicketController extends Controller
 
         $vendorCompanyId = Vendor::whereKey($vendorId)->value('company_id');
 
-        if (! \App\Support\EntityReferenceScope::fitsCompany($vendorCompanyId, $this->storeCompanyId($storeId, $fallbackCompanyId))) {
+        if (! \App\Support\EntityReferenceScope::fitsCompany(
+            $vendorCompanyId,
+            $this->storeCompanyId($storeId, $fallbackCompanyId),
+            \App\Support\EntityReferenceScope::deskCompanyId($servingDepartmentId)
+        )) {
             throw ValidationException::withMessages([
-                $field => 'This partner belongs to a different entity than the selected store. Pick a partner from the store\'s entity.',
+                $field => 'This partner belongs to a different entity than the selected store. Pick a partner from the store\'s entity or from the serving department\'s own.',
             ]);
         }
     }
@@ -2662,13 +2687,20 @@ class TicketController extends Controller
             ->get();
     }
 
-    /** Active vendors carrying `usable_company_ids` for the ticket partner pickers. */
+    /**
+     * Active vendors carrying `usable_company_ids` for the ticket partner pickers,
+     * plus `usable_everywhere` for the serving desk's own partners (they follow the
+     * desk to any location - EntityReferenceScope::fitsCompany).
+     */
     private function vendorsWithUsableCompanies(array $columns, ?int $departmentId = null, $keepId = null)
     {
         $brandsByEntity = \App\Support\EntityReferenceScope::brandIdsByEntity();
+        $departmentId ??= DepartmentReferences::viewedId();
+        $deskCompanyId = \App\Support\EntityReferenceScope::deskCompanyId($departmentId);
 
-        return $this->referenceQuery(Vendor::where(fn ($q) => $q->where('is_active', true)->when($keepId, fn ($saved) => $saved->orWhere('id', $keepId))), $departmentId ?? DepartmentReferences::viewedId(), $keepId)->orderBy('name')->get($columns)->map(function (Vendor $vendor) use ($brandsByEntity) {
+        return $this->referenceQuery(Vendor::where(fn ($q) => $q->where('is_active', true)->when($keepId, fn ($saved) => $saved->orWhere('id', $keepId))), $departmentId, $keepId)->orderBy('name')->get($columns)->map(function (Vendor $vendor) use ($brandsByEntity, $deskCompanyId) {
             $vendor->usable_company_ids = \App\Support\EntityReferenceScope::usableCompanyIds($vendor->company_id, $brandsByEntity);
+            $vendor->usable_everywhere = \App\Support\EntityReferenceScope::deskMayUse($vendor->company_id, $deskCompanyId);
 
             return $vendor;
         });
@@ -2747,13 +2779,17 @@ class TicketController extends Controller
 
         // Which companies may use each item: its own company plus every brand tagged
         // to that entity on /companies (entity_brand). The ticket forms filter on this.
+        // `usable_everywhere` marks the serving desk's own catalogue, which follows
+        // the desk to another entity's location (EntityReferenceScope::fitsCompany).
         $brandsByEntity = \App\Support\EntityReferenceScope::brandIdsByEntity();
+        $deskCompanyId = \App\Support\EntityReferenceScope::deskCompanyId($departmentId);
 
-        $items = $query->get()->map(function($item) use ($brandsByEntity) {
+        $items = $query->get()->map(function($item) use ($brandsByEntity, $deskCompanyId) {
             $cat = $item->category->name ?? 'N/A';
             $sub = $item->subCategory->name ?? 'N/A';
             $item->display_name = "{$cat} | {$sub} | {$item->name}";
             $item->usable_company_ids = \App\Support\EntityReferenceScope::usableCompanyIds($item->company_id, $brandsByEntity);
+            $item->usable_everywhere = \App\Support\EntityReferenceScope::deskMayUse($item->company_id, $deskCompanyId);
             return $item;
         });
 
@@ -2811,6 +2847,7 @@ class TicketController extends Controller
         $validated = $request->validate([
             'ticket_ids'      => 'required|array|min:1',
             'ticket_ids.*'    => 'exists:tickets,id',
+            'company_id'      => 'nullable|exists:companies,id',
             'store_id'        => 'nullable|exists:stores,id',
             'category_id'     => 'nullable|exists:categories,id',
             'sub_category_id' => 'nullable|exists:sub_categories,id',
@@ -2828,15 +2865,26 @@ class TicketController extends Controller
             ->mapWithKeys(fn($k) => [$k => $validated[$k]])
             ->all();
 
+        // The bulk bar's Entity field: move the tickets to another entity without
+        // switching to it. Only ever set, never blanked.
+        if ($request->filled('company_id')) {
+            $updates['company_id'] = (int) $validated['company_id'];
+            $this->assertBulkEntityMove($request->user(), $updates['company_id'], $validated['ticket_ids'], $updates['store_id'] ?? null);
+        }
+
         if (isset($updates['item_id'])) {
-            // The item must fit every selected ticket's store entity (or the new store's).
+            // The item must fit every selected ticket's store entity (or the new
+            // store's), or be the catalogue of the desk serving that ticket.
             Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
                 ->whereIn('id', $validated['ticket_ids'])
-                ->get(['id', 'store_id', 'company_id'])
+                ->with('assignee:id,department_id')
+                ->get(['id', 'store_id', 'company_id', 'serving_department_id', 'assignee_id'])
                 ->each(fn (Ticket $t) => $this->assertItemMatchesStoreEntity(
                     $updates['item_id'],
                     $updates['store_id'] ?? $t->store_id,
-                    $t->company_id
+                    $updates['company_id'] ?? $t->company_id,
+                    'item_id',
+                    TicketAccess::servingDepartmentId($t)
                 ));
             $item = \App\Models\Item::find($updates['item_id']);
             if ($item) {
@@ -2868,7 +2916,11 @@ class TicketController extends Controller
             $count = 0;
             foreach ($ticketsToUpdate as $t) {
                 $oldStatus = $t->status;
-                $t->update($updates);
+                $t->fill($updates);
+                if ($t->isDirty('company_id')) {
+                    $this->recordTicketHistory($t, ['company_id' => $t->company_id]);
+                }
+                $t->save();
                 if ($oldStatus !== $updates['status']) {
                     \App\Models\TicketHistory::create([
                         'ticket_id' => $t->id,
@@ -2887,13 +2939,78 @@ class TicketController extends Controller
         } else {
             $count = DB::transaction(function () use ($referenceTickets) {
                 foreach ($referenceTickets as $referenceTicket) {
+                    // A move between entities leaves a trail on the ticket.
+                    if ($referenceTicket->isDirty('company_id')) {
+                        $this->recordTicketHistory($referenceTicket, ['company_id' => $referenceTicket->company_id]);
+                    }
                     $referenceTicket->save();
                 }
                 return $referenceTickets->count();
             });
         }
 
-        return redirect()->back()->with('success', "{$count} ticket(s) updated successfully.");
+        $movedTo = isset($updates['company_id']) ? Company::whereKey($updates['company_id'])->value('name') : null;
+
+        return redirect()->back()->with('success', $movedTo
+            ? "{$count} ticket(s) updated and moved to {$movedTo}. Switch to that entity, or add it to the Entity filter, to see them."
+            : "{$count} ticket(s) updated successfully.");
+    }
+
+    /**
+     * Guard a bulk move of tickets to another entity (the bulk bar's Entity field).
+     *
+     * The target must be an entity the actor can already switch to, so the move
+     * reaches nothing the entity switcher does not. And no ticket may be left at a
+     * location the target entity does not operate: the ticket key follows the
+     * STORE's company, so a TGI store on an "ENTECH" ticket would keep its TGI-*
+     * key and the move would only half happen.
+     */
+    private function assertBulkEntityMove(User $user, int $companyId, array $ticketIds, $newStoreId): void
+    {
+        if (! in_array($companyId, \App\Support\CompanyContext::accessibleCompanyIds($user), true)) {
+            throw ValidationException::withMessages(['company_id' => 'You do not have access to that entity.']);
+        }
+
+        $storeIds = $newStoreId
+            ? [$newStoreId]
+            : Ticket::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+                ->whereIn('id', $ticketIds)->whereNotNull('store_id')->distinct()->pluck('store_id')->all();
+
+        $foreign = Store::whereIn('id', $storeIds)
+            ->whereNotNull('company_id')
+            ->whereNotIn('company_id', \App\Support\EntityReferenceScope::storeCompanyIdsFor([$companyId]))
+            ->orderBy('name')
+            ->pluck('name');
+
+        if ($foreign->isEmpty()) {
+            return;
+        }
+
+        $entity = Company::whereKey($companyId)->value('name');
+
+        throw ValidationException::withMessages([
+            'store_id' => $newStoreId
+                ? "{$foreign->first()} is not a {$entity} location. Pick one of that entity's locations."
+                : "Pick a {$entity} location as well: the selected tickets are still at "
+                    .$foreign->take(3)->implode(', ').($foreign->count() > 3 ? ' and others' : '')
+                    .', which belong to another entity.',
+        ]);
+    }
+
+    /**
+     * Locations of ONE entity the user can switch to, for the bulk bar's Entity
+     * field. Same list the ticket store pickers show under that entity.
+     */
+    public function getEntityStores(Request $request)
+    {
+        abort_unless($request->user()->can('tickets.edit'), 403);
+
+        $companyId = (int) $request->validate(['company_id' => 'required|integer|exists:companies,id'])['company_id'];
+        abort_unless(in_array($companyId, \App\Support\CompanyContext::accessibleCompanyIds($request->user()), true), 403);
+
+        return response()->json(
+            $this->storesForCompanies([$companyId])->map->only(['id', 'code', 'name', 'company_id'])->values()
+        );
     }
 
     public function bulkResponse(Request $request)

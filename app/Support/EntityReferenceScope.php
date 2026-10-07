@@ -137,12 +137,40 @@ final class EntityReferenceScope
     /**
      * Whether a row owned by $ownerCompanyId may be used for a ticket whose store
      * (or, without one, ticket) belongs to $storeCompanyId.
+     *
+     * $deskCompanyId is the entity of the department SERVING the ticket. A desk
+     * takes its own catalogue and partners to every location it works at: TAS, a
+     * TGI department, runs IT for the ENTECH offices, and ENTECH has neither an IT
+     * desk nor an item catalogue. Held to the store's entity alone, those tickets
+     * could not be classified at all. Without a desk only the store's entity
+     * counts, as before.
      */
-    public static function fitsCompany($ownerCompanyId, $storeCompanyId): bool
+    public static function fitsCompany($ownerCompanyId, $storeCompanyId, $deskCompanyId = null): bool
     {
         return ! $ownerCompanyId
             || ! $storeCompanyId
-            || in_array((int) $ownerCompanyId, Company::itemSourceIds((int) $storeCompanyId), true);
+            || in_array((int) $ownerCompanyId, Company::itemSourceIds((int) $storeCompanyId), true)
+            || self::deskMayUse($ownerCompanyId, $deskCompanyId);
+    }
+
+    /**
+     * The desk half of {@see fitsCompany}: rows of the serving department's own
+     * entity (and the entities it is tagged to) go wherever that desk works. Sent
+     * to the ticket pickers as `usable_everywhere`.
+     */
+    public static function deskMayUse($ownerCompanyId, $deskCompanyId): bool
+    {
+        return $ownerCompanyId
+            && $deskCompanyId
+            && in_array((int) $ownerCompanyId, Company::itemSourceIds((int) $deskCompanyId), true);
+    }
+
+    /** The entity a serving department belongs to, for the desk half of {@see fitsCompany}. */
+    public static function deskCompanyId($departmentId): ?int
+    {
+        $companyId = $departmentId ? \App\Models\Department::whereKey($departmentId)->value('company_id') : null;
+
+        return $companyId ? (int) $companyId : null;
     }
 
     /** URL guard for update/delete/approval actions on another entity's row. */

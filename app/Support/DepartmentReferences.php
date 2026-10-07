@@ -124,9 +124,13 @@ final class DepartmentReferences
             }
             throw ValidationException::withMessages(['serving_department_id' => 'Select the service department before classifying this ticket.']);
         }
+        // The desk only has to exist and be active. It is deliberately NOT held to
+        // the store's entity: a desk serves other entities' locations too (TAS, a
+        // TGI department, runs IT for the ENTECH offices), and tying it to the
+        // entity made every such ticket impossible to classify or relocate.
         $department = Department::find($departmentId);
-        if (! $department || ! $department->is_active || ! EntityReferenceScope::fitsCompany($department->company_id, $entityId)) {
-            throw ValidationException::withMessages(['serving_department_id' => 'The service department does not serve the selected entity.']);
+        if (! $department || ! $department->is_active) {
+            throw ValidationException::withMessages(['serving_department_id' => 'The service department of this ticket is no longer active.']);
         }
         if ($item) {
             self::validateClassification($item);
@@ -139,8 +143,9 @@ final class DepartmentReferences
                 continue;
             }
             $row = self::selectable($class::query(), $departmentId)->whereKey($ticket->$field)->first();
+            // The store's entity, or the desk's own: see EntityReferenceScope::fitsCompany.
             if (! $row || (isset($row->is_active) && ! $row->is_active)
-                || ($field !== 'store_id' && ! EntityReferenceScope::fitsCompany($row->company_id, $entityId))) {
+                || ($field !== 'store_id' && ! EntityReferenceScope::fitsCompany($row->company_id, $entityId, $department->company_id))) {
                 throw ValidationException::withMessages([$field => 'This reference is not available to the ticket\'s service department and entity.']);
             }
         }

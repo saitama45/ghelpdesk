@@ -43,6 +43,20 @@ mobile API remain Manila. Frontend: never `new Date()` a zone-less schedule stri
 `resources/js/lib/timezone.js` (`toInstant`, `inputValueIn`, `convertInputValue`, `dateKeyIn`) and
 `useTimezone()`. The device zone is never applied silently; `TimezoneBanner.vue` offers the switch.
 
+**D17 — A desk takes its catalogue and partners to other entities' locations** (2026-10-07).
+TAS is a TGI department but runs IT for the ENTECH offices; ENTECH has departments of its own, no
+IT desk and no item catalogue (~260 ENTECH-location tickets were already TAS-served with TAS items
+and TGI partners). Two stacked rules made that impossible to save: "item/partner must belong to the
+STORE's entity" and "the serving department must belong to the store's entity" — their intersection
+is empty for any cross-entity service, so the Item picker was simply blank at an ENTECH location.
+Now `EntityReferenceScope::fitsCompany($owner, $storeCompany, $deskCompany)` also accepts rows of
+the **serving department's own entity**, and `DepartmentReferences::validateTicket` only requires
+the desk to exist and be active. Catalogue rows are still held to the desk by their department tag
+(`selectable`), so another department's items stay rejected; untagged rows and desk-less entities
+keep the pure store-entity rule. Pickers get the same answer from the server as
+`usable_everywhere` (`tickets.data.items`, `vendorsWithUsableCompanies` → `lib/entityItems.js`).
+Do not reintroduce a department↔store-entity check without a way to express "TAS serves ENTECH".
+
 ## Pitfalls (non-obvious behavior)
 
 **P1 — SQL Server returns FKs as strings.** `$child->parent_id === $parent->id` is false. Cast every id in `$casts`.

@@ -16,7 +16,7 @@ import { useToast } from '@/Composables/useToast';
 import { usePagination } from '@/Composables/usePagination';
 import { usePermission } from '@/Composables/usePermission';
 import { useDateFormatter } from '@/Composables/useDateFormatter';
-import { entityIdForStore, itemsForEntity, itemFitsEntity } from '@/lib/entityItems';
+import { entityIdForStore, itemsForEntity, itemsForAnyEntity, itemFitsEntity } from '@/lib/entityItems';
 
 const props = defineProps({
     tickets: Object,
@@ -997,14 +997,43 @@ const storesWithLabel = computed(() =>
 
 // ── Bulk Form ─────────────────────────────────────────────────────────────
 const bulkForm = reactive({
-    store_id: '', item_id: '', department: '', assignee_id: '', status: ''
+    company_id: '', store_id: '', item_id: '', department: '', assignee_id: '', status: ''
 })
 
-// Bulk item picker: the new store's entity when one is chosen, otherwise the
-// entity the selected tickets' stores share. Mixed entities offer no items,
+// Entity field: move the selected tickets to another entity WITHOUT switching to
+// it. Email tickets land on the default entity (TGI-*), so the desk needs to hand
+// one to, say, ENTECH while still working its own queue. Picking an entity swaps
+// the Location list for that entity's locations; the Item list stays the desk's
+// own catalogue, which follows the desk to any location (see lib/entityItems).
+const bulkEntityOptions = computed(() => page.props.availableCompanies || [])
+const bulkEntityName = computed(() =>
+    bulkEntityOptions.value.find(c => String(c.id) === String(bulkForm.company_id))?.name || '')
+const bulkEntityStores = ref([])
+const bulkStores = computed(() => bulkForm.company_id ? bulkEntityStores.value : props.stores)
+const bulkStoreOptions = computed(() =>
+    bulkStores.value.map(s => ({ ...s, display_name: `${s.code} - ${s.name}` })))
+
+watch(() => bulkForm.company_id, async (companyId) => {
+    bulkForm.store_id = ''
+    bulkEntityStores.value = []
+    if (!companyId) return
+
+    try {
+        const response = await axios.get(route('tickets.data.stores', { company_id: companyId }, false))
+        // Ignore a reply for an entity the user has since moved off.
+        if (String(bulkForm.company_id) === String(companyId)) bulkEntityStores.value = response.data
+    } catch (error) {
+        showError('Could not load the locations of that entity.')
+    }
+})
+
+// Bulk item picker: the new store's entity when one is chosen, then the entity
+// being moved to, otherwise the entity the selected tickets' stores share. A
+// selection spanning entities is offered only what fits every one of them,
 // because the server rejects an item that doesn't match every ticket's store.
 const bulkEntityId = computed(() => {
-    if (bulkForm.store_id) return entityIdForStore(props.stores, bulkForm.store_id);
+    if (bulkForm.store_id) return entityIdForStore(bulkStores.value, bulkForm.store_id);
+    if (bulkForm.company_id) return bulkForm.company_id;
 
     const selected = displayedTickets.value.filter(t => selectedIds.value.includes(t.id));
     const ids = new Set(selected.map(t => String(entityIdForStore(props.stores, t.store_id, t.company_id) ?? '')));
@@ -1012,7 +1041,7 @@ const bulkEntityId = computed(() => {
     return ids.size === 1 ? ([...ids][0] || null) : (ids.size > 1 ? 'mixed' : null);
 })
 const bulkItems = computed(() => bulkEntityId.value === 'mixed'
-    ? []
+    ? itemsForAnyEntity(items.value)
     : itemsForEntity(items.value, bulkEntityId.value))
 // The watcher that clears a stale bulk item lives after `displayedTickets` is declared.
 const isBulkSubmitting = ref(false)
@@ -1291,6 +1320,7 @@ const submitBulk = () => {
     if (!selectedIds.value.length || isBulkSubmitting.value) return
     isBulkSubmitting.value = true
     const payload = { ticket_ids: selectedIds.value }
+    if (bulkForm.company_id)      payload.company_id      = bulkForm.company_id
     if (bulkForm.store_id)        payload.store_id        = bulkForm.store_id
     if (bulkForm.item_id)         payload.item_id         = bulkForm.item_id
     if (bulkForm.department)      payload.department      = bulkForm.department
@@ -1712,10 +1742,17 @@ const displayedTickets = computed(() => accumulatedTickets.value || []);
 
 // Declared here, not beside bulkForm: a watcher reads its source immediately, and
 // bulkEntityId depends on displayedTickets (a TDZ crash if watched earlier).
-watch(bulkEntityId, (companyId) => {
-    if (companyId === 'mixed' || !itemFitsEntity(items.value, bulkForm.item_id, companyId)) {
+watch(bulkItems, (offered) => {
+    if (bulkForm.item_id && !offered.some(item => String(item.id) === String(bulkForm.item_id))) {
         bulkForm.item_id = '';
     }
+});
+
+// A selection belongs to the queue it was made in. Switching the sidebar entity
+// replaces the list but used to leave the bulk bar up over tickets no longer on
+// screen, with pickers now describing a different entity's desk.
+watch(() => page.props.activeCompany?.id, () => {
+    selectedIds.value = [];
 });
 
 const getDashboardFilterLabel = (filterKey) => {
@@ -2318,14 +2355,30 @@ const requesterTabs = computed(() => {
                                 <div class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Bulk Selection</div>
                                 <div class="mt-2 text-2xl font-black text-blue-900">{{ selectedIds.length }}</div>
                                 <div class="mt-1 text-xs text-blue-700">Selected ticket(s) ready for response, update, split, merge, child creation, or archive.</div>
+                                <div v-if="bulkEntityName" class="mt-2 text-xs font-semibold text-blue-900">
+                                    Moving to {{ bulkEntityName }}. Tickets are renumbered to its key prefix; the old keys keep working.
+                                </div>
                             </div>
 
-                            <div class="grid grid-cols-1 gap-4 md:grid-cols-5">
+                            <div class="grid grid-cols-1 gap-4" :class="bulkEntityOptions.length > 1 ? 'md:grid-cols-3 2xl:grid-cols-6' : 'md:grid-cols-5'">
+                                <!-- Only for users who can reach more than one entity. -->
+                                <div v-if="bulkEntityOptions.length > 1" class="flex flex-col gap-1.5">
+                                    <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Entity</label>
+                                    <Autocomplete
+                                        v-model="bulkForm.company_id"
+                                        :options="bulkEntityOptions"
+                                        label-key="name"
+                                        value-key="id"
+                                        placeholder="Unchanged..."
+                                        size="sm"
+                                    />
+                                </div>
+
                                 <div class="flex flex-col gap-1.5">
                                     <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Location</label>
                                     <Autocomplete
                                         v-model="bulkForm.store_id"
-                                        :options="storesWithLabel"
+                                        :options="bulkStoreOptions"
                                         label-key="display_name"
                                         value-key="id"
                                         placeholder="Unchanged..."
