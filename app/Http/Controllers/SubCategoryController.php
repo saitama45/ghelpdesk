@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ReferenceOption;
 use App\Models\SubCategory;
 use App\Support\EntityReferenceScope;
 use App\Support\DepartmentReferences;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -27,7 +29,7 @@ class SubCategoryController extends Controller implements HasMiddleware
         // Follows the entity switcher; a brand also lists its tagged entities'
         // sub-categories, read-only (see EntityReferenceScope).
         $query = EntityReferenceScope::visible(
-            SubCategory::query()->with('company:id,name,code'),
+            SubCategory::query()->with(['assetGroup:id,value,label', 'company:id,name,code']),
             'sub_categories.company_id'
         );
 
@@ -41,6 +43,14 @@ class SubCategoryController extends Controller implements HasMiddleware
 
         return Inertia::render('SubCategories/Index', [
             'subcategories' => $subcategories,
+            // Asset Operational Health groups (slide 07). Sub-categories left
+            // unmapped fold into "Ungrouped" on the Asset Health tab.
+            'assetGroups' => ReferenceOption::ofType('asset_group')
+                ->map(fn (ReferenceOption $option) => [
+                    'id' => (int) $option->id,
+                    'name' => $option->label,
+                ])
+                ->values(),
         ]);
     }
 
@@ -49,6 +59,7 @@ class SubCategoryController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', DepartmentReferences::unique('sub_categories', 'name')],
             'description' => 'nullable|string',
+            'asset_group_id' => ['nullable', Rule::exists('reference_options', 'id')->where('type', 'asset_group')],
             'is_active' => 'boolean',
         ]);
 
@@ -64,6 +75,7 @@ class SubCategoryController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', DepartmentReferences::unique('sub_categories', 'name', $subCategory)],
             'description' => 'nullable|string',
+            'asset_group_id' => ['nullable', Rule::exists('reference_options', 'id')->where('type', 'asset_group')],
             'is_active' => 'boolean',
         ]);
 

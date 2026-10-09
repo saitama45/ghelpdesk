@@ -2523,15 +2523,8 @@ class TicketController extends Controller
             return;
         }
 
-        $isVendorEscalationChild = $ticket->parent_id && $ticket->vendor_id;
-
-        $missing = collect([
-            'Department' => $ticket->department_id || filled($ticket->department),
-            'Store' => (bool) $ticket->store_id,
-            'Company' => (bool) $ticket->company_id,
-            'Item' => (bool) $ticket->item_id,
-            'Assignee' => $isVendorEscalationChild || (bool) $ticket->assignee_id,
-        ])->reject(fn ($isSet) => $isSet)->keys();
+        $labels = ['department' => 'Department', 'store' => 'Store', 'company' => 'Company', 'item' => 'Item', 'assignee' => 'Assignee'];
+        $missing = collect($this->missingClassification($ticket))->map(fn (string $key) => $labels[$key]);
 
         if ($missing->isEmpty()) {
             return;
@@ -2539,6 +2532,53 @@ class TicketController extends Controller
 
         throw ValidationException::withMessages([
             'classification' => 'Complete the ticket classification before sending a response — missing: ' . $missing->implode(', ') . '.',
+        ]);
+    }
+
+    /**
+     * The five fields that make a ticket routable, as the keys still unset on it.
+     * One definition for the response gate and the bulk bar, so the two can never
+     * disagree on what "classified" means.
+     *
+     * @return array<int, string> any of: department, store, company, item, assignee
+     */
+    private function missingClassification(Ticket $ticket): array
+    {
+        // A partner-escalation child is carried by the partner, not an assignee.
+        $isVendorEscalationChild = $ticket->parent_id && $ticket->vendor_id;
+
+        return collect([
+            'department' => $ticket->department_id || filled($ticket->department),
+            'store' => (bool) $ticket->store_id,
+            'company' => (bool) $ticket->company_id,
+            'item' => (bool) $ticket->item_id,
+            'assignee' => $isVendorEscalationChild || (bool) $ticket->assignee_id,
+        ])->reject(fn ($isSet) => $isSet)->keys()->all();
+    }
+
+    /**
+     * The bulk bar's Department, Location, Entity, Item and Assignee are required:
+     * every selected ticket has to leave the bar with all five, picked there or
+     * already on the ticket ("Unchanged"). Takes the filled, unsaved models, so
+     * nothing is written while even one ticket would stay unclassified.
+     */
+    private function assertBulkTicketsClassified($tickets): void
+    {
+        $labels = ['department' => 'Department', 'store' => 'Location', 'company' => 'Entity', 'item' => 'Item', 'assignee' => 'Assignee'];
+        $missingByTicket = $tickets->map(fn (Ticket $ticket) => $this->missingClassification($ticket));
+
+        $missing = collect($labels)
+            ->map(fn (string $label, string $key) => $missingByTicket->filter(fn (array $keys) => in_array($key, $keys, true))->count())
+            ->filter();
+
+        if ($missing->isEmpty()) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'classification' => 'Department, Location, Entity, Item and Assignee are required. Still missing: '
+                . $missing->map(fn (int $count, string $key) => "{$labels[$key]} on {$count} " . Str::plural('ticket', $count))->implode(', ')
+                . '. Choose them in the bulk bar.',
         ]);
     }
 
@@ -2906,6 +2946,8 @@ class TicketController extends Controller
         if (empty($updates)) {
             return redirect()->back()->withErrors(['bulk' => 'No fields selected for update.']);
         }
+
+        $this->assertBulkTicketsClassified($referenceTickets);
 
         // Unscoped: selection can span entities (the index supports an "All Entities"
         // filter and families cross entities). tickets.edit is the gate here, not the

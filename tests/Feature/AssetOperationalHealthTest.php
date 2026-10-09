@@ -6,6 +6,7 @@ use App\Models\Asset;
 use App\Models\Category;
 use App\Models\Company;
 use App\Models\ReferenceOption;
+use App\Models\Role;
 use App\Models\StockIn;
 use App\Models\StockTransfer;
 use App\Models\Store;
@@ -16,7 +17,9 @@ use App\Models\TicketSlaMetric;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Services\AssetOperationalHealthService;
+use App\Support\CompanyContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -46,8 +49,8 @@ class AssetOperationalHealthTest extends TestCase
 
         // The six slide groups are already seeded by migration — reuse, don't duplicate.
         $group = $this->assetGroup('POS Systems');
-        $category = Category::create(['name' => 'POS Hardware', 'asset_group_id' => $group->id, 'is_active' => true]);
-        $subCategory = SubCategory::create(['name' => 'POS Terminal', 'is_active' => true]);
+        $category = Category::create(['name' => 'POS Hardware', 'is_active' => true]);
+        $subCategory = SubCategory::create(['name' => 'POS Terminal', 'asset_group_id' => $group->id, 'is_active' => true]);
 
         $this->asset = Asset::create([
             'item_code' => 'PC-001',
@@ -73,7 +76,7 @@ class AssetOperationalHealthTest extends TestCase
         $this->assertSame(0, $data['totals']['impacted']);
         $this->assertSame(0.0, $data['totals']['impacted_pct']);
         $this->assertSame('operational', $this->unitRow($unit)['status']);
-        // Grouped by the category's asset_group, not by a hardcoded taxonomy.
+        // Grouped by the sub-category's asset_group, not by a hardcoded taxonomy.
         $this->assertSame('POS Systems', $this->unitRow($unit)['group']);
     }
 
@@ -329,7 +332,7 @@ class AssetOperationalHealthTest extends TestCase
      * order, regardless of what the current scope happens to contain — otherwise a
      * row's shape would change per store and the sheet could not be read down a column.
      */
-    public function test_board_columns_are_the_fixed_slide_groups_with_category_subheaders(): void
+    public function test_board_columns_are_the_fixed_slide_groups_with_sub_category_subheaders(): void
     {
         $this->unit('SN-98765', $this->store->code);
 
@@ -345,9 +348,9 @@ class AssetOperationalHealthTest extends TestCase
             'Back Office',
         ], $columns->pluck('name')->all());
 
-        // The sheet's second header row: the real Category names mapped to a group.
-        $this->assertSame(['POS Hardware'], $columns->firstWhere('name', 'POS Systems')['categories']);
-        $this->assertSame([], $columns->firstWhere('name', 'Peripherals')['categories']);
+        // The sheet's second header row: the real Sub-Category names mapped to a group.
+        $this->assertSame(['POS Terminal'], $columns->firstWhere('name', 'POS Systems')['sub_categories']);
+        $this->assertSame([], $columns->firstWhere('name', 'Peripherals')['sub_categories']);
     }
 
     /** "Ungrouped" is a tail column that appears only when something lands in it. */
@@ -358,10 +361,11 @@ class AssetOperationalHealthTest extends TestCase
         // Fully mapped scope → exactly the six sheet columns.
         $this->assertNotContains('Ungrouped', collect($this->build()['columns'])->pluck('name')->all());
 
-        $orphanCategory = Category::create(['name' => 'Misc Hardware', 'is_active' => true]);
+        $orphanSubCategory = SubCategory::create(['name' => 'Misc Hardware', 'is_active' => true]);
         $orphan = Asset::create([
             'item_code' => 'MISC-002',
-            'category_id' => $orphanCategory->id,
+            'category_id' => $this->asset->category_id,
+            'sub_category_id' => $orphanSubCategory->id,
             'brand' => 'Acme',
             'model' => 'Unknown Box',
             'type' => 'Fixed',
@@ -533,10 +537,11 @@ class AssetOperationalHealthTest extends TestCase
     /** The group filter narrows the fleet without dropping the group list itself. */
     public function test_group_filter_narrows_units_but_keeps_the_group_list(): void
     {
-        $cctvCategory = Category::create(['name' => 'CCTV', 'asset_group_id' => $this->assetGroup('Security')->id, 'is_active' => true]);
+        $cctvSubCategory = SubCategory::create(['name' => 'CCTV', 'asset_group_id' => $this->assetGroup('Security')->id, 'is_active' => true]);
         $camera = Asset::create([
             'item_code' => 'CAM-001',
-            'category_id' => $cctvCategory->id,
+            'category_id' => $this->asset->category_id,
+            'sub_category_id' => $cctvSubCategory->id,
             'brand' => 'Acme',
             'model' => 'Dome Camera',
             'type' => 'Fixed',
@@ -554,13 +559,14 @@ class AssetOperationalHealthTest extends TestCase
         $this->assertSame(['POS Systems', 'Security'], collect($filtered['groups'])->pluck('name')->sort()->values()->all());
     }
 
-    /** A unit whose category has no asset group still counts, under "Ungrouped". */
+    /** A unit whose sub-category has no asset group still counts, under "Ungrouped". */
     public function test_units_without_a_mapped_group_fold_into_ungrouped(): void
     {
-        $orphanCategory = Category::create(['name' => 'Misc Hardware', 'is_active' => true]);
+        $orphanSubCategory = SubCategory::create(['name' => 'Misc Hardware', 'is_active' => true]);
         $orphan = Asset::create([
             'item_code' => 'MISC-001',
-            'category_id' => $orphanCategory->id,
+            'category_id' => $this->asset->category_id,
+            'sub_category_id' => $orphanSubCategory->id,
             'brand' => 'Acme',
             'model' => 'Unknown Box',
             'type' => 'Fixed',
@@ -572,6 +578,113 @@ class AssetOperationalHealthTest extends TestCase
 
         $this->assertSame('Ungrouped', $this->unitRow($unit)['group']);
         $this->assertSame(1, $this->build()['totals']['units']);
+    }
+
+    /**
+     * The group is read off the SUB-CATEGORY. A category ("POS Hardware") is ticket
+     * taxonomy and far too coarse: a terminal and a camera can share one, and they
+     * belong in different columns of the board.
+     */
+    public function test_two_sub_categories_of_one_category_land_in_different_groups(): void
+    {
+        $cameraSubCategory = SubCategory::create(['name' => 'Dome Camera', 'asset_group_id' => $this->assetGroup('Security')->id, 'is_active' => true]);
+        $camera = Asset::create([
+            'item_code' => 'CAM-002',
+            'category_id' => $this->asset->category_id, // same category as the POS terminal
+            'sub_category_id' => $cameraSubCategory->id,
+            'brand' => 'Acme',
+            'model' => 'Dome Camera',
+            'type' => 'Fixed',
+            'is_active' => true,
+        ]);
+        $this->stamp($camera);
+
+        $terminal = $this->unit('SN-PC', $this->store->code);
+        $dome = $this->unit('SN-CAM', $this->store->code, 'Posted', $camera);
+
+        $this->assertSame('POS Systems', $this->unitRow($terminal)['group']);
+        $this->assertSame('Security', $this->unitRow($dome)['group']);
+    }
+
+    /** The group is assigned on /sub-categories now; /categories no longer takes one. */
+    public function test_the_asset_group_is_saved_from_the_sub_category_page(): void
+    {
+        $admin = User::factory()->create(['company_id' => $this->company->id]);
+        $admin->assignRole(Role::firstOrCreate(['name' => 'Admin', 'guard_name' => 'web']));
+        $this->actingAs($admin)->withSession([CompanyContext::SESSION_KEY => $this->company->id]);
+
+        $subCategory = SubCategory::create(['name' => 'Digital Easel', 'is_active' => true]);
+        $group = $this->assetGroup('Digital Experience');
+
+        $this->put(route('sub-categories.update', $subCategory), [
+            'name' => 'Digital Easel', 'asset_group_id' => $group->id, 'is_active' => true,
+        ])->assertSessionHasNoErrors();
+        $this->assertSame($group->id, $subCategory->fresh()->asset_group_id);
+
+        // Listed back with its group, alongside the options the picker offers.
+        $this->get(route('sub-categories.index', ['search' => 'Digital Easel']))
+            ->assertInertia(fn ($page) => $page
+                ->where('subcategories.data.0.asset_group.label', 'Digital Experience')
+                ->has('assetGroups', 6));
+
+        // A reference option of another type is not an asset group.
+        $other = ReferenceOption::create(['type' => 'vendor_type', 'value' => 'Not a group', 'label' => 'Not a group', 'sort_order' => 0]);
+        $this->put(route('sub-categories.update', $subCategory), [
+            'name' => 'Digital Easel', 'asset_group_id' => $other->id, 'is_active' => true,
+        ])->assertSessionHasErrors('asset_group_id');
+
+        // Blank clears it again.
+        $this->put(route('sub-categories.update', $subCategory), [
+            'name' => 'Digital Easel', 'asset_group_id' => '', 'is_active' => true,
+        ])->assertSessionHasNoErrors();
+        $this->assertNull($subCategory->fresh()->asset_group_id);
+
+        // The category form ignores a group now.
+        $category = Category::findOrFail($this->asset->category_id);
+        $this->stamp($category);
+        $this->put(route('categories.update', $category), [
+            'name' => 'POS Hardware', 'asset_group_id' => $group->id, 'is_active' => true,
+        ])->assertSessionHasNoErrors();
+        $this->assertNull(DB::table('categories')->where('id', $category->id)->value('asset_group_id'));
+    }
+
+    /**
+     * Groups already assigned on /categories are carried over by the migration, but
+     * only where they say one thing: a sub-category whose fixed assets sit under
+     * categories of different groups (or an unmapped one) is left for a person.
+     */
+    public function test_migration_carries_category_groups_over_only_when_unambiguous(): void
+    {
+        $pos = $this->assetGroup('POS Systems');
+        $security = $this->assetGroup('Security');
+
+        $posCategory = Category::create(['name' => 'Mapped POS', 'is_active' => true]);
+        $securityCategory = Category::create(['name' => 'Mapped Security', 'is_active' => true]);
+        $plainCategory = Category::create(['name' => 'Never mapped', 'is_active' => true]);
+        DB::table('categories')->where('id', $posCategory->id)->update(['asset_group_id' => $pos->id]);
+        DB::table('categories')->where('id', $securityCategory->id)->update(['asset_group_id' => $security->id]);
+
+        $clean = SubCategory::create(['name' => 'Receipt Printer', 'is_active' => true]);
+        $mixed = SubCategory::create(['name' => 'Cable', 'is_active' => true]);
+        $partly = SubCategory::create(['name' => 'Adapter', 'is_active' => true]);
+
+        $asset = fn (string $code, Category $category, SubCategory $subCategory) => Asset::create([
+            'item_code' => $code, 'category_id' => $category->id, 'sub_category_id' => $subCategory->id,
+            'brand' => 'Acme', 'model' => $code, 'type' => 'Fixed', 'is_active' => true,
+        ]);
+        $asset('PRN-1', $posCategory, $clean);
+        $asset('PRN-2', $posCategory, $clean);
+        $asset('CBL-1', $posCategory, $mixed);
+        $asset('CBL-2', $securityCategory, $mixed);
+        $asset('ADP-1', $posCategory, $partly);
+        $asset('ADP-2', $plainCategory, $partly);
+
+        (require database_path('migrations/2026_10_09_100000_add_asset_group_id_to_sub_categories_table.php'))
+            ->backfillFromCategories();
+
+        $this->assertSame($pos->id, $clean->fresh()->asset_group_id);
+        $this->assertNull($mixed->fresh()->asset_group_id);
+        $this->assertNull($partly->fresh()->asset_group_id);
     }
 
     /** 11. The existing Store Health metric is untouched by any of this. */

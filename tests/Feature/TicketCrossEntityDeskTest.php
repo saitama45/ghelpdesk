@@ -112,6 +112,9 @@ class TicketCrossEntityDeskTest extends TestCase
             'company_id' => $this->entech->id,
             'store_id' => $this->entechStore->id,
             'item_id' => $this->tasItem->id,
+            // The bar's five fields are required: an intake ticket has neither yet.
+            'department' => $this->tas->name,
+            'assignee_id' => $this->agent->id,
         ])->assertSessionHasNoErrors()->assertSessionHas('success', fn ($message) => str_contains($message, 'moved to ENTECH'));
 
         foreach ([$first, $second] as $ticket) {
@@ -158,9 +161,16 @@ class TicketCrossEntityDeskTest extends TestCase
         ])->assertUnprocessable()->assertJsonValidationErrors('store_id');
         $this->assertSame($this->tgi->id, (int) $storeless->fresh()->company_id);
 
-        // A ticket with no location moves on the entity alone.
-        $this->post(route('tickets.bulk-update'), ['ticket_ids' => [$storeless->id], 'company_id' => $this->entech->id])
-            ->assertSessionHasNoErrors();
+        // Nor does a ticket with no location move on the entity alone: the bar's
+        // Location, Item, Department and Assignee are required with it.
+        $this->postJson(route('tickets.bulk-update'), ['ticket_ids' => [$storeless->id], 'company_id' => $this->entech->id])
+            ->assertUnprocessable()->assertJsonValidationErrors('classification');
+        $this->assertSame($this->tgi->id, (int) $storeless->fresh()->company_id);
+
+        $this->post(route('tickets.bulk-update'), [
+            'ticket_ids' => [$storeless->id], 'company_id' => $this->entech->id, 'store_id' => $this->entechStore->id,
+            'item_id' => $this->tasItem->id, 'department' => $this->tas->name, 'assignee_id' => $this->agent->id,
+        ])->assertSessionHasNoErrors();
         $moved = Ticket::withoutGlobalScopes()->findOrFail($storeless->id);
         $this->assertSame($this->entech->id, (int) $moved->company_id);
         $this->assertStringStartsWith('ENTECH-', $moved->ticket_key);

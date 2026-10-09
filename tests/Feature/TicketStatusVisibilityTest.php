@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\{Company, Department, Role, Ticket, TicketSlaMetric, TicketStatus, TicketStatusVisibility, User};
+use App\Models\{Category, Company, Department, Item, Role, Store, SubCategory, Ticket, TicketSlaMetric, TicketStatus, TicketStatusVisibility, User};
 use App\Support\{CompanyContext, DepartmentContext};
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,6 +16,9 @@ class TicketStatusVisibilityTest extends TestCase
     private Company $company;
     private Department $tas;
     private Department $fm;
+    private Store $store;
+    /** @var array<int, Item> */
+    private array $items = [];
     private User $admin;
 
     protected function setUp(): void
@@ -26,6 +29,16 @@ class TicketStatusVisibilityTest extends TestCase
             $this->company = Company::create(['name' => 'Entity', 'code' => 'TGI', 'is_active' => true]);
             $this->tas = Department::create(['name' => 'TAS', 'code' => 'TAS', 'company_id' => $this->company->id, 'is_active' => true]);
             $this->fm = Department::create(['name' => 'FM', 'code' => 'FM', 'company_id' => $this->company->id, 'is_active' => true]);
+            $this->store = Store::create(['name' => 'Shared store', 'code' => 'S1', 'company_id' => $this->company->id,
+                'sector' => 1, 'area' => 'A', 'brand' => 'B', 'class' => 'Regular', 'is_active' => true]);
+            // One catalogue item per desk: the bulk bar refuses an unclassified ticket.
+            foreach ([$this->tas, $this->fm] as $department) {
+                $tag = ['company_id' => $this->company->id, 'department_id' => $department->id, 'is_active' => true];
+                $this->items[$department->id] = Item::create([...$tag,
+                    'category_id' => Category::create([...$tag, 'name' => 'Hardware'])->id,
+                    'sub_category_id' => SubCategory::create([...$tag, 'name' => 'Repair'])->id,
+                    'name' => 'Repair service', 'concern_type' => 'Incident', 'priority' => 'Low']);
+            }
         });
         $this->admin = $this->user($this->tas);
         $this->admin->assignRole(Role::firstOrCreate(['name' => 'Admin', 'guard_name' => 'web']));
@@ -52,7 +65,8 @@ class TicketStatusVisibilityTest extends TestCase
         return Model::unguarded(fn () => Ticket::withoutEvents(fn () => Ticket::create([
             'title' => 'Help', 'status' => $status, 'priority' => 'low', 'company_id' => $this->company->id,
             'ticket_key' => 'TGI-'.random_int(1000, 99999), 'reporter_id' => $this->admin->id,
-            'serving_department_id' => $department->id,
+            'serving_department_id' => $department->id, 'department' => $department->name,
+            'store_id' => $this->store->id, 'item_id' => $this->items[$department->id]->id, 'assignee_id' => $this->admin->id,
         ])));
     }
 

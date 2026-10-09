@@ -1194,6 +1194,32 @@ const getSelectedTickets = computed(() => {
     return accumulatedTickets.value.filter(t => selectedIds.value.includes(t.id));
 });
 
+// The bar's five classification fields are required: every selected ticket has to
+// leave with a Department, Location, Entity, Item and Assignee — picked here, or
+// already on the ticket ("Unchanged"). Each count is the selected tickets a field
+// would still be blank on. TicketController::assertBulkTicketsClassified is the
+// real gate; this only says so before the round trip.
+const bulkMissing = computed(() => {
+    const selected = getSelectedTickets.value;
+    const lacking = (chosen, has) => chosen ? 0 : selected.filter(ticket => !has(ticket)).length;
+
+    return {
+        company_id: lacking(bulkForm.company_id, t => t.company_id),
+        store_id: lacking(bulkForm.store_id, t => t.store_id),
+        item_id: lacking(bulkForm.item_id, t => t.item_id),
+        department: lacking(bulkForm.department, t => t.department_id || t.department),
+        // A partner-escalation child is carried by the partner, not an assignee.
+        assignee_id: lacking(bulkForm.assignee_id, t => t.assignee_id || isVendorEscalated(t)),
+    };
+});
+
+const bulkMissingLabels = computed(() => [
+    ['company_id', 'Entity'], ['store_id', 'Location'], ['item_id', 'Item'],
+    ['department', 'Department'], ['assignee_id', 'Assignee'],
+].filter(([key]) => bulkMissing.value[key] > 0).map(([, label]) => label));
+
+const bulkMissingHint = (count) => `Required · ${count} missing`;
+
 const canCreateChildTickets = computed(() =>
     selectedIds.value.length > 0 && getSelectedTickets.value.every(ticket => !ticket.parent_id)
 );
@@ -1318,6 +1344,12 @@ watch(() => selectedIds.value.length > 0, (visible) => {
 
 const submitBulk = () => {
     if (!selectedIds.value.length || isBulkSubmitting.value) return
+
+    if (bulkMissingLabels.value.length) {
+        showError(`Required before applying: ${bulkMissingLabels.value.join(', ')}. Choose a value in the bulk bar.`)
+        return
+    }
+
     isBulkSubmitting.value = true
     const payload = { ticket_ids: selectedIds.value }
     if (bulkForm.company_id)      payload.company_id      = bulkForm.company_id
@@ -2355,6 +2387,9 @@ const requesterTabs = computed(() => {
                                 <div class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Bulk Selection</div>
                                 <div class="mt-2 text-2xl font-black text-blue-900">{{ selectedIds.length }}</div>
                                 <div class="mt-1 text-xs text-blue-700">Selected ticket(s) ready for response, update, split, merge, child creation, or archive.</div>
+                                <div class="mt-2 text-xs text-blue-700">
+                                    Fields marked <span class="font-bold text-red-500">*</span> are required to apply. "Unchanged" keeps a ticket's own value.
+                                </div>
                                 <div v-if="bulkEntityName" class="mt-2 text-xs font-semibold text-blue-900">
                                     Moving to {{ bulkEntityName }}. Tickets are renumbered to its key prefix; the old keys keep working.
                                 </div>
@@ -2363,7 +2398,7 @@ const requesterTabs = computed(() => {
                             <div class="grid grid-cols-1 gap-4" :class="bulkEntityOptions.length > 1 ? 'md:grid-cols-3 2xl:grid-cols-6' : 'md:grid-cols-5'">
                                 <!-- Only for users who can reach more than one entity. -->
                                 <div v-if="bulkEntityOptions.length > 1" class="flex flex-col gap-1.5">
-                                    <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Entity</label>
+                                    <label class="whitespace-nowrap text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Entity<span class="ml-1 tracking-normal text-red-500">*</span></label>
                                     <Autocomplete
                                         v-model="bulkForm.company_id"
                                         :options="bulkEntityOptions"
@@ -2372,10 +2407,11 @@ const requesterTabs = computed(() => {
                                         placeholder="Unchanged..."
                                         size="sm"
                                     />
+                                    <p v-if="bulkMissing.company_id" class="text-[10px] font-semibold text-red-600">{{ bulkMissingHint(bulkMissing.company_id) }}</p>
                                 </div>
 
                                 <div class="flex flex-col gap-1.5">
-                                    <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Location</label>
+                                    <label class="whitespace-nowrap text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Location<span class="ml-1 tracking-normal text-red-500">*</span></label>
                                     <Autocomplete
                                         v-model="bulkForm.store_id"
                                         :options="bulkStoreOptions"
@@ -2383,10 +2419,11 @@ const requesterTabs = computed(() => {
                                         value-key="id"
                                         placeholder="Unchanged..."
                                     />
+                                    <p v-if="bulkMissing.store_id" class="text-[10px] font-semibold text-red-600">{{ bulkMissingHint(bulkMissing.store_id) }}</p>
                                 </div>
 
                                 <div class="flex flex-col gap-1.5">
-                                    <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Item</label>
+                                    <label class="whitespace-nowrap text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Item<span class="ml-1 tracking-normal text-red-500">*</span></label>
                                     <Autocomplete
                                         v-model="bulkForm.item_id"
                                         :options="bulkItems"
@@ -2395,19 +2432,21 @@ const requesterTabs = computed(() => {
                                         placeholder="Unchanged..."
                                         size="sm"
                                     />
+                                    <p v-if="bulkMissing.item_id" class="text-[10px] font-semibold text-red-600">{{ bulkMissingHint(bulkMissing.item_id) }}</p>
                                 </div>
 
                                 <div class="flex flex-col gap-1.5">
-                                    <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Department</label>
+                                    <label class="whitespace-nowrap text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Department<span class="ml-1 tracking-normal text-red-500">*</span></label>
                                     <HierarchySelector
                                         v-model="bulkForm.department"
                                         :nodes="bulkDepartmentNodes"
                                         placeholder="Unchanged..."
                                     />
+                                    <p v-if="bulkMissing.department" class="text-[10px] font-semibold text-red-600">{{ bulkMissingHint(bulkMissing.department) }}</p>
                                 </div>
 
                                 <div class="flex flex-col gap-1.5">
-                                    <label class="text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Assignee</label>
+                                    <label class="whitespace-nowrap text-[10px] font-black uppercase tracking-[0.22em] text-blue-500">Assignee<span class="ml-1 tracking-normal text-red-500">*</span></label>
                                     <select
                                         v-model="bulkForm.assignee_id"
                                         class="min-w-[140px] rounded-lg border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600"
@@ -2415,6 +2454,7 @@ const requesterTabs = computed(() => {
                                         <option value="">-- Unchanged --</option>
                                         <option v-for="p in staff" :key="p.id" :value="p.id">{{ p.name }}</option>
                                     </select>
+                                    <p v-if="bulkMissing.assignee_id" class="text-[10px] font-semibold text-red-600">{{ bulkMissingHint(bulkMissing.assignee_id) }}</p>
                                 </div>
 
                                 <div class="flex flex-col gap-1.5">

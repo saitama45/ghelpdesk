@@ -247,7 +247,7 @@ const openCellDrill = (store, groupName, cell) => {
             </div>
 
             <!-- Asset Monitoring Board — laid out like the reference Google Sheet:
-                 LEGEND box, a GROUP header row over a Category sub-header row, then
+                 LEGEND box, a GROUP header row over a Sub-Category sub-header row, then
                  one row per store ending in Active Issues / Owner / Next Action / ETA. -->
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm dark:bg-gray-800 dark:border-gray-700">
                 <div class="px-4 py-3 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 dark:border-gray-700">
@@ -305,18 +305,18 @@ const openCellDrill = (store, groupName, cell) => {
                                     ETA
                                 </th>
                             </tr>
-                            <!-- Row 2: Category — the real Category names mapped to each group -->
+                            <!-- Row 2: Sub-Category — the real Sub-Category names mapped to each group -->
                             <tr class="bg-[#1f3864] text-white align-top">
                                 <th class="px-3 py-2 text-left text-[11px] font-black uppercase tracking-wider border border-white/30 whitespace-nowrap">
-                                    Category
+                                    Sub-Category
                                 </th>
                                 <th
                                     v-for="column in columns"
                                     :key="column.name"
                                     class="px-3 py-2 text-left text-[10px] font-semibold border border-white/30 min-w-[7rem]"
                                 >
-                                    <span v-if="column.categories.length" class="block leading-snug">
-                                        <span v-for="category in column.categories" :key="category" class="block">{{ category }}</span>
+                                    <span v-if="column.sub_categories.length" class="block leading-snug">
+                                        <span v-for="subCategory in column.sub_categories" :key="subCategory" class="block">{{ subCategory }}</span>
                                     </span>
                                     <span v-else class="italic text-white/50">unmapped</span>
                                 </th>

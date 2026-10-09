@@ -2,10 +2,10 @@
 
 namespace App\Services;
 
-use App\Models\Category;
 use App\Models\Scopes\ActiveEntityScope;
 use App\Models\StockIn;
 use App\Models\Store;
+use App\Models\SubCategory;
 use App\Models\Ticket;
 use App\Models\TicketAsset;
 use App\Support\DashboardPeriod;
@@ -33,7 +33,7 @@ class AssetOperationalHealthService
     /** Ticket statuses that stop counting against a unit. */
     private const TERMINAL_STATUSES = ['resolved', 'closed'];
 
-    /** Units with no mapped category fold into this bucket so totals always reconcile. */
+    /** Units with no mapped sub-category fold into this bucket so totals always reconcile. */
     private const UNGROUPED = 'Ungrouped';
 
     /**
@@ -102,13 +102,13 @@ class AssetOperationalHealthService
 
         $units = $this->deployedUnits($stores);
         $ticketsByUnit = $this->activeTicketsByUnit($units->pluck('id'), $period);
-        $groupByCategory = $this->groupByCategoryId();
+        $groupBySubCategory = $this->groupBySubCategoryId();
 
-        $rows = $units->map(function (array $unit) use ($ticketsByUnit, $groupByCategory) {
+        $rows = $units->map(function (array $unit) use ($ticketsByUnit, $groupBySubCategory) {
             $tickets = $ticketsByUnit->get($unit['id'], collect());
 
             return array_merge($unit, [
-                'group' => $groupByCategory[$unit['category_id']] ?? self::UNGROUPED,
+                'group' => $groupBySubCategory[$unit['sub_category_id']] ?? self::UNGROUPED,
                 'active_tickets' => $tickets->count(),
                 'status' => $tickets->isNotEmpty() ? 'impacted' : 'operational',
                 'band' => $this->worstBand($tickets),
@@ -126,7 +126,7 @@ class AssetOperationalHealthService
             'group' => $group,
             'groups' => $groups,
             // Fixed column axis for the monitoring board, in the reference sheet's order,
-            // each carrying the Category names mapped to it (the sheet's second header row).
+            // each carrying the Sub-Category names mapped to it (the sheet's second header row).
             'columns' => $this->boardColumns($rows),
             'legend' => array_values(self::BANDS),
             'totals' => $this->totals($visible),
@@ -136,22 +136,23 @@ class AssetOperationalHealthService
 
     /**
      * The board's column axis: the six reference groups (always present, in sheet order),
-     * plus any extra configured group, each with the Category names mapped to it.
+     * plus any extra configured group, each with the Sub-Category names mapped to it.
      *
      * "Ungrouped" is appended only when something actually lands there, so a fully
      * mapped taxonomy shows exactly the sheet's six columns.
      */
     private function boardColumns(Collection $rows): array
     {
-        $categoriesByGroup = Category::query()
+        $subCategoriesByGroup = SubCategory::query()
             ->whereNotNull('asset_group_id')
             ->with('assetGroup:id,label')
             ->get(['id', 'name', 'asset_group_id'])
-            ->groupBy(fn (Category $category) => $category->assetGroup?->label ?? self::UNGROUPED)
-            ->map(fn (Collection $categories) => $categories->pluck('name')->sort()->values()->all());
+            ->groupBy(fn (SubCategory $subCategory) => $subCategory->assetGroup?->label ?? self::UNGROUPED)
+            // Sub-categories are per entity, so the same name can be mapped twice.
+            ->map(fn (Collection $subCategories) => $subCategories->pluck('name')->unique()->sort()->values()->all());
 
-        // Configured groups beyond the six (someone can add one on /categories).
-        $configured = $categoriesByGroup->keys()
+        // Configured groups beyond the six (someone can add one on /sub-categories).
+        $configured = $subCategoriesByGroup->keys()
             ->reject(fn ($name) => in_array($name, self::SLIDE_GROUP_ORDER, true) || $name === self::UNGROUPED)
             ->sort()
             ->values()
@@ -166,8 +167,8 @@ class AssetOperationalHealthService
         return collect($names)
             ->map(fn (string $name) => [
                 'name' => $name,
-                // The sheet's "Category" sub-header. Empty until someone maps categories.
-                'categories' => $categoriesByGroup->get($name, []),
+                // The sheet's "Category" sub-header. Empty until someone maps sub-categories.
+                'sub_categories' => $subCategoriesByGroup->get($name, []),
             ])
             ->all();
     }
@@ -217,14 +218,14 @@ class AssetOperationalHealthService
 
         $units = $this->deployedUnits($stores);
         $ticketsByUnit = $this->activeTicketsByUnit($units->pluck('id'), $period);
-        $groupByCategory = $this->groupByCategoryId();
+        $groupBySubCategory = $this->groupBySubCategoryId();
 
         $rows = $units
-            ->map(function (array $unit) use ($ticketsByUnit, $groupByCategory) {
+            ->map(function (array $unit) use ($ticketsByUnit, $groupBySubCategory) {
                 $tickets = $ticketsByUnit->get($unit['id'], collect());
 
                 return array_merge($unit, [
-                    'group' => $groupByCategory[$unit['category_id']] ?? self::UNGROUPED,
+                    'group' => $groupBySubCategory[$unit['sub_category_id']] ?? self::UNGROUPED,
                     'active_tickets' => $tickets->count(),
                     'status' => $tickets->isNotEmpty() ? 'impacted' : 'operational',
                     'band' => $this->worstBand($tickets),
@@ -330,7 +331,7 @@ class AssetOperationalHealthService
             ->with([
                 'asset' => fn ($q) => $q
                     ->withoutGlobalScope(ActiveEntityScope::class)
-                    ->select('id', 'item_code', 'brand', 'model', 'category_id', 'sub_category_id'),
+                    ->select('id', 'item_code', 'brand', 'model', 'sub_category_id'),
                 'asset.subCategory:id,name',
                 // Only the transfer rows that can move a unit's current location.
                 'sourceStockTransfers' => fn ($q) => $q
@@ -361,7 +362,7 @@ class AssetOperationalHealthService
                     'brand' => $unit->asset?->brand,
                     'model' => $unit->asset?->model,
                     'sub_category' => $unit->asset?->subCategory?->name,
-                    'category_id' => (int) ($unit->asset?->category_id ?? 0),
+                    'sub_category_id' => (int) ($unit->asset?->sub_category_id ?? 0),
                     'store_id' => (int) $store->id,
                     'store_code' => $store->code,
                     'store_name' => $store->name,
@@ -456,19 +457,19 @@ class AssetOperationalHealthService
     }
 
     /**
-     * category_id => asset group label, from the reference_options mapping on
-     * categories.asset_group_id (slide 07's Groups & Category Triggers).
+     * sub_category_id => asset group label, from the reference_options mapping on
+     * sub_categories.asset_group_id (slide 07's Groups & Category Triggers).
      *
      * @return array<int,string>
      */
-    private function groupByCategoryId(): array
+    private function groupBySubCategoryId(): array
     {
-        return Category::query()
+        return SubCategory::query()
             ->whereNotNull('asset_group_id')
             ->with('assetGroup:id,label')
             ->get(['id', 'asset_group_id'])
-            ->mapWithKeys(fn (Category $category) => [
-                (int) $category->id => $category->assetGroup?->label ?? self::UNGROUPED,
+            ->mapWithKeys(fn (SubCategory $subCategory) => [
+                (int) $subCategory->id => $subCategory->assetGroup?->label ?? self::UNGROUPED,
             ])
             ->all();
     }

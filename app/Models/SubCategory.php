@@ -11,12 +11,23 @@ class SubCategory extends Model
         'department_id',
         'name',
         'description',
+        'asset_group_id',
         'is_active',
     ];
 
     protected $casts = [
+        'asset_group_id' => 'integer',
         'is_active' => 'boolean',
     ];
+
+    /**
+     * Asset Operational Health group (reference_options, type = asset_group).
+     * Null for the many sub-categories that only classify tickets.
+     */
+    public function assetGroup()
+    {
+        return $this->belongsTo(ReferenceOption::class, 'asset_group_id');
+    }
 
     /** Owning entity; drives entity switching on the reference pages (EntityReferenceScope). */
     public function company()

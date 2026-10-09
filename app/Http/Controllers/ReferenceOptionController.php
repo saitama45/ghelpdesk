@@ -132,6 +132,10 @@ class ReferenceOptionController extends Controller implements HasMiddleware
             return [\App\Models\Asset::where('bulk_uom', $value)->exists(), 'assets'];
         }
 
+        if ($type === 'asset_group') {
+            return [\App\Models\SubCategory::where('asset_group_id', $referenceOption->id)->exists(), 'sub-categories'];
+        }
+
         if ($type === 'company_type') {
             return [Company::where('type', $value)->exists(), 'companies'];
         }

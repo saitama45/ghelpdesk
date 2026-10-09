@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
-use App\Models\ReferenceOption;
 use App\Support\EntityReferenceScope;
 use App\Support\DepartmentReferences;
 use Illuminate\Http\Request;
@@ -28,7 +27,7 @@ class CategoryController extends Controller implements HasMiddleware
         // Follows the entity switcher; a brand also lists its tagged entities'
         // categories, read-only (see EntityReferenceScope).
         $query = EntityReferenceScope::visible(
-            Category::query()->with(['assetGroup:id,value,label', 'company:id,name,code']),
+            Category::query()->with('company:id,name,code'),
             'categories.company_id'
         );
 
@@ -42,14 +41,6 @@ class CategoryController extends Controller implements HasMiddleware
 
         return Inertia::render('Categories/Index', [
             'categories' => $categories,
-            // Asset Operational Health groups (slide 07). Categories left unmapped
-            // simply never appear on the Asset Health tab.
-            'assetGroups' => ReferenceOption::ofType('asset_group')
-                ->map(fn (ReferenceOption $option) => [
-                    'id' => (int) $option->id,
-                    'name' => $option->label,
-                ])
-                ->values(),
         ]);
     }
 
@@ -58,13 +49,11 @@ class CategoryController extends Controller implements HasMiddleware
         $request->validate([
             'name' => ['required', 'string', 'max:255', DepartmentReferences::unique('categories', 'name')],
             'description' => 'nullable|string',
-            'asset_group_id' => 'nullable|exists:reference_options,id',
         ]);
 
         Category::create([
             'name' => $request->name,
             'description' => $request->description,
-            'asset_group_id' => $request->asset_group_id ?: null,
             'is_active' => true,
         ]);
 
@@ -78,14 +67,12 @@ class CategoryController extends Controller implements HasMiddleware
         $request->validate([
             'name' => ['required', 'string', 'max:255', DepartmentReferences::unique('categories', 'name', $category)],
             'description' => 'nullable|string',
-            'asset_group_id' => 'nullable|exists:reference_options,id',
             'is_active' => 'boolean',
         ]);
 
         $category->update([
             'name' => $request->name,
             'description' => $request->description,
-            'asset_group_id' => $request->asset_group_id ?: null,
             'is_active' => $request->boolean('is_active'),
         ]);
 

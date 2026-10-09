@@ -72,6 +72,17 @@ intake → TicketObserver (key/company/SLA) → assignment → work → resolve 
 - A user with `tickets.edit` but not `tickets.assign` has no Assignee control, so the banner switches to
   "ask the desk that owns it" rather than telling them to set a field they cannot see.
 
+**The bulk bar requires the same five fields** (`TicketController@bulkUpdate` + `Tickets/Index.vue`)
+- "Apply to N" is refused unless every selected ticket leaves the bar with **Department, Location, Entity,
+  Item and Assignee** — picked in the bar, or already on the ticket ("Unchanged" keeps a ticket's own value).
+  All or nothing: one unclassified ticket blocks the whole selection.
+- One definition for both gates: `TicketController::missingClassification()`. `assertBulkTicketsClassified()`
+  runs on the filled, unsaved models and throws a `classification` error counting tickets per missing field;
+  the bar marks the fields `*`, shows "Required · N missing" under each, and blocks Apply before the round trip.
+- Partner-escalation children need no Assignee here either. Consequence: an email ticket can no longer be
+  moved to another entity on the Entity field alone — Location, Item, Department and Assignee go with it.
+- Bulk **Respond**, Archive, Merge, Split and Create Child are not gated by this.
+
 **Serving vs requesting department**
 - `tickets.department_id` = the REQUESTER's department.
 - `tickets.serving_department_id` = the desk that owns the work (from the plus-address it arrived on, the form's owning department, or an override); falls back to the assignee's department. See `Ticket::scopeOwnedByDepartment()`.
@@ -164,7 +175,7 @@ Shared shape: request table + `*_approvals` rows per step → approvers notified
 
 ## 6. Dashboard & reports
 - `DashboardController` renders 5 lazy tabs: only Ticket Flow Board loads on first paint; the rest arrive via `Inertia::optional` + `router.reload({ only: [...] })` and are cached until a filter changes. Testing partial reloads requires `X-Inertia` headers + version.
-- Report services: `StoreReportService` (store health, entity heatmap, office split), `BrandHealthService`, `PartnerPerformanceService` (vendor-escalation child tickets), `AssetOperationalHealthService` (RED/GREEN derived live from linked tickets, never stored).
+- Report services: `StoreReportService` (store health, entity heatmap, office split), `BrandHealthService`, `PartnerPerformanceService` (vendor-escalation child tickets), `AssetOperationalHealthService` (RED/GREEN derived live from linked tickets, never stored). Its groups (POS Systems, Peripherals, …) come from `sub_categories.asset_group_id` → `reference_options` (`type = asset_group`), assigned on `/sub-categories`; a unit follows its asset's sub-category and falls into "Ungrouped" when that is untagged. `categories.asset_group_id` is the retired predecessor — left in place, read by nothing.
 - Open vs closed tally is dashboard-wide: open = non-terminal statuses, closed = `resolved` + `closed`, so Total = Open + Closed.
 - **Period filter is one object: `app/Support/DashboardPeriod.php`.** The Management Filters bar sends either `year` / `month` or (toggle on "Date range") `date_from` / `date_to`; a range wins and year/month are ignored. `DashboardPeriod::fromRequest()` is applied to `tickets.created_at` by every ticket tab — Flow Board, Open vs Closed, Live Store Health, Live Brand Health, Asset Operational Health (decides which active tickets count against a unit; the fleet is never narrowed), Partner Performance, Overview — and to `awarded_at` for the leaderboard/trophies (`orCurrentMonth()` keeps their "this month" default). Every drill-down and export endpoint takes the same four params (`DashboardPeriod::RULES`), so a list always tallies with the number clicked. A new tab or drill-down **must** take the period too: Live Brand Health / Store Health / Asset Health once ignored it, which is why the Month filter "did nothing" there. CASA Pipeline and the project kanban are project-based and keep their own selectors.
 - Dashboard child components get the period as a `:period` prop built from the **client** filter state. Do not read it from `props.filters`: tab reloads use `only: [...]`, so `filters` is never refreshed after first paint and goes stale.

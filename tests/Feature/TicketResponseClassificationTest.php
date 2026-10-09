@@ -237,6 +237,93 @@ class TicketResponseClassificationTest extends TestCase
         ]);
     }
 
+    /**
+     * The bulk bar on /tickets holds the same five fields to the same rule: no
+     * selected ticket may leave it without a Department, Location, Entity, Item
+     * and Assignee.
+     */
+    public function test_bulk_update_is_refused_while_a_selected_ticket_would_stay_unclassified(): void
+    {
+        $this->allowBulkEdit();
+        $classified = $this->ticket();
+        $incomplete = $this->ticket(['store_id' => null, 'assignee_id' => null]);
+
+        $this->actingAs($this->agent)
+            ->post(route('tickets.bulk-update'), [
+                'ticket_ids' => [$classified->id, $incomplete->id],
+                'status' => 'in_progress',
+            ])
+            ->assertSessionHasErrors('classification');
+
+        $message = (string) session('errors')->first('classification');
+        $this->assertStringContainsString('Location on 1 ticket', $message);
+        $this->assertStringContainsString('Assignee on 1 ticket', $message);
+        $this->assertStringNotContainsString('Item on', $message);
+
+        // All or nothing: the ticket that was complete is not moved either.
+        $this->assertSame('open', $classified->fresh()->status);
+        $this->assertSame('open', $incomplete->fresh()->status);
+    }
+
+    public function test_bulk_update_is_accepted_once_the_bar_supplies_what_a_ticket_lacks(): void
+    {
+        $this->allowBulkEdit();
+        $first = $this->ticket(['department' => null, 'department_id' => null, 'store_id' => null, 'item_id' => null, 'assignee_id' => null]);
+        $second = $this->ticket(['store_id' => null, 'assignee_id' => null]);
+
+        $this->actingAs($this->agent)
+            ->post(route('tickets.bulk-update'), [
+                'ticket_ids' => [$first->id, $second->id],
+                'store_id' => $this->store->id,
+                'item_id' => $this->item->id,
+                'department' => $this->serving->name,
+                'assignee_id' => $this->agent->id,
+            ])
+            ->assertSessionHasNoErrors();
+
+        foreach ([$first, $second] as $ticket) {
+            $ticket->refresh();
+            $this->assertSame($this->store->id, (int) $ticket->store_id);
+            $this->assertSame($this->item->id, (int) $ticket->item_id);
+            $this->assertSame($this->serving->name, $ticket->department);
+            $this->assertSame($this->agent->id, (int) $ticket->assignee_id);
+        }
+    }
+
+    /** "Unchanged" is fine for a field every selected ticket already carries. */
+    public function test_bulk_update_may_change_one_field_on_tickets_that_are_already_classified(): void
+    {
+        $this->allowBulkEdit();
+        $first = $this->ticket();
+        $second = $this->ticket();
+
+        $this->actingAs($this->agent)
+            ->post(route('tickets.bulk-update'), ['ticket_ids' => [$first->id, $second->id], 'status' => 'in_progress'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('in_progress', $first->fresh()->status);
+        $this->assertSame('in_progress', $second->fresh()->status);
+    }
+
+    public function test_bulk_update_needs_no_assignee_for_a_partner_escalation_child(): void
+    {
+        $this->allowBulkEdit();
+        $vendor = Vendor::create(['code' => 'V1', 'name' => 'Partner Co', 'is_active' => true]);
+        $parent = $this->ticket();
+        $child = $this->ticket(['assignee_id' => null, 'parent_id' => $parent->id, 'vendor_id' => $vendor->id]);
+
+        $this->actingAs($this->agent)
+            ->post(route('tickets.bulk-update'), ['ticket_ids' => [$child->id], 'status' => 'in_progress'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('in_progress', $child->fresh()->status);
+    }
+
+    private function allowBulkEdit(): void
+    {
+        $this->agent->givePermissionTo(Permission::findOrCreate('tickets.edit', 'web'));
+    }
+
     private function ticket(array $overrides = []): Ticket
     {
         return Ticket::create(array_merge([
