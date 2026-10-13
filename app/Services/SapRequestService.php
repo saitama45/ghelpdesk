@@ -8,6 +8,7 @@ use App\Models\Ticket;
 use App\Models\User;
 use App\Mail\SapRequestNotification;
 use App\Support\CfeTicketStore;
+use App\Support\FormSchemaRequirements;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
@@ -17,6 +18,9 @@ class SapRequestService
 {
     public function createRequest(array $data, ?int $userId = null): SapRequest
     {
+        // Before any upload is stored: an incomplete submission keeps nothing.
+        FormSchemaRequirements::assert(RequestType::find($data['request_type_id'] ?? null)?->form_schema, $data, 'items');
+
         $data = $this->storeFileUploads($data);
 
         $sapRequest = DB::transaction(function () use ($data, $userId) {
@@ -66,6 +70,9 @@ class SapRequestService
 
     public function updateRequest(SapRequest $sapRequest, array $data): SapRequest
     {
+        // Before any upload is stored: an incomplete submission keeps nothing.
+        FormSchemaRequirements::assert(RequestType::find($data['request_type_id'] ?? null)?->form_schema, $data, 'items');
+
         $data = $this->storeFileUploads($data);
 
         $sapRequest = DB::transaction(function () use ($sapRequest, $data) {

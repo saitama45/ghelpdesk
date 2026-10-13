@@ -2,6 +2,7 @@
 import { ref, computed, watch, markRaw, onMounted, nextTick } from 'vue'
 import { useForm } from '@inertiajs/vue3'
 import DynamicFormRenderer from '@/Components/DynamicFormRenderer.vue'
+import { missingFieldErrors, missingItemErrors } from '@/lib/schemaRequired'
 import NewItemRequestForm from './Forms/NewItemRequestForm.vue'
 import NewVendorRequestForm from './Forms/NewVendorRequestForm.vue'
 import StoreCodeRequestForm from './Forms/StoreCodeRequestForm.vue'
@@ -102,10 +103,24 @@ watch(() => form.request_type_id, (newVal, oldVal) => {
     if (oldVal !== undefined && oldVal !== null && oldVal !== '') {
         form.form_data = {}
         form.items = []
+        form.clearErrors()
     }
 })
 
+const allErrors = computed(() => Object.values(form.errors).flat())
+const errorBanner = ref(null)
+const scrollToErrors = () => nextTick(() => errorBanner.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+
 async function submit() {
+    // Radio/checkbox groups and every line-item cell are outside the browser's own
+    // `required` check, so the schema's required flags are enforced here
+    form.clearErrors()
+    form.setError({
+        ...missingFieldErrors(schemaFields.value, form.form_data),
+        ...(schemaHasItems.value ? missingItemErrors(schemaItemsColumns.value, form.items, 'items') : {}),
+    })
+    if (form.hasErrors) { scrollToErrors(); return }
+
     const confirmed = await openConfirm()
     if (!confirmed) return
 
@@ -116,10 +131,12 @@ async function submit() {
         })).post(props.submitRoute, {
             forceFormData: true,
             onSuccess: () => form.reset(),
+            onError: scrollToErrors,
         })
     } else {
         form.post(props.submitRoute, {
             onSuccess: () => form.reset(),
+            onError: scrollToErrors,
         })
     }
 }
@@ -169,6 +186,23 @@ const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
         </div>
 
         <form v-else @submit.prevent="submit" class="space-y-8">
+            <!-- Validation Error Summary -->
+            <div v-if="allErrors.length > 0" ref="errorBanner"
+                 class="bg-rose-50 border-2 border-rose-200 rounded-2xl px-6 py-4 flex gap-4 items-start">
+                <svg class="w-5 h-5 text-rose-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                          d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <div>
+                    <p class="text-xs font-black text-rose-700 uppercase tracking-widest mb-1">
+                        Please fix {{ allErrors.length }} error(s) before submitting:
+                    </p>
+                    <ul class="space-y-0.5">
+                        <li v-for="(msg, i) in allErrors" :key="i" class="text-xs text-rose-600 font-medium">• {{ msg }}</li>
+                    </ul>
+                </div>
+            </div>
+
             <!-- Selected Type Info & Back Button -->
             <div class="flex items-center justify-between bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 p-6 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                 <div class="flex items-center gap-4">

@@ -8,6 +8,7 @@ use App\Models\Ticket;
 use App\Models\User;
 use App\Mail\PosRequestNotification;
 use App\Support\CfeTicketStore;
+use App\Support\FormSchemaRequirements;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -24,6 +25,9 @@ class PosRequestService
      */
     public function createRequest(array $data, ?int $userId = null): PosRequest
     {
+        // Before any upload is stored: an incomplete submission keeps nothing.
+        FormSchemaRequirements::assert(RequestType::find($data['request_type_id'] ?? null)?->form_schema, $data, 'details');
+
         $data = $this->storeFileUploads($data);
 
         $posRequest = DB::transaction(function () use ($data, $userId) {
@@ -95,6 +99,9 @@ class PosRequestService
      */
     public function updateRequest(PosRequest $posRequest, array $data): PosRequest
     {
+        // Before any upload is stored: an incomplete submission keeps nothing.
+        FormSchemaRequirements::assert(RequestType::find($data['request_type_id'] ?? null)?->form_schema, $data, 'details');
+
         $data = $this->storeFileUploads($data);
 
         $posRequest = DB::transaction(function () use ($posRequest, $data) {

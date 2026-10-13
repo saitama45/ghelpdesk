@@ -3,6 +3,7 @@ import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { router, useForm, Link } from '@inertiajs/vue3'
 import { useToast } from '@/Composables/useToast'
 import DynamicFormRenderer from '@/Components/DynamicFormRenderer.vue'
+import { missingFieldErrors, missingItemErrors } from '@/lib/schemaRequired'
 
 const props = defineProps({
     companies: Array,
@@ -32,6 +33,12 @@ const onConfirmYes = () => { showConfirm.value = false; resolveConfirm?.(true) }
 const onConfirmNo  = () => { showConfirm.value = false; resolveConfirm?.(false) }
 
 const isEditing = computed(() => !!props.posRequest)
+
+// True when the request type renders from a schema (fields and/or a line-items table)
+const typeHasSchema = (id) => {
+    const rt = props.requestTypes?.find(rt => rt.id == id)
+    return (rt?.form_schema?.fields?.length > 0) || !!rt?.form_schema?.has_items
+}
 
 const form = useForm({
     requester_name: props.posRequest?.requester_name ?? '',
@@ -68,6 +75,10 @@ const form = useForm({
                 printer: d.printer
             }))
         }
+
+        // A schema type keeps its rows in form_data.items; the hard-coded row below is
+        // only for types without a schema, and would be saved as a junk item here
+        if (props.posRequest && typeHasSchema(props.posRequest.request_type_id)) return []
 
         return [{
             product_name: '', pos_name: '', remarks_mechanics: '',
@@ -224,15 +235,12 @@ const removeRow = (index) => {
 }
 
 const getError = (key) => form.errors[key]
-const allErrors = computed(() => [...Object.values(form.errors).flat(), ...lineItemErrors.value])
+const allErrors = computed(() => Object.values(form.errors).flat())
 const errorBanner = ref(null)
 const scrollToErrors = () => nextTick(() => errorBanner.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
 
 // Disable submit when a line-items section is shown but no items have been added yet
-const canSubmit = computed(() => !schemaHasItems || form.details.length > 0)
-
-// Client-side validation errors for schema line item required fields
-const lineItemErrors = ref([])
+const canSubmit = computed(() => !useSchemaItems.value || form.details.length > 0)
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const emailFormatError = computed(() =>
@@ -259,11 +267,9 @@ const useSchemaItems = computed(() => schemaHasItems.value && schemaItemsColumns
 // Reset form_data and details when request type changes
 watch(() => form.request_type_id, () => {
     form.form_data = {}
-    lineItemErrors.value = []
+    form.clearErrors()
 
-    const rt = props.requestTypes?.find(rt => rt.id == form.request_type_id)
-    const hasSchema = (rt?.form_schema?.fields?.length > 0) || !!rt?.form_schema?.has_items
-    if (hasSchema) {
+    if (typeHasSchema(form.request_type_id)) {
         // Schema type: clear the stale hard-coded row so product_name/pos_name are not submitted
         form.details = []
     } else {
@@ -280,18 +286,14 @@ watch(() => form.request_type_id, () => {
 const submit = async () => {
     if (emailFormatError.value) return
 
-    // Validate required fields in schema line items
-    lineItemErrors.value = []
-    if (schemaHasItems && schemaItemsColumns.value.length > 0) {
-        form.details.forEach((row, rowIdx) => {
-            schemaItemsColumns.value.forEach(col => {
-                if (col.required && (row[col.key] === '' || row[col.key] === null || row[col.key] === undefined)) {
-                    lineItemErrors.value.push(`Item #${rowIdx + 1}: "${col.label}" is required.`)
-                }
-            })
-        })
-    }
-    if (lineItemErrors.value.length > 0) { scrollToErrors(); return }
+    // Radio/checkbox groups and every line-item cell are outside the browser's own
+    // `required` check, so the schema's required flags are enforced here
+    form.clearErrors()
+    form.setError({
+        ...missingFieldErrors(schemaFields.value, form.form_data),
+        ...(useSchemaItems.value ? missingItemErrors(schemaItemsColumns.value, form.details, 'details') : {}),
+    })
+    if (form.hasErrors) { scrollToErrors(); return }
 
     const confirmed = await openConfirm()
     if (!confirmed) return
