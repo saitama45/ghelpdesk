@@ -82,6 +82,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import JsBarcode from 'jsbarcode'
 import QRCode from 'qrcode'
 import Modal from '@/Components/Modal.vue'
+import { customBarcodeError } from './barcodeRules'
 
 const props = defineProps({
     show: { type: Boolean, default: false },
@@ -132,15 +133,7 @@ const trimmedQr = computed(() => customQr.value.trim())
 
 const barcodeError = computed(() => {
     if (barcodeMode.value !== 'custom' || !trimmedBarcode.value) return ''
-    const code = trimmedBarcode.value
-    // Code 128 (the printed label) only encodes printable ASCII.
-    if (!/^[\x20-\x7E]+$/.test(code)) return 'Use letters, numbers and standard symbols only. Barcodes cannot print accents or emoji.'
-    const key = code.toLowerCase()
-    // Keeping the unit's own current code is always allowed, even where older imports repeat one.
-    if (key !== props.barcode.trim().toLowerCase() && props.takenBarcodes[key]) {
-        return `Already used by ${props.takenBarcodes[key]} in this stock-in.`
-    }
-    return ''
+    return customBarcodeError(trimmedBarcode.value, props.barcode, props.takenBarcodes)
 })
 
 const qrError = computed(() => {

@@ -758,9 +758,21 @@
 
                                         <!-- Units List -->
                                         <div class="space-y-1.5">
-                                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">
-                                                {{ assetHasBulk(asset) ? `Per ${asset.base_uom || 'PC'} barcodes & QR` : 'Units' }} ({{ getEntriesForAsset(asset.id).length }})
-                                            </p>
+                                            <div class="flex items-center justify-between gap-2">
+                                                <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">
+                                                    {{ assetHasBulk(asset) ? `Per ${asset.base_uom || 'PC'} barcodes & QR` : 'Units' }} ({{ getEntriesForAsset(asset.id).length }})
+                                                </p>
+                                                <button
+                                                    v-if="!readOnlyMode && !(isTransferMode && asset.type === 'Fixed')"
+                                                    type="button"
+                                                    @click="startScanning(asset.id)"
+                                                    class="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-2 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-50 transition-colors dark:border-blue-400/30 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-blue-500/10"
+                                                    title="Puts the cursor in the barcode field; each scan then moves to the next unit"
+                                                >
+                                                    <ViewfinderCircleIcon class="h-3.5 w-3.5" />
+                                                    Scan labels
+                                                </button>
+                                            </div>
                                             <div class="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden dark:border-gray-700 dark:divide-gray-700">
                                                 <div
                                                     v-for="(entry, unitIdx) in orderedEntriesForAsset(asset.id)"
@@ -771,17 +783,35 @@
                                                     <span class="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[9px] font-black flex items-center justify-center dark:bg-blue-500/15 dark:text-blue-200">{{ unitIdx + 1 }}</span>
                                                     <span v-if="entryBoxLabel(entry)" class="flex-shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold text-indigo-600 uppercase dark:bg-indigo-500/15 dark:text-indigo-200">{{ entryBoxLabel(entry) }}</span>
 
-                                                    <!-- Serial No (Fixed only) -->
-                                                    <div class="flex-1 min-w-0">
+                                                    <!-- Serial No (Fixed only) + scan field for a custom barcode -->
+                                                    <div class="flex-1 min-w-0 grid grid-cols-2 items-center gap-2">
+                                                        <div class="min-w-0">
+                                                            <input
+                                                                v-if="asset.type !== 'Consumables'"
+                                                                type="text"
+                                                                v-model="entry.serial_no"
+                                                                @change="regenUnitCodes(form.entries.indexOf(entry))"
+                                                                placeholder="Serial No (optional)"
+                                                                class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs dark:border-gray-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-400"
+                                                            >
+                                                            <span v-else class="text-[10px] text-gray-300 italic">No serial required</span>
+                                                        </div>
                                                         <input
-                                                            v-if="asset.type !== 'Consumables'"
+                                                            v-if="!(isTransferMode && asset.type === 'Fixed')"
                                                             type="text"
-                                                            v-model="entry.serial_no"
-                                                            @change="regenUnitCodes(form.entries.indexOf(entry))"
-                                                            placeholder="Serial No (optional)"
-                                                            class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs dark:border-gray-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-400"
+                                                            :data-barcode-scan="entry.uid"
+                                                            :value="scanFieldValue(entry)"
+                                                            @keydown.enter.prevent="onScanEnter(entry, $event)"
+                                                            @change="onScanChange(entry, $event)"
+                                                            @input="onScanInput(entry, $event)"
+                                                            maxlength="255"
+                                                            autocomplete="off"
+                                                            spellcheck="false"
+                                                            placeholder="Scan barcode (custom)"
+                                                            :title="scanErrors[entry.uid] || 'Scan or type the label barcode; Enter moves to the next unit. Leave empty to use the system barcode.'"
+                                                            :class="scanErrors[entry.uid] ? 'border-red-400 focus:border-red-500 focus:ring-red-500 dark:border-red-500' : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600'"
+                                                            class="block w-full rounded-md shadow-sm text-xs font-mono dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-400"
                                                         >
-                                                        <span v-else class="text-[10px] text-gray-300 italic">No serial required</span>
                                                     </div>
 
                                                     <!-- Barcode thumbnail -->
@@ -1116,9 +1146,21 @@
 
                                     <!-- Units List -->
                                     <div class="space-y-1.5">
-                                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">
+                                        <div class="flex items-center justify-between gap-2">
+                                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest dark:text-gray-400">
                                                 {{ assetHasBulk(asset) ? `Per ${asset.base_uom || 'PC'} barcodes & QR` : 'Units' }} ({{ getEntriesForAsset(asset.id).length }})
                                             </p>
+                                            <button
+                                                v-if="!readOnlyMode && !(isTransferMode && asset.type === 'Fixed')"
+                                                type="button"
+                                                @click="startScanning(asset.id)"
+                                                class="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-2 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-50 transition-colors dark:border-blue-400/30 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-blue-500/10"
+                                                title="Puts the cursor in the barcode field; each scan then moves to the next unit"
+                                            >
+                                                <ViewfinderCircleIcon class="h-3.5 w-3.5" />
+                                                Scan labels
+                                            </button>
+                                        </div>
                                         <div class="divide-y divide-gray-100 rounded-xl border border-gray-200 overflow-hidden bg-white shadow-sm dark:bg-gray-800 dark:border-gray-700 dark:divide-gray-700">
                                             <div
                                                 v-for="(entry, unitIdx) in orderedEntriesForAsset(asset.id)"
@@ -1164,17 +1206,35 @@
                                                     <span class="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[9px] font-black flex items-center justify-center dark:bg-blue-500/15 dark:text-blue-200">{{ unitIdx + 1 }}</span>
                                                     <span v-if="entryBoxLabel(entry)" class="flex-shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[9px] font-bold text-indigo-600 uppercase dark:bg-indigo-500/15 dark:text-indigo-200">{{ entryBoxLabel(entry) }}</span>
 
-                                                    <div class="flex-1 min-w-0">
+                                                    <div class="flex-1 min-w-0 grid grid-cols-2 items-center gap-2">
+                                                        <div class="min-w-0">
+                                                            <input
+                                                                v-if="asset.type !== 'Consumables'"
+                                                                type="text"
+                                                                v-model="entry.serial_no"
+                                                                :disabled="isTransferMode && asset.type === 'Fixed'"
+                                                                @change="regenUnitCodes(form.entries.indexOf(entry))"
+                                                                placeholder="Serial No"
+                                                                class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs dark:border-gray-600"
+                                                            >
+                                                            <span v-else class="text-[10px] text-gray-300 italic">No serial required</span>
+                                                        </div>
                                                         <input
-                                                            v-if="asset.type !== 'Consumables'"
+                                                            v-if="!(isTransferMode && asset.type === 'Fixed')"
                                                             type="text"
-                                                            v-model="entry.serial_no"
-                                                            :disabled="isTransferMode && asset.type === 'Fixed'"
-                                                            @change="regenUnitCodes(form.entries.indexOf(entry))"
-                                                            placeholder="Serial No"
-                                                            class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500 text-xs dark:border-gray-600"
+                                                            :data-barcode-scan="entry.uid"
+                                                            :value="scanFieldValue(entry)"
+                                                            @keydown.enter.prevent="onScanEnter(entry, $event)"
+                                                            @change="onScanChange(entry, $event)"
+                                                            @input="onScanInput(entry, $event)"
+                                                            maxlength="255"
+                                                            autocomplete="off"
+                                                            spellcheck="false"
+                                                            placeholder="Scan barcode (custom)"
+                                                            :title="scanErrors[entry.uid] || 'Scan or type the label barcode; Enter moves to the next unit. Leave empty to use the system barcode.'"
+                                                            :class="scanErrors[entry.uid] ? 'border-red-400 focus:border-red-500 focus:ring-red-500 dark:border-red-500' : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600'"
+                                                            class="block w-full rounded-md shadow-sm text-xs font-mono dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-400"
                                                         >
-                                                        <span v-else class="text-[10px] text-gray-300 italic">No serial required</span>
                                                     </div>
 
                                                     <div
@@ -1368,7 +1428,8 @@ import Modal from '@/Components/Modal.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
 import CustomCodeModal from './Partials/CustomCodeModal.vue'
-import { ArrowDownTrayIcon, ArrowUpTrayIcon, PencilSquareIcon, PlusIcon, PrinterIcon, QrCodeIcon } from '@heroicons/vue/24/outline'
+import { customBarcodeError } from './Partials/barcodeRules'
+import { ArrowDownTrayIcon, ArrowUpTrayIcon, PencilSquareIcon, PlusIcon, PrinterIcon, QrCodeIcon, ViewfinderCircleIcon } from '@heroicons/vue/24/outline'
 import { usePagination } from '@/Composables/usePagination'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
@@ -2041,9 +2102,12 @@ const codeOwnerLabels = computed(() => {
     return labels
 })
 
-const codeEditorTakenBarcodes = computed(() => {
-    const target = codeEditor.value.target
-    if (!codeEditor.value.show || !target) return {}
+const codeEditorTakenBarcodes = computed(() => (
+    codeEditor.value.show && codeEditor.value.target ? takenBarcodesExcept(codeEditor.value.target) : {}
+))
+
+/** Lower-cased barcodes of every other unit/box in the form → a label naming its owner. */
+const takenBarcodesExcept = (target) => {
     const taken = {}
     form.packs.forEach(pack => {
         if (pack !== target && hasGeneratedCode(pack.barcode)) {
@@ -2056,11 +2120,15 @@ const codeEditorTakenBarcodes = computed(() => {
         }
     })
     return taken
-})
+}
 
 const applyCustomCodes = (codes) => {
     const { kind, target } = codeEditor.value
     if (!target) return
+    if (kind === 'entry') {
+        delete scanErrors[target.uid]
+        delete scanDrafts[target.uid]
+    }
     const hadCustomBarcode = target.barcode_custom
     const previousBarcode = target.barcode
     target.barcode_custom = codes.barcodeCustom
@@ -2093,6 +2161,85 @@ const applyCustomCodes = (codes) => {
     }
 
     closeCodeEditor()
+}
+
+// ---- Scanner-friendly barcode field ----------------------------------------------------
+// Every unit row has a scan field: a scan (or a typed code + Enter) becomes that unit's custom
+// barcode and the cursor jumps to the next unit, so a delivery is scanned without the mouse.
+// Clearing the field puts the unit back on a new system barcode.
+const scanErrors = reactive({}) // entry uid -> why its last scan was refused
+// Typed-but-unapplied text per entry uid. The field is bound to it, so a re-render while a
+// scanner is mid-code (e.g. another row's QR image finishing) cannot wipe the keystrokes.
+const scanDrafts = reactive({})
+
+const scanFieldValue = (entry) => scanDrafts[entry.uid] ?? (entry.barcode_custom ? entry.barcode : '')
+
+const onScanInput = (entry, event) => {
+    scanDrafts[entry.uid] = event.target.value
+    delete scanErrors[entry.uid]
+}
+
+const applyScannedBarcode = (entry, rawValue) => {
+    const index = form.entries.indexOf(entry)
+    if (index < 0) return false
+    const code = String(rawValue || '').trim()
+    delete scanErrors[entry.uid]
+
+    if (code && code !== (entry.barcode_custom ? entry.barcode : '')) {
+        const error = customBarcodeError(code, entry.barcode, takenBarcodesExcept(entry))
+        if (error) {
+            scanErrors[entry.uid] = error // the refused text stays in the field (its draft)
+            return false
+        }
+    }
+    delete scanDrafts[entry.uid]
+
+    if (code === (entry.barcode_custom ? entry.barcode : '')) return true
+
+    if (!code) {
+        entry.barcode_custom = false
+        regenUnitCodes(index)
+        return true
+    }
+
+    entry.barcode_custom = true
+    entry.barcode = code
+    entry.barcodeDataUrl = makeBarcodeDataUrl(code)
+    // The system QR names the barcode, so it follows the scan.
+    if (!entry.qrcode_custom) generateQrcode(index)
+    return true
+}
+
+const focusScanField = (field) => {
+    field.focus()
+    field.select()
+}
+
+/** Scanners end with Enter: apply, then move to the next unit's field. */
+const onScanEnter = (entry, event) => {
+    const field = event.target
+    if (!applyScannedBarcode(entry, field.value)) {
+        showError(scanErrors[entry.uid])
+        field.select() // the next scan replaces the refused code
+        return
+    }
+    const fields = [...document.querySelectorAll('[data-barcode-scan]')].filter(el => !el.disabled)
+    const next = fields[fields.indexOf(field) + 1]
+    if (next) focusScanField(next)
+    else field.blur() // last unit: a stray extra scan must not overwrite it
+}
+
+/** Tab/click-away path. After Enter the value is already applied, so this is a no-op then. */
+const onScanChange = (entry, event) => {
+    if (!applyScannedBarcode(entry, event.target.value)) showError(scanErrors[entry.uid])
+}
+
+/** Cursor to this item's first unit still on a system barcode (else its first unit). */
+const startScanning = (assetId) => {
+    const entries = orderedEntriesForAsset(assetId)
+    const entry = entries.find(e => !e.barcode_custom) || entries[0]
+    const field = entry && document.querySelector(`[data-barcode-scan="${entry.uid}"]`)
+    if (field) focusScanField(field)
 }
 
 const removePack = (pack) => {
