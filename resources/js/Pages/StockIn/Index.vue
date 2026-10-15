@@ -310,7 +310,7 @@
                         <ul class="text-xs text-blue-600 space-y-1 list-disc pl-4 dark:text-blue-200">
                             <li>Download the Excel template to keep the expected column order.</li>
                             <li>Each row creates one Stock In unit; matching rows are grouped in the table.</li>
-                            <li>Use existing asset item codes. Store codes are recommended for origin and destination.</li>
+                            <li>Pick each item by name from the item_name dropdown (items that share a name show their item code). Store codes are recommended for origin and destination.</li>
                             <li>Imported rows are saved as For Posting.</li>
                         </ul>
                     </div>

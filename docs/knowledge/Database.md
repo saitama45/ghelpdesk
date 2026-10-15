@@ -50,6 +50,9 @@ code's shape (system barcodes end `-<13–17 digits>-<n>`, system QR text starts
 (serial change, ↻, box size/code change) never overwrites a custom code. On a supplier receipt a new or changed piece
 barcode must be unique in the submission and across **all** entities' `stock_ins` (`validateBarcodeDuplicates`);
 unchanged codes are skipped because the Excel import never enforced uniqueness. Box barcodes are unique by DB index.
+The Stock In Excel template names the item in an `item_name` dropdown (asset description; code appended in brackets only
+when two items share a name — `importItemLabels`). The import also accepts an item code there, and an old file's
+`item_code` column is read as `item_name`, so pre-change templates still import.
 
 **Monitoring** — `npc_*` (statuses, documents, payments, registrations, seal receipts, proofs, workflow steps), `cctv_systems`, `cctv_inspections(+_units)`, `alaga_assessments`, `mall_hookups(+_costs,+_logs)`, `payment_*` (records, tenders, approvals, invoices, vendors, renewals, overpayments, weekly plans, settings, reminder log), `wigs_*`.
 

@@ -22,6 +22,7 @@ use Inertia\Inertia;
 use Milon\Barcode\DNS1D;
 use Milon\Barcode\DNS2D;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
@@ -542,6 +543,11 @@ class StockInController extends Controller
         $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
 
         $header = array_map(fn ($value) => trim((string) $value), array_shift($rows) ?? []);
+        // Files made from the older template name the item by code in an item_code column; the
+        // lookup below accepts codes too, so that column simply stands in for item_name.
+        if (! in_array('item_name', $header, true) && ($codeColumn = array_search('item_code', $header, true)) !== false) {
+            $header[$codeColumn] = 'item_name';
+        }
         $expectedHeaders = $this->stockInImportHeaders();
         $missingHeaders = array_values(array_diff($expectedHeaders, $header));
 
@@ -553,9 +559,9 @@ class StockInController extends Controller
         }
 
         $headerIndexes = array_flip($header);
-        $assetsByItemCode = Asset::query()
-            ->get(['id', 'item_code', 'cost', 'description', 'base_uom', 'bulk_uom'])
-            ->keyBy(fn (Asset $asset) => mb_strtolower(trim((string) $asset->item_code)));
+        $assetsByItem = $this->importItemLookup(
+            Asset::query()->get(['id', 'item_code', 'brand', 'model', 'cost', 'description', 'base_uom', 'bulk_uom'])
+        );
 
         $imported = 0;
         $errors = [];
@@ -576,13 +582,13 @@ class StockInController extends Controller
                 $data[$expectedHeader] = $this->normalizeImportValue($line[$headerIndexes[$expectedHeader]] ?? null);
             }
 
-            $itemCode = $data['item_code'] ?? '';
-            $asset = $itemCode !== ''
-                ? $assetsByItemCode->get(mb_strtolower($itemCode))
-                : null;
+            $itemName = $data['item_name'] ?? '';
+            $asset = $itemName !== '' ? ($assetsByItem[mb_strtolower($itemName)] ?? null) : null;
 
             if (! $asset) {
-                $errors[] = "Row {$rowNum}: item_code '{$itemCode}' was not found.";
+                $errors[] = $itemName === ''
+                    ? "Row {$rowNum}: item_name is required."
+                    : "Row {$rowNum}: item '{$itemName}' was not found. Pick it from the item_name dropdown (items that share a name show their item code).";
 
                 continue;
             }
@@ -685,7 +691,9 @@ class StockInController extends Controller
     {
         abort_unless($request->user()?->can('stock_ins.create'), 403);
 
-        $assets = Asset::orderBy('item_code')->get(['item_code', 'cost']);
+        $assets = Asset::query()->get(['id', 'item_code', 'brand', 'model', 'description', 'cost']);
+        $itemLabels = $this->importItemLabels($assets)->sortBy(fn ($label) => mb_strtolower($label));
+        $assets = $assets->sortBy(fn (Asset $asset) => mb_strtolower($itemLabels[$asset->id]))->values();
         $stores = Store::where('is_active', true)->orderBy('name')->get(['code', 'name']);
         $vendors = Vendor::active()->orderBy('name')->get(['name']);
 
@@ -695,9 +703,10 @@ class StockInController extends Controller
         $listsSheet->setTitle('Lists');
         $listsSheet->setSheetState(Worksheet::SHEETSTATE_HIDDEN);
 
-        $listsSheet->setCellValue('A1', 'Assets');
-        foreach ($assets as $index => $asset) {
-            $listsSheet->setCellValue('A'.($index + 2), $asset->item_code);
+        $listsSheet->setCellValue('A1', 'Items');
+        foreach ($itemLabels->values() as $index => $label) {
+            // Explicit string type: a name like "1/2 INCH" or "100" must not become a date/number.
+            $listsSheet->setCellValueExplicit('A'.($index + 2), $label, DataType::TYPE_STRING);
         }
 
         $listsSheet->setCellValue('B1', 'Stores');
@@ -723,6 +732,9 @@ class StockInController extends Controller
             $col = Coordinate::stringFromColumnIndex($index + 1);
             $sheet->setCellValue("{$col}1", $header);
         }
+        $sheet->getComment('G1')->getText()->createTextRun(
+            'Pick the item by name from the dropdown. Items that share a name show their item code in brackets.'
+        );
         $sheet->getComment('P1')->getText()->createTextRun(
             'Optional. Rows of the same item and DR with the same box_no are received as one box '
             .'(the item needs a Bulk UOM). Leave blank for loose pieces.'
@@ -741,7 +753,7 @@ class StockInController extends Controller
                 $sampleVendor?->name ?? '',
                 $sampleStore?->code ?? '',
                 $request->user()?->name ?? '',
-                $sampleAsset?->item_code ?? '',
+                $sampleAsset ? $itemLabels[$sampleAsset->id] : '',
                 'SN-001',
                 'BC-001',
                 'Sample QR content',
@@ -759,7 +771,7 @@ class StockInController extends Controller
                 $sampleVendor?->name ?? '',
                 $sampleStore?->code ?? '',
                 $request->user()?->name ?? '',
-                $sampleAsset?->item_code ?? '',
+                $sampleAsset ? $itemLabels[$sampleAsset->id] : '',
                 'SN-002',
                 'BC-002',
                 'Sample QR content',
@@ -1607,6 +1619,42 @@ class StockInController extends Controller
         }
     }
 
+    /**
+     * The import template's dropdown label per asset: the item's name (its description), with the
+     * item code added in brackets only where two items share a name, so every label is unique.
+     *
+     * @return \Illuminate\Support\Collection<int, string> asset id => label
+     */
+    protected function importItemLabels($assets)
+    {
+        $nameOf = fn (Asset $asset) => trim((string) ($asset->description ?: trim($asset->brand.' '.$asset->model) ?: $asset->item_code));
+        $nameCounts = $assets->countBy(fn (Asset $asset) => mb_strtolower($nameOf($asset)));
+
+        return $assets->mapWithKeys(function (Asset $asset) use ($nameOf, $nameCounts) {
+            $name = $nameOf($asset);
+
+            return [$asset->id => $nameCounts[mb_strtolower($name)] > 1 ? "{$name} ({$asset->item_code})" : $name];
+        });
+    }
+
+    /**
+     * Lower-cased dropdown label => asset, plus item code => asset so files from the older
+     * code-based template (or a typed code) still resolve. A shared name alone matches nothing.
+     */
+    protected function importItemLookup($assets): array
+    {
+        $lookup = [];
+        $byId = $assets->keyBy('id');
+        foreach ($this->importItemLabels($assets) as $assetId => $label) {
+            $lookup[mb_strtolower($label)] = $byId[$assetId];
+        }
+        foreach ($assets as $asset) {
+            $lookup[mb_strtolower(trim((string) $asset->item_code))] ??= $asset;
+        }
+
+        return $lookup;
+    }
+
     protected function stockInImportHeaders(): array
     {
         return [
@@ -1616,7 +1664,7 @@ class StockInController extends Controller
             'vendor',
             'origin_location',
             'received_by',
-            'item_code',
+            'item_name',
             'serial_no',
             'barcode',
             'qrcode',
