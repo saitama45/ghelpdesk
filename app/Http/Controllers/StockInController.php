@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Asset;
 use App\Models\Category;
 use App\Models\InventoryTransaction;
+use App\Models\Scopes\ActiveEntityScope;
 use App\Models\StockIn;
 use App\Models\StockPack;
 use App\Models\Store;
@@ -269,7 +270,7 @@ class StockInController extends Controller
             'entries.*.asset_id' => 'required|exists:assets,id',
             'entries.*.source_stock_in_id' => 'nullable|integer|exists:stock_ins,id',
             'entries.*.serial_no' => 'nullable|string',
-            'entries.*.barcode' => 'required|string',
+            'entries.*.barcode' => 'required|string|max:255',
             'entries.*.qrcode' => 'required|string',
             'entries.*.asset_type' => 'required|string|in:New,Used,For Repair,For Disposal',
             'entries.*.is_allocation' => 'required|boolean',
@@ -292,6 +293,7 @@ class StockInController extends Controller
         $this->validateSerialNoDuplicates($validated['entries']);
 
         $originLocation = $this->normalizeStoreCode($validated['origin_location'] ?? null);
+        $this->validateBarcodeDuplicates($originLocation, $validated['entries']);
         $validated['entries'] = $this->prepareMultiAssetEntriesForSave($originLocation, $validated['entries']);
         $validated['entries'] = $this->resolvePacks($validated['packs'] ?? [], $validated['entries'], $originLocation);
 
@@ -354,7 +356,7 @@ class StockInController extends Controller
             'entries.*.asset_id' => 'required_with:entries|exists:assets,id',
             'entries.*.source_stock_in_id' => 'nullable|integer|exists:stock_ins,id',
             'entries.*.serial_no' => 'nullable|string',
-            'entries.*.barcode' => 'required|string',
+            'entries.*.barcode' => 'required|string|max:255',
             'entries.*.qrcode' => 'required|string',
             'entries.*.warranty_months' => 'required_with:entries|integer|min:0',
             'entries.*.eol_months' => 'required_with:entries|integer|min:0',
@@ -372,7 +374,7 @@ class StockInController extends Controller
             'packs.*.units_per_pack' => 'required|integer|min:1|max:100000',
             'source_stock_in_id' => 'nullable|integer|exists:stock_ins,id',
             'serial_no' => 'nullable|string',
-            'barcode' => 'required_without:entries|string',
+            'barcode' => 'required_without:entries|string|max:255',
             'qrcode' => 'required_without:entries|string',
             'warranty_months' => 'required_without:entries|integer|min:0',
             'eol_months' => 'required_without:entries|integer|min:0',
@@ -403,6 +405,7 @@ class StockInController extends Controller
                 'destination_location' => $validated['destination_location'] ?? null,
             ]];
             $this->validateSerialNoDuplicates($entryDetails, $relatedRows->pluck('id')->all());
+            $this->validateBarcodeDuplicates($originLocation, $entryDetails, $relatedRows);
 
             $validated['entries'] = $this->prepareMultiAssetEntriesForSave(
                 $originLocation,
@@ -1417,7 +1420,7 @@ class StockInController extends Controller
                 ->exists();
             if ($clash) {
                 throw ValidationException::withMessages([
-                    'packs' => sprintf('Box barcode %s is already used. Regenerate it and save again.', $pack['barcode']),
+                    'packs' => sprintf('Box barcode %s is already used. Enter a different code or regenerate it, then save again.', $pack['barcode']),
                 ]);
             }
 
@@ -1500,13 +1503,70 @@ class StockInController extends Controller
         }
     }
 
+    /**
+     * A unit barcode names one physical piece, so on a supplier receipt a new or changed code
+     * (typed, scanned or generated) may not repeat within the submission or on another stock row.
+     * Unchanged codes are skipped: the Excel import never enforced this, so older groups can
+     * already share one. Transfers carry their source's codes and are not checked.
+     *
+     * @param  \Illuminate\Support\Collection|null  $relatedRows  the group's rows, matched to entries by position
+     */
+    protected function validateBarcodeDuplicates(?string $originLocation, array $entries, $relatedRows = null): void
+    {
+        if ($this->isInternalTransferLocation($originLocation)) {
+            return;
+        }
+
+        $relatedRows = collect($relatedRows)->values();
+        $entries = array_values($entries);
+        $keyOf = fn ($code) => mb_strtolower(trim((string) $code));
+
+        $changed = [];
+        foreach ($entries as $index => $entry) {
+            $code = trim((string) ($entry['barcode'] ?? ''));
+            if ($code !== '' && $keyOf($code) !== $keyOf($relatedRows->get($index)?->barcode)) {
+                $changed[$index] = $code;
+            }
+        }
+        if (! $changed) {
+            return;
+        }
+
+        $counts = array_count_values(array_map(fn ($entry) => $keyOf($entry['barcode'] ?? ''), $entries));
+        foreach ($changed as $index => $code) {
+            if ($counts[$keyOf($code)] > 1) {
+                throw ValidationException::withMessages([
+                    "entries.{$index}.barcode" => "Barcode \"{$code}\" is used on more than one unit in this stock-in.",
+                ]);
+            }
+        }
+
+        // Checked across every entity (a label is physical), chunked under SQL Server's
+        // 2100-parameter limit on large receipts.
+        $groupIds = $relatedRows->pluck('id')->map(fn ($id) => (int) $id)->all();
+        foreach (array_chunk(array_unique(array_values($changed)), 1000) as $codes) {
+            $clash = StockIn::withoutGlobalScope(ActiveEntityScope::class)
+                ->whereIn('barcode', $codes)
+                ->get(['id', 'barcode'])
+                ->first(fn (StockIn $row) => ! in_array((int) $row->id, $groupIds, true));
+
+            if ($clash) {
+                $index = array_search($keyOf($clash->barcode), array_map($keyOf, $changed), true);
+                throw ValidationException::withMessages([
+                    "entries.{$index}.barcode" => "Barcode \"{$clash->barcode}\" is already used by another stock unit. Enter a different code or use the system-generated one.",
+                ]);
+            }
+        }
+    }
+
     protected function stockInCodeValidationMessages(): array
     {
         return [
-            'entries.*.barcode.required' => 'Generate a barcode for every stock-in row before saving or updating.',
-            'entries.*.qrcode.required' => 'Generate a QR code for every stock-in row before saving or updating.',
-            'barcode.required_without' => 'Generate a barcode before updating this stock-in record.',
-            'qrcode.required_without' => 'Generate a QR code before updating this stock-in record.',
+            'entries.*.barcode.required' => 'Add a barcode (system generated or custom) for every stock-in row before saving or updating.',
+            'entries.*.qrcode.required' => 'Add a QR code (system generated or custom) for every stock-in row before saving or updating.',
+            'entries.*.barcode.max' => 'A barcode can be at most 255 characters.',
+            'barcode.required_without' => 'Add a barcode before updating this stock-in record.',
+            'qrcode.required_without' => 'Add a QR code before updating this stock-in record.',
         ];
     }
 

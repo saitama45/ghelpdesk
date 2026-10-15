@@ -112,6 +112,102 @@ class StockInCodeValidationTest extends TestCase
         ]);
     }
 
+    public function test_custom_barcode_and_qr_code_are_saved_as_entered(): void
+    {
+        $user = User::factory()->create();
+        $asset = $this->createAsset();
+
+        $this->actingAs($user)
+            ->post(route('stock-ins.store'), $this->stockInPayload($asset, [
+                'barcode' => 'TAG-000123',
+                'qrcode' => 'https://example.test/assets/TAG-000123',
+            ]))
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('stock_ins', [
+            'asset_id' => $asset->id,
+            'barcode' => 'TAG-000123',
+            'qrcode' => 'https://example.test/assets/TAG-000123',
+        ]);
+    }
+
+    public function test_custom_barcode_cannot_repeat_within_one_stock_in(): void
+    {
+        $user = User::factory()->create();
+        $asset = $this->createAsset();
+        $payload = $this->stockInPayload($asset, ['barcode' => 'TAG-1']);
+        $payload['entries'][] = [...$payload['entries'][0], 'serial_no' => 'SN-002', 'barcode' => 'tag-1'];
+        $payload['quantity'] = 2;
+
+        $this->actingAs($user)
+            ->from('/stock-ins')
+            ->post(route('stock-ins.store'), $payload)
+            ->assertRedirect('/stock-ins')
+            ->assertSessionHasErrors(['entries.0.barcode']);
+
+        $this->assertDatabaseCount('stock_ins', 0);
+    }
+
+    public function test_custom_barcode_already_on_another_entitys_stock_is_rejected(): void
+    {
+        $cbtl = Company::create(['name' => 'CBTL Entity', 'code' => 'CBTL', 'type' => 'Entity', 'is_active' => true]);
+        $other = Company::create(['name' => 'Other Entity', 'code' => 'OTH', 'type' => 'Entity', 'is_active' => true]);
+        $user = User::factory()->create(['company_id' => $cbtl->id]);
+        $asset = $this->createAsset();
+        $asset->forceFill(['company_id' => $cbtl->id])->save();
+        $elsewhere = StockIn::create([
+            'receive_date' => '2026-04-01',
+            'asset_id' => $asset->id,
+            'quantity' => 1,
+            'barcode' => 'TAG-000123',
+            'qrcode' => 'QR-ELSEWHERE',
+            'warranty_months' => 12,
+            'eol_months' => 60,
+            'cost' => 100,
+            'price' => 150,
+        ]);
+        $elsewhere->forceFill(['company_id' => $other->id])->save();
+
+        $this->actingAs($user)
+            ->withSession([CompanyContext::SESSION_KEY => $cbtl->id])
+            ->from('/stock-ins')
+            ->post(route('stock-ins.store'), $this->stockInPayload($asset, ['barcode' => 'TAG-000123']))
+            ->assertRedirect('/stock-ins')
+            ->assertSessionHasErrors(['entries.0.barcode']);
+
+        $this->assertSame(1, StockIn::withoutGlobalScopes()->count());
+    }
+
+    public function test_editing_a_group_keeps_a_barcode_its_rows_already_share(): void
+    {
+        $user = User::factory()->create();
+        $asset = $this->createAsset();
+        // Imported rows can already share one code (e.g. the maker's barcode); editing must not block on it.
+        $rows = collect(['SN-001', 'SN-002'])->map(fn ($serial) => StockIn::create([
+            'receive_date' => '2026-05-05',
+            'asset_id' => $asset->id,
+            'quantity' => 1,
+            'serial_no' => $serial,
+            'barcode' => 'EAN-4800016',
+            'qrcode' => 'QR-'.$serial,
+            'warranty_months' => 12,
+            'eol_months' => 60,
+            'cost' => 100,
+            'price' => 150,
+        ]));
+        $payload = $this->stockInPayload($asset, ['barcode' => 'EAN-4800016', 'qrcode' => 'QR-SN-001'], ['header_mode' => true]);
+        $payload['entries'][] = [...$payload['entries'][0], 'serial_no' => 'SN-002', 'qrcode' => 'QR-SN-002'];
+        $payload['quantity'] = 2;
+
+        $this->actingAs($user)
+            ->put(route('stock-ins.update', $rows[0]), $payload)
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $this->assertSame(2, StockIn::where('barcode', 'EAN-4800016')->count());
+    }
+
     public function test_saved_and_edited_stock_in_prints_barcode_and_qr_graphics(): void
     {
         $cbtl = Company::create([

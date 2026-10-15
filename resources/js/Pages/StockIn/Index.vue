@@ -736,8 +736,13 @@
                                                     <input type="number" min="1" :value="pack.units_per_pack" @change="setPackSize(pack, $event.target.value)"
                                                            class="w-14 text-center rounded-md border-gray-300 text-xs font-bold dark:border-gray-600 dark:bg-slate-900 dark:text-slate-100">
                                                 </label>
-                                                <button v-if="!readOnlyMode" type="button" @click="regenPackCodes(pack)"
-                                                        class="flex-shrink-0 text-[9px] font-black text-indigo-400 hover:text-indigo-700 transition-colors" :title="`Regenerate ${pack.bulk_uom} barcode & QR`">↻</button>
+                                                <button v-if="!readOnlyMode && !(pack.barcode_custom && pack.qrcode_custom)" type="button" @click="regenPackCodes(pack)"
+                                                        class="flex-shrink-0 text-[9px] font-black text-indigo-400 hover:text-indigo-700 transition-colors" :title="`Regenerate the system ${pack.bulk_uom} barcode & QR`">↻</button>
+                                                <button v-if="!readOnlyMode" type="button" @click="openCodeEditor('pack', pack)"
+                                                        :class="customCodeLabel(pack) ? 'text-amber-600 hover:text-amber-700 dark:text-amber-400' : 'text-gray-400 hover:text-indigo-700 dark:text-gray-400'"
+                                                        class="flex-shrink-0 transition-colors" :title="`Enter a custom ${pack.bulk_uom} barcode or QR code`"><PencilSquareIcon class="h-3.5 w-3.5" /></button>
+                                                <span v-if="customCodeLabel(pack)" :title="customCodeLabel(pack)"
+                                                        class="flex-shrink-0 rounded bg-amber-50 px-1 py-0.5 text-[8px] font-black uppercase text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Custom</span>
                                                 <button v-if="!readOnlyMode" type="button" @click="removePack(pack)"
                                                         class="ml-auto p-0.5 text-gray-300 hover:text-red-500 transition-colors dark:text-gray-500" :title="`Remove this ${pack.bulk_uom} and its pieces`">
                                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -799,13 +804,28 @@
                                                         <div v-else class="h-6 w-6 flex items-center justify-center bg-gray-100 rounded text-[9px] text-gray-300 animate-pulse dark:bg-gray-800">QR</div>
                                                     </div>
 
-                                                    <!-- Regen button -->
+                                                    <!-- Regen button (system codes only) -->
                                                     <button
+                                                        v-if="!(entry.barcode_custom && entry.qrcode_custom)"
                                                         type="button"
                                                         @click="regenUnitCodes(form.entries.indexOf(entry))"
                                                         class="flex-shrink-0 text-[9px] font-black text-blue-400 hover:text-blue-700 uppercase tracking-widest transition-colors"
-                                                        title="Regenerate barcode & QR"
+                                                        title="Regenerate the system barcode & QR"
                                                     >↻</button>
+                                                    <!-- Custom barcode / QR -->
+                                                    <button
+                                                        v-if="!readOnlyMode && !(isTransferMode && asset.type === 'Fixed')"
+                                                        type="button"
+                                                        @click="openCodeEditor('entry', entry)"
+                                                        :class="customCodeLabel(entry) ? 'text-amber-600 hover:text-amber-700 dark:text-amber-400' : 'text-gray-400 hover:text-blue-700 dark:text-gray-400'"
+                                                        class="flex-shrink-0 transition-colors"
+                                                        title="Enter a custom barcode or QR code"
+                                                    ><PencilSquareIcon class="h-3.5 w-3.5" /></button>
+                                                    <span
+                                                        v-if="customCodeLabel(entry)"
+                                                        :title="customCodeLabel(entry)"
+                                                        class="flex-shrink-0 rounded bg-amber-50 px-1 py-0.5 text-[8px] font-black uppercase text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+                                                    >Custom</span>
 
                                                     <!-- Validation flags -->
                                                     <span v-if="entryNeedsBarcode(entry)" class="flex-shrink-0 text-[9px] text-red-500 font-bold">!BC</span>
@@ -1074,8 +1094,13 @@
                                                 <input type="number" min="1" :value="pack.units_per_pack" @change="setPackSize(pack, $event.target.value)"
                                                        class="w-14 text-center rounded-md border-gray-300 text-xs font-bold dark:border-gray-600 dark:bg-slate-900 dark:text-slate-100">
                                             </label>
-                                            <button v-if="!readOnlyMode" type="button" @click="regenPackCodes(pack)"
-                                                    class="flex-shrink-0 text-[9px] font-black text-indigo-400 hover:text-indigo-700 transition-colors" :title="`Regenerate ${pack.bulk_uom} barcode & QR`">↻</button>
+                                            <button v-if="!readOnlyMode && !(pack.barcode_custom && pack.qrcode_custom)" type="button" @click="regenPackCodes(pack)"
+                                                    class="flex-shrink-0 text-[9px] font-black text-indigo-400 hover:text-indigo-700 transition-colors" :title="`Regenerate the system ${pack.bulk_uom} barcode & QR`">↻</button>
+                                            <button v-if="!readOnlyMode" type="button" @click="openCodeEditor('pack', pack)"
+                                                    :class="customCodeLabel(pack) ? 'text-amber-600 hover:text-amber-700 dark:text-amber-400' : 'text-gray-400 hover:text-indigo-700 dark:text-gray-400'"
+                                                    class="flex-shrink-0 transition-colors" :title="`Enter a custom ${pack.bulk_uom} barcode or QR code`"><PencilSquareIcon class="h-3.5 w-3.5" /></button>
+                                            <span v-if="customCodeLabel(pack)" :title="customCodeLabel(pack)"
+                                                    class="flex-shrink-0 rounded bg-amber-50 px-1 py-0.5 text-[8px] font-black uppercase text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Custom</span>
                                             <button v-if="!readOnlyMode" type="button" @click="removePack(pack)"
                                                     class="ml-auto p-0.5 text-gray-300 hover:text-red-500 transition-colors dark:text-gray-500" :title="`Remove this ${pack.bulk_uom} and its pieces`">
                                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -1171,12 +1196,26 @@
                                                     </div>
 
                                                     <button
-                                                        v-if="!(isTransferMode && asset.type === 'Fixed') && !readOnlyMode"
+                                                        v-if="!(isTransferMode && asset.type === 'Fixed') && !readOnlyMode && !(entry.barcode_custom && entry.qrcode_custom)"
                                                         type="button"
                                                         @click="regenUnitCodes(form.entries.indexOf(entry))"
                                                         class="flex-shrink-0 text-[9px] font-black text-blue-400 hover:text-blue-700 uppercase tracking-widest transition-colors"
-                                                        title="Regenerate barcode & QR"
+                                                        title="Regenerate the system barcode & QR"
                                                     >↻</button>
+                                                    <!-- Custom barcode / QR -->
+                                                    <button
+                                                        v-if="!readOnlyMode && !(isTransferMode && asset.type === 'Fixed')"
+                                                        type="button"
+                                                        @click="openCodeEditor('entry', entry)"
+                                                        :class="customCodeLabel(entry) ? 'text-amber-600 hover:text-amber-700 dark:text-amber-400' : 'text-gray-400 hover:text-blue-700 dark:text-gray-400'"
+                                                        class="flex-shrink-0 transition-colors"
+                                                        title="Enter a custom barcode or QR code"
+                                                    ><PencilSquareIcon class="h-3.5 w-3.5" /></button>
+                                                    <span
+                                                        v-if="customCodeLabel(entry)"
+                                                        :title="customCodeLabel(entry)"
+                                                        class="flex-shrink-0 rounded bg-amber-50 px-1 py-0.5 text-[8px] font-black uppercase text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+                                                    >Custom</span>
 
                                                     <span v-if="entryNeedsBarcode(entry)" class="flex-shrink-0 text-[9px] text-red-500 font-bold">!BC</span>
                                                     <span v-if="entryNeedsQrcode(entry)" class="flex-shrink-0 text-[9px] text-red-500 font-bold">!QR</span>
@@ -1303,6 +1342,18 @@
                 </div>
             </div>
         </Modal>
+
+        <CustomCodeModal
+            :show="codeEditor.show"
+            :title="codeEditor.title"
+            :barcode="codeEditor.target?.barcode || ''"
+            :qrcode="codeEditor.target?.qrcode || ''"
+            :barcode-custom="!!codeEditor.target?.barcode_custom"
+            :qrcode-custom="!!codeEditor.target?.qrcode_custom"
+            :taken-barcodes="codeEditorTakenBarcodes"
+            @close="closeCodeEditor"
+            @apply="applyCustomCodes"
+        />
     </AppLayout>
 </template>
 
@@ -1316,7 +1367,8 @@ import DataTable from '@/Components/DataTable.vue'
 import Modal from '@/Components/Modal.vue'
 import Autocomplete from '@/Components/Autocomplete.vue'
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue'
-import { ArrowDownTrayIcon, ArrowUpTrayIcon, PlusIcon, PrinterIcon, QrCodeIcon } from '@heroicons/vue/24/outline'
+import CustomCodeModal from './Partials/CustomCodeModal.vue'
+import { ArrowDownTrayIcon, ArrowUpTrayIcon, PencilSquareIcon, PlusIcon, PrinterIcon, QrCodeIcon } from '@heroicons/vue/24/outline'
 import { usePagination } from '@/Composables/usePagination'
 import { useToast } from '@/Composables/useToast'
 import { useConfirm } from '@/Composables/useConfirm'
@@ -1575,6 +1627,9 @@ const createEntry = (overrides = {}) => ({
     serial_no: '',
     barcode: '',
     qrcode: '',
+    // Client-only: a custom code is typed/scanned by the user and never auto-regenerated.
+    barcode_custom: false,
+    qrcode_custom: false,
     asset_type: 'New',
     is_allocation: false,
     warranty_months: 12,
@@ -1756,6 +1811,11 @@ const createModalAssets = computed(() => {
 
 const hasGeneratedCode = (value) => String(value || '').trim().length > 0
 
+// Saved records carry no custom flag, so a code is custom unless it has the system shape:
+// ITEM-<ms>-<n> per piece, ITEM-BX-<ms or YmdHisv>-<n> per box, and QR text from generateQrcode.
+const isCustomBarcode = (code) => hasGeneratedCode(code) && !/-(BX-)?\d{13,17}-\d+$/.test(String(code).trim())
+const isCustomQrcode = (text) => hasGeneratedCode(text) && !String(text).startsWith('Item Code: ')
+
 const entryNeedsBarcode = (entry) => codeValidationAttempted.value && !hasGeneratedCode(entry?.barcode)
 const entryNeedsQrcode = (entry) => codeValidationAttempted.value && !hasGeneratedCode(entry?.qrcode)
 
@@ -1822,9 +1882,12 @@ const removeAssetGroup = (assetId) => {
     delete groupSharedFields[aid]
 }
 
+/** Regenerates the system codes only; a custom barcode or QR stays as the user entered it. */
 const regenUnitCodes = (entryIndex) => {
-    generateBarcode(entryIndex)
-    generateQrcode(entryIndex)
+    const entry = form.entries[entryIndex]
+    if (!entry) return
+    if (!entry.barcode_custom) generateBarcode(entryIndex)
+    if (!entry.qrcode_custom) generateQrcode(entryIndex)
 }
 
 // ---- Boxes (bulk units) -------------------------------------------------------------
@@ -1886,11 +1949,13 @@ const generatePackBarcode = (pack) => {
     pack.barcodeDataUrl = makeBarcodeDataUrl(pack.barcode)
 }
 
-/** New box code: the box QR and every piece QR (which names the box) are rebuilt. */
+/** New box code: the box QR and every piece QR (which names the box) are rebuilt, custom codes kept. */
 const regenPackCodes = (pack) => {
-    generatePackBarcode(pack)
-    generatePackQr(pack)
-    piecesOfPack(pack.key).forEach(entry => generateQrcode(form.entries.indexOf(entry)))
+    if (!pack.barcode_custom) generatePackBarcode(pack)
+    if (!pack.qrcode_custom) generatePackQr(pack)
+    piecesOfPack(pack.key).forEach(entry => {
+        if (!entry.qrcode_custom) generateQrcode(form.entries.indexOf(entry))
+    })
 }
 
 const addPack = async (asset) => {
@@ -1903,6 +1968,8 @@ const addPack = async (asset) => {
         units_per_pack: Number(asset.units_per_bulk),
         barcode: '',
         qrcode: '',
+        barcode_custom: false,
+        qrcode_custom: false,
         barcodeDataUrl: null,
         qrcodeDataUrl: null,
     })
@@ -1931,7 +1998,101 @@ const setPackSize = async (pack, rawSize) => {
         form.quantity = form.entries.length
     }
     pack.units_per_pack = size
-    generatePackQr(pack)
+    if (!pack.qrcode_custom) generatePackQr(pack)
+}
+
+// ---- Custom barcode / QR ------------------------------------------------------------
+// Either code of a piece or box can be typed/scanned instead of system generated.
+const codeEditor = ref({ show: false, kind: 'entry', target: null, title: '' })
+
+const openCodeEditor = (kind, target) => {
+    const asset = normalizedAssets.value.find(a => a.id === Number(target.asset_id))
+    const label = kind === 'pack' ? `${target.bulk_uom} ${packNumber(target)}` : codeOwnerLabels.value.get(target)
+    codeEditor.value = {
+        show: true,
+        kind,
+        target,
+        title: [asset?.item_code, label].filter(Boolean).join(' · '),
+    }
+}
+
+/** "Custom barcode & QR code" when either code was entered by hand, else ''. */
+const customCodeLabel = (item) => {
+    const parts = [item?.barcode_custom && 'barcode', item?.qrcode_custom && 'QR code'].filter(Boolean)
+    return parts.length ? `Custom ${parts.join(' & ')}` : ''
+}
+
+const closeCodeEditor = () => {
+    codeEditor.value = { ...codeEditor.value, show: false }
+}
+
+/** "Unit 3" / "Unit 3 (BOX 1)" per entry, numbered the way the rows are shown. */
+const codeOwnerLabels = computed(() => {
+    const labels = new Map()
+    const assetIds = [...new Set(form.entries.map(entry => Number(entry.asset_id)))]
+    assetIds.forEach(assetId => {
+        const asset = normalizedAssets.value.find(a => a.id === assetId)
+        const prefix = assetIds.length > 1 && asset ? `${asset.item_code} unit` : 'Unit'
+        orderedEntriesForAsset(assetId).forEach((entry, index) => {
+            const box = entryBoxLabel(entry)
+            labels.set(entry, `${prefix} ${index + 1}${box ? ` (${box})` : ''}`)
+        })
+    })
+    return labels
+})
+
+const codeEditorTakenBarcodes = computed(() => {
+    const target = codeEditor.value.target
+    if (!codeEditor.value.show || !target) return {}
+    const taken = {}
+    form.packs.forEach(pack => {
+        if (pack !== target && hasGeneratedCode(pack.barcode)) {
+            taken[pack.barcode.trim().toLowerCase()] = `${pack.bulk_uom} ${packNumber(pack)}`
+        }
+    })
+    form.entries.forEach(entry => {
+        if (entry !== target && hasGeneratedCode(entry.barcode)) {
+            taken[entry.barcode.trim().toLowerCase()] = codeOwnerLabels.value.get(entry) || 'another unit'
+        }
+    })
+    return taken
+})
+
+const applyCustomCodes = (codes) => {
+    const { kind, target } = codeEditor.value
+    if (!target) return
+    const hadCustomBarcode = target.barcode_custom
+    const previousBarcode = target.barcode
+    target.barcode_custom = codes.barcodeCustom
+    target.qrcode_custom = codes.qrcodeCustom
+
+    if (codes.barcodeCustom) {
+        target.barcode = codes.barcode
+        target.barcodeDataUrl = makeBarcodeDataUrl(target.barcode)
+    } else if (hadCustomBarcode || !hasGeneratedCode(target.barcode)) {
+        if (kind === 'pack') generatePackBarcode(target)
+        else generateBarcode(form.entries.indexOf(target))
+    }
+
+    if (codes.qrcodeCustom) {
+        target.qrcode = codes.qrcode
+        target.qrcodeDataUrl = null
+        makeQrcodeDataUrl(target.qrcode).then(url => { target.qrcodeDataUrl = url })
+    } else if (kind === 'pack') {
+        generatePackQr(target)
+    } else {
+        // The system QR names the barcode, so it is rebuilt with whatever barcode was just set.
+        generateQrcode(form.entries.indexOf(target))
+    }
+
+    // Piece QRs name their box, so a new box code flows into them.
+    if (kind === 'pack' && target.barcode !== previousBarcode) {
+        piecesOfPack(target.key).forEach(entry => {
+            if (!entry.qrcode_custom) generateQrcode(form.entries.indexOf(entry))
+        })
+    }
+
+    closeCodeEditor()
 }
 
 const removePack = (pack) => {
@@ -1968,7 +2129,7 @@ const validateGeneratedCodes = () => {
     if (!missingRows.length) return true
 
     const action = isEditing.value ? 'updating' : 'saving'
-    showError(`Generate required codes before ${action}: ${describeMissingGeneratedCodes(missingRows)}.`)
+    showError(`Add the missing codes before ${action}: ${describeMissingGeneratedCodes(missingRows)}.`)
     return false
 }
 
@@ -2159,7 +2320,7 @@ const generateBarcode = (entryIndex) => {
     const prefix = asset ? asset.item_code : 'ST'
     entry.barcode = `${prefix}-${Date.now()}-${entryIndex + 1}`
     entry.barcodeDataUrl = makeBarcodeDataUrl(entry.barcode)
-    entry.qrcode = ''
+    if (!entry.qrcode_custom) entry.qrcode = ''
 }
 
 const generateQrcode = (entryIndex) => {
@@ -2378,6 +2539,8 @@ const editItem = async (item, aggregatedQuantity = item.quantity, relatedRows = 
             units_per_pack: Number(pack.units_per_pack),
             barcode: pack.barcode,
             qrcode: pack.qrcode || '',
+            barcode_custom: isCustomBarcode(pack.barcode),
+            qrcode_custom: isCustomQrcode(pack.qrcode),
             barcodeDataUrl: makeBarcodeDataUrl(pack.barcode),
             qrcodeDataUrl: null,
         }))
@@ -2402,6 +2565,8 @@ const editItem = async (item, aggregatedQuantity = item.quantity, relatedRows = 
             serial_no: row.serial_no,
             barcode: row.barcode || '',
             qrcode: row.qrcode || '',
+            barcode_custom: isCustomBarcode(row.barcode),
+            qrcode_custom: isCustomQrcode(row.qrcode),
             asset_type: row.asset_type || 'New',
             is_allocation: !!row.is_allocation,
             warranty_months: row.warranty_months,
