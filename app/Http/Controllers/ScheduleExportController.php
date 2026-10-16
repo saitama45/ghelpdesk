@@ -270,6 +270,7 @@ class ScheduleExportController extends Controller
         }
 
         $query = Schedule::with(['user', 'scheduleStores.store'])
+            ->ofActiveUsers()
             ->orderBy('start_time', 'asc');
 
         $this->applyDeptFilter($query, $request, onUser: false);

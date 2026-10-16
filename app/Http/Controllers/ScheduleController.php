@@ -91,7 +91,8 @@ class ScheduleController extends Controller implements HasMiddleware
             ? Carbon::parse($request->end, 'Asia/Manila')->endOfDay()
             : now('Asia/Manila')->endOfMonth();
 
-        $query = Schedule::with(['user', 'creator', 'updater', 'scheduleStores.store', 'scheduleStores.ticket.item']);
+        $query = Schedule::with(['user', 'creator', 'updater', 'scheduleStores.store', 'scheduleStores.ticket.item'])
+            ->ofActiveUsers();
 
         $query->where('start_time', '<=', $rangeEnd)
             ->where('end_time', '>=', $rangeStart);

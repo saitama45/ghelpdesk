@@ -48,6 +48,15 @@ class Schedule extends Model
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * Only schedules of people still active on /users. Their past schedules stay in the table,
+     * they just stop showing on /schedules. Archived (soft-deleted) users drop out too.
+     */
+    public function scopeOfActiveUsers($query)
+    {
+        return $query->whereHas('user', fn ($user) => $user->active());
+    }
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
