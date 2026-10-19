@@ -713,6 +713,12 @@ class CctvMonitoringController extends Controller implements HasMiddleware
             ->orderBy('serial_no')
             ->get();
 
+        // Same no-shelf rule as fixedUnitsCurrentlyAt for transfers written off in transit.
+        // Keys are cast back to strings: PHP turns numeric store codes into int keys.
+        $neverArrived = \App\Models\StockReceiving::neverArrivedTransferIds(
+            array_map('strval', array_keys($locationToStore))
+        );
+
         $grouped = [];
         foreach ($units as $unit) {
             $role = CctvEquipmentMatcher::classify($unit);
@@ -721,6 +727,9 @@ class CctvMonitoringController extends Controller implements HasMiddleware
             }
 
             $lastReceived = $unit->sourceStockTransfers->firstWhere('status', 'Received');
+            if ($lastReceived && $neverArrived->has($lastReceived->id)) {
+                continue;
+            }
             $location = $lastReceived?->destination_location ?: $unit->destination_location;
             if (!$location) {
                 continue;

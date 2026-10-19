@@ -83,6 +83,13 @@ class InventoryTransaction extends Model
                     $query->where("{$table}.reference_type", StockReceiving::class)
                         ->where("{$table}.transaction_type", 'Receiving Declined')
                         ->where("{$stockReceivings}.status", 'Declined');
+                })->orWhere(function ($query) use ($table) {
+                    // Unserved-line history (reported in transit, written off as lost) is
+                    // always quantity 0, so it can never move stock on hand. It counts
+                    // unconditionally so the Transaction Trail shows it whatever the line's
+                    // status is now.
+                    $query->where("{$table}.reference_type", StockReceiving::class)
+                        ->whereIn("{$table}.transaction_type", ['Receiving Unserved', 'Unserved Written Off']);
                 })->orWhere(function ($query) use ($table, $stockTransfers) {
                     $query->where("{$table}.reference_type", StockTransfer::class)
                         ->where("{$table}.transaction_type", 'Transfer Out')

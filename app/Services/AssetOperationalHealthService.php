@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Scopes\ActiveEntityScope;
 use App\Models\StockIn;
+use App\Models\StockReceiving;
 use App\Models\Store;
 use App\Models\SubCategory;
 use App\Models\Ticket;
@@ -307,6 +308,10 @@ class AssetOperationalHealthService
             ->values()
             ->all();
 
+        // Received transfers whose piece never arrived (written off in transit): same
+        // no-shelf rule as fixedUnitsCurrentlyAt, fetched once for the whole store set.
+        $neverArrived = StockReceiving::neverArrivedTransferIds($locations);
+
         return StockIn::query()
             // StockIn, Asset and StockTransfer are all entity-scoped models. That scope
             // pins queries to the viewer's single ACTIVE entity, which would silently
@@ -344,8 +349,11 @@ class AssetOperationalHealthService
             // drag the whole deployed fleet over the Azure link for fields nobody shows.
             ->select('id', 'asset_id', 'serial_no', 'barcode', 'qrcode', 'destination_location', 'status')
             ->get()
-            ->map(function (StockIn $unit) use ($storeByLocation) {
+            ->map(function (StockIn $unit) use ($storeByLocation, $neverArrived) {
                 $received = $unit->sourceStockTransfers->firstWhere('status', 'Received');
+                if ($received && $neverArrived->has($received->id)) {
+                    return null; // Written off in transit: on no store's shelf.
+                }
                 $location = $received?->destination_location ?: $unit->destination_location;
                 $store = $storeByLocation[$this->locationKey($location)] ?? null;
 

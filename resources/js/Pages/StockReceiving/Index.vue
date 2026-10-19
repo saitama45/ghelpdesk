@@ -145,6 +145,11 @@
                                       :class="getStatusBadgeClass(item.status)">
                                     {{ item.status }}
                                 </span>
+                                <span v-if="item.status === 'For Receiving' && inTransitCount(item) > 0"
+                                      class="ml-1 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300"
+                                      title="Reported unserved: nothing arrived yet. The source can return these to stock or write them off.">
+                                    In Transit · {{ inTransitCount(item) }} unserved
+                                </span>
                             </td>
                             <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                                 <div class="flex flex-col">
@@ -178,14 +183,35 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                                         </svg>
                                     </button>
+                                    <!-- A fully unserved receiving is resolved with Return to Source instead -->
                                     <button
-                                        v-if="hasPermission('stock_receivings.post') && item.status === 'For Receiving'"
+                                        v-if="hasPermission('stock_receivings.post') && item.status === 'For Receiving' && !isFullyInTransit(item)"
                                         @click="openDeclineModal(item)"
                                         class="p-2 text-orange-600 hover:text-orange-900 hover:bg-orange-50 rounded-full transition-colors dark:text-orange-300 dark:hover:bg-orange-500/15 dark:hover:text-orange-200"
                                         title="Decline Receiving"
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h11m0 0l-4-4m4 4l-4 4m8-9v14" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        v-if="canResolveInTransit(item)"
+                                        @click="openResolveModal(item, 'return')"
+                                        class="p-2 text-teal-600 hover:text-teal-900 hover:bg-teal-50 rounded-full transition-colors dark:text-teal-300 dark:hover:bg-teal-500/15 dark:hover:text-teal-200"
+                                        title="Return to Source"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        v-if="canResolveInTransit(item)"
+                                        @click="openResolveModal(item, 'writeoff')"
+                                        class="p-2 text-rose-600 hover:text-rose-900 hover:bg-rose-50 rounded-full transition-colors dark:text-rose-300 dark:hover:bg-rose-500/15 dark:hover:text-rose-200"
+                                        title="Write Off (lost in transit)"
+                                    >
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                                         </svg>
                                     </button>
                                     <button
@@ -210,7 +236,7 @@
                                         </svg>
                                     </button>
                                     <button
-                                        v-if="hasPermission('stock_receivings.delete') && item.status === 'For Receiving'"
+                                        v-if="hasPermission('stock_receivings.delete') && item.status === 'For Receiving' && inTransitCount(item) === 0"
                                         @click="deleteReceiving(item)"
                                         class="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-full transition-colors dark:text-red-300 dark:hover:bg-red-500/15 dark:hover:text-red-200"
                                         title="Delete"
@@ -511,6 +537,64 @@
                 </div>
             </div>
         </Modal>
+
+        <!-- Resolve unserved (in transit) lines: Return to Source or Write Off -->
+        <Modal :show="showResolveModal" @close="closeResolveModal" max-width="lg">
+            <div class="bg-white p-6 dark:bg-gray-800">
+                <div class="mb-5">
+                    <h3 class="text-lg font-black text-gray-900 uppercase tracking-tight dark:text-gray-100">{{ resolveCopy.title }}</h3>
+                    <p class="mt-1 text-sm text-gray-500 dark:text-gray-300">{{ resolveEffect }}</p>
+                </div>
+
+                <div v-if="resolveTarget" class="mb-4 rounded-xl border px-4 py-3 text-sm" :class="resolveCopy.panel">
+                    <div class="font-bold">{{ resolveTarget.receiving_no || 'Pending Receiving' }}</div>
+                    <div class="mt-1">{{ resolveTarget.origin_location }} -> {{ resolveTarget.destination_location }}</div>
+                </div>
+
+                <label class="block text-[10px] font-black uppercase tracking-[0.22em] text-gray-500 dark:text-gray-300">Unserved Units</label>
+                <p v-if="resolveLoading" class="mt-2 mb-4 text-sm text-gray-500 dark:text-gray-400">Loading unserved units…</p>
+                <p v-else-if="!resolveLines.length" class="mt-2 mb-4 text-sm text-gray-500 dark:text-gray-400">No unserved units are left on this receiving.</p>
+                <div v-else class="mt-2 mb-4 max-h-48 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100 dark:border-gray-700 dark:divide-gray-700">
+                    <label v-for="line in resolveLines" :key="line.id" class="flex items-start gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <input v-model="resolveSelected" type="checkbox" :value="line.id"
+                               class="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900">
+                        <span class="min-w-0">
+                            <span class="block font-bold text-gray-900 dark:text-gray-100">
+                                {{ line.asset?.item_code }} · {{ line.serial_no || line.barcode || 'NO SERIAL' }}
+                            </span>
+                            <span v-if="line.damage_notes" class="block truncate text-xs text-gray-500 dark:text-gray-400">{{ line.damage_notes }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <label class="block text-[10px] font-black uppercase tracking-[0.22em] text-gray-500 dark:text-gray-300">Reason</label>
+                <textarea
+                    v-model="resolveReason"
+                    rows="3"
+                    class="mt-2 block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                    :placeholder="resolveCopy.placeholder"
+                ></textarea>
+
+                <div class="mt-6 flex justify-end gap-3">
+                    <button
+                        type="button"
+                        @click="closeResolveModal"
+                        class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-bold text-gray-600 transition-colors hover:bg-gray-50 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        @click="submitResolve"
+                        :disabled="resolveProcessing || resolveLoading || !resolveSelected.length || !resolveReason.trim()"
+                        class="rounded-lg px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                        :class="resolveCopy.button"
+                    >
+                        {{ resolveCopy.title }}
+                    </button>
+                </div>
+            </div>
+        </Modal>
     </AppLayout>
 </template>
 
@@ -677,6 +761,17 @@ const getStatusBadgeClass = (status) => {
     if (status === 'Declined') return 'bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-300'
     return 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
 }
+
+// In transit = reported unserved: still 'For Receiving', condition Missing, nothing received.
+// Keep in step with StockReceiving::isInTransit (and linkportal, which reports these lines).
+const inTransitCount = (item) => Number(item?.in_transit_count || 0)
+const isFullyInTransit = (item) => inTransitCount(item) > 0 && inTransitCount(item) === Number(item?.record_count || 0)
+const canResolveInTransit = (item) => hasPermission('stock_receivings.post')
+    && item.status === 'For Receiving'
+    && inTransitCount(item) > 0
+const isInTransitLine = (row) => row.status === 'For Receiving'
+    && row.condition === 'Missing'
+    && Number(row.received_quantity || 0) === 0
 
 // Barcode scanner state
 const verifiedIds   = ref(new Set())
@@ -895,7 +990,7 @@ const submitForm = () => {
 const postReceiving = async (item) => {
     const confirmed = await confirm({
         title: 'Post Receiving',
-        message: 'This will credit the destination inventory and mark the source transfer as Received. Continue?',
+        message: 'Received units credit the destination inventory and close their transfers. Units not received stay In Transit as unserved until the source returns them or writes them off. Continue?',
     })
     if (confirmed) {
         router.post(route('stock-receivings.post', item.id), {})
@@ -925,6 +1020,88 @@ const submitDecline = () => {
         onSuccess: () => closeDeclineModal(),
         onError: (errors) => showError(Object.values(errors)[0] || 'Failed to decline receiving.'),
         onFinish: () => { declineProcessing.value = false },
+    })
+}
+
+// ---- Resolve unserved lines: Return to Source (credit origin) / Write Off (lost in transit) ----
+const showResolveModal = ref(false)
+const resolveMode = ref('return')
+const resolveTarget = ref(null)
+const resolveLines = ref([])
+const resolveSelected = ref([])
+const resolveReason = ref('')
+const resolveLoading = ref(false)
+const resolveProcessing = ref(false)
+
+const RESOLVE_COPY = {
+    return: {
+        title: 'Return to Source',
+        route: 'stock-receivings.return-to-source',
+        placeholder: 'e.g. never loaded on the delivery / found at the source...',
+        panel: 'border-teal-100 bg-teal-50 text-teal-800 dark:bg-teal-500/10 dark:border-teal-500/30 dark:text-teal-300',
+        button: 'bg-teal-600 hover:bg-teal-700',
+    },
+    writeoff: {
+        title: 'Write Off',
+        route: 'stock-receivings.write-off',
+        placeholder: 'e.g. lost in transit, courier claim no. ...',
+        panel: 'border-rose-100 bg-rose-50 text-rose-800 dark:bg-rose-500/10 dark:border-rose-500/30 dark:text-rose-300',
+        button: 'bg-rose-600 hover:bg-rose-700',
+    },
+}
+const resolveCopy = computed(() => RESOLVE_COPY[resolveMode.value])
+const resolveEffect = computed(() => {
+    const count = resolveSelected.value.length
+    const origin = resolveTarget.value?.origin_location || 'the origin'
+    return resolveMode.value === 'return'
+        ? `This credits ${count} unit(s) back to ${origin} and closes the line${count === 1 ? '' : 's'} as returned to source.`
+        : `This records ${count} unit(s) as lost in transit; ${origin} stays deducted.`
+})
+
+const openResolveModal = async (item, mode) => {
+    resolveMode.value = mode
+    resolveTarget.value = item
+    resolveReason.value = ''
+    resolveLines.value = []
+    resolveSelected.value = []
+    resolveLoading.value = true
+    showResolveModal.value = true
+    try {
+        // The server acts on the receiving's in-transit lines; list exactly those so the
+        // count and the units shown are what will be resolved.
+        const res = await axios.get(route('stock-receivings.show', item.id))
+        resolveLines.value = res.data.filter(isInTransitLine)
+        resolveSelected.value = resolveLines.value.map(line => line.id)
+    } catch (e) {
+        showError('Failed to load the unserved units')
+        closeResolveModal()
+    } finally {
+        resolveLoading.value = false
+    }
+}
+
+const closeResolveModal = () => {
+    showResolveModal.value = false
+    resolveTarget.value = null
+    resolveLines.value = []
+    resolveSelected.value = []
+    resolveReason.value = ''
+    resolveProcessing.value = false
+}
+
+const submitResolve = () => {
+    if (!resolveTarget.value || !resolveReason.value.trim() || !resolveSelected.value.length || resolveProcessing.value) return
+
+    resolveProcessing.value = true
+    // No toast here: AppLayout shows the controller's flash.
+    router.post(route(resolveCopy.value.route, resolveTarget.value.id), {
+        reason: resolveReason.value.trim(),
+        ids: resolveSelected.value,
+    }, {
+        preserveScroll: true,
+        onSuccess: () => closeResolveModal(),
+        onError: (errors) => showError(Object.values(errors)[0] || `Failed to ${resolveCopy.value.title.toLowerCase()}.`),
+        onFinish: () => { resolveProcessing.value = false },
     })
 }
 

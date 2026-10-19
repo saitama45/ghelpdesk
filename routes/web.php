@@ -276,6 +276,8 @@ Route::middleware('auth')->group(function () {
     Route::get('stock-receivings/{stock_receiving}/dr-image', [\App\Http\Controllers\StockReceivingController::class, 'drImage'])->middleware('can:stock_receivings.view')->name('stock-receivings.dr-image');
     Route::post('stock-receivings/{stock_receiving}/post',[\App\Http\Controllers\StockReceivingController::class, 'post'])->name('stock-receivings.post');
     Route::post('stock-receivings/{stock_receiving}/decline', [\App\Http\Controllers\StockReceivingController::class, 'decline'])->name('stock-receivings.decline');
+    Route::post('stock-receivings/{stock_receiving}/return-to-source', [\App\Http\Controllers\StockReceivingController::class, 'returnToSource'])->middleware('can:stock_receivings.post')->name('stock-receivings.return-to-source');
+    Route::post('stock-receivings/{stock_receiving}/write-off', [\App\Http\Controllers\StockReceivingController::class, 'writeOff'])->middleware('can:stock_receivings.post')->name('stock-receivings.write-off');
     Route::resource('stock-receivings', \App\Http\Controllers\StockReceivingController::class)->except(['create', 'edit', 'store']);
 
     Route::post('task-boards/{taskBoard}/restore', [\App\Http\Controllers\TaskBoardController::class, 'restore'])->name('task-boards.restore');

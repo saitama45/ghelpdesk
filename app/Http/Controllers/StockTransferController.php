@@ -210,17 +210,21 @@ class StockTransferController extends Controller
                 ->orderBy('serial_no')
                 ->get();
 
+            $neverArrived = StockReceiving::neverArrivedTransferIds($locationVariants);
+
             $availableUnits = $stockInRecords
-                ->filter(function ($unit) use ($locationVariants, $excludeTransferIds) {
+                ->filter(function ($unit) use ($locationVariants, $excludeTransferIds, $neverArrived) {
                     // Current location precedence:
-                    // 1. Latest "Received" transfer destination
+                    // 1. Latest "Received" transfer destination, unless that transfer was
+                    //    written off in transit (the piece never arrived: on no shelf)
                     $lastReceived = $unit->sourceStockTransfers
                         ->filter(fn ($t) => $t->status === 'Received'
                             && ! in_array($t->id, $excludeTransferIds))
                         ->first();
 
                     if ($lastReceived) {
-                        return in_array($lastReceived->destination_location, $locationVariants, true);
+                        return in_array($lastReceived->destination_location, $locationVariants, true)
+                            && ! $neverArrived->has($lastReceived->id);
                     }
 
                     // 2. If never moved, its location is the StockIn destination field

@@ -1156,6 +1156,11 @@ const getTransactionTypeClass = (type) => {
             return 'bg-red-100 text-red-800 border border-red-200'
         case 'Receiving Declined':
             return 'bg-orange-100 text-orange-800 border border-orange-200'
+        // Unserved-line history (quantity 0): reported in transit, then written off as lost.
+        case 'Receiving Unserved':
+            return 'bg-amber-100 text-amber-800 border border-amber-200'
+        case 'Unserved Written Off':
+            return 'bg-rose-100 text-rose-800 border border-rose-200'
         default:
             return 'bg-gray-100 text-gray-800 border border-gray-200'
     }
@@ -1236,7 +1241,8 @@ const formatPlainQuantity = (value) => {
 
 const isTransferTransaction = (tx) => {
     const type = (tx.transaction_type || '').toLowerCase()
-    return type.includes('transfer') || type === 'receiving declined'
+    return type.includes('transfer')
+        || ['receiving declined', 'receiving unserved', 'unserved written off'].includes(type)
 }
 
 const stockInTransactionHref = (referenceId) => route('stock-ins.index', { open_stock_in: referenceId })

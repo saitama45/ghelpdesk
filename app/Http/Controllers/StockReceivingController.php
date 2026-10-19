@@ -9,8 +9,10 @@ use App\Models\StockTransfer;
 use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class StockReceivingController extends Controller
@@ -45,6 +47,16 @@ class StockReceivingController extends Controller
             }
         };
 
+        // Lines in transit (reported unserved, see StockReceiving::isInTransit). Raw SQL, so
+        // every column goes through the grammar: `condition` is reserved on some drivers.
+        $grammar      = DB::getQueryGrammar();
+        $inTransitSql = sprintf(
+            "SUM(CASE WHEN %s = 'For Receiving' AND %s = 'Missing' AND %s = 0 THEN 1 ELSE 0 END) as in_transit_count",
+            $grammar->wrap('status'),
+            $grammar->wrap('condition'),
+            $grammar->wrap('received_quantity')
+        );
+
         $query = StockReceiving::with(['creator:id,name,email', 'updater:id,name,email'])
             ->select(
                 'receiving_date',
@@ -57,6 +69,7 @@ class StockReceivingController extends Controller
                 DB::raw('SUM(received_quantity) as quantity'),
                 DB::raw('SUM(transferred_quantity) as transferred_quantity'),
                 DB::raw('COUNT(*) as record_count'),
+                DB::raw($inTransitSql),
                 DB::raw('COUNT(DISTINCT asset_id) as asset_count'),
                 DB::raw('MAX(id) as id'),
                 DB::raw('MAX(created_at) as created_at'),
@@ -174,6 +187,17 @@ class StockReceivingController extends Controller
     {
         abort_unless($stockReceiving->status === 'For Receiving', 422, 'Cannot delete a posted receiving.');
 
+        // An in-transit line carries unserved history and a deducted origin; deleting it
+        // would strand both. The source resolves it with Return to Source or Write Off.
+        $targets = $request->boolean('delete_group')
+            ? $this->receivingGroupQuery($stockReceiving)->get()
+            : collect([$stockReceiving]);
+        abort_if(
+            $targets->contains(fn (StockReceiving $row) => $row->isInTransit()),
+            422,
+            'This receiving has unserved lines in transit. Return them to source or write them off instead of deleting.'
+        );
+
         if ($request->boolean('delete_group')) {
             $this->groupedReceivingRows($stockReceiving)->delete();
         } else {
@@ -183,46 +207,63 @@ class StockReceivingController extends Controller
         return redirect()->back()->with('success', 'Receiving Stock deleted successfully');
     }
 
+    /**
+     * Lines with a received quantity are posted: the destination is credited and their
+     * transfers close as Received. A line received as 0 is NOT closed: nothing arrived, so
+     * it stays open in transit (StockReceiving::isInTransit) with one 'Receiving Unserved'
+     * history row and its transfer still Posted, until the source returns it to stock or
+     * writes it off. A late arrival is simply received on a later post.
+     */
     public function post(Request $request, StockReceiving $stockReceiving)
     {
         abort_unless($request->user()->can('stock_receivings.post'), 403);
         abort_unless($stockReceiving->status === 'For Receiving', 422, 'Receiving already posted.');
 
-        $affectedRows = $this->groupedReceivingRows($stockReceiving)->get();
-        $now          = now();
-        $userName     = $request->user()->name;
-        $userId       = $request->user()->id;
+        $now      = now();
+        $userName = $request->user()->name;
+        $userId   = $request->user()->id;
 
-        DB::transaction(function () use ($affectedRows, $now, $userName, $userId) {
+        [$received, $inTransit] = DB::transaction(function () use ($stockReceiving, $now, $userName, $userId) {
             $transferIds = [];
+            $received    = 0;
+            $inTransit   = 0;
 
-            foreach ($affectedRows as $row) {
+            // Locked re-read: linkportal works the same lines concurrently.
+            foreach ($this->receivingGroupQuery($stockReceiving)->lockForUpdate()->get() as $row) {
+                if ($row->received_quantity <= 0) {
+                    $this->markUnserved($row, $userName, $userId);
+                    $inTransit++;
+
+                    continue;
+                }
+
                 $row->update([
                     'status'      => 'Received',
+                    // A late arrival of a line reported unserved is no longer missing.
+                    'condition'   => $row->condition === 'Missing' ? 'Good' : $row->condition,
                     'received_by' => $userName,
                     'received_at' => $now,
                     'updated_by'  => $userId,
                 ]);
 
-                if ($row->received_quantity > 0) {
-                    InventoryTransaction::create([
-                        'asset_id'         => $row->asset_id,
-                        'reference_type'   => StockReceiving::class,
-                        'reference_id'     => $row->id,
-                        'location'         => $row->destination_location,
-                        'transaction_type' => 'Transfer In',
-                        'quantity'         => $row->received_quantity,
-                        'created_by'       => $userId,
-                        'updated_by'       => $userId,
-                    ]);
-                }
+                InventoryTransaction::create([
+                    'asset_id'         => $row->asset_id,
+                    'reference_type'   => StockReceiving::class,
+                    'reference_id'     => $row->id,
+                    'location'         => $row->destination_location,
+                    'transaction_type' => 'Transfer In',
+                    'quantity'         => $row->received_quantity,
+                    'created_by'       => $userId,
+                    'updated_by'       => $userId,
+                ]);
 
                 if ($row->stock_transfer_id) {
                     $transferIds[$row->stock_transfer_id] = true;
                 }
+                $received++;
             }
 
-            // Mark corresponding StockTransfer rows as Received
+            // Only transfers whose piece actually arrived are Received; the rest stay Posted.
             if (! empty($transferIds)) {
                 StockTransfer::whereIn('id', array_keys($transferIds))->update([
                     'status'      => 'Received',
@@ -231,9 +272,128 @@ class StockReceivingController extends Controller
                     'updated_by'  => $userId,
                 ]);
             }
+
+            return [$received, $inTransit];
         });
 
-        return redirect()->back()->with('success', 'Receiving Stock posted. Destination inventory credited.');
+        $message = $inTransit === 0
+            ? 'Receiving Stock posted. Destination inventory credited.'
+            : "Receiving posted: {$received} unit(s) received, {$inTransit} unserved unit(s) left in transit.";
+
+        return redirect()->back()->with('success', $message);
+    }
+
+    /**
+     * Source side: an unserved line was never shipped (or turned up at the source), so it
+     * goes back to origin stock and the line closes as Declined.
+     */
+    public function returnToSource(Request $request, StockReceiving $stockReceiving)
+    {
+        [$reason, $ids] = $this->validateInTransitResolution($request);
+        $now      = now();
+        $userName = $request->user()->name;
+        $userId   = $request->user()->id;
+
+        $count = DB::transaction(function () use ($stockReceiving, $ids, $reason, $now, $userName, $userId) {
+            $lines = $this->lockedInTransitLines($stockReceiving, $ids);
+            abort_if($lines->isEmpty(), 422, 'Only lines reported unserved (in transit) can be returned to source.');
+
+            foreach ($lines as $row) {
+                InventoryTransaction::create([
+                    'asset_id'         => $row->asset_id,
+                    'reference_type'   => StockReceiving::class,
+                    'reference_id'     => $row->id,
+                    'location'         => $row->origin_location,
+                    'transaction_type' => 'Receiving Declined',
+                    'quantity'         => $row->transferred_quantity,
+                    'created_by'       => $userId,
+                    'updated_by'       => $userId,
+                ]);
+
+                $row->update([
+                    'status'            => 'Declined',
+                    'received_quantity' => 0,
+                    'remarks'           => $reason,
+                    'received_by'       => $userName,
+                    'received_at'       => $now,
+                    'updated_by'        => $userId,
+                ]);
+            }
+
+            $transferIds = $lines->pluck('stock_transfer_id')->filter()->unique()->values();
+            if ($transferIds->isNotEmpty()) {
+                StockTransfer::whereIn('id', $transferIds)->update([
+                    'status'      => 'Declined',
+                    'received_by' => null,
+                    'received_at' => null,
+                    'updated_by'  => $userId,
+                ]);
+            }
+
+            return $lines->count();
+        });
+
+        return redirect()->back()->with(
+            'success',
+            "{$count} unserved unit(s) returned to {$stockReceiving->origin_location}. Origin inventory credited back."
+        );
+    }
+
+    /**
+     * Source side: an unserved line is lost in transit. The origin stays deducted, the line
+     * closes as Received with nothing received, and the piece is on no shelf from now on.
+     */
+    public function writeOff(Request $request, StockReceiving $stockReceiving)
+    {
+        [$reason, $ids] = $this->validateInTransitResolution($request);
+        $now      = now();
+        $userName = $request->user()->name;
+        $userId   = $request->user()->id;
+
+        $count = DB::transaction(function () use ($stockReceiving, $ids, $reason, $now, $userName, $userId) {
+            $lines = $this->lockedInTransitLines($stockReceiving, $ids);
+            abort_if($lines->isEmpty(), 422, 'Only lines reported unserved (in transit) can be written off.');
+
+            foreach ($lines as $row) {
+                InventoryTransaction::create([
+                    'asset_id'         => $row->asset_id,
+                    'reference_type'   => StockReceiving::class,
+                    'reference_id'     => $row->id,
+                    'location'         => $row->origin_location,
+                    'transaction_type' => 'Unserved Written Off',
+                    'quantity'         => 0,
+                    'created_by'       => $userId,
+                    'updated_by'       => $userId,
+                ]);
+
+                $row->update([
+                    'status'            => 'Received',
+                    'received_quantity' => 0,
+                    'condition'         => 'Missing',
+                    'remarks'           => $reason,
+                    'received_by'       => $userName,
+                    'received_at'       => $now,
+                    'updated_by'        => $userId,
+                ]);
+            }
+
+            $transferIds = $lines->pluck('stock_transfer_id')->filter()->unique()->values();
+            if ($transferIds->isNotEmpty()) {
+                StockTransfer::whereIn('id', $transferIds)->update([
+                    'status'      => 'Received',
+                    'received_by' => $userName,
+                    'received_at' => $now,
+                    'updated_by'  => $userId,
+                ]);
+            }
+
+            return $lines->count();
+        });
+
+        return redirect()->back()->with(
+            'success',
+            "{$count} unserved unit(s) written off as lost in transit. {$stockReceiving->origin_location} stays deducted."
+        );
     }
 
     public function decline(Request $request, StockReceiving $stockReceiving)
@@ -298,9 +458,90 @@ class StockReceivingController extends Controller
         return redirect()->back()->with('success', 'Receiving declined. Inventory has been returned to the origin location.');
     }
 
+    /**
+     * Leave a line that received nothing open in transit, logging 'Receiving Unserved' once.
+     * A line already reported keeps its reporter and reason.
+     */
+    private function markUnserved(StockReceiving $row, string $userName, ?int $userId): void
+    {
+        $row->update([
+            'condition'         => 'Missing',
+            'received_quantity' => 0,
+            'received_by'       => $row->isInTransit() && $row->received_by ? $row->received_by : $userName,
+            'received_at'       => null,
+            'updated_by'        => $userId,
+        ]);
+
+        $alreadyLogged = InventoryTransaction::query()
+            ->where('reference_type', StockReceiving::class)
+            ->where('reference_id', $row->id)
+            ->where('transaction_type', 'Receiving Unserved')
+            ->exists();
+
+        if (! $alreadyLogged) {
+            InventoryTransaction::create([
+                'asset_id'         => $row->asset_id,
+                'reference_type'   => StockReceiving::class,
+                'reference_id'     => $row->id,
+                'location'         => $row->destination_location,
+                'transaction_type' => 'Receiving Unserved',
+                'quantity'         => 0,
+                'created_by'       => $userId,
+                'updated_by'       => $userId,
+            ]);
+        }
+    }
+
+    /**
+     * Shared guard + input for Return to Source / Write Off: a required reason, and an
+     * optional `ids` subset of the group's in-transit lines.
+     *
+     * @return array{0: string, 1: array<int, int>|null}
+     */
+    private function validateInTransitResolution(Request $request): array
+    {
+        abort_unless($request->user()->can('stock_receivings.post'), 403);
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'max:2000'],
+            'ids'    => ['sometimes', 'nullable', 'array'],
+            'ids.*'  => ['integer'],
+        ]);
+
+        $reason = trim($validated['reason']);
+        if ($reason === '') {
+            throw ValidationException::withMessages(['reason' => 'The reason field is required.']);
+        }
+
+        $ids = isset($validated['ids']) ? array_map('intval', $validated['ids']) : null;
+
+        return [$reason, $ids];
+    }
+
+    /**
+     * The anchor's group lines that are still in transit, re-read under lock (call inside
+     * the transaction), narrowed to `$ids` when given.
+     */
+    private function lockedInTransitLines(StockReceiving $stockReceiving, ?array $ids): Collection
+    {
+        return $this->receivingGroupQuery($stockReceiving)
+            ->lockForUpdate()
+            ->get()
+            ->filter(fn (StockReceiving $row) => $row->isInTransit()
+                && ($ids === null || in_array($row->id, $ids, true)))
+            ->values();
+    }
+
     protected function groupedReceivingRows(StockReceiving $stockReceiving)
     {
-        $query = StockReceiving::with(['asset', 'pack', 'creator:id,name,email', 'updater:id,name,email', 'sourceStockIn', 'stockTransfer']);
+        return $this->receivingGroupQuery($stockReceiving)
+            ->with(['asset', 'pack', 'creator:id,name,email', 'updater:id,name,email', 'sourceStockIn', 'stockTransfer']);
+    }
+
+    /** One receiving (same no./date/route/status) as a plain query, without eager loads. */
+    protected function receivingGroupQuery(StockReceiving $stockReceiving)
+    {
+        $query = StockReceiving::query();
 
         if ($stockReceiving->receiving_no !== null) {
             $query->where('receiving_no', $stockReceiving->receiving_no)

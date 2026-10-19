@@ -54,6 +54,18 @@ The Stock In Excel template names the item in an `item_name` dropdown (asset des
 when two items share a name — `importItemLabels`). The import also accepts an item code there, and an old file's
 `item_code` column is read as `item_name`, so pre-change templates still import.
 
+**Unserved = still in transit** (contract shared with linkportal). Posting a receiving closes only lines with
+`received_quantity > 0` ('Transfer In' at destination, transfer `Received`, `Missing` → `Good`). A line received as 0
+stays open **in transit** — `status = For Receiving`, `condition = Missing`, `received_quantity = 0`
+(`StockReceiving::isInTransit`), `received_by` = reporter, transfer still `Posted` — with one quantity-0
+`Receiving Unserved` ledger row at the destination. The source resolves it on /stock-receivings: **Return to Source**
+(`Declined`, 'Receiving Declined' +qty at origin, transfer `Declined`) or **Write Off** (`Received` with qty 0,
+quantity-0 `Unserved Written Off` at origin, transfer `Received`). Both quantity-0 types are valid unconditionally in
+`InventoryTransaction::scopeValidInventoryLedger`. A unit whose latest `Received` transfer has a `Received` line with
+`received_quantity < 1` is on **no shelf** (`StockReceiving::neverArrivedTransferIds`, applied in
+`LocatesInventoryUnits::fixedUnitsCurrentlyAt` and its batched copies in `AssetOperationalHealthService`,
+`CctvMonitoringController`, `StockTransferController::availableStock`). In-transit lines cannot be deleted.
+
 **Monitoring** — `npc_*` (statuses, documents, payments, registrations, seal receipts, proofs, workflow steps), `cctv_systems`, `cctv_inspections(+_units)`, `alaga_assessments`, `mall_hookups(+_costs,+_logs)`, `payment_*` (records, tenders, approvals, invoices, vendors, renewals, overpayments, weekly plans, settings, reminder log), `wigs_*`.
 
 **Administrative** — `schedules`, `schedule_stores`, `schedule_change_requests`, `attendance_logs`, `service_vehicles`, `service_vehicle_trips(+_attachments)`, `uat_cycles`, `uat_sections`, `uat_cases`, `uat_case_results`, `uat_participants`, `uat_findings`, `uat_evidence`, `uat_signoffs`, `stamp_*`, `quests`, `agent_point_transactions`, `agent_quest_progress`, `customers`, `notifications`.

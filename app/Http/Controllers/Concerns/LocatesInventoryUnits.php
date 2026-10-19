@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Concerns;
 
 use App\Models\StockIn;
+use App\Models\StockReceiving;
 use App\Models\Store;
 use Closure;
 use Illuminate\Support\Collection;
@@ -59,6 +60,8 @@ trait LocatesInventoryUnits
      * Return Posted StockIn unit rows whose CURRENT location is within the given variants.
      * Current location = destination of the latest "Received" transfer, else the original
      * StockIn destination_location. Mirrors StockTransferController::availableStock.
+     * A unit whose latest "Received" transfer was closed with nothing received (written
+     * off in transit) never arrived, so it is on no shelf at all.
      *
      * @param  array  $locationVariants
      * @param  \Closure|null  $stockInQuery  optional modifier applied to the base StockIn query
@@ -83,13 +86,16 @@ trait LocatesInventoryUnits
             $stockInQuery($query);
         }
 
+        $neverArrived = StockReceiving::neverArrivedTransferIds($locationVariants);
+
         return $query->get()
-            ->filter(function (StockIn $unit) use ($locationVariants) {
+            ->filter(function (StockIn $unit) use ($locationVariants, $neverArrived) {
                 $lastReceived = $unit->sourceStockTransfers
                     ->firstWhere('status', 'Received');
 
                 if ($lastReceived) {
-                    return in_array($lastReceived->destination_location, $locationVariants, true);
+                    return in_array($lastReceived->destination_location, $locationVariants, true)
+                        && ! $neverArrived->has($lastReceived->id);
                 }
 
                 return in_array($unit->destination_location, $locationVariants, true);

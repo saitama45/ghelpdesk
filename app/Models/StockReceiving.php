@@ -2,12 +2,55 @@
 
 namespace App\Models;
 
+use App\Models\Scopes\ActiveEntityScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 
 class StockReceiving extends Model
 {
     use HasFactory;
+
+    /**
+     * A line reported unserved: nothing arrived, so it stays open "in transit" until the
+     * source returns it to stock or writes it off. Shared with linkportal, which reports
+     * unserved lines with exactly this state.
+     */
+    public function isInTransit(): bool
+    {
+        return $this->status === 'For Receiving'
+            && $this->condition === 'Missing'
+            && (int) $this->received_quantity === 0;
+    }
+
+    /**
+     * Transfer ids (as keys, for ->has()) whose receiving line at one of the given
+     * destinations was closed as Received with nothing received: written off as lost in
+     * transit, or posted as zero before unserved lines stayed open. Their transfer reads
+     * 'Received', yet the piece never got there, so unit-location lookups must put it on
+     * no shelf instead of at the destination.
+     *
+     * Entity-agnostic on purpose: this answers where a piece physically is, so the listing
+     * scope must not hide the receiving line of a transfer the caller can see.
+     *
+     * @param  array<int, string>  $destinations
+     * @return Collection<int, int>
+     */
+    public static function neverArrivedTransferIds(array $destinations): Collection
+    {
+        if (empty($destinations)) {
+            return collect();
+        }
+
+        return static::query()
+            ->withoutGlobalScope(ActiveEntityScope::class)
+            ->whereIn('destination_location', $destinations)
+            ->where('status', 'Received')
+            ->where('received_quantity', '<', 1)
+            ->whereNotNull('stock_transfer_id')
+            ->pluck('stock_transfer_id')
+            ->flip();
+    }
 
     protected $fillable = [
         'stock_transfer_id',
