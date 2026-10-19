@@ -39,6 +39,7 @@ class UserDeletionBlockers
         'voucher_batches' => ['Voucher Batches', 'Stamps → Vouchers tab'],
         'voucher_redemptions' => ['Voucher Payments', 'Stamps → Vouchers tab'],
         'voucher_verification_attempts' => ['Voucher Verification Attempts', 'Stamps → Vouchers tab'],
+        'customer_suggestions' => ['Customer Suggestions', 'Stamps → Suggestions tab'],
         'project_tasks' => ['Project Tasks', 'Project Tracker'],
         'inventory_transactions' => ['Inventory Transactions', 'Inventory'],
         'ticket_assets' => ['Ticket Assets', 'Tickets → Affected Assets'],

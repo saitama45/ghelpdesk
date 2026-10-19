@@ -25,6 +25,7 @@ const props = defineProps({
     voucherBatches: { type: Array, default: () => [] },
     voucherRedemptions: { type: Array, default: () => [] },
     voucherSummary: { type: Object, default: () => ({}) },
+    suggestions: { type: Array, default: () => [] },
 })
 
 const { confirm } = useConfirm()
@@ -38,6 +39,7 @@ const tabList = [
     { id: 'customers', label: 'Customers' },
     { id: 'programs', label: 'Programs' },
     { id: 'vouchers', label: 'Vouchers' },
+    { id: 'suggestions', label: 'Suggestions' },
 ]
 
 /* ------------------------------------------------------------------ *
@@ -78,6 +80,7 @@ const custTable = useClientTable(() => props.customers, ['name', 'email', 'phone
 const progTable = useClientTable(() => props.programs, ['name', 'description'])
 const cardTable = useClientTable(() => props.cards, ['customer.name', 'program.name', 'status'])
 const redeemTable = useClientTable(() => props.redemptions, ['customer.name', 'program.name', 'asset.item_code', 'location'])
+const suggTable = useClientTable(() => props.suggestions, ['customer.name', 'customer.email', 'user.name', 'user.email', 'subject', 'message'])
 
 /* ------------------------------------------------------------------ *
  | Dropdown option sources
@@ -945,6 +948,43 @@ const submitRedeem = () => {
                     :stores="stores"
                     :summary="voucherSummary"
                 />
+
+                <!-- SUGGESTIONS (mobile app Profile → Suggestion Box) -->
+                <DataTable
+                    v-if="currentTab === 'suggestions'"
+                    title="Suggestions"
+                    search-placeholder="Search suggestions..."
+                    :data="suggTable.data"
+                    :search="suggTable.search"
+                    :current-page="suggTable.currentPage"
+                    :last-page="suggTable.lastPage"
+                    :per-page="suggTable.perPage"
+                    :showing-text="suggTable.showingText"
+                    @update:search="suggTable.search = $event"
+                    @goToPage="suggTable.goToPage"
+                    @changePerPage="suggTable.changePerPage"
+                >
+                    <template #header>
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Customer</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Subject</th>
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase dark:text-slate-300">Message</th>
+                        </tr>
+                    </template>
+                    <template #body="{ data }">
+                        <tr v-for="s in data" :key="s.id" class="hover:bg-gray-50 align-top dark:hover:bg-gray-700">
+                            <td class="px-6 py-3 text-sm text-gray-600 whitespace-nowrap dark:text-gray-300">{{ formatDateTime(s.created_at) }}</td>
+                            <td class="px-6 py-3 text-sm">
+                                <div class="font-medium text-gray-900 dark:text-gray-100">{{ s.customer?.name || s.user?.name || '—' }}</div>
+                                <div v-if="s.customer?.email || s.user?.email" class="text-xs text-gray-500 dark:text-gray-400">{{ s.customer?.email || s.user?.email }}</div>
+                                <div v-if="s.customer?.phone" class="text-xs text-gray-500 dark:text-gray-400">{{ s.customer.phone }}</div>
+                            </td>
+                            <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{{ s.subject || '—' }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-700 whitespace-pre-line break-words min-w-[16rem] max-w-xl dark:text-gray-300">{{ s.message }}</td>
+                        </tr>
+                    </template>
+                </DataTable>
 
                 <!-- PROGRAMS -->
                 <DataTable

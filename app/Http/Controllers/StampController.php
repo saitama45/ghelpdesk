@@ -6,6 +6,7 @@ use App\Http\Controllers\Concerns\LocatesInventoryUnits;
 use App\Models\Asset;
 use App\Models\Company;
 use App\Models\Customer;
+use App\Models\CustomerSuggestion;
 use App\Models\InventoryTransaction;
 use App\Models\StampCard;
 use App\Models\StampEntry;
@@ -98,6 +99,20 @@ class StampController extends Controller implements HasMiddleware
                         ->whereColumn('stamp_entries.stamp_card_id', 'stamp_redemptions.stamp_card_id'),
                 ])
                 ->when($activeCompanyId, $forActiveEntity('card.store'))
+                ->orderByDesc('id')
+                ->get(),
+            // Mobile app Suggestion Box. Stamped with the CBTL entity by
+            // Api\SuggestionController; unstamped rows (no CBTL company when
+            // sent) stay visible everywhere, as unassigned programs do. The
+            // customer is loaded withTrashed so an archived member's message
+            // still says who wrote it.
+            'suggestions' => CustomerSuggestion::with([
+                'customer' => fn ($q) => $q->withTrashed()->select('id', 'name', 'email', 'phone'),
+                'user:id,name,email',
+            ])
+                ->when($activeCompanyId, fn ($q) => $q->where(
+                    fn ($q2) => $q2->where('company_id', $activeCompanyId)->orWhereNull('company_id')
+                ))
                 ->orderByDesc('id')
                 ->get(),
             // Stamp cards belong to customer-facing outlets only — warehouses and

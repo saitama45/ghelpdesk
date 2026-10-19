@@ -67,6 +67,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // Mobile app "My Member Code" QR + real stamp progress pull-down.
     Route::get('/loyalty/qr-card', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'qrCard']);
     Route::get('/loyalty/my-cards', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'myCards']);
+
+    // Mobile app Suggestion Box (Profile tab); staff read it on /stamps → Suggestions.
+    Route::post('/loyalty/suggestions', [\App\Http\Controllers\Api\SuggestionController::class, 'store'])
+        ->middleware('throttle:5,1');
     Route::get('/loyalty/my-transactions', [\App\Http\Controllers\Api\LoyaltyMemberController::class, 'myTransactions']);
 
     // DTR / Attendance Routes

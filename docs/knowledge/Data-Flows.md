@@ -188,6 +188,8 @@ Shared shape: request table + `*_approvals` rows per step → approvers notified
 ## 8. Mobile / API
 `routes/api.php`: `POST /api/login` → Sanctum token; `auth:sanctum` group exposes DTR (`/dtr/status`, `/dtr/offline-bootstrap`, `/dtr/log`) and `/attendance/logs` for the Capacitor app, plus the linkportal document-review intake.
 
+**Loyalty app Suggestion Box** (2026-10-19): `POST /api/loyalty/suggestions` (`Api\SuggestionController`, `auth:sanctum`, `throttle:5,1`; `subject` ≤120 optional, `message` ≤2000 required) → `customer_suggestions`, stamped with the CBTL entity explicitly (the model is NOT in `SCOPED_MODELS`; a roleless mobile login's active entity is unreliable). Staff read it on `/stamps` → **Suggestions** tab (`StampController::index` `suggestions` prop, existing `stamps.view` gate, filtered to the active entity or unstamped rows — so it shows only while **CBTL** is the active entity). Read-only: no status/reply workflow.
+
 ## 9. File storage
 Uploads land on the `public` disk; served through the symlink-free route `GET /serve-storage/{path}` (`routes/web.php:16`). Client-side compression is mandatory for image uploads (`resources/js/Composables/useImageCompressor.js`) — an oversized POST dies at PHP's limit before validation runs.
 

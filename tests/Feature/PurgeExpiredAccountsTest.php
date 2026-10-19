@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Customer;
+use App\Models\CustomerSuggestion;
 use App\Models\OtpCode;
 use App\Models\User;
 use App\Services\AccountArchiveService;
@@ -159,6 +160,21 @@ class PurgeExpiredAccountsTest extends TestCase
 
         $this->assertNull(User::withTrashed()->find($member->id));
         $this->assertSame(0, OtpCode::where('user_id', $member->id)->count());
+    }
+
+    public function test_a_members_suggestions_leave_with_them_and_do_not_block_the_purge(): void
+    {
+        // Suggestion Box rows hold a `no action` FK to the login, which the
+        // blocker scan would otherwise report. Run on an ACTIVE pair, as above,
+        // so nothing is soft-deleted.
+        $customer = Customer::create(['name' => 'Member', 'email' => 'member@example.test', 'is_active' => true]);
+        $member = User::factory()->create(['email' => 'member@example.test', 'customer_id' => $customer->id]);
+        CustomerSuggestion::create(['customer_id' => $customer->id, 'user_id' => $member->id, 'message' => 'Hi']);
+
+        app(AccountArchiveService::class)->purgeUser($member, null);
+
+        $this->assertNull(User::withTrashed()->find($member->id));
+        $this->assertSame(0, CustomerSuggestion::count());
     }
 
     public function test_a_customer_someone_else_created_still_blocks_the_purge(): void

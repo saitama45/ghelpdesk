@@ -589,6 +589,8 @@ class AccountArchiveService
                 $this->forceDeleteLogin($user, $actorId);
             }
 
+            $this->forgetSuggestions($customer);
+
             $customer->forceFill([
                 'name' => self::ANONYMIZED_NAME,
                 'email' => null,
@@ -657,6 +659,8 @@ class AccountArchiveService
             $card->delete();
         }
 
+        $this->forgetSuggestions($customer);
+
         Log::warning('Customer record purged permanently', [
             'customer_id' => $customer->id,
             'email' => $customer->email,
@@ -664,6 +668,18 @@ class AccountArchiveService
         ]);
 
         $customer->forceDelete();
+    }
+
+    /**
+     * A member's Suggestion Box messages are their own words, so they go with
+     * the person instead of outliving them on a purged or anonymized record.
+     * The login side is cleared in `releaseUserReferences`.
+     */
+    private function forgetSuggestions(Customer $customer): void
+    {
+        if (Schema::hasTable('customer_suggestions')) {
+            DB::table('customer_suggestions')->where('customer_id', $customer->id)->delete();
+        }
     }
 
     /**
@@ -737,6 +753,11 @@ class AccountArchiveService
         // blocker scan refused to remove any member who had ever signed in.
         if (Schema::hasTable('otp_codes')) {
             DB::table('otp_codes')->where('user_id', $user->id)->delete();
+        }
+
+        // Suggestion Box messages leave with their author (see forgetSuggestions).
+        if (Schema::hasTable('customer_suggestions')) {
+            DB::table('customer_suggestions')->where('user_id', $user->id)->delete();
         }
 
         // A self-registered member is stamped as the creator of their own
