@@ -64,6 +64,8 @@ class RoleService
             'tickets',
             'queue monitor',
             'task board',
+            'diagrams',
+            'whiteboards',
             'pos_requests',
             'sap_requests',
             'loyalty stamps',

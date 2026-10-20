@@ -50,6 +50,18 @@ class RolesAndPermissionSeeder extends Seeder
             'task_boards.delete' => 'Close and delete task boards/cards',
             'task_boards.manage_members' => 'Manage task board members',
 
+            // Diagrams
+            'diagrams.view' => 'View diagrams shared with you',
+            'diagrams.create' => 'Create and duplicate diagrams',
+            'diagrams.edit' => 'Edit diagrams you can see',
+            'diagrams.delete' => 'Delete diagrams you own',
+
+            // Whiteboards (standalone)
+            'whiteboards.view' => 'View whiteboards shared with you',
+            'whiteboards.create' => 'Create and duplicate whiteboards',
+            'whiteboards.edit' => 'Draw on whiteboards you can see',
+            'whiteboards.delete' => 'Delete whiteboards you own',
+
             // Users
             'users.view' => 'View users',
             'users.create' => 'Create users',

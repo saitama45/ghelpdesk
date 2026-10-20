@@ -61,7 +61,10 @@ User Management itself was open until 2026-08-20 — `/users` and `/roles` (inde
 2. Category placement in `RoleService::getPermissionsByCategory()`.
 3. Route group behind `permission:{slug}.view`.
 4. Entry in `resources/js/Composables/useModuleRegistry.js` (drives sidebar, hub pages and layout settings).
-5. Role-edit UI + `useSidebarOrder.js` defaults follow automatically from (2) and (4).
+5. `useSidebarOrder.js` defaults and the role landing-page list follow automatically from (4). The role-edit
+   modal does NOT: `resources/js/Components/Roles/RoleFormModal.vue` → `permissionGroups` lists each tab's
+   categories by the exact RoleService display name; a category missing there still shows, but under a
+   catch-all tab instead of its section (e.g. `'Diagrams'` sits in the Services list next to `'Task Board'`).
 
 ## Milestone owners get `projects.manage_tasks` automatically
 `ProjectMilestone::booted()` grants `projects.manage_tasks` as a **direct permission** whenever a milestone's

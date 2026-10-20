@@ -47,6 +47,8 @@ import {
     ArchiveBoxArrowDownIcon,
     ChatBubbleLeftRightIcon,
     StarIcon,
+    ShareIcon,
+    PaintBrushIcon,
 } from '@heroicons/vue/24/outline';
 
 /**
@@ -142,6 +144,24 @@ export const MODULE_REGISTRY = [
                 activeMatch: ['task-boards.*'],
                 permission: 'task_boards.view',
                 eta: 'Same day',
+            },
+            {
+                id: 'diagrams',
+                label: 'Diagrams',
+                description: 'Flowcharts, process maps and diagrams, drawn and shared like draw.io',
+                icon: ShareIcon,
+                routeName: 'diagrams.index',
+                activeMatch: ['diagrams.*'],
+                permission: 'diagrams.view',
+            },
+            {
+                id: 'whiteboards',
+                label: 'Whiteboards',
+                description: 'Free-form drawing, sticky notes and sketches you can present',
+                icon: PaintBrushIcon,
+                routeName: 'whiteboards.index',
+                activeMatch: ['whiteboards.*'],
+                permission: 'whiteboards.view',
             },
             {
                 id: 'pos-requests',

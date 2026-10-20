@@ -95,6 +95,7 @@ const container = ref(null);
 const svgEl = ref(null);
 const contentGroup = ref(null);
 const textInput = ref(null);
+const toolbarEl = ref(null);
 
 const canEdit = computed(() => !props.readonly);
 const page = computed(() => props.doc.pageById(props.pageId));
@@ -181,10 +182,12 @@ const fitToContent = ({ maxZoom = 1 } = {}) => {
     }
     const r = svgRect();
     const pad = 56;
-    const zoom = clampZoom(Math.min((r.width - pad * 2) / Math.max(bounds.w, 1), (r.height - pad * 2) / Math.max(bounds.h, 1), maxZoom));
+    // Keep content clear of the floating toolbar (it wraps to two rows on narrower canvases).
+    const top = props.toolbarPlacement === 'top' && toolbarEl.value ? Math.max(pad, toolbarEl.value.offsetHeight + 28) : pad;
+    const zoom = clampZoom(Math.min((r.width - pad * 2) / Math.max(bounds.w, 1), (r.height - top - pad) / Math.max(bounds.h, 1), maxZoom));
     view.zoom = zoom;
     view.x = (r.width - bounds.w * zoom) / 2 - bounds.x * zoom;
-    view.y = (r.height - bounds.h * zoom) / 2 - bounds.y * zoom;
+    view.y = top + (r.height - top - pad - bounds.h * zoom) / 2 - bounds.y * zoom;
 };
 
 const viewportCenter = () => {
@@ -980,6 +983,7 @@ defineExpose({
 
         <!-- Toolbar -->
         <div
+            ref="toolbarEl"
             class="pointer-events-auto absolute left-1/2 z-20 flex w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-xl border border-gray-200 bg-white/95 p-1 text-gray-600 shadow-lg dark:border-gray-700 dark:bg-gray-800/95 dark:text-gray-300"
             :class="toolbarPlacement === 'bottom' ? 'bottom-4' : 'top-3'"
             data-testid="whiteboard-toolbar"

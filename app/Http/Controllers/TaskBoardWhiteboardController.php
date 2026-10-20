@@ -6,6 +6,7 @@ use App\Models\TaskBoard;
 use App\Models\TaskBoardWhiteboard;
 use App\Models\TaskCard;
 use App\Models\User;
+use App\Support\WhiteboardScene;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,28 +25,6 @@ use Inertia\Inertia;
 class TaskBoardWhiteboardController extends Controller implements HasMiddleware
 {
     private const MAX_SCENE_BYTES = 4_000_000;
-
-    private const MAX_PAGES = 30;
-
-    private const MAX_ELEMENTS_PER_PAGE = 5000;
-
-    private const MAX_POINT_VALUES = 40000;
-
-    private const BACKGROUNDS = ['dots', 'grid', 'plain'];
-
-    /**
-     * Allowed fields per element type. Anything else the client sends is dropped.
-     */
-    private const ELEMENT_FIELDS = [
-        'pen' => ['points' => 'points', 'color' => 'color', 'size' => 'number', 'opacity' => 'number'],
-        'line' => ['x1' => 'number', 'y1' => 'number', 'x2' => 'number', 'y2' => 'number', 'color' => 'color', 'size' => 'number'],
-        'arrow' => ['x1' => 'number', 'y1' => 'number', 'x2' => 'number', 'y2' => 'number', 'color' => 'color', 'size' => 'number'],
-        'rect' => ['x1' => 'number', 'y1' => 'number', 'x2' => 'number', 'y2' => 'number', 'color' => 'color', 'size' => 'number', 'fill' => 'optional_color'],
-        'ellipse' => ['x1' => 'number', 'y1' => 'number', 'x2' => 'number', 'y2' => 'number', 'color' => 'color', 'size' => 'number', 'fill' => 'optional_color'],
-        'text' => ['x' => 'number', 'y' => 'number', 'text' => 'text', 'color' => 'color', 'size' => 'number'],
-        'sticky' => ['x' => 'number', 'y' => 'number', 'w' => 'number', 'h' => 'number', 'text' => 'text', 'color' => 'color'],
-        'card' => ['x' => 'number', 'y' => 'number', 'w' => 'number', 'h' => 'number', 'cardId' => 'integer', 'title' => 'text', 'status' => 'text', 'color' => 'color'],
-    ];
 
     public static function middleware(): array
     {
@@ -110,10 +89,10 @@ class TaskBoardWhiteboardController extends Controller implements HasMiddleware
         $validated = $request->validate([
             'revision' => 'required|integer|min:0',
             'scene' => 'required|array',
-            'scene.pages' => 'required|array|min:1|max:'.self::MAX_PAGES,
+            'scene.pages' => 'required|array|min:1|max:30',
         ]);
 
-        $scene = $this->sanitizeScene($validated['scene']);
+        $scene = WhiteboardScene::sanitizer(withCards: true)->sanitize($validated['scene']);
         $encoded = json_encode($scene, JSON_UNESCAPED_UNICODE);
 
         if ($encoded === false || strlen($encoded) > self::MAX_SCENE_BYTES) {
@@ -206,110 +185,6 @@ class TaskBoardWhiteboardController extends Controller implements HasMiddleware
             ])
             ->values()
             ->all();
-    }
-
-    private function sanitizeScene(array $scene): array
-    {
-        $pages = [];
-        $seenPages = [];
-
-        foreach (array_slice($scene['pages'] ?? [], 0, self::MAX_PAGES) as $page) {
-            if (! is_array($page) || ! $this->validId($page['id'] ?? null) || isset($seenPages[$page['id']])) {
-                continue;
-            }
-
-            $seenPages[$page['id']] = true;
-            $elements = [];
-
-            foreach (array_slice(is_array($page['elements'] ?? null) ? $page['elements'] : [], 0, self::MAX_ELEMENTS_PER_PAGE) as $element) {
-                $clean = $this->sanitizeElement($element);
-
-                if ($clean) {
-                    $elements[$clean['id']] = $clean;
-                }
-            }
-
-            $pages[] = [
-                'id' => $page['id'],
-                'name' => mb_substr(trim((string) ($page['name'] ?? '')), 0, 120) ?: 'Page '.(count($pages) + 1),
-                'background' => in_array($page['background'] ?? null, self::BACKGROUNDS, true) ? $page['background'] : 'dots',
-                'elements' => array_values($elements),
-            ];
-        }
-
-        if (! $pages) {
-            $pages[] = ['id' => 'page-1', 'name' => 'Page 1', 'background' => 'dots', 'elements' => []];
-        }
-
-        return ['version' => 1, 'pages' => $pages];
-    }
-
-    private function sanitizeElement(mixed $element): ?array
-    {
-        if (! is_array($element) || ! $this->validId($element['id'] ?? null)) {
-            return null;
-        }
-
-        $type = $element['type'] ?? null;
-        $fields = self::ELEMENT_FIELDS[$type] ?? null;
-
-        if (! $fields) {
-            return null;
-        }
-
-        $clean = ['id' => $element['id'], 'type' => $type];
-
-        foreach ($fields as $field => $kind) {
-            $value = $element[$field] ?? null;
-
-            $clean[$field] = match ($kind) {
-                'number' => $this->number($value),
-                'integer' => is_numeric($value) ? (int) $value : null,
-                'color' => $this->color($value) ?? '#111827',
-                'optional_color' => $this->color($value),
-                'text' => mb_substr((string) ($value ?? ''), 0, 5000),
-                'points' => $this->points($value),
-            };
-        }
-
-        if ($type === 'pen' && count($clean['points']) < 2) {
-            return null;
-        }
-
-        return $clean;
-    }
-
-    private function points(mixed $value): array
-    {
-        if (! is_array($value)) {
-            return [];
-        }
-
-        $points = array_map(fn ($n) => $this->number($n), array_slice($value, 0, self::MAX_POINT_VALUES));
-
-        // Keep whole x,y pairs only.
-        return count($points) % 2 === 0 ? $points : array_slice($points, 0, -1);
-    }
-
-    private function number(mixed $value): float|int
-    {
-        if (! is_numeric($value)) {
-            return 0;
-        }
-
-        $number = round(max(-1_000_000, min(1_000_000, (float) $value)), 1);
-
-        return floor($number) === $number ? (int) $number : $number;
-    }
-
-    private function color(mixed $value): ?string
-    {
-        return is_string($value) && preg_match('/^#[0-9a-fA-F]{3,8}$/', $value) ? $value : null;
-    }
-
-    private function validId(mixed $value): bool
-    {
-        return is_string($value) && preg_match('/^[A-Za-z0-9_-]{1,64}$/', $value) === 1;
     }
 
     private function canEdit(TaskBoard $board, User $user): bool

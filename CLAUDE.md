@@ -32,7 +32,7 @@
 
 **ghelpdesk** — an internal service-management platform for a multi-entity retail/restaurant group. It began as a helpdesk (email + web ticketing with SLA) and now also covers project delivery, task boards, inventory and assets, purchase/approval workflows, compliance monitoring, scheduling/attendance, UAT, and executive reporting.
 
-**Main modules** (sidebar sections, defined in `resources/js/Composables/useModuleRegistry.js`): Dashboard · Project Tracker · **Services** (Tickets, Queue Monitor, Task Board, POS Requests, SAP Requests, Loyalty Stamps) · **Inventory** (Assets, Stock In/Transfer/Receiving, Inventory Report) · **Monitoring** (NPC Status, CCTV, ALAGA, WIGS, Payments & SOA, Accounting Documents, Mall Hookup) · **Administrative** (DTR, Attendance Logs, Scheduling, Service Vehicle Trips, Presence, KB Articles, Holidays, QAT Tracker, UAT Tracker) · **References** (Companies, Departments, Clusters, Stores, Vendors, Activity Templates, Categories, Sub-Categories, Items, Request Types, Form Builder) · **Reports** · **User Management** · **Settings**.
+**Main modules** (sidebar sections, defined in `resources/js/Composables/useModuleRegistry.js`): Dashboard · Project Tracker · **Services** (Tickets, Queue Monitor, Task Board, Diagrams, Whiteboards, POS Requests, SAP Requests, Loyalty Stamps) · **Inventory** (Assets, Stock In/Transfer/Receiving, Inventory Report) · **Monitoring** (NPC Status, CCTV, ALAGA, WIGS, Payments & SOA, Accounting Documents, Mall Hookup) · **Administrative** (DTR, Attendance Logs, Scheduling, Service Vehicle Trips, Presence, KB Articles, Holidays, QAT Tracker, UAT Tracker) · **References** (Companies, Departments, Clusters, Stores, Vendors, Activity Templates, Categories, Sub-Categories, Items, Request Types, Form Builder) · **Reports** · **User Management** · **Settings**.
 
 ## Stack in one line
 
@@ -74,6 +74,9 @@ Laravel 12 + Inertia v2 + Vue 3 + Tailwind v4 (Vite) on SQL Server, with Spatie 
 | Gantt scheduling chain | `app/Services/ProjectScheduler.php`, `ScheduleChain.php`, `HolidayCalendar.php` |
 | Project ↔ board sync | `app/Services/ProjectTaskBoardSyncService.php` |
 | Board whiteboard (saved, revision + 409 merge) & Present ink | `app/Http/Controllers/TaskBoardWhiteboardController.php`, `resources/js/Components/Whiteboard/` |
+| Diagrams (draw.io-style, .drawio import/export) & standalone Whiteboards | `DiagramController`, `WhiteboardController` (both use `Controllers/Concerns/ManagesSharedCanvas.php`), `resources/js/Components/Diagram/` |
+| Who sees a diagram/whiteboard (list + URL guard) | `app/Support/SharedCanvasAccess.php`, `app/Http/Middleware/EnsureCanvasVisible.php` |
+| Canvas engine shared by all three (scene doc, save/poll, whitelist) | `resources/js/lib/sceneDocument.js`, `resources/js/Composables/useSceneSync.js`, `app/Support/SceneSanitizer.php` |
 | Module tree (sidebar + hub + layout settings) | `resources/js/Composables/useModuleRegistry.js` |
 | Frontend permission checks | `resources/js/Composables/usePermission.js` |
 

@@ -295,6 +295,37 @@ Route::middleware('auth')->group(function () {
     Route::post('task-boards/{taskBoard}/labels', [\App\Http\Controllers\TaskCardController::class, 'storeLabel'])->name('task-boards.labels.store');
     Route::post('task-boards/{taskBoard}/columns', [\App\Http\Controllers\TaskCardController::class, 'storeColumn'])->name('task-boards.columns.store');
     Route::post('task-boards/{taskBoard}/columns/reorder', [\App\Http\Controllers\TaskCardController::class, 'reorderColumns'])->name('task-boards.columns.reorder');
+    // Shared canvases (diagrams, standalone whiteboards). {lightDiagram}/{lightWhiteboard} bind
+    // the row WITHOUT the scene/preview LOBs for the routes an open editor hits every few
+    // seconds (poll, autosave). EnsureCanvasVisible applies the private/department/everyone rule.
+    Route::bind('lightDiagram', fn (string $value) => \App\Models\Diagram::select(\App\Models\Diagram::LIGHT_COLUMNS)->findOrFail($value));
+    Route::bind('lightWhiteboard', fn (string $value) => \App\Models\Whiteboard::select(\App\Models\Whiteboard::LIGHT_COLUMNS)->findOrFail($value));
+    Route::middleware('permission:whiteboards.view')->group(function () {
+        Route::get('whiteboards', [\App\Http\Controllers\WhiteboardController::class, 'index'])->name('whiteboards.index');
+        Route::post('whiteboards', [\App\Http\Controllers\WhiteboardController::class, 'store'])->middleware('permission:whiteboards.create')->name('whiteboards.store');
+        Route::middleware(\App\Http\Middleware\EnsureCanvasVisible::class)->group(function () {
+            Route::get('whiteboards/{whiteboard}', [\App\Http\Controllers\WhiteboardController::class, 'show'])->name('whiteboards.show');
+            Route::get('whiteboards/{lightWhiteboard}/state', [\App\Http\Controllers\WhiteboardController::class, 'state'])->name('whiteboards.state');
+            Route::put('whiteboards/{lightWhiteboard}/scene', [\App\Http\Controllers\WhiteboardController::class, 'saveScene'])->middleware('permission:whiteboards.edit')->name('whiteboards.scene');
+            Route::put('whiteboards/{lightWhiteboard}', [\App\Http\Controllers\WhiteboardController::class, 'update'])->middleware('permission:whiteboards.edit')->name('whiteboards.update');
+            Route::post('whiteboards/{whiteboard}/duplicate', [\App\Http\Controllers\WhiteboardController::class, 'duplicate'])->middleware('permission:whiteboards.create')->name('whiteboards.duplicate');
+            Route::delete('whiteboards/{lightWhiteboard}', [\App\Http\Controllers\WhiteboardController::class, 'destroy'])->middleware('permission:whiteboards.delete')->name('whiteboards.destroy');
+        });
+    });
+    Route::middleware('permission:diagrams.view')->group(function () {
+        Route::get('diagrams', [\App\Http\Controllers\DiagramController::class, 'index'])->name('diagrams.index');
+        Route::post('diagrams', [\App\Http\Controllers\DiagramController::class, 'store'])->middleware('permission:diagrams.create')->name('diagrams.store');
+        Route::post('diagrams/images', [\App\Http\Controllers\DiagramController::class, 'uploadImage'])->name('diagrams.images');
+        Route::middleware(\App\Http\Middleware\EnsureCanvasVisible::class)->group(function () {
+            Route::get('diagrams/{diagram}', [\App\Http\Controllers\DiagramController::class, 'show'])->name('diagrams.show');
+            Route::get('diagrams/{lightDiagram}/state', [\App\Http\Controllers\DiagramController::class, 'state'])->name('diagrams.state');
+            Route::put('diagrams/{lightDiagram}/scene', [\App\Http\Controllers\DiagramController::class, 'saveScene'])->middleware('permission:diagrams.edit')->name('diagrams.scene');
+            Route::put('diagrams/{lightDiagram}', [\App\Http\Controllers\DiagramController::class, 'update'])->middleware('permission:diagrams.edit')->name('diagrams.update');
+            Route::post('diagrams/{diagram}/duplicate', [\App\Http\Controllers\DiagramController::class, 'duplicate'])->middleware('permission:diagrams.create')->name('diagrams.duplicate');
+            Route::delete('diagrams/{lightDiagram}', [\App\Http\Controllers\DiagramController::class, 'destroy'])->middleware('permission:diagrams.delete')->name('diagrams.destroy');
+        });
+    });
+
     Route::get('task-boards/{taskBoard}/whiteboard', [\App\Http\Controllers\TaskBoardWhiteboardController::class, 'show'])->name('task-boards.whiteboard');
     Route::get('task-boards/{taskBoard}/whiteboard/state', [\App\Http\Controllers\TaskBoardWhiteboardController::class, 'state'])->name('task-boards.whiteboard.state');
     Route::put('task-boards/{taskBoard}/whiteboard', [\App\Http\Controllers\TaskBoardWhiteboardController::class, 'update'])->name('task-boards.whiteboard.update');
