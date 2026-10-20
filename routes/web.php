@@ -295,6 +295,9 @@ Route::middleware('auth')->group(function () {
     Route::post('task-boards/{taskBoard}/labels', [\App\Http\Controllers\TaskCardController::class, 'storeLabel'])->name('task-boards.labels.store');
     Route::post('task-boards/{taskBoard}/columns', [\App\Http\Controllers\TaskCardController::class, 'storeColumn'])->name('task-boards.columns.store');
     Route::post('task-boards/{taskBoard}/columns/reorder', [\App\Http\Controllers\TaskCardController::class, 'reorderColumns'])->name('task-boards.columns.reorder');
+    Route::get('task-boards/{taskBoard}/whiteboard', [\App\Http\Controllers\TaskBoardWhiteboardController::class, 'show'])->name('task-boards.whiteboard');
+    Route::get('task-boards/{taskBoard}/whiteboard/state', [\App\Http\Controllers\TaskBoardWhiteboardController::class, 'state'])->name('task-boards.whiteboard.state');
+    Route::put('task-boards/{taskBoard}/whiteboard', [\App\Http\Controllers\TaskBoardWhiteboardController::class, 'update'])->name('task-boards.whiteboard.update');
     Route::resource('task-boards', \App\Http\Controllers\TaskBoardController::class)
         ->parameters(['task-boards' => 'taskBoard'])
         ->except(['create', 'edit']);

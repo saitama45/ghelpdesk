@@ -73,6 +73,7 @@ Laravel 12 + Inertia v2 + Vue 3 + Tailwind v4 (Vite) on SQL Server, with Spatie 
 | User ↔ loyalty-customer archive pair (soft delete, restore, purge; nightly `accounts:purge-expired`) | `app/Services/AccountArchiveService.php` |
 | Gantt scheduling chain | `app/Services/ProjectScheduler.php`, `ScheduleChain.php`, `HolidayCalendar.php` |
 | Project ↔ board sync | `app/Services/ProjectTaskBoardSyncService.php` |
+| Board whiteboard (saved, revision + 409 merge) & Present ink | `app/Http/Controllers/TaskBoardWhiteboardController.php`, `resources/js/Components/Whiteboard/` |
 | Module tree (sidebar + hub + layout settings) | `resources/js/Composables/useModuleRegistry.js` |
 | Frontend permission checks | `resources/js/Composables/usePermission.js` |
 

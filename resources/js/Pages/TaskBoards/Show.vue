@@ -6,6 +6,7 @@ import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import MultiAutocomplete from '@/Components/MultiAutocomplete.vue';
 import MentionTextarea from '@/Components/MentionTextarea.vue';
+import BoardAnnotator from '@/Components/Whiteboard/BoardAnnotator.vue';
 import { useConfirm } from '@/Composables/useConfirm';
 import { usePermission } from '@/Composables/usePermission';
 import { useToast } from '@/Composables/useToast';
@@ -24,8 +25,10 @@ import {
     EyeIcon,
     FunnelIcon,
     LinkIcon,
+    PaintBrushIcon,
     PaperClipIcon,
     PencilSquareIcon,
+    PlayIcon,
     PlusIcon,
     StarIcon,
     TrashIcon,
@@ -72,6 +75,36 @@ const detailsSectionRef = ref(null);
 const lastSavedDetailsSignature = ref('');
 const pendingDetailsSave = ref(null);
 const isAutoSavingDetails = ref(false);
+
+// Present mode: the board takes over the screen (real fullscreen where the browser allows)
+// with a drawing layer on top. The ink is never saved — see BoardAnnotator. Only the Exit /
+// "Stop presenting" buttons end it: Esc (e.g. to close a card opened mid-presentation) makes
+// the browser leave fullscreen, and that must not wipe the presenter's ink.
+const presenting = ref(false);
+let enteredFullscreen = false;
+
+const startPresenting = async () => {
+    showBoardMenu.value = false;
+    presenting.value = true;
+    try {
+        if (document.fullscreenEnabled && !document.fullscreenElement) {
+            await document.documentElement.requestFullscreen();
+            enteredFullscreen = true;
+        }
+    } catch {
+        enteredFullscreen = false;
+    }
+};
+
+const stopPresenting = async () => {
+    presenting.value = false;
+    if (enteredFullscreen && document.fullscreenElement) await document.exitFullscreen().catch(() => {});
+    enteredFullscreen = false;
+};
+
+const handleFullscreenChange = () => {
+    if (!document.fullscreenElement) enteredFullscreen = false;
+};
 
 // Column (list) management
 const activeColumnMenu = ref(null);
@@ -1825,6 +1858,13 @@ onMounted(() => {
     document.addEventListener('pointerdown', handleDetailsBoundaryPointerDown, true);
     document.addEventListener('focusin', handleDetailsBoundaryFocusIn, true);
     document.addEventListener('click', closeColumnMenu);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    // Deep link from the whiteboard ("Open on board"): /task-boards/{id}?card={cardId}
+    const requestedCardId = Number(new URLSearchParams(window.location.search).get('card'));
+    if (requestedCardId && (localBoard.value.cards || []).some((card) => card.id === requestedCardId)) {
+        selectedCardId.value = requestedCardId;
+    }
 
     if (isProjectBoard.value) {
         autoSyncTimer = setInterval(runAutoSync, AUTO_SYNC_INTERVAL_MS);
@@ -1837,6 +1877,8 @@ onUnmounted(() => {
     document.removeEventListener('pointerdown', handleDetailsBoundaryPointerDown, true);
     document.removeEventListener('focusin', handleDetailsBoundaryFocusIn, true);
     document.removeEventListener('click', closeColumnMenu);
+    document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    if (enteredFullscreen && document.fullscreenElement) document.exitFullscreen().catch(() => {});
 
     clearInterval(autoSyncTimer);
     clearTimeout(autoSyncDebounce);
@@ -1850,7 +1892,11 @@ onUnmounted(() => {
     <AppLayout content-class="max-w-none px-0 sm:px-0 lg:px-0">
         <template #header>Task Board</template>
 
-        <div class="flex h-[calc(100vh-6rem)] min-h-[680px] flex-col overflow-hidden text-gray-900 dark:text-gray-100" :style="boardStyle">
+        <div
+            class="flex flex-col overflow-hidden text-gray-900 dark:text-gray-100"
+            :class="presenting ? 'fixed inset-0 z-[60] h-screen' : 'h-[calc(100vh-6rem)] min-h-[680px]'"
+            :style="boardStyle"
+        >
             <header class="shrink-0 border-b border-white/10 bg-black/20 px-4 py-3 text-white backdrop-blur-md">
                 <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div class="flex min-w-0 items-center gap-3">
@@ -1886,6 +1932,14 @@ onUnmounted(() => {
                             <LinkIcon class="h-4 w-4" />
                             Link to Project
                         </button>
+                        <Link :href="route('task-boards.whiteboard', localBoard.id)" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/15" title="Open this board's whiteboard: draw, add cards and present" data-testid="board-whiteboard-link">
+                            <PaintBrushIcon class="h-4 w-4" />
+                            Whiteboard
+                        </Link>
+                        <button type="button" @click="presenting ? stopPresenting() : startPresenting()" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/15" :class="presenting ? 'bg-white/20' : ''" title="Present this board full screen and draw on it" data-testid="board-present">
+                            <PlayIcon class="h-4 w-4" />
+                            {{ presenting ? 'Stop presenting' : 'Present' }}
+                        </button>
                         <button type="button" @click="toggleStar" class="rounded-lg p-2 transition-colors hover:bg-white/15" title="Star board">
                             <StarSolidIcon v-if="localBoard.starred" class="h-5 w-5 text-yellow-300" />
                             <StarIcon v-else class="h-5 w-5 text-white/80" />
@@ -1898,7 +1952,7 @@ onUnmounted(() => {
                             <UserGroupIcon class="h-4 w-4" />
                             {{ boardMembers.length }}
                         </button>
-                        <button type="button" @click="showBoardMenu = !showBoardMenu" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/15">
+                        <button v-if="!presenting" type="button" @click="showBoardMenu = !showBoardMenu" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/15">
                             <Bars3Icon class="h-4 w-4" />
                             Menu
                         </button>
@@ -1948,7 +2002,8 @@ onUnmounted(() => {
                 </div>
             </header>
 
-            <main class="flex-1 overflow-x-auto overflow-y-hidden px-4 py-4">
+            <div class="relative min-h-0 flex-1">
+            <main class="h-full overflow-x-auto overflow-y-hidden px-4 py-4">
                 <div class="flex h-full gap-4">
                     <section
                         v-for="column in boardColumns"
@@ -2193,6 +2248,8 @@ onUnmounted(() => {
                     </div>
                 </div>
             </main>
+            <BoardAnnotator v-if="presenting" @close="stopPresenting" />
+            </div>
         </div>
 
         <aside v-if="showBoardMenu" class="fixed right-0 top-0 z-50 flex h-screen w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-2xl dark:bg-gray-800 dark:border-gray-700">

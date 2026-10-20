@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TaskBoard extends Model
@@ -119,6 +120,11 @@ class TaskBoard extends Model
     public function activities(): HasMany
     {
         return $this->hasMany(TaskCardActivity::class)->latest();
+    }
+
+    public function whiteboard(): HasOne
+    {
+        return $this->hasOne(TaskBoardWhiteboard::class);
     }
 
     public function isMember(User $user): bool
