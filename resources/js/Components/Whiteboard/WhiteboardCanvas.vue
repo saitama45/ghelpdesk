@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue';
 import WhiteboardElements from './WhiteboardElements.vue';
+import { ASSET_DRAG_TYPE, RASTER_IMAGE, fitPicture } from '@/Components/SharedCanvas/assets';
 import {
     CARD_DRAG_TYPE,
     FONT_FAMILY,
@@ -43,9 +44,12 @@ const props = defineProps({
     showZoom: { type: Boolean, default: true },
     // 'bottom' keeps the toolbar off content that matters at the top (board column headers).
     toolbarPlacement: { type: String, default: 'top' },
+    // async (File) => { url, width, height } — stores a pasted/dropped picture. Without it,
+    // pictures can still be added from the Elements panel.
+    uploadImage: { type: Function, default: null },
 });
 
-const emit = defineEmits(['open-card', 'drop-card', 'history']);
+const emit = defineEmits(['open-card', 'drop-card', 'history', 'error']);
 
 const TOOL_DEFS = {
     pointer: { label: 'Interact with the board', key: null },
@@ -260,7 +264,7 @@ const pickColor = (value) => {
     else color.value = value;
 
     restyleSelection((element) => {
-        if (element.type === 'card') return null;
+        if (element.type === 'card' || element.type === 'image') return null;
         if (element.type === 'sticky') {
             if (!STICKY_COLORS.includes(value)) return null;
         } else if (!INK_COLORS.includes(value)) {
@@ -743,17 +747,93 @@ const onWheel = (event) => {
     }
 };
 
+// ── Icons & pictures (Elements panel, paste, drop) ───────────────────────────
+
+const uploading = ref(0);
+
+/** Place an Elements-panel item ({ kind: 'icon', key } | { kind: 'image', url, width, height }). */
+const addAsset = (asset, at = null) => {
+    if (!canEdit.value || !asset) return null;
+    const point = at || viewportCenter();
+    let element = null;
+    if (asset.kind === 'icon') {
+        element = { id: uid(), type: 'icon', icon: asset.key, x: round1(point.x - 48), y: round1(point.y - 48), w: 96, h: 96, color: color.value };
+    } else if (asset.kind === 'image' && asset.url) {
+        const { w, h } = fitPicture(asset.width, asset.height);
+        element = { id: uid(), type: 'image', src: asset.url, x: round1(point.x - w / 2), y: round1(point.y - h / 2), w, h, opacity: 1 };
+    }
+    if (!element) return null;
+    commit([{ id: element.id, after: element }]);
+    if (availableTools.value.includes('select')) tool.value = 'select';
+    selection.value = [element.id];
+    return element.id;
+};
+
+/** Upload pasted/dropped picture files, then place them (cascading from `at`). */
+const insertImages = async (files, at = null) => {
+    if (!canEdit.value || !props.uploadImage) return;
+    const pictures = [...files].filter((file) => RASTER_IMAGE.test(file.type));
+    if (!pictures.length) {
+        emit('error', 'Only PNG, JPG, GIF or WebP pictures can be added.');
+        return;
+    }
+    const origin = at || viewportCenter();
+    uploading.value += pictures.length;
+    for (const [index, file] of pictures.entries()) {
+        try {
+            const asset = await props.uploadImage(file);
+            addAsset({ kind: 'image', url: asset.url, width: asset.width, height: asset.height }, { x: origin.x + index * 24, y: origin.y + index * 24 });
+        } catch (error) {
+            emit('error', error?.response?.data?.message || `Could not add ${file.name || 'the picture'}.`);
+        } finally {
+            uploading.value--;
+        }
+    }
+};
+
+const onPaste = (event) => {
+    if (!props.keyboard || props.overlay || !canEdit.value || !props.uploadImage) return;
+    const target = event.target;
+    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName) || target?.isContentEditable) return;
+    if (document.querySelector('dialog[open]')) return;
+    const pictures = [...(event.clipboardData?.files || [])].filter((file) => file.type.startsWith('image/'));
+    if (!pictures.length) return;
+    event.preventDefault();
+    insertImages(pictures);
+};
+
 const onDragOver = (event) => {
-    if (!canEdit.value || !event.dataTransfer?.types?.includes(CARD_DRAG_TYPE)) return;
+    const types = event.dataTransfer?.types || [];
+    const accepts = types.includes(CARD_DRAG_TYPE) || types.includes(ASSET_DRAG_TYPE) || (types.includes('Files') && props.uploadImage);
+    if (!canEdit.value || !accepts) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
 };
 
 const onDrop = (event) => {
-    const cardId = event.dataTransfer?.getData(CARD_DRAG_TYPE);
-    if (!canEdit.value || !cardId) return;
-    event.preventDefault();
+    if (!canEdit.value) return;
     const point = toWorld(event.clientX, event.clientY);
+
+    const asset = event.dataTransfer?.getData(ASSET_DRAG_TYPE);
+    if (asset) {
+        event.preventDefault();
+        try {
+            addAsset(JSON.parse(asset), point);
+        } catch {
+            // Not one of ours.
+        }
+        return;
+    }
+
+    if (event.dataTransfer?.files?.length && props.uploadImage) {
+        event.preventDefault();
+        insertImages(event.dataTransfer.files, point);
+        return;
+    }
+
+    const cardId = event.dataTransfer?.getData(CARD_DRAG_TYPE);
+    if (!cardId) return;
+    event.preventDefault();
     emit('drop-card', { cardId: Number(cardId), x: point.x, y: point.y });
 };
 
@@ -856,16 +936,20 @@ const exportPng = async (filename = 'whiteboard.png') => {
 onMounted(() => {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('paste', onPaste);
     nextTick(() => fitToContent());
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('paste', onPaste);
     if (laserFrame) cancelAnimationFrame(laserFrame);
 });
 
 defineExpose({
+    addAsset,
+    insertImages,
     fitToContent,
     zoomBy,
     resetZoom,
@@ -967,6 +1051,10 @@ defineExpose({
                 </g>
             </g>
         </svg>
+
+        <div v-if="uploading" class="pointer-events-none absolute bottom-16 left-1/2 z-20 -translate-x-1/2 rounded-full bg-gray-900/80 px-3 py-1 text-xs font-semibold text-white shadow" data-testid="whiteboard-uploading">
+            Adding {{ uploading === 1 ? 'picture' : `${uploading} pictures` }}…
+        </div>
 
         <textarea
             v-if="editing"

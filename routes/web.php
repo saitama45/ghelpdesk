@@ -300,6 +300,15 @@ Route::middleware('auth')->group(function () {
     // seconds (poll, autosave). EnsureCanvasVisible applies the private/department/everyone rule.
     Route::bind('lightDiagram', fn (string $value) => \App\Models\Diagram::select(\App\Models\Diagram::LIGHT_COLUMNS)->findOrFail($value));
     Route::bind('lightWhiteboard', fn (string $value) => \App\Models\Whiteboard::select(\App\Models\Whiteboard::LIGHT_COLUMNS)->findOrFail($value));
+    // Picture library behind the whiteboard Elements panel (standalone and task-board whiteboards).
+    Route::middleware('permission:whiteboards.view|diagrams.view|task_boards.view')->group(function () {
+        Route::get('canvas-assets', [\App\Http\Controllers\CanvasAssetController::class, 'index'])->name('canvas-assets.index');
+        Route::middleware('permission:whiteboards.edit|whiteboards.create|diagrams.edit|diagrams.create|task_boards.edit')->group(function () {
+            Route::post('canvas-assets', [\App\Http\Controllers\CanvasAssetController::class, 'store'])->name('canvas-assets.store');
+            Route::put('canvas-assets/{canvasAsset}', [\App\Http\Controllers\CanvasAssetController::class, 'update'])->name('canvas-assets.update');
+            Route::delete('canvas-assets/{canvasAsset}', [\App\Http\Controllers\CanvasAssetController::class, 'destroy'])->name('canvas-assets.destroy');
+        });
+    });
     Route::middleware('permission:whiteboards.view')->group(function () {
         Route::get('whiteboards', [\App\Http\Controllers\WhiteboardController::class, 'index'])->name('whiteboards.index');
         Route::post('whiteboards', [\App\Http\Controllers\WhiteboardController::class, 'store'])->middleware('permission:whiteboards.create')->name('whiteboards.store');

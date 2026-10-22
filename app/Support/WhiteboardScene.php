@@ -20,6 +20,10 @@ final class WhiteboardScene
         'text' => ['x' => 'number', 'y' => 'number', 'text' => 'text', 'color' => 'color', 'size' => 'number'],
         'sticky' => ['x' => 'number', 'y' => 'number', 'w' => 'number', 'h' => 'number', 'text' => 'text', 'color' => 'color'],
         'card' => ['x' => 'number', 'y' => 'number', 'w' => 'number', 'h' => 'number', 'cardId' => 'integer', 'title' => 'text', 'status' => 'text', 'color' => 'color'],
+        // Uploaded picture (library or pasted); src must be one of our /serve-storage files.
+        'image' => ['x' => 'number', 'y' => 'number', 'w' => 'number:160', 'h' => 'number:120', 'src' => 'storage_path', 'opacity' => 'number:1'],
+        // Built-in vector icon (Elements panel), drawn in `color`.
+        'icon' => ['x' => 'number', 'y' => 'number', 'w' => 'number:96', 'h' => 'number:96', 'icon' => 'slug:question', 'color' => 'color'],
     ];
 
     public static function sanitizer(bool $withCards): SceneSanitizer
@@ -36,7 +40,11 @@ final class WhiteboardScene
             maxPages: 30,
             maxElementsPerPage: 5000,
             maxPointValues: 40000,
-            accept: fn (array $element) => $element['type'] !== 'pen' || count($element['points']) >= 2,
+            accept: fn (array $element) => match ($element['type']) {
+                'pen' => count($element['points']) >= 2,
+                'image' => $element['src'] !== null,
+                default => true,
+            },
         );
     }
 }

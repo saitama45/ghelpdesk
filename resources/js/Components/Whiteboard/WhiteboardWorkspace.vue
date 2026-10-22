@@ -27,6 +27,8 @@ const props = defineProps({
     editable: { type: Boolean, default: false },
     cardsById: { type: Object, default: () => ({}) },
     exportName: { type: String, default: 'whiteboard' },
+    // async (File) => { url, width, height } — enables pasting / dropping pictures.
+    uploadImage: { type: Function, default: null },
 });
 
 const emit = defineEmits(['open-card', 'drop-card']);
@@ -241,6 +243,8 @@ onBeforeUnmount(() => {
 defineExpose({
     currentPage,
     addElement,
+    addAsset: (asset) => canvas.value?.addAsset(asset),
+    insertImages: (files) => canvas.value?.insertImages(files),
     startPresenting,
     exportPng,
     viewportCenter: () => canvas.value?.viewportCenter() || { x: 0, y: 0 },
@@ -327,9 +331,11 @@ defineExpose({
                     :tools="presenting ? PRESENT_TOOLS : EDIT_TOOLS"
                     :initial-tool="editable ? 'pen' : 'hand'"
                     :cards-by-id="cardsById"
+                    :upload-image="uploadImage"
                     @open-card="(cardId) => emit('open-card', cardId)"
                     @drop-card="(payload) => emit('drop-card', payload)"
                     @history="onHistory"
+                    @error="showError"
                 >
                     <template v-if="presenting" #toolbar-end>
                         <span class="mx-1 h-6 w-px shrink-0 bg-gray-200 dark:bg-gray-700"></span>

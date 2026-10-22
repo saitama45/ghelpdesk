@@ -127,6 +127,9 @@ export const elementBounds = (element, cardsById = {}) => {
             const { w, h } = cardLayout(element, cardsById[element.cardId]);
             return { x: element.x, y: element.y, w, h };
         }
+        case 'image':
+        case 'icon':
+            return { x: element.x, y: element.y, w: element.w, h: element.h };
         default:
             return { x: 0, y: 0, w: 0, h: 0 };
     }
@@ -202,7 +205,7 @@ export const resizeHandles = (element, cardsById = {}) => {
     if (element.type === 'line' || element.type === 'arrow') {
         return [{ key: 'start', x: element.x1, y: element.y1 }, { key: 'end', x: element.x2, y: element.y2 }];
     }
-    if (['rect', 'ellipse', 'sticky', 'card'].includes(element.type)) {
+    if (['rect', 'ellipse', 'sticky', 'card', 'image', 'icon'].includes(element.type)) {
         const box = elementBounds({ ...element, size: 0 }, cardsById);
         return [{ key: 'se', x: box.x + box.w, y: box.y + box.h }];
     }
@@ -225,6 +228,13 @@ export const resizeElement = (element, handle, x, y) => {
         return next;
     }
     if (next.type === 'card') next.w = round1(Math.max(180, x - next.x));
+    if (next.type === 'image' || next.type === 'icon') {
+        // Pictures and icons keep their proportions.
+        const ratio = next.h / Math.max(next.w, 1);
+        const w = Math.max(16, x - next.x, (y - next.y) / Math.max(ratio, 0.01));
+        next.w = round1(w);
+        next.h = round1(w * ratio);
+    }
     return next;
 };
 

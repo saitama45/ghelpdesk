@@ -76,6 +76,7 @@ Laravel 12 + Inertia v2 + Vue 3 + Tailwind v4 (Vite) on SQL Server, with Spatie 
 | Board whiteboard (saved, revision + 409 merge) & Present ink | `app/Http/Controllers/TaskBoardWhiteboardController.php`, `resources/js/Components/Whiteboard/` |
 | Diagrams (draw.io-style, .drawio import/export) & standalone Whiteboards | `DiagramController`, `WhiteboardController` (both use `Controllers/Concerns/ManagesSharedCanvas.php`), `resources/js/Components/Diagram/` |
 | Who sees a diagram/whiteboard (list + URL guard) | `app/Support/SharedCanvasAccess.php`, `app/Http/Middleware/EnsureCanvasVisible.php` |
+| Whiteboard Elements panel (built-in icons + picture library) | `resources/js/Components/SharedCanvas/CanvasAssetsPanel.vue`, `canvasIcons.js`, `CanvasAssetController` |
 | Canvas engine shared by all three (scene doc, save/poll, whitelist) | `resources/js/lib/sceneDocument.js`, `resources/js/Composables/useSceneSync.js`, `app/Support/SceneSanitizer.php` |
 | Module tree (sidebar + hub + layout settings) | `resources/js/Composables/useModuleRegistry.js` |
 | Frontend permission checks | `resources/js/Composables/usePermission.js` |

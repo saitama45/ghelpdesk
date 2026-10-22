@@ -4,6 +4,8 @@ import { Head, Link } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import Modal from '@/Components/Modal.vue';
 import WhiteboardWorkspace from '@/Components/Whiteboard/WhiteboardWorkspace.vue';
+import CanvasAssetsPanel from '@/Components/SharedCanvas/CanvasAssetsPanel.vue';
+import { uploadCanvasAsset } from '@/Components/SharedCanvas/assets';
 import { CARD_DRAG_TYPE, createWhiteboardDocument, round1, uid } from '@/Components/Whiteboard/whiteboard';
 import { useToast } from '@/Composables/useToast';
 import { useSceneSync } from '@/Composables/useSceneSync';
@@ -38,7 +40,11 @@ const cardsById = computed(() => Object.fromEntries(liveCards.value.map((card) =
 // ── Board cards ──────────────────────────────────────────────────────────────
 
 const showCards = ref(props.canEdit);
+const asideTab = ref('cards');
 const cardSearch = ref('');
+
+// Pictures pasted or dropped on the board go into the uploader's own library (not shared).
+const uploadPicture = (file) => uploadCanvasAsset(file, { shared: false });
 
 const cardsOnPage = computed(() => new Set((workspace.value?.currentPage?.elements || [])
     .filter((element) => element.type === 'card')
@@ -151,6 +157,7 @@ const headerStyle = computed(() => {
             :editable="editable"
             :cards-by-id="cardsById"
             :export-name="board.title"
+            :upload-image="editable ? uploadPicture : null"
             @open-card="openCard"
             @drop-card="({ cardId, x, y }) => addCard(cardId, x, y)"
         >
@@ -182,7 +189,7 @@ const headerStyle = computed(() => {
                         <div class="flex flex-wrap items-center gap-2">
                             <button v-if="editable" type="button" class="hidden items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/15 lg:inline-flex" :class="showCards ? 'bg-white/15' : ''" @click="showCards = !showCards">
                                 <RectangleStackIcon class="h-4 w-4" />
-                                Board cards
+                                Cards &amp; elements
                             </button>
                             <button type="button" class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/15 disabled:opacity-50" :disabled="exporting" @click="exportPng">
                                 <ArrowDownTrayIcon class="h-4 w-4" />
@@ -199,12 +206,22 @@ const headerStyle = computed(() => {
 
             <template #aside>
                 <aside v-if="editable && showCards" class="hidden w-72 shrink-0 flex-col border-l border-gray-200 bg-white lg:flex dark:border-gray-800 dark:bg-gray-900" data-testid="whiteboard-cards-panel">
+                    <div class="flex items-center gap-1 border-b border-gray-100 px-3 pt-2 dark:border-gray-800">
+                        <button
+                            v-for="option in [{ value: 'cards', label: 'Board cards' }, { value: 'elements', label: 'Elements' }]"
+                            :key="option.value"
+                            type="button"
+                            class="-mb-px border-b-2 px-2 py-1.5 text-xs font-black uppercase tracking-wider"
+                            :class="asideTab === option.value ? 'border-blue-600 text-blue-700 dark:text-blue-300' : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400'"
+                            :data-testid="`whiteboard-aside-${option.value}`"
+                            @click="asideTab = option.value"
+                        >{{ option.label }}</button>
+                        <button type="button" aria-label="Hide side panel" class="ml-auto rounded p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800" @click="showCards = false"><XMarkIcon class="h-4 w-4" /></button>
+                    </div>
+                    <CanvasAssetsPanel v-if="asideTab === 'elements'" :can-upload="editable" class="min-h-0 flex-1" @add="(asset) => workspace?.addAsset(asset)" />
+                    <template v-else>
                     <div class="border-b border-gray-100 p-3 dark:border-gray-800">
-                        <div class="flex items-center justify-between">
-                            <span class="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Board cards</span>
-                            <button type="button" aria-label="Hide board cards" class="rounded p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800" @click="showCards = false"><XMarkIcon class="h-4 w-4" /></button>
-                        </div>
-                        <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Drag a card onto the page, or click +. It keeps showing the card’s live status.</p>
+                        <p class="text-[11px] text-gray-500 dark:text-gray-400">Drag a card onto the page, or click +. It keeps showing the card’s live status.</p>
                         <input v-model="cardSearch" type="search" placeholder="Search cards…" class="mt-2 h-8 w-full rounded-lg border-gray-300 text-sm dark:border-gray-600 dark:bg-gray-800">
                     </div>
                     <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">
@@ -236,6 +253,7 @@ const headerStyle = computed(() => {
                             </ul>
                         </section>
                     </div>
+                    </template>
                 </aside>
             </template>
         </WhiteboardWorkspace>

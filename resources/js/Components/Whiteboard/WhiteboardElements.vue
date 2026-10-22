@@ -11,6 +11,7 @@ import {
     stickyLayout,
     textLines,
 } from './whiteboard';
+import { iconOf } from '@/Components/SharedCanvas/canvasIcons';
 
 // Pure renderer: everything is plain SVG with inline attributes so the same markup
 // can be serialised straight into a PNG export.
@@ -43,6 +44,8 @@ const items = computed(() => props.elements
             item.layout = stickyLayout(el);
         } else if (el.type === 'card') {
             item.layout = cardLayout(el, props.cardsById[el.cardId]);
+        } else if (el.type === 'icon') {
+            item.icon = iconOf(el.icon);
         }
 
         return item;
@@ -50,7 +53,7 @@ const items = computed(() => props.elements
 </script>
 
 <template>
-    <g v-for="{ el, opacity, box, lines, layout } in items" :key="el.id" :opacity="opacity" :data-type="el.type">
+    <g v-for="{ el, opacity, box, lines, layout, icon } in items" :key="el.id" :opacity="opacity" :data-type="el.type" :data-icon="el.icon || null">
         <path
             v-if="el.type === 'pen'"
             :d="penPath(el.points)"
@@ -114,6 +117,21 @@ const items = computed(() => props.elements
             <text v-if="layout.meta" :x="el.x + 14" :y="el.y + layout.metaY" font-size="12" font-weight="600" :font-family="FONT_FAMILY" :fill="layout.overdue ? '#dc2626' : '#64748b'">
                 {{ layout.meta }}
             </text>
+        </g>
+        <image
+            v-else-if="el.type === 'image' && el.src"
+            :href="el.src"
+            :x="el.x" :y="el.y" :width="el.w" :height="el.h"
+            :opacity="el.opacity ?? 1"
+            preserveAspectRatio="xMidYMid meet"
+        />
+        <g v-else-if="el.type === 'icon' && icon" :transform="`translate(${el.x} ${el.y}) scale(${el.w / 24} ${el.h / 24})`">
+            <path v-if="icon.d" :d="icon.d" fill="none" :stroke="el.color" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            <path v-if="icon.fill" :d="icon.fill" :fill="el.color" />
+        </g>
+        <g v-else-if="el.type === 'image' || el.type === 'icon'">
+            <rect :x="el.x" :y="el.y" :width="el.w" :height="el.h" fill="#f1f5f9" stroke="#cbd5e1" stroke-dasharray="4 3" />
+            <text :x="el.x + el.w / 2" :y="el.y + el.h / 2 + 4" text-anchor="middle" font-size="12" fill="#94a3b8" :font-family="FONT_FAMILY">{{ el.type === 'image' ? 'Picture' : 'Icon' }}</text>
         </g>
     </g>
 </template>

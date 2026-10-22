@@ -3,12 +3,14 @@ import { computed, ref } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import CanvasHeader from '@/Components/SharedCanvas/CanvasHeader.vue';
+import CanvasAssetsPanel from '@/Components/SharedCanvas/CanvasAssetsPanel.vue';
 import WhiteboardWorkspace from '@/Components/Whiteboard/WhiteboardWorkspace.vue';
 import WhiteboardElements from '@/Components/Whiteboard/WhiteboardElements.vue';
 import { contentBounds, createWhiteboardDocument } from '@/Components/Whiteboard/whiteboard';
+import { uploadCanvasAsset } from '@/Components/SharedCanvas/assets';
 import { useSceneSync } from '@/Composables/useSceneSync';
 import { useToast } from '@/Composables/useToast';
-import { ArrowDownTrayIcon, PlayIcon } from '@heroicons/vue/24/outline';
+import { ArrowDownTrayIcon, PlayIcon, Squares2X2Icon, XMarkIcon } from '@heroicons/vue/24/outline';
 
 // Standalone whiteboard (/whiteboards/{id}): shared by visibility, no board cards.
 const props = defineProps({
@@ -22,6 +24,11 @@ const doc = createWhiteboardDocument(props.whiteboard.scene);
 const editable = ref(!!props.can.edit);
 const title = ref(props.whiteboard.title);
 const visibility = ref(props.whiteboard.visibility);
+const workspace = ref(null);
+const showElements = ref(true);
+
+// Pictures pasted or dropped on the board go into the uploader's own library (not shared).
+const uploadPicture = (file) => uploadCanvasAsset(file, { shared: false });
 
 // ── List-card preview (page 1, thinned so it stays small) ─────────────────────
 
@@ -39,10 +46,19 @@ const previewBox = computed(() => {
     return `${box.x - pad} ${box.y - pad} ${box.w + pad * 2} ${box.h + pad * 2}`;
 });
 
+// An <img>-rendered SVG cannot load pictures, so each one becomes a grey block of its size.
+const pictureBlock = (attributes) => {
+    const read = (name) => attributes.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1] ?? '0';
+    return `<rect x="${read('x')}" y="${read('y')}" width="${read('width')}" height="${read('height')}" fill="#e2e8f0"/>`;
+};
+
 const buildPreview = () => {
     const svg = previewHost.value?.querySelector('svg');
     if (!svg) return null;
-    let markup = svg.outerHTML.replace(/<!--[\s\S]*?-->/g, '').replace(/ data-[a-z-]+="[^"]*"/g, '');
+    let markup = svg.outerHTML
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/ data-[a-z-]+="[^"]*"/g, '')
+        .replace(/<image\b([^>]*?)\/?>(<\/image>)?/g, (match, attributes) => pictureBlock(attributes));
     if (markup.length > 58000) markup = markup.replace(/<text[\s\S]*?<\/text>/g, '');
     return markup.length > 58000 ? null : markup;
 };
@@ -87,7 +103,7 @@ const saveLabel = computed(() => {
     <AppLayout content-class="max-w-none px-0 sm:px-0 lg:px-0">
         <template #header>Whiteboards</template>
 
-        <WhiteboardWorkspace :doc="doc" :editable="editable" :export-name="title">
+        <WhiteboardWorkspace ref="workspace" :doc="doc" :editable="editable" :export-name="title" :upload-image="editable ? uploadPicture : null">
             <template #header="{ startPresenting, exportPng, exporting }">
                 <CanvasHeader
                     v-model:title="title"
@@ -103,6 +119,10 @@ const saveLabel = computed(() => {
                     test-prefix="whiteboard"
                 >
                     <template #actions>
+                        <button v-if="editable" type="button" class="hidden items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 lg:inline-flex dark:text-gray-200 dark:hover:bg-gray-800" :class="showElements ? 'bg-gray-100 dark:bg-gray-800' : ''" title="Icons and pictures to drag onto the board" data-testid="whiteboard-elements-toggle" @click="showElements = !showElements">
+                            <Squares2X2Icon class="h-4 w-4" />
+                            Elements
+                        </button>
                         <button type="button" class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-800" :disabled="exporting" data-testid="whiteboard-export" @click="exportPng">
                             <ArrowDownTrayIcon class="h-4 w-4" />
                             Export PNG
@@ -113,6 +133,16 @@ const saveLabel = computed(() => {
                         </button>
                     </template>
                 </CanvasHeader>
+            </template>
+
+            <template #aside>
+                <aside v-if="editable && showElements" class="hidden w-72 shrink-0 flex-col border-l border-gray-200 bg-white lg:flex dark:border-gray-800 dark:bg-gray-900">
+                    <div class="flex items-center justify-between px-3 pt-2">
+                        <span class="text-xs font-black uppercase tracking-wider text-gray-500 dark:text-gray-400">Elements</span>
+                        <button type="button" aria-label="Hide elements" class="rounded p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800" @click="showElements = false"><XMarkIcon class="h-4 w-4" /></button>
+                    </div>
+                    <CanvasAssetsPanel :can-upload="editable" class="min-h-0 flex-1" @add="(asset) => workspace?.addAsset(asset)" />
+                </aside>
             </template>
         </WhiteboardWorkspace>
 

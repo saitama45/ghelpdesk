@@ -116,6 +116,30 @@ class WhiteboardTest extends TestCase
         $this->assertSame('department', $board->fresh()->visibility);
     }
 
+    public function test_pictures_and_icons_are_kept_but_outside_pictures_are_dropped(): void
+    {
+        $editor = $this->user($this->ops, ['whiteboards.view', 'whiteboards.edit']);
+        $board = $this->whiteboard($editor, 'Store layout', 'department');
+
+        $this->actingAs($editor)->putJson(route('whiteboards.scene', $board), [
+            'revision' => 0,
+            'scene' => ['pages' => [['id' => 'page-1', 'elements' => [
+                ['id' => 'i1', 'type' => 'image', 'x' => 10, 'y' => 20, 'w' => 200, 'h' => 150, 'src' => '/serve-storage/canvas-assets/2026/10/cam.png'],
+                ['id' => 'i2', 'type' => 'image', 'x' => 0, 'y' => 0, 'src' => 'https://tracker.example/pixel.png'],
+                ['id' => 'k1', 'type' => 'icon', 'x' => 0, 'y' => 0, 'w' => 96, 'h' => 96, 'icon' => 'cctv-dome', 'color' => '#ef4444'],
+                ['id' => 'k2', 'type' => 'icon', 'x' => 0, 'y' => 0, 'icon' => '<script>', 'color' => 'red'],
+            ]]]],
+        ])->assertOk();
+
+        $elements = $board->fresh()->scene['pages'][0]['elements'];
+        $this->assertSame(['i1', 'k1', 'k2'], array_column($elements, 'id'));
+        $this->assertSame('/serve-storage/canvas-assets/2026/10/cam.png', $elements[0]['src']);
+        $this->assertSame('cctv-dome', $elements[1]['icon']);
+        $this->assertSame('#ef4444', $elements[1]['color']);
+        $this->assertSame('question', $elements[2]['icon']);
+        $this->assertSame('#111827', $elements[2]['color']);
+    }
+
     private function user(Department $department, array $permissions): User
     {
         $user = User::factory()->create(['department_id' => $department->id]);
