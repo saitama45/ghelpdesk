@@ -24,9 +24,13 @@ use Closure;
  *   ref                   another element id or null
  *   slug[:default]        lowercase slug (e.g. a shape key), else the default
  *   storage_path          a file served by /serve-storage/… (uploaded image), else null
+ *   strokes               part-eraser cuts [{ s: width, p: points }]; the field is left out when empty
  */
 final class SceneSanitizer
 {
+    /** Most eraser strokes one element keeps (`strokes` kind); mirrors MAX_ERASE_STROKES in whiteboard.js. */
+    public const MAX_STROKES = 500;
+
     /**
      * @param  array<string, array<string, string>>  $elementFields  type => [field => kind]
      * @param  array<string, string>  $pageFields  field => kind (besides id and elements)
@@ -109,7 +113,14 @@ final class SceneSanitizer
         $clean = ['id' => $element['id'], 'type' => $type];
 
         foreach ($fields as $field => $kind) {
-            $clean[$field] = $this->value($kind, $element[$field] ?? null);
+            $value = $this->value($kind, $element[$field] ?? null);
+
+            // Most elements were never part-erased: don't store an empty list on every one.
+            if ($kind === 'strokes' && $value === []) {
+                continue;
+            }
+
+            $clean[$field] = $value;
         }
 
         if ($this->accept && ! ($this->accept)($clean)) {
@@ -130,6 +141,7 @@ final class SceneSanitizer
             'text' => mb_substr(is_scalar($value) ? (string) $value : '', 0, 5000),
             'name' => mb_substr(is_scalar($value) ? trim((string) $value) : '', 0, 120),
             'points' => $this->points($value),
+            'strokes' => $this->strokes($value),
             'color' => $this->color($value) ?? ($argument ?: '#111827'),
             'optional_color' => $this->color($value),
             'enum' => in_array($value, $options = explode('|', (string) $argument), true) ? $value : $options[0],
@@ -151,6 +163,33 @@ final class SceneSanitizer
 
         // Keep whole x,y pairs only.
         return count($points) % 2 === 0 ? $points : array_slice($points, 0, -1);
+    }
+
+    /**
+     * Eraser strokes cut into one element. Shares the per-field point budget with `points`; the
+     * client stops adding cuts at the same limits, so nothing it shows is dropped here.
+     */
+    private function strokes(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $strokes = [];
+        $budget = $this->maxPointValues;
+
+        foreach (array_slice(array_values($value), 0, self::MAX_STROKES) as $stroke) {
+            $points = is_array($stroke) ? $this->points($stroke['p'] ?? null) : [];
+
+            if (count($points) < 2 || count($points) > $budget) {
+                continue;
+            }
+
+            $budget -= count($points);
+            $strokes[] = ['s' => max(0.5, $this->number($stroke['s'] ?? 0)), 'p' => $points];
+        }
+
+        return $strokes;
     }
 
     private function number(mixed $value): float|int

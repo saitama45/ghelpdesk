@@ -92,6 +92,23 @@ export const cardLayout = (element, live) => {
 
 // ── Geometry ──────────────────────────────────────────────────────────────────
 
+// Pictures and icons can be turned to any angle (`rotation`, degrees, about their centre).
+export const isRotatable = (element) => element?.type === 'image' || element?.type === 'icon';
+export const elementBox = (element) => ({ x: element.x, y: element.y, w: element.w, h: element.h });
+export const elementCenter = (element) => ({ x: element.x + element.w / 2, y: element.y + element.h / 2 });
+export const normalizeAngle = (degrees) => round1((((degrees % 360) + 360) % 360));
+
+/** Rotate a point about `center` by `degrees` (clockwise on screen, like SVG rotate()). */
+export const rotatePoint = (point, center, degrees) => {
+    if (!degrees) return { x: point.x, y: point.y };
+    const radians = (degrees * Math.PI) / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const dx = point.x - center.x;
+    const dy = point.y - center.y;
+    return { x: center.x + dx * cos - dy * sin, y: center.y + dx * sin + dy * cos };
+};
+
 export const elementBounds = (element, cardsById = {}) => {
     const pad = (element.size || 0) / 2;
     switch (element.type) {
@@ -128,8 +145,15 @@ export const elementBounds = (element, cardsById = {}) => {
             return { x: element.x, y: element.y, w, h };
         }
         case 'image':
-        case 'icon':
-            return { x: element.x, y: element.y, w: element.w, h: element.h };
+        case 'icon': {
+            if (!element.rotation) return elementBox(element);
+            const c = elementCenter(element);
+            const corners = [[element.x, element.y], [element.x + element.w, element.y], [element.x + element.w, element.y + element.h], [element.x, element.y + element.h]]
+                .map(([x, y]) => rotatePoint({ x, y }, c, element.rotation));
+            const xs = corners.map((p) => p.x);
+            const ys = corners.map((p) => p.y);
+            return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+        }
         default:
             return { x: 0, y: 0, w: 0, h: 0 };
     }
@@ -156,8 +180,129 @@ const distToSegment = (px, py, x1, y1, x2, y2) => {
 
 const inBox = (box, x, y, tolerance) => x >= box.x - tolerance && x <= box.x + box.w + tolerance && y >= box.y - tolerance && y <= box.y + box.h + tolerance;
 
+// ── Part eraser ───────────────────────────────────────────────────────────────
+// The part eraser cuts like Paint: every element it crosses keeps the eraser strokes that touched
+// it (`erase: [{ s: width, p: [x, y, …] }]`) and is drawn through a mask of them. Strokes are in
+// the element's own frame (for a picture/icon, before its rotation), so a cut moves, turns,
+// resizes, duplicates and undoes with the element. Board cards are never part-erased.
+
+export const MAX_ERASE_STROKES = 500;
+export const MAX_ERASE_VALUES = 40000; // SceneSanitizer's per-field point budget
+
+export const canErasePart = (element) => element.type !== 'card';
+
+/** World point -> the element's own frame (undoes a picture/icon's rotation). */
+export const toElementFrame = (element, point) => (isRotatable(element) && element.rotation
+    ? rotatePoint(point, elementCenter(element), -element.rotation)
+    : { x: point.x, y: point.y });
+
+/** The area an element's eraser mask has to cover, in its own frame. */
+export const eraseRegion = (element, cardsById = {}) => {
+    const box = isRotatable(element) ? elementBox(element) : elementBounds(element, cardsById);
+    const pad = 8 + (element.size || 0);
+    return { x: box.x - pad, y: box.y - pad, w: box.w + pad * 2, h: box.h + pad * 2 };
+};
+
+const nearStroke = (stroke, x, y, reach) => {
+    const p = stroke.p;
+    if (p.length <= 2) return Math.hypot(x - p[0], y - p[1]) <= reach;
+    for (let i = 0; i < p.length - 2; i += 2) {
+        if (distToSegment(x, y, p[i], p[i + 1], p[i + 2], p[i + 3]) <= reach) return true;
+    }
+    return false;
+};
+
+/** True when world point (x, y) on the element has been rubbed out. */
+export const erasedAt = (element, x, y) => {
+    if (!element.erase?.length) return false;
+    const local = toElementFrame(element, { x, y });
+    return element.erase.some((stroke) => nearStroke(stroke, local.x, local.y, stroke.s / 2));
+};
+
+/**
+ * The stretches of an eraser path (flat world points) that pass over the element, in its own
+ * frame. The rest is dropped, so one long rub across the board doesn't bloat every element.
+ */
+export const eraserRuns = (element, path, width, cardsById = {}) => {
+    const region = eraseRegion(element, cardsById);
+    const near = { x: region.x - width / 2, y: region.y - width / 2, w: region.w + width, h: region.h + width };
+    const points = [];
+    for (let i = 0; i < path.length; i += 2) points.push(toElementFrame(element, { x: path[i], y: path[i + 1] }));
+
+    if (points.length === 1) {
+        const [p] = points;
+        return inBox(near, p.x, p.y, 0) ? [[round1(p.x), round1(p.y), round1(p.x + 0.1), round1(p.y)]] : [];
+    }
+    const runs = [];
+    let run = null;
+    for (let i = 0; i < points.length - 1; i++) {
+        const a = points[i];
+        const b = points[i + 1];
+        const segment = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
+        if (boxesIntersect(segment, near)) {
+            if (!run) {
+                run = [round1(a.x), round1(a.y)];
+                runs.push(run);
+            }
+            run.push(round1(b.x), round1(b.y));
+        } else {
+            run = null;
+        }
+    }
+    return runs;
+};
+
+/** The element with eraser runs cut into it, or null once it has no room for more cuts. */
+export const withErasure = (element, runs, width) => {
+    const next = clone(element);
+    next.erase = [...(next.erase || []), ...runs.map((p) => ({ s: round1(width), p }))];
+    const values = next.erase.reduce((sum, stroke) => sum + stroke.p.length, 0);
+    return next.erase.length > MAX_ERASE_STROKES || values > MAX_ERASE_VALUES ? null : next;
+};
+
+/** True when ink or a line has been rubbed out end to end, so it can go instead of lingering unseen. */
+export const fullyErased = (element) => {
+    if (!element.erase?.length) return false;
+    let points;
+    if (element.type === 'pen') points = element.points || [];
+    else if (element.type === 'line' || element.type === 'arrow') points = [element.x1, element.y1, element.x2, element.y2];
+    else return false;
+
+    const inset = (element.size || 0) / 2;
+    const covered = (x, y) => element.erase.some((stroke) => nearStroke(stroke, x, y, stroke.s / 2 - inset));
+    if (points.length <= 2) return covered(points[0], points[1]);
+    for (let i = 0; i < points.length - 2; i += 2) {
+        const [x1, y1, x2, y2] = [points[i], points[i + 1], points[i + 2], points[i + 3]];
+        const steps = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 2));
+        for (let k = 0; k <= steps; k++) {
+            if (!covered(x1 + ((x2 - x1) * k) / steps, y1 + ((y2 - y1) * k) / steps)) return false;
+        }
+    }
+    return true;
+};
+
+/** Re-fit eraser strokes when the element's box is resized from `from` to `to`. */
+const refitErase = (erase, from, to) => {
+    const sx = to.w / Math.max(from.w, 0.1);
+    const sy = to.h / Math.max(from.h, 0.1);
+    const scale = Math.sqrt(Math.abs(sx * sy));
+    return erase.map((stroke) => ({
+        s: round1(Math.max(0.5, stroke.s * scale)),
+        p: stroke.p.map((value, index) => round1(index % 2 === 0 ? to.x + (value - from.x) * sx : to.y + (value - from.y) * sy)),
+    }));
+};
+
+const shapeBox = (element) => ({
+    x: Math.min(element.x1, element.x2),
+    y: Math.min(element.y1, element.y2),
+    w: Math.abs(element.x2 - element.x1),
+    h: Math.abs(element.y2 - element.y1),
+});
+
 /** True when world point (x, y) touches the element within `tolerance` world units. */
 export const hitTest = (element, x, y, tolerance, cardsById = {}) => {
+    // A rubbed-out spot is empty space: it doesn't grab the element.
+    if (element.erase?.length && erasedAt(element, x, y)) return false;
     const reach = tolerance + (element.size || 0) / 2;
     switch (element.type) {
         case 'pen': {
@@ -179,6 +324,12 @@ export const hitTest = (element, x, y, tolerance, cardsById = {}) => {
             const cy = (element.y1 + element.y2) / 2;
             return ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
         }
+        case 'image':
+        case 'icon': {
+            // Turn the pointer back into the element's own frame, so the corners outside a turned picture don't grab it.
+            const local = rotatePoint({ x, y }, elementCenter(element), -(element.rotation || 0));
+            return inBox(elementBox(element), local.x, local.y, tolerance);
+        }
         default:
             return inBox(elementBounds(element, cardsById), x, y, tolerance);
     }
@@ -197,6 +348,9 @@ export const translateElement = (element, dx, dy) => {
         moved.x = round1(moved.x + dx);
         moved.y = round1(moved.y + dy);
     }
+    if (moved.erase) {
+        moved.erase = moved.erase.map((stroke) => ({ ...stroke, p: stroke.p.map((value, index) => round1(value + (index % 2 === 0 ? dx : dy))) }));
+    }
     return moved;
 };
 
@@ -205,7 +359,11 @@ export const resizeHandles = (element, cardsById = {}) => {
     if (element.type === 'line' || element.type === 'arrow') {
         return [{ key: 'start', x: element.x1, y: element.y1 }, { key: 'end', x: element.x2, y: element.y2 }];
     }
-    if (['rect', 'ellipse', 'sticky', 'card', 'image', 'icon'].includes(element.type)) {
+    if (isRotatable(element)) {
+        const corner = rotatePoint({ x: element.x + element.w, y: element.y + element.h }, elementCenter(element), element.rotation || 0);
+        return [{ key: 'se', x: corner.x, y: corner.y }];
+    }
+    if (['rect', 'ellipse', 'sticky', 'card'].includes(element.type)) {
         const box = elementBounds({ ...element, size: 0 }, cardsById);
         return [{ key: 'se', x: box.x + box.w, y: box.y + box.h }];
     }
@@ -217,9 +375,11 @@ export const resizeElement = (element, handle, x, y) => {
     if (handle === 'start') { next.x1 = round1(x); next.y1 = round1(y); return next; }
     if (handle === 'end') { next.x2 = round1(x); next.y2 = round1(y); return next; }
     if (next.type === 'rect' || next.type === 'ellipse') {
+        const before = shapeBox(next);
         const left = Math.min(next.x1, next.x2);
         const top = Math.min(next.y1, next.y2);
         Object.assign(next, { x1: left, y1: top, x2: round1(Math.max(left + 4, x)), y2: round1(Math.max(top + 4, y)) });
+        if (next.erase) next.erase = refitErase(next.erase, before, shapeBox(next));
         return next;
     }
     if (next.type === 'sticky') {
@@ -228,14 +388,30 @@ export const resizeElement = (element, handle, x, y) => {
         return next;
     }
     if (next.type === 'card') next.w = round1(Math.max(180, x - next.x));
-    if (next.type === 'image' || next.type === 'icon') {
-        // Pictures and icons keep their proportions.
+    if (isRotatable(next)) {
+        // Pictures and icons keep their proportions. A turned one is resized in its own frame, with
+        // its (turned) top-left corner pinned so it grows away from that corner, not from the centre.
+        const rotation = next.rotation || 0;
         const ratio = next.h / Math.max(next.w, 1);
-        const w = Math.max(16, x - next.x, (y - next.y) / Math.max(ratio, 0.01));
+        const anchor = rotatePoint({ x: next.x, y: next.y }, elementCenter(next), rotation);
+        const local = rotatePoint({ x, y }, anchor, -rotation);
+        const w = Math.max(16, local.x - anchor.x, (local.y - anchor.y) / Math.max(ratio, 0.01));
+        const h = w * ratio;
+        const center = rotatePoint({ x: anchor.x + w / 2, y: anchor.y + h / 2 }, anchor, rotation);
+        const before = elementBox(next);
         next.w = round1(w);
-        next.h = round1(w * ratio);
+        next.h = round1(h);
+        next.x = round1(center.x - w / 2);
+        next.y = round1(center.y - h / 2);
+        if (next.erase) next.erase = refitErase(next.erase, before, elementBox(next));
     }
     return next;
+};
+
+/** Where the rotate knob sits: above the element's top edge, turned with it. */
+export const rotateHandlePosition = (element, offset) => {
+    const center = elementCenter(element);
+    return rotatePoint({ x: center.x, y: element.y - offset }, center, element.rotation || 0);
 };
 
 /** Constrain a shape drag: squares/circles, and 45° steps for lines. */

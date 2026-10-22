@@ -6,24 +6,25 @@ namespace App\Support;
  * Element whitelist for whiteboard scenes, shared by the task-board whiteboard
  * (TaskBoardWhiteboardController) and standalone whiteboards (WhiteboardController).
  * Only the task-board one keeps `card` elements: they snapshot that board's cards.
+ * Every element but a card can carry `erase` (part-eraser cuts, see whiteboard.js).
  */
 final class WhiteboardScene
 {
     public const BACKGROUNDS = ['dots', 'grid', 'plain'];
 
     public const ELEMENT_FIELDS = [
-        'pen' => ['points' => 'points', 'color' => 'color', 'size' => 'number', 'opacity' => 'number'],
-        'line' => ['x1' => 'number', 'y1' => 'number', 'x2' => 'number', 'y2' => 'number', 'color' => 'color', 'size' => 'number'],
-        'arrow' => ['x1' => 'number', 'y1' => 'number', 'x2' => 'number', 'y2' => 'number', 'color' => 'color', 'size' => 'number'],
-        'rect' => ['x1' => 'number', 'y1' => 'number', 'x2' => 'number', 'y2' => 'number', 'color' => 'color', 'size' => 'number', 'fill' => 'optional_color'],
-        'ellipse' => ['x1' => 'number', 'y1' => 'number', 'x2' => 'number', 'y2' => 'number', 'color' => 'color', 'size' => 'number', 'fill' => 'optional_color'],
-        'text' => ['x' => 'number', 'y' => 'number', 'text' => 'text', 'color' => 'color', 'size' => 'number'],
-        'sticky' => ['x' => 'number', 'y' => 'number', 'w' => 'number', 'h' => 'number', 'text' => 'text', 'color' => 'color'],
+        'pen' => ['points' => 'points', 'color' => 'color', 'size' => 'number', 'opacity' => 'number', 'erase' => 'strokes'],
+        'line' => ['x1' => 'number', 'y1' => 'number', 'x2' => 'number', 'y2' => 'number', 'color' => 'color', 'size' => 'number', 'erase' => 'strokes'],
+        'arrow' => ['x1' => 'number', 'y1' => 'number', 'x2' => 'number', 'y2' => 'number', 'color' => 'color', 'size' => 'number', 'erase' => 'strokes'],
+        'rect' => ['x1' => 'number', 'y1' => 'number', 'x2' => 'number', 'y2' => 'number', 'color' => 'color', 'size' => 'number', 'fill' => 'optional_color', 'erase' => 'strokes'],
+        'ellipse' => ['x1' => 'number', 'y1' => 'number', 'x2' => 'number', 'y2' => 'number', 'color' => 'color', 'size' => 'number', 'fill' => 'optional_color', 'erase' => 'strokes'],
+        'text' => ['x' => 'number', 'y' => 'number', 'text' => 'text', 'color' => 'color', 'size' => 'number', 'erase' => 'strokes'],
+        'sticky' => ['x' => 'number', 'y' => 'number', 'w' => 'number', 'h' => 'number', 'text' => 'text', 'color' => 'color', 'erase' => 'strokes'],
         'card' => ['x' => 'number', 'y' => 'number', 'w' => 'number', 'h' => 'number', 'cardId' => 'integer', 'title' => 'text', 'status' => 'text', 'color' => 'color'],
         // Uploaded picture (library or pasted); src must be one of our /serve-storage files.
-        'image' => ['x' => 'number', 'y' => 'number', 'w' => 'number:160', 'h' => 'number:120', 'src' => 'storage_path', 'opacity' => 'number:1'],
+        'image' => ['x' => 'number', 'y' => 'number', 'w' => 'number:160', 'h' => 'number:120', 'src' => 'storage_path', 'opacity' => 'number:1', 'rotation' => 'number', 'erase' => 'strokes'],
         // Built-in vector icon (Elements panel), drawn in `color`.
-        'icon' => ['x' => 'number', 'y' => 'number', 'w' => 'number:96', 'h' => 'number:96', 'icon' => 'slug:question', 'color' => 'color'],
+        'icon' => ['x' => 'number', 'y' => 'number', 'w' => 'number:96', 'h' => 'number:96', 'icon' => 'slug:question', 'color' => 'color', 'rotation' => 'number', 'erase' => 'strokes'],
     ];
 
     public static function sanitizer(bool $withCards): SceneSanitizer

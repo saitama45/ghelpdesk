@@ -13,19 +13,29 @@ import {
     STROKE_SIZES,
     TEXT_SIZES,
     boxesIntersect,
+    canErasePart,
     clone,
     constrainShape,
     contentBounds,
     elementBounds,
+    elementBox,
+    elementCenter,
+    eraserRuns,
     exportGroupToPng,
+    fullyErased,
     hitTest,
+    isRotatable,
     measureText,
+    normalizeAngle,
     resizeElement,
     resizeHandles,
+    rotateHandlePosition,
+    rotatePoint,
     round1,
     stickyLayout,
     translateElement,
     uid,
+    withErasure,
 } from './whiteboard';
 
 const props = defineProps({
@@ -87,12 +97,20 @@ const ICONS = {
     trash: 'M5 7h14M10 11v6m4-6v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3',
     fill: 'M5 6.5A1.5 1.5 0 0 1 6.5 5h11A1.5 1.5 0 0 1 19 6.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 17.5zM5 14l9-9m-9 14L19 5m-5 14l5-5',
     fit: 'M4 9V4h5M20 9V4h-5M4 15v5h5m11-5v5h-5',
+    rotateLeft: 'M4 4v5h5M4.6 9A8 8 0 1 1 6 16.5',
+    rotateRight: 'M20 4v5h-5M19.4 9A8 8 0 1 0 18 16.5',
 };
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
 const LASER_MS = 900;
-const ERASER_CURSOR = `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22'><circle cx='11' cy='11' r='9' fill='white' fill-opacity='0.6' stroke='black' stroke-width='1.5'/></svg>") 11 11, auto`;
+const ERASER_MIN = 6;
+const ERASER_MAX = 120;
+const ERASER_MODES = [
+    { key: 'object', label: 'Whole object', title: 'Erase whole objects you touch' },
+    { key: 'part', label: 'Part', title: 'Rub out only the part you touch, like Paint' },
+];
+const ERASER_STORAGE_KEY = 'whiteboard.eraser';
 const patternId = `wb-pattern-${uid('')}`;
 
 const container = ref(null);
@@ -116,6 +134,26 @@ const color = ref(props.overlay ? '#ef4444' : '#111827');
 const stickyColor = ref(STICKY_COLORS[0]);
 const size = ref(4);
 const fillShapes = ref(false);
+
+// Eraser: whole objects or Paint-style part erasing, sized in screen px. Remembered per viewer.
+const clampEraser = (value) => Math.min(ERASER_MAX, Math.max(ERASER_MIN, Math.round(value)));
+const storedEraser = (() => {
+    try {
+        return JSON.parse(window.localStorage.getItem(ERASER_STORAGE_KEY) || 'null') || {};
+    } catch {
+        return {};
+    }
+})();
+const eraserMode = ref(storedEraser.mode === 'part' ? 'part' : 'object');
+const eraserSize = ref(clampEraser(Number(storedEraser.size) || 24));
+const eraserHead = ref(null);
+watch([eraserMode, eraserSize], ([mode, value]) => {
+    try {
+        window.localStorage.setItem(ERASER_STORAGE_KEY, JSON.stringify({ mode, size: value }));
+    } catch {
+        // Storage blocked (private window): the choice just isn't remembered.
+    }
+});
 
 const view = reactive({ x: 0, y: 0, zoom: 1 });
 const selection = ref([]);
@@ -298,9 +336,46 @@ const toggleFill = () => {
 
 const showStyle = computed(() => canEdit.value && (
     ['pen', 'highlighter', 'line', 'arrow', 'rect', 'ellipse', 'text', 'sticky'].includes(tool.value)
-    || selectedElements.value.some((element) => element.type !== 'card')
+    || selectedElements.value.some((element) => element.type !== 'card' && element.type !== 'image')
 ));
-const showSizes = computed(() => showStyle.value && !usesStickyPalette.value);
+// Sizes only mean something for strokes and text, so a lone picture or icon doesn't show them.
+const showSizes = computed(() => showStyle.value && !usesStickyPalette.value && (!selectedElements.value.length
+    || selectedElements.value.some((element) => ['pen', 'line', 'arrow', 'rect', 'ellipse', 'text'].includes(element.type))));
+
+// ── Rotation (pictures & icons) ──────────────────────────────────────────────
+
+const ROTATE_KNOB_GAP = 28; // screen px between the item's top edge and its rotate knob
+
+const rotatableSelection = computed(() => selectedElements.value.filter(isRotatable));
+
+// The angle shown in the toolbar follows the knob live while it is being dragged.
+const rotationShown = computed(() => {
+    const first = rotatableSelection.value[0];
+    if (!first) return null;
+    return Math.round((overrides.value?.get(first.id) || first).rotation || 0);
+});
+
+/** Turn the selected pictures/icons, each about its own centre: `by` degrees, or `to` an angle. */
+const rotateSelection = ({ by = 0, to = null }) => restyleSelection((element) => {
+    if (!isRotatable(element)) return null;
+    const angle = normalizeAngle(to ?? (element.rotation || 0) + by);
+    if (angle === (element.rotation || 0)) return null;
+    element.rotation = angle;
+    return element;
+});
+
+const onRotationInput = (event) => {
+    const value = Number.parseFloat(event.target.value);
+    if (Number.isFinite(value)) rotateSelection({ to: value });
+    else event.target.value = rotationShown.value ?? 0;
+};
+
+// Free by default, easing into 0/45/90… within a few degrees; Shift = 15° steps, Alt = no easing.
+const snapAngle = (raw, event) => {
+    if (event.shiftKey) return normalizeAngle(Math.round(raw / 15) * 15);
+    const nearest = Math.round(raw / 45) * 45;
+    return normalizeAngle(!event.altKey && Math.abs(raw - nearest) <= 4 ? nearest : Math.round(raw));
+};
 const showFill = computed(() => canEdit.value && (tool.value === 'rect' || tool.value === 'ellipse'
     || selectedElements.value.some((element) => element.type === 'rect' || element.type === 'ellipse')));
 
@@ -409,10 +484,35 @@ const selectionFrames = computed(() => {
     return selection.value
         .map((id) => {
             const element = overrides.value?.get(id) || elementById(id);
-            return element ? { id, box: elementBounds(element, props.cardsById) } : null;
+            if (!element) return null;
+            // A turned picture gets a frame that turns with it, not its wider bounding box.
+            if (isRotatable(element) && element.rotation) {
+                const center = elementCenter(element);
+                return { id, box: elementBox(element), transform: `rotate(${element.rotation} ${center.x} ${center.y})` };
+            }
+            return { id, box: elementBounds(element, props.cardsById), transform: null };
         })
         .filter(Boolean);
 });
+
+const rotateKnob = computed(() => {
+    if (!showSelection.value || selection.value.length !== 1) return null;
+    const id = selection.value[0];
+    const element = overrides.value?.get(id) || elementById(id);
+    if (!isRotatable(element)) return null;
+    const center = elementCenter(element);
+    return {
+        id,
+        ...rotateHandlePosition(element, ROTATE_KNOB_GAP / view.zoom),
+        stem: rotatePoint({ x: center.x, y: element.y }, center, element.rotation || 0),
+        angle: Math.round(element.rotation || 0),
+    };
+});
+
+const onRotateKnob = (point) => {
+    const knob = rotateKnob.value;
+    return knob && Math.hypot(knob.x - point.x, knob.y - point.y) <= 12 / view.zoom ? knob : null;
+};
 
 const handles = computed(() => {
     if (!showSelection.value || selection.value.length !== 1) return [];
@@ -484,18 +584,46 @@ const updatePinch = () => {
     view.y = mid.y - r.top - worldY * zoom;
 };
 
+// World radius of the eraser circle; whole-object mode never grabs less than it used to.
+const eraserReach = () => Math.max(tolerance.value * 1.5, eraserSize.value / 2 / view.zoom);
+
+// Calls `visit(x, y)` at points along from→to, close enough together not to skip anything `reach` wide.
+const sweep = (from, to, reach, visit) => {
+    const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / Math.max(reach / 2, 0.5 / view.zoom)));
+    for (let step = 0; step <= steps; step++) {
+        visit(from.x + ((to.x - from.x) * step) / steps, from.y + ((to.y - from.y) * step) / steps);
+    }
+};
+
 const eraseAlong = (from, to) => {
     const hits = gesture.hits;
     const before = hits.size;
-    const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / tolerance.value));
-    for (let step = 0; step <= steps; step++) {
-        const x = from.x + ((to.x - from.x) * step) / steps;
-        const y = from.y + ((to.y - from.y) * step) / steps;
+    const reach = eraserReach();
+    sweep(from, to, reach, (x, y) => {
         for (const element of elements.value) {
-            if (!hits.has(element.id) && hitTest(element, x, y, tolerance.value * 1.5, props.cardsById)) hits.add(element.id);
+            if (!hits.has(element.id) && hitTest(element, x, y, reach, props.cardsById)) hits.add(element.id);
         }
-    }
+    });
     if (hits.size !== before) faded.value = new Set(hits);
+};
+
+// Part eraser: collect the elements the rub has touched, and preview each with the rub cut out.
+const rubAlong = (from, to) => {
+    const { touched, width } = gesture;
+    sweep(from, to, width / 2, (x, y) => {
+        for (const element of elements.value) {
+            if (!touched.has(element.id) && canErasePart(element) && hitTest(element, x, y, width / 2, props.cardsById)) {
+                touched.set(element.id, clone(element));
+            }
+        }
+    });
+    const preview = [];
+    for (const [id, base] of touched) {
+        const runs = eraserRuns(base, gesture.path, width, props.cardsById);
+        const cut = runs.length ? withErasure(base, runs, width) : null;
+        if (cut) preview.push([id, cut]);
+    }
+    overrides.value = preview.length ? new Map(preview) : null;
 };
 
 const openCardAt = (point) => {
@@ -558,8 +686,14 @@ const onPointerDown = (event) => {
             return;
         }
         case 'eraser':
-            startGesture('erase', { last: point, hits: new Set() });
-            eraseAlong(point, point);
+            eraserHead.value = point;
+            if (eraserMode.value === 'part') {
+                startGesture('rub', { path: [round1(point.x), round1(point.y)], width: eraserSize.value / view.zoom, touched: new Map() });
+                rubAlong(point, point);
+            } else {
+                startGesture('erase', { last: point, hits: new Set() });
+                eraseAlong(point, point);
+            }
             return;
         case 'text': {
             const hit = hitAt(point);
@@ -570,6 +704,12 @@ const onPointerDown = (event) => {
             beginEdit(newSticky(point), true);
             return;
         case 'select': {
+            const knob = onRotateKnob(point);
+            if (knob) {
+                const base = clone(elementById(knob.id));
+                startGesture('rotate', { id: knob.id, base, center: elementCenter(base), angle: base.rotation || 0 });
+                return;
+            }
             const handle = handleAt(point);
             if (handle) {
                 startGesture('resize', { id: handle.id, handle: handle.key, base: clone(elementById(handle.id)) });
@@ -612,6 +752,7 @@ const onPointerMove = (event) => {
         laserHead.value = point;
         if (gesture?.kind === 'laser' || event.pointerType === 'mouse') pushLaser(point);
     }
+    if (tool.value === 'eraser') eraserHead.value = point;
     if (!gesture) return;
 
     switch (gesture.kind) {
@@ -642,6 +783,19 @@ const onPointerMove = (event) => {
             eraseAlong(gesture.last, point);
             gesture.last = point;
             break;
+        case 'rub': {
+            const path = gesture.path;
+            const spacing = Math.max(1.5 / view.zoom, gesture.width * 0.15);
+            const samples = event.getCoalescedEvents?.() || [];
+            for (const sample of samples.length ? samples : [event]) {
+                const next = toWorld(sample.clientX, sample.clientY);
+                const last = { x: path[path.length - 2], y: path[path.length - 1] };
+                if (Math.hypot(next.x - last.x, next.y - last.y) < spacing) continue;
+                path.push(round1(next.x), round1(next.y));
+                rubAlong(last, next);
+            }
+            break;
+        }
         case 'move': {
             const dx = point.x - gesture.origin.x;
             const dy = point.y - gesture.origin.y;
@@ -653,6 +807,13 @@ const onPointerMove = (event) => {
         case 'resize':
             overrides.value = new Map([[gesture.id, resizeElement(gesture.base, gesture.handle, point.x, point.y)]]);
             break;
+        case 'rotate': {
+            // Knob sits above the top edge, so pointing straight up from the centre is 0°.
+            const raw = (Math.atan2(point.y - gesture.center.y, point.x - gesture.center.x) * 180) / Math.PI + 90;
+            gesture.angle = snapAngle(raw, event);
+            overrides.value = new Map([[gesture.id, { ...gesture.base, rotation: gesture.angle }]]);
+            break;
+        }
         case 'marquee':
             marquee.value = {
                 x: Math.min(gesture.origin.x, point.x),
@@ -696,9 +857,23 @@ const onPointerUp = (event) => {
                 pruneSelection();
             }
             break;
+        case 'rub': {
+            // Ink or a line rubbed out end to end is removed rather than kept as an invisible element.
+            const changes = [...(moved || [])].map(([id, after]) => ({ id, after: fullyErased(after) ? null : after }));
+            if (changes.length) {
+                commit(changes);
+                pruneSelection();
+            }
+            break;
+        }
         case 'move':
         case 'resize':
             if (moved && (current.kind === 'resize' || current.moved)) {
+                commit([...moved].map(([id, after]) => ({ id, after })));
+            }
+            break;
+        case 'rotate':
+            if (moved && current.angle !== (current.base.rotation || 0)) {
                 commit([...moved].map(([id, after]) => ({ id, after })));
             }
             break;
@@ -719,7 +894,9 @@ const onPointerCancel = (event) => {
 };
 
 const onPointerLeave = () => {
-    if (!gesture) laserHead.value = null;
+    if (gesture) return;
+    laserHead.value = null;
+    eraserHead.value = null;
 };
 
 const onDoubleClick = (event) => {
@@ -881,6 +1058,12 @@ const onKeyDown = (event) => {
         selection.value = elements.value.map((element) => element.id);
         return;
     }
+    // Only taken over while a picture/icon is selected; otherwise Ctrl+R still reloads the page.
+    if (canEdit.value && mod && key === 'r' && rotatableSelection.value.length) {
+        event.preventDefault();
+        rotateSelection({ by: event.shiftKey ? -90 : 90 });
+        return;
+    }
     if (canEdit.value && mod && key === 'd' && selection.value.length) {
         event.preventDefault();
         duplicateSelection();
@@ -896,6 +1079,10 @@ const onKeyDown = (event) => {
         return;
     }
     if (mod || event.altKey) return;
+    if (tool.value === 'eraser' && (event.key === '[' || event.key === ']')) {
+        eraserSize.value = clampEraser(eraserSize.value + (event.key === ']' ? 6 : -6));
+        return;
+    }
 
     const match = Object.entries(TOOL_DEFS).find(([name, def]) => def.key === key && availableTools.value.includes(name));
     if (match) tool.value = match[0];
@@ -908,17 +1095,18 @@ const onKeyUp = (event) => {
 watch(tool, (next) => {
     if (next !== 'select') selection.value = [];
     if (next !== 'laser') laserHead.value = null;
+    if (next !== 'eraser') eraserHead.value = null;
 });
 
 const cursor = computed(() => {
-    if (gestureKind.value === 'pan') return 'grabbing';
+    if (gestureKind.value === 'pan' || gestureKind.value === 'rotate') return 'grabbing';
     if (spaceHeld.value || tool.value === 'hand') return 'grab';
     return {
         select: 'default',
         pointer: 'default',
         text: 'text',
         laser: 'none',
-        eraser: ERASER_CURSOR,
+        eraser: 'none', // the sized eraser circle is drawn instead
         sticky: 'copy',
     }[tool.value] || 'crosshair';
 });
@@ -1005,7 +1193,7 @@ defineExpose({
                 <WhiteboardElements v-if="editingGhost" :elements="editingGhost" :cards-by-id="cardsById" />
                 <WhiteboardElements v-if="draft" :elements="[draft]" :cards-by-id="cardsById" />
 
-                <g v-for="frame in selectionFrames" :key="`sel-${frame.id}`" pointer-events="none">
+                <g v-for="frame in selectionFrames" :key="`sel-${frame.id}`" :transform="frame.transform" pointer-events="none">
                     <rect
                         :x="frame.box.x - 4 / view.zoom"
                         :y="frame.box.y - 4 / view.zoom"
@@ -1030,6 +1218,21 @@ defineExpose({
                     :stroke-width="1.5 / view.zoom"
                     style="cursor: nwse-resize"
                 />
+                <template v-if="rotateKnob">
+                    <line
+                        :x1="rotateKnob.stem.x" :y1="rotateKnob.stem.y" :x2="rotateKnob.x" :y2="rotateKnob.y"
+                        stroke="#2563eb" :stroke-width="1.25 / view.zoom" pointer-events="none"
+                    />
+                    <g :transform="`translate(${rotateKnob.x} ${rotateKnob.y}) scale(${1 / view.zoom})`" :style="{ cursor: gestureKind === 'rotate' ? 'grabbing' : 'grab' }" data-testid="whiteboard-rotate-handle">
+                        <title>Drag to rotate (Shift = 15° steps, Alt = no snapping)</title>
+                        <circle r="8" fill="#ffffff" stroke="#2563eb" stroke-width="1.5" />
+                        <path d="M-3.6 -1.4A4 4 0 1 1 -3 2.7M-3.6 -1.4V-4.6M-3.6 -1.4H-0.6" fill="none" stroke="#2563eb" stroke-width="1.4" stroke-linecap="round" />
+                        <g v-if="gestureKind === 'rotate'" pointer-events="none" data-testid="whiteboard-rotate-angle">
+                            <rect x="13" y="-10" width="42" height="20" rx="10" fill="#1e293b" />
+                            <text x="34" y="4" text-anchor="middle" font-size="11" font-weight="700" fill="#ffffff" :font-family="FONT_FAMILY">{{ rotateKnob.angle }}°</text>
+                        </g>
+                    </g>
+                </template>
                 <rect
                     v-if="marquee"
                     :x="marquee.x" :y="marquee.y" :width="marquee.w" :height="marquee.h"
@@ -1037,6 +1240,16 @@ defineExpose({
                     pointer-events="none"
                 />
 
+                <circle
+                    v-if="eraserHead && tool === 'eraser' && canEdit"
+                    :cx="eraserHead.x" :cy="eraserHead.y"
+                    :r="eraserMode === 'part' ? eraserSize / 2 / view.zoom : eraserReach()"
+                    fill="#ffffff" fill-opacity="0.35"
+                    stroke="#475569" :stroke-width="1.25 / view.zoom"
+                    :stroke-dasharray="eraserMode === 'object' ? `${4 / view.zoom} ${3 / view.zoom}` : null"
+                    pointer-events="none"
+                    data-testid="whiteboard-eraser-cursor"
+                />
                 <g v-if="laserSegments.length || laserHead" pointer-events="none">
                     <line
                         v-for="segment in laserSegments"
@@ -1133,6 +1346,60 @@ defineExpose({
             >
                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path :d="ICONS.fill" /></svg>
             </button>
+
+            <div v-if="canEdit && tool === 'eraser'" class="flex shrink-0 items-center gap-1" data-testid="whiteboard-eraser-options">
+                <span class="mx-1 h-6 w-px shrink-0 bg-gray-200 dark:bg-gray-700"></span>
+                <div class="flex rounded-lg bg-gray-100 p-0.5 dark:bg-gray-700" role="group" aria-label="Eraser mode">
+                    <button
+                        v-for="mode in ERASER_MODES"
+                        :key="mode.key"
+                        type="button"
+                        :title="mode.title"
+                        :aria-pressed="eraserMode === mode.key"
+                        :data-eraser-mode="mode.key"
+                        class="h-8 whitespace-nowrap rounded-md px-2.5 text-xs font-bold transition-colors"
+                        :class="eraserMode === mode.key ? 'bg-white text-blue-700 shadow-sm dark:bg-gray-800 dark:text-blue-300' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100'"
+                        @click="eraserMode = mode.key"
+                    >{{ mode.label }}</button>
+                </div>
+                <label class="flex h-9 shrink-0 items-center gap-2 pl-1" title="Eraser size — [ and ] change it too">
+                    <span class="text-xs font-semibold text-gray-400">Size</span>
+                    <input
+                        v-model.number="eraserSize"
+                        type="range"
+                        :min="ERASER_MIN"
+                        :max="ERASER_MAX"
+                        step="2"
+                        class="w-24 accent-blue-600"
+                        aria-label="Eraser size"
+                        data-testid="whiteboard-eraser-size"
+                    >
+                    <span class="w-10 text-right text-xs font-semibold tabular-nums text-gray-500">{{ eraserSize }}px</span>
+                </label>
+            </div>
+
+            <div v-if="canEdit && rotatableSelection.length" class="flex shrink-0 items-center gap-1">
+                <span class="mx-1 h-6 w-px shrink-0 bg-gray-200 dark:bg-gray-700"></span>
+                <button type="button" title="Rotate 90° left (Ctrl+Shift+R)" aria-label="Rotate 90 degrees left" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700" @click="rotateSelection({ by: -90 })">
+                    <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path :d="ICONS.rotateLeft" /></svg>
+                </button>
+                <label class="flex h-9 shrink-0 items-center gap-0.5" title="Angle in degrees — or drag the round handle above the picture">
+                    <input
+                        type="number"
+                        step="1"
+                        :value="rotationShown"
+                        class="h-8 w-16 rounded-lg border-gray-300 px-1.5 text-center text-sm tabular-nums dark:border-gray-600 dark:bg-gray-800"
+                        aria-label="Rotation in degrees"
+                        data-testid="whiteboard-rotation"
+                        @change="onRotationInput"
+                        @keydown.enter="$event.target.blur()"
+                    >
+                    <span class="text-xs font-semibold text-gray-400">°</span>
+                </label>
+                <button type="button" title="Rotate 90° right (Ctrl+R)" aria-label="Rotate 90 degrees right" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700" @click="rotateSelection({ by: 90 })">
+                    <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path :d="ICONS.rotateRight" /></svg>
+                </button>
+            </div>
 
             <template v-if="canEdit">
                 <span class="mx-1 h-6 w-px shrink-0 bg-gray-200 dark:bg-gray-700"></span>

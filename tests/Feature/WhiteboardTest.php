@@ -116,7 +116,7 @@ class WhiteboardTest extends TestCase
         $this->assertSame('department', $board->fresh()->visibility);
     }
 
-    public function test_pictures_and_icons_are_kept_but_outside_pictures_are_dropped(): void
+    public function test_pictures_and_icons_keep_their_angle_but_outside_pictures_are_dropped(): void
     {
         $editor = $this->user($this->ops, ['whiteboards.view', 'whiteboards.edit']);
         $board = $this->whiteboard($editor, 'Store layout', 'department');
@@ -124,10 +124,10 @@ class WhiteboardTest extends TestCase
         $this->actingAs($editor)->putJson(route('whiteboards.scene', $board), [
             'revision' => 0,
             'scene' => ['pages' => [['id' => 'page-1', 'elements' => [
-                ['id' => 'i1', 'type' => 'image', 'x' => 10, 'y' => 20, 'w' => 200, 'h' => 150, 'src' => '/serve-storage/canvas-assets/2026/10/cam.png'],
+                ['id' => 'i1', 'type' => 'image', 'x' => 10, 'y' => 20, 'w' => 200, 'h' => 150, 'src' => '/serve-storage/canvas-assets/2026/10/cam.png', 'rotation' => 37.25],
                 ['id' => 'i2', 'type' => 'image', 'x' => 0, 'y' => 0, 'src' => 'https://tracker.example/pixel.png'],
-                ['id' => 'k1', 'type' => 'icon', 'x' => 0, 'y' => 0, 'w' => 96, 'h' => 96, 'icon' => 'cctv-dome', 'color' => '#ef4444'],
-                ['id' => 'k2', 'type' => 'icon', 'x' => 0, 'y' => 0, 'icon' => '<script>', 'color' => 'red'],
+                ['id' => 'k1', 'type' => 'icon', 'x' => 0, 'y' => 0, 'w' => 96, 'h' => 96, 'icon' => 'cctv-dome', 'color' => '#ef4444', 'rotation' => 315],
+                ['id' => 'k2', 'type' => 'icon', 'x' => 0, 'y' => 0, 'icon' => '<script>', 'color' => 'red', 'rotation' => 'sideways'],
             ]]]],
         ])->assertOk();
 
@@ -138,6 +138,37 @@ class WhiteboardTest extends TestCase
         $this->assertSame('#ef4444', $elements[1]['color']);
         $this->assertSame('question', $elements[2]['icon']);
         $this->assertSame('#111827', $elements[2]['color']);
+        $this->assertSame(37.3, $elements[0]['rotation']);
+        $this->assertSame(315, $elements[1]['rotation']);
+        $this->assertSame(0, $elements[2]['rotation']);
+    }
+
+    public function test_part_eraser_cuts_are_kept_and_cleaned(): void
+    {
+        $editor = $this->user($this->ops, ['whiteboards.view', 'whiteboards.edit']);
+        $board = $this->whiteboard($editor, 'Rubbed out', 'department');
+
+        $this->actingAs($editor)->putJson(route('whiteboards.scene', $board), [
+            'revision' => 0,
+            'scene' => ['pages' => [['id' => 'page-1', 'elements' => [
+                ['id' => 'p1', 'type' => 'pen', 'points' => [0, 0, 100, 0], 'color' => '#111827', 'size' => 4, 'erase' => [
+                    ['s' => 12.04, 'p' => [40, -5, 60, 5]],
+                    ['s' => 8, 'p' => [1, 2, 3]],
+                    ['s' => 8, 'p' => 'scribble'],
+                    'junk',
+                    ['p' => [70, 0]],
+                ]],
+                ['id' => 't1', 'type' => 'text', 'x' => 0, 'y' => 0, 'text' => 'Hi', 'color' => '#111827', 'size' => 24, 'erase' => []],
+            ]]]],
+        ])->assertOk();
+
+        [$pen, $text] = $board->fresh()->scene['pages'][0]['elements'];
+        $this->assertSame([
+            ['s' => 12, 'p' => [40, -5, 60, 5]],
+            ['s' => 8, 'p' => [1, 2]],
+            ['s' => 0.5, 'p' => [70, 0]],
+        ], $pen['erase']);
+        $this->assertArrayNotHasKey('erase', $text);
     }
 
     private function user(Department $department, array $permissions): User
