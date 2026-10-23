@@ -97,8 +97,19 @@ const programOptions = computed(() =>
 // Holiday slots are part of a card's stamps, not extra (StampAllocator), and a
 // program edited mid-campaign can leave a card with more holiday stamps than
 // slots — those count as regular, so clamp for display the same way.
+// Same slot arithmetic as StampCard::holidayFilled/regularFilled, so the two
+// always add up to the card's stamps and match what the scan modal shows.
 const holidaySlotsOf = (program) => Math.max(0, Math.min(Number(program?.holiday_stamps || 0), Number(program?.stamps_required || 0)))
-const holidayFilledOf = (card) => Math.min(Number(card?.holiday_count || 0), holidaySlotsOf(card?.program))
+const regularSlotsOf = (program) => Number(program?.stamps_required || 0) - holidaySlotsOf(program)
+const regularCountOf = (card) => Math.max(0, Number(card?.stamps_count || 0) - Number(card?.holiday_count || 0))
+const holidayFilledOf = (card) => {
+    const overflow = Math.max(0, regularCountOf(card) - regularSlotsOf(card?.program))
+    return holidaySlotsOf(card?.program) - Math.max(0, holidaySlotsOf(card?.program) - Number(card?.holiday_count || 0) - overflow)
+}
+const regularFilledOf = (card) => {
+    const overflow = Math.max(0, Number(card?.holiday_count || 0) - holidaySlotsOf(card?.program))
+    return regularSlotsOf(card?.program) - Math.max(0, regularSlotsOf(card?.program) - regularCountOf(card) - overflow)
+}
 const storeOptions = computed(() =>
     props.stores.map(s => ({ label: s.name ? `${s.code} — ${s.name}` : s.code, value: s.id })))
 const storeLocationOptions = computed(() =>
@@ -1146,8 +1157,14 @@ const submitRedeem = () => {
                     <template #body="{ data }">
                         <tr v-for="card in data" :key="card.id" class="hover:bg-gray-50 dark:hover:bg-gray-700">
                             <td class="px-6 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{{ card.customer?.name || '—' }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">{{ card.program?.name || '—' }}</td>
-                            <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{{ card.store ? `${card.store.code}${card.store.name ? ' — ' + card.store.name : ''}` : '—' }}</td>
+                            <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">
+                                {{ card.program?.name || '—' }}
+                                <!-- A member can hold several cards for one program; say which one this row is. -->
+                                <span v-if="card.card_number" class="block text-xs text-gray-400 dark:text-gray-500">
+                                    Card {{ card.card_number }}<template v-if="card.program?.max_cards_per_customer"> of {{ card.program.max_cards_per_customer }}</template>
+                                </span>
+                            </td>
+                            <td class="px-6 py-3 text-sm text-gray-600 dark:text-gray-300">{{ card.store ?`${card.store.code}${card.store.name ? ' — ' + card.store.name : ''}` : '—' }}</td>
                             <td class="px-6 py-3 text-sm text-gray-600 whitespace-nowrap dark:text-gray-300">{{ formatDateTime(card.created_at) }}</td>
                             <td class="px-6 py-3 text-sm text-gray-700 dark:text-gray-300">
                                 <button @click="openEntriesModal(card)" class="flex items-center gap-2 group" title="View stamp history">
@@ -1156,8 +1173,10 @@ const submitRedeem = () => {
                                     </div>
                                     <span class="text-xs text-gray-600 whitespace-nowrap group-hover:text-blue-600 transition-colors dark:text-gray-300">{{ card.stamps_count }} / {{ card.program?.stamps_required }}</span>
                                 </button>
-                                <p v-if="holidaySlotsOf(card.program) > 0" class="text-xs text-rose-700 mt-0.5 dark:text-rose-300">
-                                    Holiday {{ holidayFilledOf(card) }}/{{ holidaySlotsOf(card.program) }}
+                                <!-- The split of this card's own stamps, so "Holiday 1/4" can't be read as a count of cards. -->
+                                <p v-if="holidaySlotsOf(card.program) > 0" class="text-xs text-gray-500 mt-0.5 whitespace-nowrap dark:text-gray-400">
+                                    <span class="text-rose-700 dark:text-rose-300">Holiday {{ holidayFilledOf(card) }}/{{ holidaySlotsOf(card.program) }}</span>
+                                    · Regular {{ regularFilledOf(card) }}/{{ regularSlotsOf(card.program) }}
                                 </p>
                             </td>
                             <td class="px-6 py-3 text-sm">

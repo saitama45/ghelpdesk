@@ -306,4 +306,35 @@ class StampHolidaySlotsTest extends TestCase
             ->assertJsonPath('cards.1.holiday_filled', 1)
             ->assertJsonPath("cards_held.{$program->id}", 2);
     }
+
+    /**
+     * The Cards table says "Card 2 of 3" on each row, so the row's Holiday 1/4
+     * reads as that card's slots. Numbered per member and program, redeemed
+     * cards included, the same way the scan modal numbers them.
+     */
+    public function test_the_cards_list_numbers_each_card_among_the_members_cards(): void
+    {
+        $this->staff->givePermissionTo(Permission::findOrCreate('stamps.view', 'web'));
+        $program = $this->program();
+        $gen = $this->member();
+        $this->scan($gen, $program, 'holiday', 5)->assertOk();
+        $this->cards($gen, $program)->first()->update(['status' => 'redeemed']);
+        $other = Customer::create(['name' => 'Other', 'is_active' => true]);
+        $this->scan($other, $program, 'regular')->assertOk();
+
+        [$first, $second] = $this->cards($gen, $program);
+        $otherCard = $this->cards($other, $program)->sole();
+
+        $this->actingAs($this->staff)->get(route('stamps.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Stamps/Index')
+                ->has('cards', 3)
+                ->where('cards.0.id', $otherCard->id)
+                ->where('cards.0.card_number', 1)
+                ->where('cards.1.id', $second->id)
+                ->where('cards.1.card_number', 2)
+                ->where('cards.2.id', $first->id)
+                ->where('cards.2.card_number', 1));
+    }
 }

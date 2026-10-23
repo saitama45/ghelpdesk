@@ -81,6 +81,21 @@ class StampController extends Controller implements HasMiddleware
                 ->get(),
             'companies' => Company::orderBy('name')->get(['id', 'code', 'name']),
             'cards' => StampCard::with(['customer:id,name,email', 'program:id,name,stamps_required,holiday_stamps,max_cards_per_customer,auto_stamp_amount', 'store:id,code,name'])
+                ->select('stamp_cards.*')
+                // Which of the member's cards for the program this row is
+                // ("Card 2 of 3"), counted over all of them — redeemed ones and
+                // those of other entities included — the way openCardsForScan
+                // numbers them, so a row's Holiday 1/4 reads as this card's.
+                ->addSelect([
+                    'card_number' => StampCard::query()
+                        ->from('stamp_cards as sibling')
+                        ->selectRaw('COUNT(*)')
+                        ->whereColumn('sibling.customer_id', 'stamp_cards.customer_id')
+                        ->whereColumn('sibling.stamp_program_id', 'stamp_cards.stamp_program_id')
+                        ->whereColumn('sibling.id', '<=', 'stamp_cards.id'),
+                ])
+                // SQL Server hands the count back as a string.
+                ->withCasts(['card_number' => 'integer'])
                 ->when($activeCompanyId, $forActiveEntity('store'))
                 ->orderByDesc('id')
                 ->get(),
