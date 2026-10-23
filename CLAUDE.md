@@ -71,6 +71,7 @@ Laravel 12 + Inertia v2 + Vue 3 + Tailwind v4 (Vite) on SQL Server, with Spatie 
 | Bell notifications | `app/Services/NotificationService.php` + `app/Notifications/ActivityNotification.php` |
 | Permission catalogue / grouping | `app/Http/Services/RoleService.php` |
 | User ↔ loyalty-customer archive pair (soft delete, restore, purge; nightly `accounts:purge-expired`) | `app/Services/AccountArchiveService.php` |
+| Which card a loyalty stamp lands on (holiday slots, card limit; copy in linkportal) | `app/Services/StampAllocator.php` |
 | Gantt scheduling chain | `app/Services/ProjectScheduler.php`, `ScheduleChain.php`, `HolidayCalendar.php` |
 | Project ↔ board sync | `app/Services/ProjectTaskBoardSyncService.php` |
 | Board whiteboard (saved, revision + 409 merge) & Present ink | `app/Http/Controllers/TaskBoardWhiteboardController.php`, `resources/js/Components/Whiteboard/` |

@@ -18,6 +18,8 @@ use App\Models\Store;
 use App\Services\AccountArchiveService;
 use App\Services\LoyaltyQrService;
 use App\Services\LoyaltyRedeemQrService;
+use App\Services\StampAllocator;
+use App\Services\StampAward;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -78,7 +80,7 @@ class StampController extends Controller implements HasMiddleware
                 ->orderBy('name')
                 ->get(),
             'companies' => Company::orderBy('name')->get(['id', 'code', 'name']),
-            'cards' => StampCard::with(['customer:id,name,email', 'program:id,name,stamps_required,auto_stamp_amount', 'store:id,code,name'])
+            'cards' => StampCard::with(['customer:id,name,email', 'program:id,name,stamps_required,holiday_stamps,max_cards_per_customer,auto_stamp_amount', 'store:id,code,name'])
                 ->when($activeCompanyId, $forActiveEntity('store'))
                 ->orderByDesc('id')
                 ->get(),
@@ -218,6 +220,7 @@ class StampController extends Controller implements HasMiddleware
             'description' => 'nullable|string|max:1000',
             'company_id' => 'nullable|exists:companies,id',
             'stamps_required' => 'required|integer|min:1|max:1000',
+            ...self::slotRules(),
             'auto_stamp_amount' => 'nullable|numeric|min:0.01',
             'is_active' => 'boolean',
         ]);
@@ -226,6 +229,7 @@ class StampController extends Controller implements HasMiddleware
         // listener already stamps the active entity onto company_id when it's
         // left empty (stamp_programs is in CompanyContext::MODULE_TABLES) —
         // the same mechanism every other module's controller relies on.
+        $data = self::normalizeSlots($data);
         $data['created_by'] = $request->user()->id;
         $data['updated_by'] = $request->user()->id;
         StampProgram::create($data);
@@ -241,14 +245,39 @@ class StampController extends Controller implements HasMiddleware
             'description' => 'nullable|string|max:1000',
             'company_id' => 'nullable|exists:companies,id',
             'stamps_required' => 'required|integer|min:1|max:1000',
+            ...self::slotRules(),
             'auto_stamp_amount' => 'nullable|numeric|min:0.01',
             'is_active' => 'boolean',
         ]);
 
+        $data = self::normalizeSlots($data);
         $data['updated_by'] = $request->user()->id;
         $program->update($data);
 
         return back()->with('success', 'Stamp program updated.');
+    }
+
+    /**
+     * Holiday slots and the per-member card limit (see StampAllocator). The
+     * holiday slots are part of the card, never in addition to it: 20 stamps
+     * with 4 holiday slots is 4 Holiday + 16 Regular.
+     */
+    private static function slotRules(): array
+    {
+        return [
+            'holiday_stamps' => 'nullable|integer|min:0|lte:stamps_required',
+            'max_cards_per_customer' => 'nullable|integer|min:1|max:100',
+        ];
+    }
+
+    /** A blank holiday field means none — the column is not nullable. */
+    private static function normalizeSlots(array $data): array
+    {
+        if (array_key_exists('holiday_stamps', $data)) {
+            $data['holiday_stamps'] = (int) ($data['holiday_stamps'] ?? 0);
+        }
+
+        return $data;
     }
 
     public function destroyProgram(StampProgram $program)
@@ -281,6 +310,16 @@ class StampController extends Controller implements HasMiddleware
 
         if ($existing) {
             return back()->with('error', 'This customer already has an open card for that program.');
+        }
+
+        $program = $this->programForStamping((int) $data['stamp_program_id']);
+        $held = StampCard::where('customer_id', $data['customer_id'])
+            ->where('stamp_program_id', $program->id)
+            ->count();
+
+        if (! StampAllocator::canOpenCard($program, $held)) {
+            return back()->with('error', "This customer already holds the limit of {$program->cardLimit()} "
+                . ($program->cardLimit() === 1 ? 'card' : 'cards') . ' for that program.');
         }
 
         StampCard::create([
@@ -321,11 +360,44 @@ class StampController extends Controller implements HasMiddleware
 
         return response()->json([
             'customer' => $customer->only(['id', 'name', 'email', 'phone']),
-            'cards' => $customer->stampCards()
-                ->with('program:id,name,stamps_required')
-                ->whereIn('status', ['active', 'completed'])
-                ->get(['id', 'stamp_program_id', 'stamps_count', 'status']),
+            'cards' => $this->openCardsForScan($customer),
+            // Cards held per program, redeemed ones included — what a
+            // program's card limit counts against.
+            'cards_held' => $customer->stampCards()
+                ->selectRaw('stamp_program_id, COUNT(*) as held')
+                ->groupBy('stamp_program_id')
+                ->pluck('held', 'stamp_program_id'),
         ]);
+    }
+
+    /**
+     * The member's unredeemed cards, each with its number among all their
+     * cards for that program ("card 2 of 3") and its holiday/regular split,
+     * so the scan modal can say where the next stamp will land.
+     */
+    private function openCardsForScan(Customer $customer)
+    {
+        $numbers = [];
+        $all = $customer->stampCards()->orderBy('id')->get(['id', 'stamp_program_id']);
+        foreach ($all->groupBy('stamp_program_id') as $group) {
+            foreach ($group->values() as $i => $card) {
+                $numbers[$card->id] = $i + 1;
+            }
+        }
+
+        return $customer->stampCards()
+            ->with('program:id,name,stamps_required,holiday_stamps,max_cards_per_customer')
+            ->whereIn('status', ['active', 'completed'])
+            ->orderBy('id')
+            ->get(['id', 'stamp_program_id', 'stamps_count', 'holiday_count', 'status'])
+            ->each(function (StampCard $card) use ($numbers) {
+                $card->setAttribute('card_number', $numbers[$card->id] ?? null);
+                if ($card->program) {
+                    $card->setAttribute('holiday_filled', $card->holidayFilled($card->program));
+                    $card->setAttribute('regular_filled', $card->regularFilled($card->program));
+                }
+            })
+            ->values();
     }
 
     /**
@@ -345,11 +417,12 @@ class StampController extends Controller implements HasMiddleware
      * Purchase amount is required (same rule as the manual Add Stamps modal);
      * note is optional.
      */
-    public function scanAddStamp(Request $request)
+    public function scanAddStamp(Request $request, StampAllocator $allocator)
     {
         $data = $request->validate([
             'token' => 'required|string|max:255',
             'stamp_program_id' => 'required|exists:stamp_programs,id',
+            'stamp_type' => 'nullable|in:' . implode(',', StampAllocator::TYPES),
             'quantity' => 'nullable|integer|min:1|max:1000',
             'store_id' => 'nullable|exists:stores,id',
             'purchase_amount' => 'required|numeric|min:0.01',
@@ -370,53 +443,95 @@ class StampController extends Controller implements HasMiddleware
             ]);
         }
 
-        $applied = 0;
+        $program = $this->programForStamping((int) $data['stamp_program_id']);
+        $userId = $request->user()->id;
+        $storeId = $data['store_id'] ?? null;
 
-        $card = DB::transaction(function () use ($customer, $data, $request, &$applied) {
-            // Only an ACTIVE card can take a stamp, so only an active card is
-            // reused here. A full card still waiting to be redeemed is passed
-            // over rather than matched and then refused: the customer is at the
-            // counter buying again, and requiring them to claim the previous
-            // reward first would be turning away a sale. The full card keeps
-            // its place in the redemption queue untouched and this purchase
-            // opens the next cycle on a new card — one customer legitimately
-            // holding two cards for one program, which the redemption side
-            // already handles (`resolveRedeemScan` resolves a specific card id).
-            $card = StampCard::where('customer_id', $customer->id)
-                ->where('stamp_program_id', $data['stamp_program_id'])
-                ->where('status', 'active')
-                ->oldest('id')
-                ->first();
+        // Which card each stamp lands on is StampAllocator's call: the oldest
+        // ACTIVE card with a free slot of the requested type, else a new card
+        // within the program's limit. A full card still waiting to be redeemed
+        // is passed over rather than matched and then refused — the customer
+        // is at the counter buying again, and their earned reward stays
+        // claimable on its own card (`resolveRedeemScan` resolves a card id).
+        $award = $allocator->award(
+            $customer->id,
+            $program,
+            $data['stamp_type'] ?? StampAllocator::REGULAR,
+            (int) ($data['quantity'] ?? 1),
+            $data['purchase_amount'],
+            newCard: ['store_id' => $storeId, 'created_by' => $userId, 'updated_by' => $userId],
+            touch: ['updated_by' => $userId],
+            entry: ['store_id' => $storeId, 'source' => 'scan', 'note' => $data['note'] ?? null, 'created_by' => $userId],
+        );
 
-            if (! $card) {
-                $card = StampCard::create([
-                    'customer_id' => $customer->id,
-                    'stamp_program_id' => $data['stamp_program_id'],
-                    'store_id' => $data['store_id'] ?? null,
-                    'stamps_count' => 0,
-                    'status' => 'active',
-                    'created_by' => $request->user()->id,
-                    'updated_by' => $request->user()->id,
-                ]);
-            }
+        // The award can differ from the request — holiday stamps landing as
+        // regular, stamps past the card limit refused — so the toast is told
+        // what actually happened rather than echoing the request back.
+        return response()->json([
+            'card' => $award->cards->last()->fresh(['customer:id,name', 'program:id,name,stamps_required,holiday_stamps']),
+            ...$award->toArray(),
+            'message' => $award->message($customer->name),
+        ]);
+    }
 
-            $applied = $this->applyStamps(
-                $card,
-                (int) ($data['quantity'] ?? 1),
-                'scan',
-                $data['purchase_amount'],
-                $data['note'] ?? null,
-                $request->user()->id,
-                $data['store_id'] ?? null,
-            );
+    /**
+     * The program a stamp is earned on, as the staff member's entity sees it:
+     * the active entity's programs plus unassigned ones, the same rule the
+     * Programs list applies. Loaded without ActiveEntityScope because that
+     * scope matches the entity strictly and would hide the unassigned
+     * programs the list shows.
+     */
+    private function programForStamping(int $programId, string $field = 'stamp_program_id', ?string $message = null): StampProgram
+    {
+        $activeCompanyId = \App\Support\CompanyContext::activeCompanyId();
 
-            return $card->fresh(['customer:id,name', 'program:id,name,stamps_required']);
-        });
+        $program = StampProgram::withoutGlobalScope(\App\Models\Scopes\ActiveEntityScope::class)
+            ->when($activeCompanyId, fn ($q) => $q->where(
+                fn ($q2) => $q2->where('company_id', $activeCompanyId)->orWhereNull('company_id')
+            ))
+            ->find($programId);
 
-        // `applied` can be lower than what was asked for: `applyStamps` fills the
-        // card and stops. The counter tells the toast what actually happened
-        // rather than echoing the request back at the staff member.
-        return response()->json(['card' => $card, 'applied' => $applied]);
+        if (! $program) {
+            throw ValidationException::withMessages([
+                $field => $message ?? 'That program is not available in the current entity.',
+            ]);
+        }
+
+        return $program;
+    }
+
+    /**
+     * Add Stamps / Record Purchase start from a card the staff member clicked,
+     * but the stamps are placed by the same rules as a scan — the card names
+     * the member and program; StampAllocator decides the slot.
+     */
+    private function awardFromCard(StampCard $card, StampAllocator $allocator, string $type, int $quantity, $purchaseAmount, string $source, ?string $note, int $userId, ?int $storeId): StampAward
+    {
+        if ($card->status !== 'active') {
+            throw ValidationException::withMessages([
+                'quantity' => 'Stamps can only be added to an active card.',
+            ]);
+        }
+
+        // A card can point at a program that has since become unreachable
+        // (e.g. legacy/imported data). Say so, rather than letting a missing
+        // program read as a full card.
+        $program = $this->programForStamping(
+            (int) $card->stamp_program_id,
+            'quantity',
+            'This card has no stamp program assigned, so stamps cannot be added. Contact an admin to reassign it to a valid program.',
+        );
+
+        return $allocator->award(
+            (int) $card->customer_id,
+            $program,
+            $type,
+            $quantity,
+            $purchaseAmount,
+            newCard: ['store_id' => $storeId ?? $card->store_id, 'created_by' => $userId, 'updated_by' => $userId],
+            touch: ['updated_by' => $userId],
+            entry: ['store_id' => $storeId, 'source' => $source, 'note' => $note, 'created_by' => $userId],
+        );
     }
 
     /**
@@ -470,18 +585,29 @@ class StampController extends Controller implements HasMiddleware
         return back()->with('success', 'Stamp card deleted.');
     }
 
-    public function addStamps(Request $request, StampCard $card)
+    public function addStamps(Request $request, StampCard $card, StampAllocator $allocator)
     {
         $data = $request->validate([
+            'stamp_type' => 'nullable|in:' . implode(',', StampAllocator::TYPES),
             'quantity' => 'required|integer|min:1|max:1000',
             'purchase_amount' => 'required|numeric|min:0.01',
             'store_id' => 'nullable|exists:stores,id',
             'note' => 'nullable|string|max:255',
         ]);
 
-        $this->applyStamps($card, $data['quantity'], 'manual', $data['purchase_amount'], $data['note'] ?? null, $request->user()->id, $data['store_id'] ?? null);
+        $award = $this->awardFromCard(
+            $card,
+            $allocator,
+            $data['stamp_type'] ?? StampAllocator::REGULAR,
+            (int) $data['quantity'],
+            $data['purchase_amount'],
+            'manual',
+            $data['note'] ?? null,
+            $request->user()->id,
+            $data['store_id'] ?? null,
+        );
 
-        return back()->with('success', 'Stamps added.');
+        return back()->with('success', $award->message($card->customer?->name ?? 'this member'));
     }
 
     public function cardEntries(StampCard $card)
@@ -492,14 +618,15 @@ class StampController extends Controller implements HasMiddleware
             ->get();
 
         return response()->json([
-            'card' => $card->load(['customer:id,name', 'program:id,name,stamps_required']),
+            'card' => $card->load(['customer:id,name', 'program:id,name,stamps_required,holiday_stamps']),
             'entries' => $entries,
         ]);
     }
 
-    public function recordPurchase(Request $request, StampCard $card)
+    public function recordPurchase(Request $request, StampCard $card, StampAllocator $allocator)
     {
         $data = $request->validate([
+            'stamp_type' => 'nullable|in:' . implode(',', StampAllocator::TYPES),
             'purchase_amount' => 'required|numeric|min:0.01',
             'note' => 'nullable|string|max:255',
         ]);
@@ -523,72 +650,19 @@ class StampController extends Controller implements HasMiddleware
             ]);
         }
 
-        $this->applyStamps($card, $earned, 'purchase', $data['purchase_amount'], $data['note'] ?? null, $request->user()->id, null);
+        $award = $this->awardFromCard(
+            $card,
+            $allocator,
+            $data['stamp_type'] ?? StampAllocator::REGULAR,
+            $earned,
+            $data['purchase_amount'],
+            'purchase',
+            $data['note'] ?? null,
+            $request->user()->id,
+            null,
+        );
 
-        return back()->with('success', "Recorded purchase — {$earned} stamp(s) earned.");
-    }
-
-    /**
-     * Apply stamps to a card, capping at the program threshold and flipping
-     * the card to "completed" when the threshold is reached.
-     *
-     * Returns how many were actually applied, which is what the card had room
-     * for rather than what was asked for.
-     */
-    private function applyStamps(StampCard $card, int $quantity, string $source, $purchaseAmount, ?string $note, int $userId, ?int $storeId): int
-    {
-        if ($card->status !== 'active') {
-            throw ValidationException::withMessages([
-                'quantity' => 'Stamps can only be added to an active card.',
-            ]);
-        }
-
-        // A card's stamp_program_id is a required, FK-constrained column, but a
-        // card can still end up pointing at a program that's since become
-        // unreachable (e.g. legacy/imported data). Without this check the missing
-        // program silently reads as 0 stamps required below, and the card gets
-        // reported as "already full" — which is misleading; the real problem is
-        // the missing program.
-        if (! $card->program) {
-            throw ValidationException::withMessages([
-                'quantity' => 'This card has no stamp program assigned, so stamps cannot be added. Contact an admin to reassign it to a valid program.',
-            ]);
-        }
-
-        $required = (int) $card->program->stamps_required;
-        $remaining = max(0, $required - $card->stamps_count);
-        $applied = min($quantity, $remaining);
-
-        if ($applied < 1) {
-            throw ValidationException::withMessages([
-                'quantity' => 'This card is already full.',
-            ]);
-        }
-
-        DB::transaction(function () use ($card, $applied, $source, $purchaseAmount, $note, $userId, $storeId, $required) {
-            StampEntry::create([
-                'stamp_card_id' => $card->id,
-                'store_id' => $storeId,
-                'quantity' => $applied,
-                'source' => $source,
-                'purchase_amount' => $purchaseAmount,
-                'note' => $note,
-                'created_by' => $userId,
-            ]);
-
-            $card->stamps_count += $applied;
-            $card->updated_by = $userId;
-
-            if ($card->stamps_count >= $required) {
-                $card->stamps_count = $required;
-                $card->status = 'completed';
-                $card->completed_at = now();
-            }
-
-            $card->save();
-        });
-
-        return $applied;
+        return back()->with('success', 'Recorded purchase — ' . $award->message($card->customer?->name ?? 'this member'));
     }
 
     /* ----------------------------------------------------------------------

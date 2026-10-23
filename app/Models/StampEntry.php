@@ -13,6 +13,7 @@ class StampEntry extends Model
         'stamp_card_id',
         'store_id',
         'quantity',
+        'stamp_type',
         'source',
         'purchase_amount',
         'receipt_number',

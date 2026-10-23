@@ -84,7 +84,12 @@ class StampScanQuantityTest extends TestCase
         $this->assertSame(1, (int) StampCard::where('customer_id', $customer->id)->value('stamps_count'));
     }
 
-    public function test_more_stamps_than_the_card_holds_fill_it_and_report_what_fit(): void
+    /**
+     * Stamps the card has no room for continue on the next card rather than
+     * being dropped — the member earned all of them. (Before card limits and
+     * holiday slots, the scan filled the card and discarded the rest.)
+     */
+    public function test_more_stamps_than_the_card_holds_continue_on_new_cards(): void
     {
         $customer = $this->member();
         $program = $this->program(5);
@@ -104,12 +109,40 @@ class StampScanQuantityTest extends TestCase
             ]);
 
         $response->assertOk();
-        // Two of the nine fit; the toast must say two, and the card completes
-        // rather than overflowing past stamps_required.
-        $response->assertJsonPath('applied', 2);
+        $response->assertJsonPath('applied', 9);
         $card->refresh();
+        // The first card completes rather than overflowing past stamps_required...
         $this->assertSame(5, (int) $card->stamps_count);
         $this->assertSame('completed', $card->status);
+        // ...and the other seven fill a second card and start a third.
+        $this->assertSame([5, 5, 2], StampCard::where('customer_id', $customer->id)
+            ->orderBy('id')->pluck('stamps_count')->map(fn ($n) => (int) $n)->all());
+    }
+
+    public function test_more_stamps_than_the_card_limit_allows_report_what_fit(): void
+    {
+        $customer = $this->member();
+        $program = $this->program(5);
+        $program->update(['max_cards_per_customer' => 1]);
+        StampCard::create([
+            'customer_id' => $customer->id,
+            'stamp_program_id' => $program->id,
+            'stamps_count' => 3,
+            'status' => 'active',
+        ]);
+
+        $response = $this->actingAs($this->staff())
+            ->postJson(route('stamps.scan.add-stamp'), [
+                'token' => LoyaltyQrService::encode($customer->id),
+                'stamp_program_id' => $program->id,
+                'quantity' => 9,
+                'purchase_amount' => 900,
+            ]);
+
+        // Two of the nine fit; the toast must say two, not echo the nine.
+        $response->assertOk();
+        $response->assertJsonPath('applied', 2);
+        $response->assertJsonPath('refused', 7);
     }
 
     public function test_a_quantity_below_one_is_rejected(): void

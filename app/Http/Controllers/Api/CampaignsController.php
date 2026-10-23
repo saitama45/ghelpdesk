@@ -72,6 +72,9 @@ class CampaignsController extends Controller
             'emoji' => $program->emoji,
             'tag' => $program->tag,
             'required_stamps' => $program->stamps_required,
+            // Part of required_stamps, not in addition to it (StampAllocator).
+            'holiday_stamps' => $program->holidaySlots(),
+            'max_cards_per_customer' => $program->cardLimit(),
             'eligible_items_description' => $program->eligible_items_description,
             'reward_description' => $program->reward_description,
             'terms_and_conditions' => $program->terms_and_conditions,

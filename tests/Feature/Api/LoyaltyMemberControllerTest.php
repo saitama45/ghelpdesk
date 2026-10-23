@@ -103,6 +103,89 @@ class LoyaltyMemberControllerTest extends TestCase
         $this->assertSame(12, $cards[0]['stamps_required']);
     }
 
+    public function test_my_cards_reports_the_holiday_split_and_card_numbers(): void
+    {
+        $cbtl = $this->cbtl();
+        [$user, $customer] = $this->memberWithCustomer($cbtl);
+        $program = $this->program($cbtl, [
+            'stamps_required' => 20, 'holiday_stamps' => 4, 'max_cards_per_customer' => 3,
+        ]);
+
+        StampCard::create([
+            'customer_id' => $customer->id, 'stamp_program_id' => $program->id,
+            'stamps_count' => 20, 'holiday_count' => 4, 'status' => 'redeemed',
+        ]);
+        StampCard::create([
+            'customer_id' => $customer->id, 'stamp_program_id' => $program->id,
+            'stamps_count' => 6, 'holiday_count' => 4, 'status' => 'active',
+        ]);
+        StampCard::create([
+            'customer_id' => $customer->id, 'stamp_program_id' => $program->id,
+            'stamps_count' => 1, 'holiday_count' => 1, 'status' => 'active',
+        ]);
+
+        $cards = $this->withHeaders($this->bearerHeaders($user))
+            ->getJson('/api/loyalty/my-cards')
+            ->assertOk()
+            ->json('cards');
+
+        $this->assertSame([1, 2, 3], array_column($cards, 'card_number'));
+        $this->assertSame(3, $cards[1]['max_cards']);
+        $this->assertSame(4, $cards[1]['holiday_stamps']);
+        $this->assertSame(4, $cards[1]['holiday_count']);
+        $this->assertSame(2, $cards[1]['regular_count']);
+        $this->assertSame(1, $cards[2]['holiday_count']);
+        $this->assertSame(0, $cards[2]['regular_count']);
+    }
+
+    public function test_my_transactions_shows_a_deduction_with_its_reason_but_hides_ordinary_notes(): void
+    {
+        $cbtl = $this->cbtl();
+        [$user, $customer] = $this->memberWithCustomer($cbtl);
+        $program = $this->program($cbtl);
+        $card = StampCard::create([
+            'customer_id' => $customer->id, 'stamp_program_id' => $program->id,
+            'stamps_count' => 1, 'status' => 'active',
+        ]);
+        StampEntry::create([
+            'stamp_card_id' => $card->id, 'quantity' => 2, 'source' => 'scan',
+            'purchase_amount' => 300, 'note' => 'staff-only remark',
+        ]);
+        StampEntry::create([
+            'stamp_card_id' => $card->id, 'quantity' => -1, 'source' => 'deduction',
+            'note' => 'Typed 2 stamps instead of 1',
+        ]);
+
+        $rows = collect($this->withHeaders($this->bearerHeaders($user))
+            ->getJson('/api/loyalty/my-transactions')
+            ->assertOk()
+            ->json('transactions'))->keyBy('points');
+
+        $this->assertSame('earn', $rows[-1]['type']);
+        $this->assertSame('Stamp correction', $rows[-1]['product_name']);
+        $this->assertSame('Typed 2 stamps instead of 1', $rows[-1]['note']);
+        $this->assertNull($rows[2]['note'], 'an ordinary stamp\'s staff note never reaches the member');
+        $this->assertNull($rows[2]['product_name']);
+    }
+
+    public function test_campaigns_expose_holiday_slots_and_the_card_limit(): void
+    {
+        $cbtl = $this->cbtl();
+        [$user] = $this->memberWithCustomer($cbtl);
+        $this->program($cbtl, ['stamps_required' => 20, 'holiday_stamps' => 4, 'max_cards_per_customer' => 3]);
+        $this->program($cbtl, ['name' => 'Plain']);
+
+        $campaigns = collect($this->withHeaders($this->bearerHeaders($user))
+            ->getJson('/api/campaigns')
+            ->assertOk()
+            ->json('campaigns'))->keyBy('name');
+
+        $this->assertSame(4, $campaigns['CBTL Campaign']['holiday_stamps']);
+        $this->assertSame(3, $campaigns['CBTL Campaign']['max_cards_per_customer']);
+        $this->assertSame(0, $campaigns['Plain']['holiday_stamps']);
+        $this->assertNull($campaigns['Plain']['max_cards_per_customer']);
+    }
+
     public function test_my_cards_is_empty_for_a_user_with_no_linked_customer(): void
     {
         $user = User::factory()->create();

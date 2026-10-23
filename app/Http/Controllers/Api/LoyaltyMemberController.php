@@ -81,7 +81,18 @@ class LoyaltyMemberController extends Controller
                     ->when($companyId, fn ($q2) => $q2->where('company_id', $companyId), fn ($q2) => $q2->whereRaw('1 = 0'));
             })
             ->with(['program' => fn ($q) => $q->withoutGlobalScope(ActiveEntityScope::class)])
-            ->get(['id', 'stamp_program_id', 'stamps_count', 'status', 'redeemed_at']);
+            ->orderBy('id')
+            ->get(['id', 'stamp_program_id', 'stamps_count', 'holiday_count', 'status', 'redeemed_at']);
+
+        // "Card 2 of 3": a card's place among ALL the member's cards for its
+        // program, redeemed ones included — the same count the program's
+        // card limit is measured against.
+        $numbers = [];
+        foreach ($cards->groupBy('stamp_program_id') as $group) {
+            foreach ($group->values() as $i => $card) {
+                $numbers[$card->id] = $i + 1;
+            }
+        }
 
         return response()->json([
             'cards' => $cards->map(fn (StampCard $c) => [
@@ -97,6 +108,14 @@ class LoyaltyMemberController extends Controller
                 'card_id' => $c->id,
                 'stamps_count' => $c->stamps_count,
                 'stamps_required' => $c->program->stamps_required,
+                // The holiday/regular split of this card's slots
+                // (StampAllocator). Filled counts never exceed their slots,
+                // even for a program edited after the card was stamped.
+                'holiday_stamps' => $c->program->holidaySlots(),
+                'holiday_count' => $c->holidayFilled($c->program),
+                'regular_count' => $c->regularFilled($c->program),
+                'card_number' => $numbers[$c->id] ?? null,
+                'max_cards' => $c->program->cardLimit(),
                 'status' => $c->status,
                 'redeemed_at' => optional($c->redeemed_at)->toIso8601String(),
                 // Only a completed card can be redeemed (StampController::redeem
@@ -136,9 +155,17 @@ class LoyaltyMemberController extends Controller
             ->map(fn (StampEntry $e) => [
                 'reference' => "SE-{$e->id}",
                 'type' => 'earn',
+                'card_id' => $e->stamp_card_id,
+                'stamp_type' => $e->stamp_type ?? 'regular',
+                // A cashier's "Deduct Stamps" correction is a negative entry
+                // (source `deduction`, reason in `note`). It travels as an earn
+                // with negative points so the member's totals stay net, and is
+                // the only kind whose note reaches the member — staff notes on
+                // ordinary stamps stay internal.
                 'points' => $e->quantity,
                 'campaign_code' => "SP-{$e->card->stamp_program_id}",
-                'product_name' => null,
+                'product_name' => $e->source === 'deduction' ? 'Stamp correction' : null,
+                'note' => $e->source === 'deduction' ? $e->note : null,
                 'store_name' => $e->store ? "{$e->store->code} — {$e->store->name}" : null,
                 'occurred_at' => $e->created_at?->toIso8601String(),
             ]);
@@ -149,6 +176,7 @@ class LoyaltyMemberController extends Controller
             ->map(fn (StampRedemption $r) => [
                 'reference' => "SR-{$r->id}",
                 'type' => 'redeem',
+                'card_id' => $r->stamp_card_id,
                 // A redemption spends the whole card, not the reward item
                 // count — matches the local redeemReward's own convention
                 // (-campaign.requiredStamps), so totals stay consistent

@@ -87,6 +87,8 @@ Do not reintroduce a department↔store-entity check without a way to express "T
 
 **P14 — PHP tests pass while pages are broken.** Browser QA is not optional.
 
+**P15 — Stamp placement lives in two repos.** `StampAllocator` exists in ghelpdesk AND linkportal (same tables, same `tashelpdeskdb`). Change one, change the other — or the hub and the cashier till place the same stamp differently. Never write `stamp_entries`/`stamps_count` directly; a hand-rolled "add to the active card" ignores holiday slots and the card limit.
+
 ## UI conventions (enforced)
 - Row actions are always **round icon buttons**, never text labels.
 - Every dropdown uses `Autocomplete.vue` / `MultiAutocomplete.vue`; native `<select>` is not acceptable (where one survives, it needs `pl-2 pr-7`, not `px-2`).
