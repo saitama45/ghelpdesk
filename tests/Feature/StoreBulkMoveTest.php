@@ -14,7 +14,7 @@ use Tests\TestCase;
 
 /**
  * /stores bulk move: the active entity's own stores move to another entity,
- * keeping store names unique per entity and inherited rows read-only.
+ * keeping inherited rows read-only. Names may repeat; the code identifies a store.
  */
 class StoreBulkMoveTest extends TestCase
 {
@@ -70,29 +70,30 @@ class StoreBulkMoveTest extends TestCase
         $this->assertSame([$user->id], $first->users()->pluck('users.id')->all());
     }
 
-    public function test_refuses_a_name_the_target_entity_already_uses(): void
+    public function test_moves_a_store_whose_name_the_target_entity_already_uses(): void
     {
         $user = $this->editor();
         $store = $this->makeStore('Vertis North', $this->cbtl);
         $this->makeStore('Vertis North', $this->dbs);
 
         $this->moveAs($user, $this->cbtl, [$store->id], $this->dbs)
-            ->assertSessionHasErrors(['company_id' => 'Distinto would have more than one store named "Vertis North". Rename the store first, then move it.']);
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success', 'Moved 1 store to Distinto.');
 
-        $this->assertSame($this->cbtl->id, $store->fresh()->company_id);
+        $this->assertSame($this->dbs->id, $store->fresh()->company_id);
     }
 
-    public function test_refuses_two_selected_stores_with_the_same_name(): void
+    public function test_moves_two_selected_stores_with_the_same_name(): void
     {
         $user = $this->editor();
         $first = $this->makeStore('Vertis North', $this->cbtl);
         $second = $this->makeStore('Vertis North', $this->cbtl);
 
         $this->moveAs($user, $this->cbtl, [$first->id, $second->id], $this->dbs)
-            ->assertSessionHasErrors('company_id');
+            ->assertSessionHasNoErrors();
 
-        $this->assertSame($this->cbtl->id, $first->fresh()->company_id);
-        $this->assertSame($this->cbtl->id, $second->fresh()->company_id);
+        $this->assertSame($this->dbs->id, $first->fresh()->company_id);
+        $this->assertSame($this->dbs->id, $second->fresh()->company_id);
     }
 
     public function test_inherited_stores_cannot_be_moved_from_the_brand(): void

@@ -188,7 +188,7 @@ class StoreController extends Controller implements HasMiddleware
         $request->merge(['opening_date' => $request->input('opening_date') ?: null]);
 
         $validated = $request->validate(
-            $this->storeValidationRules('required|string|max:50|unique:stores,code', $this->storeNameRule($request))
+            $this->storeValidationRules('required|string|max:50|unique:stores,code')
         );
 
         $validated['radius_meters'] = $validated['radius_meters'] ?? 150;
@@ -222,10 +222,7 @@ class StoreController extends Controller implements HasMiddleware
         $request->merge(['opening_date' => $request->input('opening_date') ?: null]);
 
         $validated = $request->validate(
-            $this->storeValidationRules(
-                'required|string|max:50|unique:stores,code,' . $store->id,
-                $this->storeNameRule($request, $store)
-            )
+            $this->storeValidationRules('required|string|max:50|unique:stores,code,' . $store->id)
         );
 
         $validated['radius_meters'] = $validated['radius_meters'] ?? 150;
@@ -254,8 +251,8 @@ class StoreController extends Controller implements HasMiddleware
     /**
      * Move stores to another entity in one step. Only the active entity's own
      * stores move (inherited rows stay read-only), the legacy brand label
-     * follows the entity exactly as a single edit does, and a name the target
-     * entity already uses is refused because store names are unique per entity.
+     * follows the entity exactly as a single edit does. Names may repeat (the
+     * code is what identifies a store), so no name check blocks the move.
      * Tickets, teams, clusters and NPC assignments keep pointing at the store.
      */
     public function bulkMove(Request $request)
@@ -281,23 +278,6 @@ class StoreController extends Controller implements HasMiddleware
         }
 
         $moving = $stores->reject(fn (Store $store) => (int) $store->company_id === $target->id);
-
-        $sameNameInBatch = $moving->toBase()
-            ->groupBy(fn (Store $store) => mb_strtolower(trim($store->name)))
-            ->filter(fn ($group) => $group->count() > 1)
-            ->map(fn ($group) => $group->first()->name);
-        $takenInTarget = Store::where('company_id', $target->id)
-            ->whereIn('name', $moving->pluck('name')->all())
-            ->pluck('name');
-        $conflicts = $sameNameInBatch->values()->concat($takenInTarget)->unique()->values();
-
-        if ($conflicts->isNotEmpty()) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'company_id' => "{$target->name} would have more than one store named "
-                    . $conflicts->map(fn ($name) => "\"{$name}\"")->implode(', ')
-                    . '. Rename the store first, then move it.',
-            ]);
-        }
 
         DB::transaction(function () use ($moving, $target) {
             foreach ($moving as $store) {
@@ -325,24 +305,15 @@ class StoreController extends Controller implements HasMiddleware
     }
 
     /**
-     * Store names are unique per entity: two entities may each run a store
-     * with the same name (e.g. "DS SM North"). Codes stay globally unique.
+     * Shared validation rules for store create/update. The code is what
+     * identifies a store and is globally unique; names may repeat, even within
+     * one entity (e.g. two "NN Naia Terminal 1" rows with different codes).
      */
-    private function storeNameRule(Request $request, ?Store $store = null): array
-    {
-        $unique = Rule::unique('stores', 'name')->where('company_id', $request->input('company_id'));
-
-        return ['required', 'string', 'max:255', $store ? $unique->ignore($store->id) : $unique];
-    }
-
-    /**
-     * Shared validation rules for store create/update.
-     */
-    private function storeValidationRules(string $codeRule, string|array $nameRule): array
+    private function storeValidationRules(string $codeRule): array
     {
         return [
             'code' => $codeRule,
-            'name' => $nameRule,
+            'name' => 'required|string|max:255',
             'sector' => 'required|numeric|min:0',
             'area' => 'required|string|max:255',
             'company_id' => 'required|exists:companies,id',
