@@ -62,6 +62,9 @@ return [
             // should count only its own company's tickets.
             'all_tickets_entity' => env('DAVID_TALLY_ALL_TICKETS_ENTITY', 'NONOS'),
         ],
+        'diwa' => [
+            'key' => env('DIWA_INTEGRATION_KEY'),
+        ],
     ],
 
     // App Store / Play Store review accounts. A reviewer signs in with demo

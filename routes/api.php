@@ -48,6 +48,11 @@ Route::get('/integrations/david/ticket-tally', \App\Http\Controllers\Api\DavidTi
     ->middleware(['integration.key:david', 'throttle:60,1'])
     ->name('api.integrations.david.ticket-tally');
 
+// Server-to-server: diwa reads the company directory (entities, brands, stores).
+Route::get('/integrations/diwa/directory', \App\Http\Controllers\Api\DiwaDirectoryController::class)
+    ->middleware(['integration.key:diwa', 'throttle:60,1'])
+    ->name('api.integrations.diwa.directory');
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
