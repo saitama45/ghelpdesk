@@ -147,7 +147,8 @@ blocks everything queued behind it, so a single blocking endpoint stalls a whole
   skipped deliberately (verified safe — no `env()` outside `config/` — but only ~15% on top of
   OPcache, not worth a deploy risk).
 - **Production runs from Azure's network share**, so `startup.sh` turns OPcache timestamp checks
-  off (a once-a-minute re-stat froze every request ~3s). See `docs/knowledge/Integrations.md` § Deployment.
+  off (a once-a-minute re-stat froze every request ~3s). It also keeps nginx down until PHP-FPM
+  listens, so a deploy causes no 502s. See `docs/knowledge/Integrations.md` § Deployment.
 - **`HandleInertiaRequests::share()` runs on every web request, JSON polls included** — keep its
   props as closures (`SharedInertiaPropsTest` guards it).
 - Vite dev is not usually the bottleneck; verify before blaming the frontend. Measure which host

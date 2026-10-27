@@ -1,9 +1,14 @@
 #!/bin/bash
 
-# 1. Map the Nginx root to /public
+# 1. Map the Nginx root to /public, and keep nginx DOWN until PHP-FPM can answer
+# Azure moves traffic to a new container as soon as its port responds; until then the
+# previous container keeps serving. With nginx up from the start, the 2026-10-27
+# restart answered at 02:04:50 but PHP-FPM only started at 02:05:54, after this
+# script: 57 requests in between got "connect() failed", a 502 for the user.
+# Step 10 starts nginx again once PHP-FPM is listening.
 echo "🔨 Configuring Nginx..."
 cp /home/site/wwwroot/default.conf /etc/nginx/sites-available/default
-service nginx reload
+service nginx stop
 
 # 2. Ensure critical storage directories exist (Fixes "View path not found")
 echo "📂 Creating storage subdirectories..."
@@ -14,13 +19,14 @@ mkdir -p /home/site/wwwroot/storage/framework/views
 mkdir -p /home/site/wwwroot/storage/logs
 
 # 2.1 Create storage symlink
-echo "🔗 Creating storage symlink..."
-php /home/site/wwwroot/artisan storage:link
+# Only when it is missing or broken (the same test storage:link makes itself). It
+# lives on /home, so it survives restarts, and each artisan call costs ~5s here.
+if [ ! -e /home/site/wwwroot/public/storage ]; then
+    echo "🔗 Creating storage symlink..."
+    php /home/site/wwwroot/artisan storage:link
+fi
 
-# 3. Fix permissions (Fast)
-echo "🔐 Setting storage permissions..."
-chmod -R 777 /home/site/wwwroot/storage
-chmod -R 775 /home/site/wwwroot/bootstrap/cache
+# 3. Fix permissions: moved to step 9, which runs in the background
 
 # 4. Increase PHP-FPM limits
 sed -i 's/^pm.max_children = .*/pm.max_children = 20/g' /usr/local/etc/php-fpm.d/www.conf
@@ -74,11 +80,17 @@ EOF
 
 # 5. Clear Application Caches
 # We do NOT run config:cache because we need dynamic DB settings in AppServiceProvider.
+# Each artisan call boots the framework from the network share (~5s each in the
+# 2026-10-27 log), so no call here may be redundant:
+# - config:clear only deletes bootstrap/cache/config.php, which exists only if someone
+#   ran config:cache, so it is skipped when there is nothing to clear.
+# - route:clear and view:clear are not called: route:cache and view:cache (step 5.1)
+#   run them first.
 echo "🧹 Clearing caches..."
-php /home/site/wwwroot/artisan config:clear
+if [ -f /home/site/wwwroot/bootstrap/cache/config.php ]; then
+    php /home/site/wwwroot/artisan config:clear
+fi
 php /home/site/wwwroot/artisan cache:clear
-php /home/site/wwwroot/artisan view:clear
-php /home/site/wwwroot/artisan route:clear
 
 # 5.1 Rebuild the caches we just cleared.
 # route:clear/view:clear without a matching rebuild left production registering all
@@ -119,5 +131,31 @@ touch /home/site/wwwroot/storage/logs/queue.log
 # a large print run starts promptly and cannot block normal background jobs.
 nohup sh -c 'while true; do php /home/site/wwwroot/artisan queue:work --queue=default --tries=3 --timeout=300 --max-time=3600 --sleep=3; sleep 2; done' >> /home/site/wwwroot/storage/logs/queue.log 2>&1 &
 nohup sh -c 'while true; do php /home/site/wwwroot/artisan queue:work --queue=voucher-pdfs --tries=3 --timeout=300 --max-time=3600 --sleep=1; sleep 2; done' >> /home/site/wwwroot/storage/logs/queue.log 2>&1 &
+
+# 9. Fix permissions, in the background
+# This step took 18s in the 2026-10-27 log: the recursive chmod walks every file under
+# storage over the network share. Permissions on /home persist across restarts, so the
+# site need not wait for it, and running it after the artisan steps now also covers
+# the files those steps just created.
+echo "🔐 Setting storage permissions (in the background)..."
+nohup sh -c 'chmod -R 777 /home/site/wwwroot/storage; chmod -R 775 /home/site/wwwroot/bootstrap/cache' > /dev/null 2>&1 &
+
+# 10. Start nginx as soon as PHP-FPM is listening
+# PHP-FPM is started by the App Service startup command right AFTER this script
+# ('bash startup.sh; php-fpm;'), so wait for its port in the background. bash, not
+# sh: /dev/tcp is a bash feature. If PHP-FPM is still not up after two minutes,
+# start nginx anyway, so the container shows its error instead of never answering.
+nohup bash -c '
+    for i in $(seq 1 600); do
+        (: < /dev/tcp/127.0.0.1/9000) 2> /dev/null && break
+        sleep 0.2
+    done
+    if (: < /dev/tcp/127.0.0.1/9000) 2> /dev/null; then
+        echo "🌐 PHP-FPM is listening, starting nginx..."
+    else
+        echo "⚠️ PHP-FPM is still not listening after 2 minutes, starting nginx anyway..."
+    fi
+    service nginx start
+' &
 
 echo "🚀 Startup script finished! PHP-FPM taking over."
