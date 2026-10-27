@@ -80,9 +80,22 @@ const unread = ref(0);
 const total = ref(0);
 
 let pollInterval = null;
+// Set once the session is gone (401/419): a tab left open after its session expired
+// otherwise kept polling, and failing, until it was closed.
+let pollingStopped = false;
+
+const isSessionGone = (error) => [401, 419].includes(error?.response?.status);
+
+const stopPolling = () => {
+    pollingStopped = true;
+    clearInterval(pollInterval);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+};
 
 const fetchNotifications = async () => {
-    if (isFetching.value) return;
+    // A hidden tab shows nothing, so it skips the poll and refreshes the moment it
+    // is visible again (handleVisibilityChange) instead of every 30s in the background.
+    if (isFetching.value || pollingStopped || document.hidden) return;
     isFetching.value = true;
     try {
         const res = await axios.get(route('notifications.summary'));
@@ -90,11 +103,16 @@ const fetchNotifications = async () => {
         reminders.value = res.data.reminders ?? [];
         unread.value = res.data.unread ?? 0;
         total.value = res.data.total ?? 0;
-    } catch {
-        // silent fail — do not disrupt the UI
+    } catch (error) {
+        if (isSessionGone(error)) stopPolling();
+        // any other failure is silent — do not disrupt the UI
     } finally {
         isFetching.value = false;
     }
+};
+
+const handleVisibilityChange = () => {
+    if (!document.hidden) fetchNotifications();
 };
 
 const hasContent = computed(() => notifications.value.length > 0 || reminders.value.length > 0);
@@ -211,11 +229,13 @@ onMounted(() => {
     fetchNotifications();
     pollInterval = setInterval(fetchNotifications, 30_000);
     document.addEventListener('click', handleOutsideClick);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 });
 
 onUnmounted(() => {
     clearInterval(pollInterval);
     document.removeEventListener('click', handleOutsideClick);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
 });
 
 const severityClasses = {

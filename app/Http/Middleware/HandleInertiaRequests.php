@@ -40,6 +40,50 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
+
+        // Inertia builds this array on EVERY request in the web group, including the
+        // bell and presence polls that answer with plain JSON and never use it. So the
+        // props are closures: they are resolved only when a page is rendered, and only
+        // the ones a partial reload asks for. The per-user ones share one memoized
+        // lookup that still runs whole and in its original order, because auth.user
+        // is serialized with whatever relations those calls load onto it.
+        $context = null;
+        $userContext = function () use ($user, &$context) {
+            return $context ??= $this->userContext($user);
+        };
+
+        return array_merge(parent::share($request), [
+            'auth' => fn () => [
+                'user' => $user,
+                'permissions' => $userContext()['permissions'],
+            ],
+            'activeCompany' => fn () => $userContext()['activeCompany'],
+            'availableCompanies' => fn () => $userContext()['availableCompanies'],
+            // Department axis (nested inside the active entity): home vs viewed
+            // department and the derived provider/customer access view.
+            'departmentContext' => fn () => $userContext()['departmentContext'],
+            'sidebarLayout' => fn () => Cache::remember('sidebar_layout_config', 3600, function () {
+                $val = \App\Models\Setting::where('key', 'sidebar_layout')->value('value');
+                return $val ? json_decode($val, true) : null;
+            }),
+            'dynamicForms' => fn () => $this->activeFormDefinitions(),
+            // Ticket status catalogue (References -> Ticket Statuses): labels, colours, behaviour.
+            'ticketStatuses' => fn () => $user ? \App\Support\TicketStatuses::payload() : [],
+            // A partial reload normally retains props omitted by the server. Flash
+            // messages must always be returned (including as null after they are
+            // consumed), or background polls can replay the previous toast forever.
+            'flash' => Inertia::always(fn () => [
+                'success' => $request->session()->get('success'),
+                'error' => $request->session()->get('error'),
+                'warning' => $request->session()->get('warning'),
+                'info' => $request->session()->get('info'),
+                'created_store_id' => $request->session()->get('created_store_id'),
+            ]),
+        ]);
+    }
+
+    private function userContext($user): array
+    {
         $permissions = [];
         $activeCompany = null;
         $availableCompanies = [];
@@ -64,49 +108,28 @@ class HandleInertiaRequests extends Middleware
             $activeId = \App\Support\CompanyContext::resolveActiveId($user);
             $activeCompany = $activeId ? $accessible->firstWhere('id', $activeId) : null;
         }
-        
-        return array_merge(parent::share($request), [
-            'auth' => [
-                'user' => $user,
-                'permissions' => array_values($permissions),
-            ],
+
+        return [
+            'permissions' => array_values($permissions),
             'activeCompany' => $activeCompany,
             'availableCompanies' => $availableCompanies,
-            // Department axis (nested inside the active entity): home vs viewed
-            // department and the derived provider/customer access view.
             'departmentContext' => $user
                 ? \App\Support\DepartmentContext::share($user)
                 : ['home' => null, 'viewed' => null, 'accessView' => 'customer', 'departments' => []],
-            'sidebarLayout' => Cache::remember('sidebar_layout_config', 3600, function () {
-                $val = \App\Models\Setting::where('key', 'sidebar_layout')->value('value');
-                return $val ? json_decode($val, true) : null;
-            }),
-            'dynamicForms' => $this->activeFormDefinitions(),
-            // Ticket status catalogue (References -> Ticket Statuses): labels, colours, behaviour.
-            'ticketStatuses' => fn () => $user ? \App\Support\TicketStatuses::payload() : [],
-            // A partial reload normally retains props omitted by the server. Flash
-            // messages must always be returned (including as null after they are
-            // consumed), or background polls can replay the previous toast forever.
-            'flash' => Inertia::always(fn () => [
-                'success' => $request->session()->get('success'),
-                'error' => $request->session()->get('error'),
-                'warning' => $request->session()->get('warning'),
-                'info' => $request->session()->get('info'),
-                'created_store_id' => $request->session()->get('created_store_id'),
-            ]),
-        ]);
+        ];
     }
 
     private function activeFormDefinitions(): array
     {
-        if (!Schema::hasTable('form_definitions')) {
-            return [];
-        }
-
         // Cache key is versioned: the payload gained department_id, and a stale v1
         // entry would leave every form unassigned (invisible in all catalogues)
-        // until the hour expired.
+        // until the hour expired. The table check is a catalog query, so it runs
+        // only on a cache miss; it used to run in front of the cache on every request.
         return Cache::remember('active_form_definitions_v2', 3600, function () {
+            if (! Schema::hasTable('form_definitions')) {
+                return [];
+            }
+
             return \App\Models\FormDefinition::where('is_active', true)
                 ->get(['name', 'slug', 'icon', 'department_id'])
                 ->toArray();

@@ -5,6 +5,10 @@ import { usePage } from '@inertiajs/vue3';
 // Minimum ms between any two status-update requests (30 seconds)
 const MIN_UPDATE_INTERVAL = 30 * 1000;
 
+// 401/419 mean the session is gone. Without stopping, a tab left open after its
+// session expired kept posting (and failing) every minute until it was closed.
+const isSessionGone = (error) => [401, 419].includes(error?.response?.status);
+
 export function usePresence() {
     const page = usePage();
     const user = page.props.auth.user;
@@ -34,6 +38,10 @@ export function usePresence() {
             await axios.post(route('presence.update'), { status });
             currentStatus.value = status;
         } catch (error) {
+            if (isSessionGone(error)) {
+                destroy();
+                return;
+            }
             console.error('Failed to update status:', error);
         } finally {
             isUpdating = false;
@@ -67,7 +75,10 @@ export function usePresence() {
 
             lastUpdateAt = now;
             axios.post(route('presence.update'), { status: currentStatus.value })
-                .catch(e => console.debug('Presence heartbeat failed', e));
+                .catch(e => {
+                    if (isSessionGone(e)) destroy();
+                    else console.debug('Presence heartbeat failed', e);
+                });
         }, 60 * 1000); // Every 1 minute
     };
 

@@ -144,7 +144,7 @@ intake → TicketObserver (key/company/SLA) → assignment → work → resolve 
 - Tests: `tests/Feature/TicketDutyAssignmentTest.php`.
 
 ## 3. Notifications (bell + email)
-- In-app: `app/Services/NotificationService.php` → `App\Notifications\ActivityNotification` → `notifications` table; the bell polls every 30s (`NotificationController`).
+- In-app: `app/Services/NotificationService.php` → `App\Notifications\ActivityNotification` → `notifications` table; the bell polls every 30s (`NotificationController`). It skips the poll while the tab is hidden and refreshes the moment it is visible again. On 401/419 (session gone) it stops for good; so does the presence heartbeat (`usePresence.js`, once a minute, started only by `AppLayout`).
 - Ambient reminders (Assigned Tickets, SLA Breached/Due, Missing Schedule/Time-In/Out, Points) are recomputed each poll but have read state: each carries internal `items` (ticket ids/keys, `userId|date`), and `notification_reminder_reads` stores the items a user acknowledged (Mark all read, or clicking the reminder). A reminder turns unread again only when a new item joins it. Badge `total` = unread activity + unread reminders. Stored in a table, not cache, because `startup.sh` runs `cache:clear` on every Azure start.
 - "Needs approval" pings (domain `approval`, event `pending`) are hidden and uncounted once they no longer need the recipient: `App\Services\ApprovalNotificationResolver`, checked at read time, nothing deleted. A ping is stale when its request left the pending state, or when the level it was sent for already has an approval/rejection row (someone at that level acted). Covered, all keyed by `subject = {workflow}:{id}`:
   - multi-level: `pos_request`, `sap_request`, `form_record`, `payment_record`

@@ -1,9 +1,8 @@
 <script setup>
-import { computed, onMounted, onUnmounted } from 'vue';
+import { computed, onMounted } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import { Bars3Icon, XMarkIcon } from '@heroicons/vue/24/outline';
 import { usePermission } from '@/Composables/usePermission.js';
-import { usePresence } from '@/Composables/usePresence.js';
 import { useSidebarOrder } from '@/Composables/useSidebarOrder.js';
 import { MODULE_REGISTRY } from '@/Composables/useModuleRegistry.js';
 import { useDepartmentContext } from '@/Composables/useDepartmentContext.js';
@@ -38,7 +37,8 @@ const sectionVerb = (section) => {
     return viewingOwnDepartment.value ? 'Provide' : 'Request';
 };
 
-const { init: initPresence, destroy: destroyPresence } = usePresence();
+// Presence is started by AppLayout, which renders this sidebar. Starting it here as
+// well ran two heartbeats per tab (two POSTs a minute instead of one).
 const { init: initSidebar, getSectionOrder, getSectionLabel, ensureDynamicFormChildren } = useSidebarOrder();
 
 const route = window.route;
@@ -100,15 +100,10 @@ const orderedSections = computed(() => {
 });
 
 onMounted(() => {
-    initPresence();
     initSidebar(page.props.sidebarLayout);
     // Dynamic forms still register as Services children so the hub can order and
     // label them from the saved sidebar layout.
     ensureDynamicFormChildren(dynamicForms.value);
-});
-
-onUnmounted(() => {
-    destroyPresence();
 });
 </script>
 

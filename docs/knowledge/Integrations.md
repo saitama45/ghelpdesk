@@ -214,3 +214,6 @@ Other commands: `tickets:diagnose-email`, `sla:recalculate`, `inventory:backfill
 
 ## Deployment
 GitHub Actions (`.github/workflows/main.yaml`) → Azure App Service. `startup.sh` configures nginx, creates storage dirs + symlink, raises PHP upload limits to 1 GB, clears caches, **runs `php artisan migrate --force`**, then launches `schedule:work`. Migrations therefore ship with the deploy — never ask the user to run them by hand.
+
+- Code runs from `/home/site/wwwroot`, Azure's **network share**, not local disk. `startup.sh` therefore sets `opcache.validate_timestamps=0` and `realpath_cache_ttl=3600`. With timestamp checks on, PHP re-stat()ed every file over the share once a minute, and the log showed every in-flight request freezing ~3s on a 61s cycle. This is safe only because every deploy restarts the container (the same restart that runs migrations), which clears OPcache. Don't turn timestamp checks back on to "pick up" a deploy.
+- The PHP-FPM access log (`/usr/local/etc/php-fpm.d/zz-access-log.conf`, written by `startup.sh`) prints `"METHOD /real/url?query" status N ms MB CPU%`. The leading ISO timestamp is when the request finished; the bracketed one is when it started.

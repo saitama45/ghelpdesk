@@ -48,11 +48,28 @@ opcache.enable=1
 opcache.memory_consumption=256
 opcache.interned_strings_buffer=16
 opcache.max_accelerated_files=20000
-; Deployments replace the whole wwwroot, and the container restarts with it, so the
-; cache is cold on every deploy anyway. Validating timestamps costs a stat() per file
-; but keeps us safe against a partial/rolling file swap serving stale bytecode.
-opcache.validate_timestamps=1
-opcache.revalidate_freq=60
+; Never re-check source files. /home/site/wwwroot is Azure's NETWORK storage, not local
+; disk, and with validate_timestamps=1 / revalidate_freq=60 PHP re-stat()ed every
+; compiled file over that share once a minute. The production log matched it: every
+; ~61s, every request in flight froze ~3s and finished together, 401s included.
+; Code only changes on deploy, and every deploy restarts the container (that is also
+; how this script's migrations run), so the restart is what clears the cache.
+opcache.validate_timestamps=0
+; Same reason: each FPM worker re-resolved its include paths (composer's '/..' paths
+; included) over the share every 120s, the default TTL.
+realpath_cache_size=4096K
+realpath_cache_ttl=3600
+EOF
+
+# 4.3 Name the route and its duration in the PHP-FPM access log
+# The default format logs every request as `"GET /index.php" 200`, which cannot say
+# which page was slow. REQUEST_URI is the original URL (query string included, so
+# search terms show up in the log stream); %{mili}d is the time PHP spent on it.
+# Only tokens documented in php-fpm's sample www.conf are used, because a bad pool
+# config would stop PHP-FPM from starting at all.
+cat <<'EOF' > /usr/local/etc/php-fpm.d/zz-access-log.conf
+[www]
+access.format = "%R - %u %t \"%m %{REQUEST_URI}e\" %s %{mili}d ms %{megabytes}M MB %C%%"
 EOF
 
 # 5. Clear Application Caches
