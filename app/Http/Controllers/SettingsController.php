@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\DepartmentMailRouter;
 use App\Services\OrganizationReferenceService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -213,6 +214,10 @@ class SettingsController extends Controller implements HasMiddleware
         }
 
         Cache::forget('app_mail_settings');
+        // Queue workers read the mail and IMAP settings once, when they start, and live
+        // up to an hour (--max-time in startup.sh). Ticket emails and the mailbox fetch
+        // run there, so tell them to restart and pick the new settings up.
+        Artisan::call('queue:restart');
         Cache::forget('sidebar_layout_config');
         // Departmental addresses are derived from the support mailbox, so a change
         // to imap_username re-points every one of them.

@@ -23,3 +23,5 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 /storage/logs/laravel.log
+# Production log stream saved locally for diagnosis; never commit it
+/azure_log_stream*.txt

@@ -28,6 +28,8 @@ use App\Support\TicketAccess;
 use App\Support\TicketStatuses;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Mail\Mailable;
+use Illuminate\Mail\PendingMail;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -1406,7 +1408,7 @@ class TicketController extends Controller
                         if ($ticket->assignee->roles()->where('notify_on_ticket_assign', true)->exists()) {
                             $pending = Mail::to($ticket->assignee->email);
                             $cc = $this->attachTicketCcs($pending, $ticket, [$ticket->assignee->email]);
-                            $pending->send(new TicketAssigned($ticket, $ticket->assignee->name));
+                            $this->queueMail($pending, new TicketAssigned($ticket, $ticket->assignee->name));
                             $alreadyNotified[] = $ticket->assignee->email;
                             $alreadyNotified = array_merge($alreadyNotified, $cc);
                         }
@@ -1420,7 +1422,7 @@ class TicketController extends Controller
 
                     foreach ($urgentWatchers as $watcher) {
                         if ($watcher->email && !in_array($watcher->email, $alreadyNotified)) {
-                            Mail::to($watcher->email)->send(new TicketAssigned($ticket, $watcher->name));
+                            $this->queueMail(Mail::to($watcher->email), new TicketAssigned($ticket, $watcher->name));
                             $alreadyNotified[] = $watcher->email;
                         }
                     }
@@ -1435,7 +1437,7 @@ class TicketController extends Controller
                     if ($primary && !in_array($primary, $alreadyNotified, true)) {
                         $pending = Mail::to($primary);
                         $cc = $this->attachTicketCcs($pending, $ticket, array_merge($alreadyNotified, [$primary]));
-                        $pending->send(new TicketStatusChanged($ticket, $primaryName, (string) $oldStatus, (string) $newStatus));
+                        $this->queueMail($pending, new TicketStatusChanged($ticket, $primaryName, (string) $oldStatus, (string) $newStatus));
                         $alreadyNotified[] = $primary;
                         $alreadyNotified = array_merge($alreadyNotified, $cc);
                     } else {
@@ -1443,7 +1445,7 @@ class TicketController extends Controller
                         $effective = $ticket->deliverableCcs();
                         foreach ($effective as $cc) {
                             if ($cc->email && !in_array($cc->email, $alreadyNotified, true)) {
-                                Mail::to($cc->email)->send(new TicketStatusChanged($ticket, $cc->name ?: 'Subscriber', (string) $oldStatus, (string) $newStatus));
+                                $this->queueMail(Mail::to($cc->email), new TicketStatusChanged($ticket, $cc->name ?: 'Subscriber', (string) $oldStatus, (string) $newStatus));
                                 $alreadyNotified[] = $cc->email;
                             }
                         }
@@ -2274,6 +2276,19 @@ class TicketController extends Controller
         });
 
         return redirect()->back()->with('success', 'CC list updated.');
+    }
+
+    /**
+     * Ticket emails are sent by the queue worker, not inside the request. Each send
+     * is a round trip to the mail server, so a reply made the page wait on every
+     * thread recipient in turn (a bulk reply: every recipient of every ticket).
+     * afterCommit, because some callers are still inside DB::transaction() and the
+     * worker must not look the ticket up before it is committed. The partner
+     * escalation mail still sends inline: its page reports whether it went out.
+     */
+    private function queueMail(PendingMail $pending, Mailable $mail): void
+    {
+        $pending->queue($mail->afterCommit());
     }
 
     /**
@@ -3438,8 +3453,7 @@ class TicketController extends Controller
             // department), so a reply returns to the desk that answered.
             $mail = new TicketCommentAdded($ticket, $comment, $recipient['name'], $attachments);
 
-            $pending = Mail::to($recipient['email']);
-            $pending->send($mail);
+            $this->queueMail(Mail::to($recipient['email']), $mail);
         }
     }
 
@@ -3462,7 +3476,7 @@ class TicketController extends Controller
         $recipients = $recipients->unique('email');
 
         foreach ($recipients as $recipient) {
-            Mail::to($recipient['email'])->send(new TicketMergedNotification($parent, $children, $recipient['name']));
+            $this->queueMail(Mail::to($recipient['email']), new TicketMergedNotification($parent, $children, $recipient['name']));
         }
     }
 
@@ -3478,13 +3492,13 @@ class TicketController extends Controller
             if ($requester) {
                 $pending = Mail::to($requester['email']);
                 $this->attachTicketCcs($pending, $ticket, [$requester['email']]);
-                $pending->send(new NewTicketCreated($ticket, $requester['name']));
+                $this->queueMail($pending, new NewTicketCreated($ticket, $requester['name']));
                 return;
             }
 
             foreach ($ticket->deliverableCcs()->unique('email') as $cc) {
                 if ($cc->email) {
-                    Mail::to($cc->email)->send(new NewTicketCreated($ticket, $cc->name ?: 'Subscriber'));
+                    $this->queueMail(Mail::to($cc->email), new NewTicketCreated($ticket, $cc->name ?: 'Subscriber'));
                 }
             }
         } catch (\Throwable $e) {
@@ -3503,10 +3517,10 @@ class TicketController extends Controller
 
         // Notify requester
         if ($ticket->reporter && $ticket->reporter->email) {
-            Mail::to($ticket->reporter->email)->send(new NewTicketCreated($ticket, $ticket->reporter->name));
+            $this->queueMail(Mail::to($ticket->reporter->email), new NewTicketCreated($ticket, $ticket->reporter->name));
             $sentTo[] = $ticket->reporter->email;
         } elseif ($ticket->sender_email) {
-            Mail::to($ticket->sender_email)->send(new NewTicketCreated($ticket, $ticket->sender_name ?? 'External User'));
+            $this->queueMail(Mail::to($ticket->sender_email), new NewTicketCreated($ticket, $ticket->sender_name ?? 'External User'));
             $sentTo[] = $ticket->sender_email;
         }
 
@@ -3514,7 +3528,7 @@ class TicketController extends Controller
         if ($ticket->assignee && $ticket->assignee->email && !in_array($ticket->assignee->email, $sentTo)) {
             $shouldNotifyAssignee = $ticket->assignee->roles()->where('notify_on_ticket_assign', true)->exists();
             if ($shouldNotifyAssignee) {
-                Mail::to($ticket->assignee->email)->send(new NewTicketCreated($ticket, $ticket->assignee->name));
+                $this->queueMail(Mail::to($ticket->assignee->email), new NewTicketCreated($ticket, $ticket->assignee->name));
                 $sentTo[] = $ticket->assignee->email;
             }
         }
@@ -3545,7 +3559,7 @@ class TicketController extends Controller
                 continue;
             }
 
-            Mail::to($email)->send(new NewTicketCreated($ticket, $userToNotify->name));
+            $this->queueMail(Mail::to($email), new NewTicketCreated($ticket, $userToNotify->name));
             $sentTo[] = $email;
         }
     }

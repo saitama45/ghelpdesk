@@ -192,7 +192,7 @@ stores require are `/privacy-policy` and `/account-deletion` (`routes/web.php`).
 SMTP and IMAP credentials are read from the **`settings` table**, not `.env`. `AppServiceProvider::boot()` overwrites `mail.*` and `imap.accounts.default.*` from `Setting::where('group','mail')`, cached as `app_mail_settings` for 1 hour (skipped when `APP_ENV=testing`).
 
 Consequences:
-- Changing `MAIL_MAILER` in `.env` does **nothing**. The app will send **real Gmail SMTP mail synchronously** during ticket actions.
+- Changing `MAIL_MAILER` in `.env` does **nothing**. Ticket actions send **real Gmail SMTP mail**. Since 2026-10-27 it goes out from the queue worker a few seconds later, not in the request; locally, `composer run dev`'s `queue:listen` sends it. A long-running `queue:work` keeps the mail settings it started with until `php artisan queue:restart`; saving the Settings page does this.
 - After editing mail settings in the UI, `Cache::forget('app_mail_settings')`.
 - `config:cache` is deliberately **not** run on deploy (`startup.sh` step 5) because these DB-driven settings must stay dynamic.
 - Never run merge/notify flows against production data casually — a merge test once emailed four real requesters.

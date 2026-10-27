@@ -82,7 +82,7 @@ class TicketBulkResponseTest extends TestCase
         $response->assertSessionHasErrors('bulk_response');
 
         $this->assertDatabaseCount('ticket_comments', 0);
-        Mail::assertNothingSent();
+        Mail::assertNothingOutgoing();
     }
 
     public function test_bulk_response_accepts_attachment_without_text_and_copies_it_to_each_ticket(): void
@@ -157,10 +157,12 @@ class TicketBulkResponseTest extends TestCase
         $ticket->refresh();
 
         $this->assertNotNull($ticket->slaMetric->first_response_at);
-        Mail::assertSent(TicketCommentAdded::class, function (TicketCommentAdded $mail) use ($reporter, $ticket) {
+        // Queued for the worker, not sent while the agent's page waits.
+        Mail::assertQueued(TicketCommentAdded::class, function (TicketCommentAdded $mail) use ($reporter, $ticket) {
             return $mail->hasTo($reporter->email)
                 && $mail->ticket->is($ticket);
         });
+        Mail::assertNothingSent();
     }
 
     private function ticket(array $overrides = []): Ticket

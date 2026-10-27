@@ -159,7 +159,7 @@ intake → TicketObserver (key/company/SLA) → assignment → work → resolve 
   - **Legacy accounting pings** used event `received` and subject "Document {ref}"; the id is taken from the `/accounting-documents/{id}` link. New ones send `pending` + `acct_document_review:{id}`.
   - **Entity scope:** request lookups drop `ActiveEntityScope`, or approvers viewing another entity would lose live pings.
 - Recipients are resolved per domain (ticket: assignee + reporter + CC; task card: assignees/watchers/board members; project task: assigned/support + team) with the actor removed.
-- Email: 18 mailables in `app/Mail/`. SMTP credentials come from the `settings` table (cached as `app_mail_settings`) — **`MAIL_MAILER` in `.env` does not control the driver**, and ticket actions send synchronously.
+- Email: 18 mailables in `app/Mail/`. SMTP credentials come from the `settings` table (cached as `app_mail_settings`) — **`MAIL_MAILER` in `.env` does not control the driver**. Ticket emails are **queued**, not sent in the request: creation through the `SendTicketCreationNotifications` job, and updates, replies (bulk included), merges, child and split tickets through `TicketController::queueMail()` (`afterCommit`). The one exception is the partner escalation email, which still sends inline so its page can report whether it went out. A worker must therefore be running. Saving Settings runs `queue:restart`, because workers read the mail settings only when they start. Tests assert `Mail::assertQueued`; `TicketMailQueueTest` drives the real queue path.
 
 ## 4. Projects ↔ Task boards
 - Two-way sync in `app/Services/ProjectTaskBoardSyncService.php`: Checklist ↔ Milestone, Checklist item ↔ Activity, Subtask ↔ Subtask. A card is never an activity.
