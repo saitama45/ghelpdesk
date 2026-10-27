@@ -86,6 +86,10 @@ EOF
 #   ran config:cache, so it is skipped when there is nothing to clear.
 # - route:clear and view:clear are not called: route:cache and view:cache (step 5.1)
 #   run them first.
+# cache:clear on the redis store empties the WHOLE Redis database the cache uses
+# (flushdb, not just the cache's keys). Sessions are in Redis too (SESSION_DRIVER=redis,
+# database REDIS_DB), so REDIS_CACHE_DB must differ from REDIS_DB. With both 0, every
+# restart logged everyone out (2026-10-27).
 echo "🧹 Clearing caches..."
 if [ -f /home/site/wwwroot/bootstrap/cache/config.php ]; then
     php /home/site/wwwroot/artisan config:clear
