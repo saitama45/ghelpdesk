@@ -66,6 +66,15 @@ quantity-0 `Unserved Written Off` at origin, transfer `Received`). Both quantity
 `LocatesInventoryUnits::fixedUnitsCurrentlyAt` and its batched copies in `AssetOperationalHealthService`,
 `CctvMonitoringController`, `StockTransferController::availableStock`). In-transit lines cannot be deleted.
 
+**Posting is one-shot.** Stock on hand is a ledger SUM, so a header posted twice moves stock twice. `StockInController::post`
+and `StockTransferController::post` re-read the group under `lockForUpdate` and post only rows still unposted; a repeat
+post returns an `error` flash and writes nothing. Before this guard, TRF-20260820-KMPN1Z was posted twice 8s apart: two
+'Transfer Out' rows and two receivings per piece, so the origin read one short (SKU100075 at CFE I-WAREHOUSE) and the
+destination one over. Migration `2026_10_28_000001_void_duplicate_stock_transfer_posts` voids such past double posts
+without deleting: extra ledger rows go to quantity 0, and a duplicate receiving still pending closes as `Declined`.
+A Received duplicate keeps `received_quantity`, because 0 would mean "never arrived". Mixed outcomes are logged for
+manual review. To find drift: more than one non-zero 'Transfer Out' with the same `reference_id`.
+
 **Monitoring** — `npc_*` (statuses, documents, payments, registrations, seal receipts, proofs, workflow steps), `cctv_systems`, `cctv_inspections(+_units)`, `alaga_assessments`, `mall_hookups(+_costs,+_logs)`, `payment_*` (records, tenders, approvals, invoices, vendors, renewals, overpayments, weekly plans, settings, reminder log), `wigs_*`.
 
 **Administrative** — `schedules`, `schedule_stores`, `schedule_change_requests`, `attendance_logs`, `service_vehicles`, `service_vehicle_trips(+_attachments)`, `uat_cycles`, `uat_sections`, `uat_cases`, `uat_case_results`, `uat_participants`, `uat_findings`, `uat_evidence`, `uat_signoffs`, `stamp_*`, `quests`, `agent_point_transactions`, `agent_quest_progress`, `customers`, `notifications`.

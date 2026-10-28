@@ -496,6 +496,11 @@ class StockInController extends Controller
     {
         abort_unless($request->user()->can('stock_ins.post'), 403);
 
+        $alreadyPosted = 'This stock-in has already been posted. No ledger entries were added again.';
+        if ($stockIn->status === 'Posted') {
+            return redirect()->back()->with('error', $alreadyPosted);
+        }
+
         $affectedRows = StockIn::where('asset_id', $stockIn->asset_id)
             ->whereDate('receive_date', $stockIn->receive_date);
 
@@ -516,8 +521,20 @@ class StockInController extends Controller
         ]);
         $now = now();
 
-        DB::transaction(function () use ($itemsToPost, $request, $now, $ledgerRowsByItemId) {
+        $posted = DB::transaction(function () use ($itemsToPost, $request, $now, $ledgerRowsByItemId) {
+            // Same guard as StockTransferController::post — a second Post of an already-Posted
+            // header would record its ledger rows twice. Locked re-read of what is still unposted.
+            $unposted = StockIn::whereKey($itemsToPost->modelKeys())
+                ->where('status', '!=', 'Posted')
+                ->lockForUpdate()
+                ->pluck('id')
+                ->flip();
+
             foreach ($itemsToPost as $item) {
+                if (! $unposted->has($item->id)) {
+                    continue;
+                }
+
                 $item->update([
                     'status' => 'Posted',
                     'posted_by' => $request->user()->name,
@@ -528,7 +545,13 @@ class StockInController extends Controller
                     InventoryTransaction::create($ledgerRow);
                 }
             }
+
+            return $unposted->count();
         });
+
+        if ($posted === 0) {
+            return redirect()->back()->with('error', $alreadyPosted);
+        }
 
         return redirect()->back()->with('success', 'Stock In status updated to Posted and ledger entries recorded');
     }

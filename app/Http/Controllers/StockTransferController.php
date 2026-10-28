@@ -417,8 +417,22 @@ class StockTransferController extends Controller
         $now = now();
         $receivingNo = 'RCV-' . $now->format('Ymd') . '-' . strtoupper(Str::random(6));
 
-        DB::transaction(function () use ($affectedRows, $request, $now, $receivingNo) {
+        $posted = DB::transaction(function () use ($affectedRows, $request, $now, $receivingNo) {
+            // A second Post (double-click, stale tab, retry after a slow response) used to
+            // re-group the already-Posted rows, deduct the origin again and open a second
+            // receiving for the same pieces. Only rows still For Posting are posted; the
+            // locked re-read makes a concurrent second post wait, then find nothing left.
+            $unposted = StockTransfer::whereKey($affectedRows->modelKeys())
+                ->where('status', 'For Posting')
+                ->lockForUpdate()
+                ->pluck('id')
+                ->flip();
+
             foreach ($affectedRows as $item) {
+                if (! $unposted->has($item->id)) {
+                    continue;
+                }
+
                 $item->update([
                     'status' => 'Posted',
                     'posted_by' => $request->user()->name,
@@ -464,7 +478,13 @@ class StockTransferController extends Controller
                     'updated_by'           => $request->user()->id,
                 ]);
             }
+
+            return $unposted->count();
         });
+
+        if ($posted === 0) {
+            return redirect()->back()->with('error', 'This transfer has already been posted. Nothing was deducted again.');
+        }
 
         return redirect()->back()->with('success', 'Transfer posted. Origin inventory deducted and pending receiving created at destination.');
     }

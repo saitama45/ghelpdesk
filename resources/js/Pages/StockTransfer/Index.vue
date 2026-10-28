@@ -204,7 +204,8 @@
                                     <button
                                         v-if="hasPermission('stock_transfers.post') && canPostTransfer(item.status)"
                                         @click="postTransfer(item)"
-                                        class="p-2 text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded-full transition-colors dark:text-emerald-300 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-200"
+                                        :disabled="postingTransferId !== null"
+                                        class="p-2 disabled:opacity-50 disabled:cursor-wait text-emerald-600 hover:text-emerald-900 hover:bg-emerald-50 rounded-full transition-colors dark:text-emerald-300 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-200"
                                         title="Post Transfer"
                                     >
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1145,13 +1146,20 @@ const submitForm = () => {
     }
 }
 
+// Id of the transfer whose Post is in flight: a second click on a slow response used to post it twice.
+const postingTransferId = ref(null)
+
 const postTransfer = async (item) => {
+    if (postingTransferId.value !== null) return
     const confirmed = await confirm({
         title: 'Post Stock Transfer',
         message: 'This will deduct the stock from the origin location. It will be available for receiving later.',
     })
     if (confirmed) {
-        router.post(route('stock-transfers.post', item.id), {})
+        postingTransferId.value = item.id
+        router.post(route('stock-transfers.post', item.id), {}, {
+            onFinish: () => { postingTransferId.value = null },
+        })
     }
 }
 
