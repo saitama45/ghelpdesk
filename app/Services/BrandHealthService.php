@@ -58,6 +58,12 @@ class BrandHealthService
     /** Status buckets offered by the Top 10 filter. */
     public const STATUS_BUCKETS = ['open', 'closed', 'all'];
 
+    /** Most tickets the drill-down modal paints; the Excel export takes them all. */
+    private const DRILL_DOWN_LIMIT = 500;
+
+    /** Stores ranked inside a sub-category's drill-down. */
+    private const DRILL_DOWN_TOP_STORES = 10;
+
     /**
      * @param  array|null  $companyIds  Effective Entity/Company selection from the
      *                                  dashboard filter. The tab counts only brands
@@ -465,6 +471,60 @@ class BrandHealthService
      */
     public function tickets(array $filters, ?array $companyIds = null): array
     {
+        $slice = $this->drillDown($filters, $companyIds, self::DRILL_DOWN_LIMIT);
+
+        // Per-item roll-up: "its specific items and concerns" for the clicked slice.
+        $items = $slice['tickets']
+            ->groupBy(fn (Ticket $ticket) => $ticket->item?->name ?? 'Unspecified')
+            ->map(fn ($rows, $name) => [
+                'name' => $name,
+                'concern_type' => $rows->first()->item?->concern_type,
+                'sub_category' => $rows->first()->subCategory?->name,
+                'count' => $rows->count(),
+            ])
+            ->sortByDesc('count')
+            ->values()
+            ->all();
+
+        return [
+            // The whole slice, even when `tickets` stops at the row cap.
+            'count' => $slice['count'],
+            'items' => $items,
+            'top_stores' => $slice['top_stores']->map(fn (array $row) => [
+                'id' => (int) $row['store']->id,
+                'code' => $row['store']->code,
+                'name' => $row['store']->name,
+                'brand' => $this->storeBrandLabel($row['store']),
+                'count' => $row['count'],
+                'tickets' => $row['tickets']->map(fn (Ticket $ticket) => $this->drillDownRow($ticket))->values()->all(),
+            ])->all(),
+            'tickets' => $slice['tickets']->map(fn (Ticket $ticket) => $this->drillDownRow($ticket))->all(),
+        ];
+    }
+
+    /**
+     * The same slice as tickets(), for the Excel export: models rather than modal rows,
+     * and every ticket rather than the first DRILL_DOWN_LIMIT.
+     *
+     * @return array{count:int, tickets:Collection, top_stores:Collection, stores:Collection}
+     */
+    public function ticketsForExport(array $filters, ?array $companyIds = null): array
+    {
+        return $this->drillDown($filters, $companyIds);
+    }
+
+    /** How a store's owning brand is named on a Top 10 row. */
+    public function storeBrandLabel(?Store $store): ?string
+    {
+        return $store?->company?->code ?: $store?->company?->name;
+    }
+
+    /**
+     * One drill-down slice: its tickets (newest first, stopping at $limit when given),
+     * how many there are in all, and — for a sub-category — its Top 10 Stores.
+     */
+    private function drillDown(array $filters, ?array $companyIds, ?int $limit = null): array
+    {
         $period = DashboardPeriod::fromArray($filters);
         $asOfDate = $filters['as_of_date'] ?? Carbon::now()->format('Y-m-d');
         $brandId = $filters['brand_id'] ?? null;
@@ -483,64 +543,92 @@ class BrandHealthService
                 ->where('is_active', true)
                 ->whereIn('company_id', $brands->pluck('id'))
                 ->when($storeId, fn ($q) => $q->where('id', $storeId))
-                ->get(['id', 'code', 'name', 'company_id']);
+                ->with('company:id,name,code')
+                ->get(['id', 'code', 'name', 'company_id'])
+                ->keyBy('id');
 
         if ($stores->isEmpty()) {
-            return ['tickets' => [], 'items' => [], 'count' => 0];
+            return ['count' => 0, 'tickets' => collect(), 'top_stores' => collect(), 'stores' => collect()];
         }
 
-        $tickets = Ticket::query()
+        $query = Ticket::query()
             ->withoutGlobalScope(ActiveEntityScope::class)
             ->whereNull('tickets.parent_id')
             ->when($bucket === 'open', fn ($q) => $q->whereNotIn('tickets.status', self::TERMINAL_STATUSES))
             ->when($bucket === 'closed', fn ($q) => $q->whereIn('tickets.status', self::TERMINAL_STATUSES))
             ->when($concernType, fn ($q) => $q->whereHas('item', fn ($i) => $i->where('concern_type', $concernType)))
-            ->whereIn('tickets.store_id', $stores->pluck('id'))
+            ->whereIn('tickets.store_id', $stores->keys())
             ->whereDate('tickets.created_at', '<=', $asOfDate)
             ->tap(fn ($q) => $period->apply($q, 'tickets.created_at'))
             ->when($subCategory === 'none', fn ($q) => $q->whereNull('tickets.sub_category_id'))
             ->when($subCategory !== null && $subCategory !== '' && $subCategory !== 'none',
-                fn ($q) => $q->where('tickets.sub_category_id', (int) $subCategory))
+                fn ($q) => $q->where('tickets.sub_category_id', (int) $subCategory));
+
+        // Counted apart from the rows, so neither the total nor the ranking can be
+        // skewed by the row cap.
+        $storeCounts = (clone $query)
+            ->selectRaw('tickets.store_id, COUNT(*) as c')
+            ->groupBy('tickets.store_id')
+            ->get()
+            ->mapWithKeys(fn ($row) => [(int) $row->store_id => (int) $row->c]);
+
+        $rows = fn () => (clone $query)
             ->with(['store:id,code,name', 'item:id,name,concern_type', 'subCategory:id,name', 'assignee:id,name'])
             // Pinned columns — tickets.description is nvarchar(MAX) and would drag the
             // whole backlog over the wire for a modal that never shows it.
             ->select('id', 'ticket_key', 'title', 'status', 'priority', 'store_id', 'item_id', 'sub_category_id', 'assignee_id', 'created_at')
-            ->latest('created_at')
-            ->limit(500)
-            ->get();
+            ->latest('created_at');
 
-        // Per-item roll-up: "its specific items and concerns" for the clicked slice.
-        $items = $tickets
-            ->groupBy(fn (Ticket $ticket) => $ticket->item?->name ?? 'Unspecified')
-            ->map(fn ($rows, $name) => [
-                'name' => $name,
-                'concern_type' => $rows->first()->item?->concern_type,
-                'sub_category' => $rows->first()->subCategory?->name,
-                'count' => $rows->count(),
-            ])
-            ->sortByDesc('count')
-            ->values()
-            ->all();
+        $tickets = $rows()->when($limit, fn ($q) => $q->limit($limit))->get();
+        $total = (int) $storeCounts->sum();
 
+        $topStores = collect();
+
+        // A store drill is already one store, so only a sub-category has any to rank.
+        if (filled($subCategory) && ! $storeId) {
+            $ranked = $stores
+                ->filter(fn (Store $store) => $storeCounts->has($store->id))
+                ->sortBy([
+                    fn (Store $a, Store $b) => $storeCounts[$b->id] <=> $storeCounts[$a->id],
+                    fn (Store $a, Store $b) => $a->code <=> $b->code,
+                ])
+                ->take(self::DRILL_DOWN_TOP_STORES);
+
+            // Each ranked store lists all its tickets, so the capped rows only do when
+            // nothing was cut off.
+            $source = $tickets->count() < $total
+                ? $rows()->whereIn('tickets.store_id', $ranked->keys())->get()
+                : $tickets;
+            $ticketsByStore = $source->groupBy('store_id');
+
+            $topStores = $ranked->values()->map(fn (Store $store) => [
+                'store' => $store,
+                'count' => $storeCounts[$store->id],
+                'tickets' => $ticketsByStore->get($store->id, collect()),
+            ]);
+        }
+
+        return ['count' => $total, 'tickets' => $tickets, 'top_stores' => $topStores, 'stores' => $stores];
+    }
+
+    /** One ticket as the drill-down modal lists it. */
+    private function drillDownRow(Ticket $ticket): array
+    {
         return [
-            'count' => $tickets->count(),
-            'items' => $items,
-            'tickets' => $tickets->map(fn (Ticket $ticket) => [
-                'id' => $ticket->id,
-                'key' => $ticket->ticket_key ?? (string) $ticket->id,
-                'title' => $ticket->title,
-                'status' => $ticket->status,
-                'priority' => $ticket->priority,
-                'store' => $ticket->store
-                    ? trim(($ticket->store->code ? '[' . $ticket->store->code . '] ' : '') . $ticket->store->name)
-                    : null,
-                'sub_category' => $ticket->subCategory?->name ?? 'Unspecified',
-                'item' => $ticket->item?->name ?? 'Unspecified',
-                'concern_type' => $ticket->item?->concern_type,
-                'assignee' => $ticket->assignee?->name ?? 'Unassigned',
-                'created_at' => $ticket->created_at?->format('M j, Y'),
-                'url' => route('tickets.edit', $ticket),
-            ])->all(),
+            'id' => $ticket->id,
+            'key' => $ticket->ticket_key ?? (string) $ticket->id,
+            'title' => $ticket->title,
+            'status' => $ticket->status,
+            'priority' => $ticket->priority,
+            'store' => $ticket->store
+                ? trim(($ticket->store->code ? '[' . $ticket->store->code . '] ' : '') . $ticket->store->name)
+                : null,
+            'sub_category' => $ticket->subCategory?->name ?? 'Unspecified',
+            'item' => $ticket->item?->name ?? 'Unspecified',
+            'concern_type' => $ticket->item?->concern_type,
+            'assignee' => $ticket->assignee?->name ?? 'Unassigned',
+            'created_at' => $ticket->created_at?->format('M j, Y'),
+            'url' => route('tickets.edit', $ticket),
         ];
     }
 

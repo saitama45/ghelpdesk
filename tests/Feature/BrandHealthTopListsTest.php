@@ -252,6 +252,217 @@ class BrandHealthTopListsTest extends TestCase
         $this->assertSame(['Slow Link'], collect($serviceRequests['items'])->pluck('name')->all());
     }
 
+    public function test_sub_category_drill_down_ranks_its_top_stores_with_their_tickets(): void
+    {
+        [$alpha] = $this->fixture();
+        $viewer = $this->viewer($alpha);
+        $posId = SubCategory::where('name', 'POS')->value('id');
+
+        $all = $this->actingAs($viewer)
+            ->getJson(route('dashboard.brand-health.tickets', ['sub_category_id' => $posId, 'status' => 'all']))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(['ALP-1' => 3, 'ALP-2' => 1], collect($all['top_stores'])->pluck('count', 'code')->all());
+        $this->assertSame('ALPHA', $all['top_stores'][0]['brand']);
+        $this->assertCount(3, $all['top_stores'][0]['tickets']);
+        $this->assertSame(['[ALP-1] Store ALP-1'], collect($all['top_stores'][0]['tickets'])->pluck('store')->unique()->all());
+
+        // The list follows the same status filter as the rest of the modal.
+        $open = $this->actingAs($viewer)
+            ->getJson(route('dashboard.brand-health.tickets', ['sub_category_id' => $posId]))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(['ALP-1' => 3], collect($open['top_stores'])->pluck('count', 'code')->all());
+
+        // 'none' is a sub-category like any other.
+        $unspecified = $this->actingAs($viewer)
+            ->getJson(route('dashboard.brand-health.tickets', ['sub_category_id' => 'none']))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(['ALP-1' => 1], collect($unspecified['top_stores'])->pluck('count', 'code')->all());
+
+        // A store drill is already one store, so there is nothing to rank.
+        $byStore = $this->actingAs($viewer)
+            ->getJson(route('dashboard.brand-health.tickets', ['store_id' => Store::where('code', 'ALP-1')->value('id')]))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame([], $byStore['top_stores']);
+    }
+
+    public function test_drill_down_top_stores_stay_inside_the_entity_selection(): void
+    {
+        [$alpha] = $this->fixture();
+        $networkId = SubCategory::where('name', 'Network')->value('id');
+
+        // Network also has a ticket at Beta's store, which an Alpha viewer must not see.
+        $out = $this->actingAs($this->viewer($alpha))
+            ->getJson(route('dashboard.brand-health.tickets', ['sub_category_id' => $networkId]))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(['ALP-2'], collect($out['top_stores'])->pluck('code')->all());
+    }
+
+    public function test_drill_down_top_stores_stop_at_ten_and_break_ties_by_store_code(): void
+    {
+        $brand = $this->brand('Gamma Brand', 'GAMMA');
+        $printer = SubCategory::create(['name' => 'Printer', 'is_active' => true]);
+
+        foreach (range(1, 11) as $n) {
+            $this->ticket($this->store($brand, sprintf('GAM-%02d', $n)), 'open', $printer, null);
+        }
+        $busiest = Store::where('code', 'GAM-11')->first();
+        $this->ticket($busiest, 'open', $printer, null);
+
+        $out = $this->actingAs($this->viewer($brand))
+            ->getJson(route('dashboard.brand-health.tickets', ['sub_category_id' => $printer->id]))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(12, $out['count']);
+        $this->assertCount(10, $out['top_stores']);
+        $this->assertSame(['GAM-11', 'GAM-01', 'GAM-02'], collect($out['top_stores'])->take(3)->pluck('code')->all());
+    }
+
+    public function test_row_cap_skews_neither_the_total_nor_the_top_stores_nor_the_export(): void
+    {
+        $brand = $this->brand('Gamma Brand', 'GAMMA');
+        $printer = SubCategory::create(['name' => 'Printer', 'is_active' => true]);
+        $old = $this->store($brand, 'GAM-OLD');
+        $new = $this->store($brand, 'GAM-NEW');
+
+        // The older store's tickets all fall outside the newest 500 rows.
+        Ticket::withoutEvents(function () use ($old, $new, $printer) {
+            foreach (range(1, 3) as $n) {
+                $this->ticket($old, 'open', $printer, null)->forceFill(['created_at' => now()->subDays(30)])->save();
+            }
+            foreach (range(1, 500) as $n) {
+                $this->ticket($new, 'open', $printer, null);
+            }
+        });
+
+        $viewer = $this->viewer($brand);
+
+        $out = $this->actingAs($viewer)
+            ->getJson(route('dashboard.brand-health.tickets', ['sub_category_id' => $printer->id]))
+            ->assertOk()
+            ->json();
+
+        $this->assertSame(503, $out['count']);
+        $this->assertCount(500, $out['tickets']);
+        $this->assertSame(['GAM-NEW' => 500, 'GAM-OLD' => 3], collect($out['top_stores'])->pluck('count', 'code')->all());
+        $this->assertCount(3, $out['top_stores'][1]['tickets']);
+
+        $workbook = $this->exportedWorkbook($viewer, ['sub_category_id' => $printer->id]);
+
+        $this->assertSame(504, $workbook->getSheetByName('Tickets')->getHighestDataRow());
+        $this->assertSame(504, $workbook->getSheetByName('Top 10 Stores')->getHighestDataRow());
+    }
+
+    public function test_export_writes_the_tickets_and_top_stores_sheets(): void
+    {
+        [$alpha] = $this->fixture();
+        $viewer = $this->viewer($alpha);
+        $posId = SubCategory::where('name', 'POS')->value('id');
+
+        $this->actingAs($viewer)
+            ->get(route('dashboard.brand-health.tickets.export', ['sub_category_id' => $posId]))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            ->assertDownload();
+
+        $workbook = $this->exportedWorkbook($viewer, ['sub_category_id' => $posId, 'status' => 'all']);
+
+        $this->assertSame(['Tickets', 'Top 10 Stores'], $workbook->getSheetNames());
+
+        // Tickets: every row of the slice, newest first, closed one included for 'all'.
+        $tickets = $workbook->getSheetByName('Tickets')->toArray();
+        $this->assertSame(
+            ['Ticket #', 'Store Code', 'Store Name', 'Brand', 'Sub-category', 'Issue', 'Item', 'Concern', 'Assignee', 'Status', 'Created At'],
+            $tickets[0]
+        );
+        $this->assertCount(5, $tickets);
+        $this->assertSame(['ALP-1', 'ALP-2'], collect($tickets)->skip(1)->pluck(1)->unique()->sort()->values()->all());
+        $this->assertSame(['ALPHA'], collect($tickets)->skip(1)->pluck(3)->unique()->values()->all());
+        $this->assertSame(['POS'], collect($tickets)->skip(1)->pluck(4)->unique()->values()->all());
+        $this->assertSame(['Terminal Down'], collect($tickets)->skip(1)->pluck(6)->unique()->values()->all());
+
+        // Top 10 Stores: one row per ticket, each carrying its store's rank and total.
+        $topStores = $workbook->getSheetByName('Top 10 Stores')->toArray(null, false, false);
+        $this->assertSame(
+            ['Rank', 'Store Code', 'Store Name', 'Brand', 'Store Tickets', 'Ticket #', 'Issue', 'Item', 'Concern', 'Assignee', 'Status', 'Created At'],
+            $topStores[0]
+        );
+        $this->assertSame(
+            [[1, 'ALP-1', 3], [1, 'ALP-1', 3], [1, 'ALP-1', 3], [2, 'ALP-2', 1]],
+            collect($topStores)->skip(1)->map(fn ($row) => [$row[0], $row[1], $row[4]])->values()->all()
+        );
+    }
+
+    public function test_export_of_a_store_drill_has_no_top_stores_sheet(): void
+    {
+        [$alpha] = $this->fixture();
+
+        $workbook = $this->exportedWorkbook($this->viewer($alpha), [
+            'store_id' => Store::where('code', 'ALP-1')->value('id'),
+        ]);
+
+        $this->assertSame(['Tickets'], $workbook->getSheetNames());
+        $this->assertSame(5, $workbook->getSheetByName('Tickets')->getHighestDataRow());
+    }
+
+    public function test_export_keeps_a_formula_looking_title_as_plain_text(): void
+    {
+        [$alpha] = $this->fixture();
+        $store = Store::where('code', 'ALP-1')->first();
+        $this->ticket($store, 'open', null, null)
+            ->forceFill(['title' => '=HYPERLINK("http://evil.test","open me")'])
+            ->saveQuietly();
+
+        $sheet = $this->exportedWorkbook($this->viewer($alpha), ['sub_category_id' => 'none'])
+            ->getSheetByName('Tickets');
+
+        $titles = collect(range(2, $sheet->getHighestDataRow()))->map(fn ($row) => $sheet->getCell([6, $row]));
+        $formula = $titles->first(fn ($cell) => str_starts_with((string) $cell->getValue(), '='));
+
+        $this->assertNotNull($formula);
+        $this->assertSame(\PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING, $formula->getDataType());
+    }
+
+    public function test_export_respects_entity_scope_and_permission(): void
+    {
+        [$alpha, $beta] = $this->fixture();
+
+        // Beta sits outside the viewer's entity: headers only, none of its tickets.
+        $workbook = $this->exportedWorkbook($this->viewer($alpha), ['brand_id' => $beta->id]);
+        $this->assertSame(1, $workbook->getSheetByName('Tickets')->getHighestDataRow());
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('dashboard.brand-health.tickets.export'))
+            ->assertForbidden();
+    }
+
+    private function exportedWorkbook(User $viewer, array $params): \PhpOffice\PhpSpreadsheet\Spreadsheet
+    {
+        $content = $this->actingAs($viewer)
+            ->get(route('dashboard.brand-health.tickets.export', $params))
+            ->assertOk()
+            ->streamedContent();
+
+        $path = tempnam(sys_get_temp_dir(), 'brand-health-export');
+        file_put_contents($path, $content);
+
+        try {
+            return \PhpOffice\PhpSpreadsheet\IOFactory::load($path);
+        } finally {
+            unlink($path);
+        }
+    }
+
     private function viewer(Company $company): User
     {
         $viewer = User::factory()->create(['company_id' => $company->id]);

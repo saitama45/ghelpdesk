@@ -4,7 +4,8 @@ import { router, Link } from '@inertiajs/vue3';
 import axios from 'axios';
 import Modal from '@/Components/Modal.vue';
 import Autocomplete from '@/Components/Autocomplete.vue';
-import { XMarkIcon } from '@heroicons/vue/24/outline';
+import BrandHealthTicketTable from '@/Components/BrandHealthTicketTable.vue';
+import { ChevronDownIcon, DocumentArrowDownIcon, XMarkIcon } from '@heroicons/vue/24/outline';
 import { useToast } from '@/Composables/useToast';
 import { useConfirm } from '@/Composables/useConfirm';
 
@@ -177,32 +178,57 @@ const drillTitle = ref('');
 const drillSubtitle = ref('');
 const drillItems = ref([]);
 const drillTickets = ref([]);
+const drillCount = ref(0);          // the whole slice; drillTickets stops at the row cap
+const drillTopStores = ref([]);     // only a sub-category drill has stores to rank
+const expandedDrillStores = ref(new Set());
+const drillExportUrl = ref('');
 
 const openDrill = async ({ title, subtitle, params }) => {
     drillTitle.value = title;
     drillSubtitle.value = subtitle;
     drillItems.value = [];
     drillTickets.value = [];
+    drillCount.value = 0;
+    drillTopStores.value = [];
+    expandedDrillStores.value = new Set();
+    drillExportUrl.value = '';
     drillLoading.value = true;
     showDrill.value = true;
 
+    const query = {
+        ...(activeBrand.value ? { brand_id: activeBrand.value.id } : {}),
+        ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
+        ...props.period,
+        ...topFilterParams(),
+        ...params,
+    };
+
     try {
-        const { data } = await axios.get(route('dashboard.brand-health.tickets', {}, false), {
-            params: {
-                ...(activeBrand.value ? { brand_id: activeBrand.value.id } : {}),
-                ...(props.entityIds.length ? { entity_ids: props.entityIds } : {}),
-                ...props.period,
-                ...topFilterParams(),
-                ...params,
-            },
-        });
+        const { data } = await axios.get(route('dashboard.brand-health.tickets', {}, false), { params: query });
         drillItems.value = data.items || [];
         drillTickets.value = data.tickets || [];
+        drillCount.value = data.count || 0;
+        drillTopStores.value = data.top_stores || [];
+        drillExportUrl.value = route('dashboard.brand-health.tickets.export', query, false);
     } catch (e) {
         showError('Unable to load the ticket breakdown.');
         showDrill.value = false;
     } finally {
         drillLoading.value = false;
+    }
+};
+
+const toggleDrillStore = (storeId) => {
+    if (!expandedDrillStores.value.delete(storeId)) {
+        expandedDrillStores.value.add(storeId);
+    }
+};
+
+// Attachment download, so navigating doesn't leave the page; window.open would leave
+// a blank tab behind and can be popup-blocked.
+const exportDrill = () => {
+    if (drillExportUrl.value) {
+        window.location.href = drillExportUrl.value;
     }
 };
 
@@ -224,16 +250,6 @@ const openStoreDrill = (row) => openDrill({
     subtitle: `${ticketPhrase(row.count)} at this store`,
     params: { store_id: row.id },
 });
-
-const statusLabel = (status) => (status || '').replace(/_/g, ' ');
-
-const statusClass = (status) => ({
-    open: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
-    in_progress: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-    for_schedule: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
-    waiting_service_provider: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-    waiting_client_feedback: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
-}[status] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300');
 
 // --- WCF register actions ----------------------------------------------------
 const runAction = async (row, kind) => {
@@ -759,9 +775,21 @@ const runAction = async (row, kind) => {
                         <h2 class="text-lg font-black text-gray-900 dark:text-gray-100">{{ drillTitle }}</h2>
                         <p class="text-xs text-gray-500 mt-0.5 dark:text-gray-400">{{ drillSubtitle }}</p>
                     </div>
-                    <button @click="showDrill = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:hover:text-gray-200">
-                        <XMarkIcon class="w-6 h-6" />
-                    </button>
+                    <div class="flex items-center gap-3 flex-shrink-0">
+                        <!-- Up here because the Top 10 Stores list can push the footer off screen. -->
+                        <button
+                            v-if="!drillLoading && drillTickets.length"
+                            @click="exportDrill"
+                            :disabled="!drillExportUrl"
+                            class="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium flex items-center shadow-sm"
+                        >
+                            <DocumentArrowDownIcon class="w-4 h-4 mr-2" />
+                            Export to Excel
+                        </button>
+                        <button @click="showDrill = false" class="text-gray-400 hover:text-gray-600 transition-colors dark:hover:text-gray-200">
+                            <XMarkIcon class="w-6 h-6" />
+                        </button>
+                    </div>
                 </div>
 
                 <div v-if="drillLoading" class="flex flex-col items-center justify-center py-12">
@@ -786,39 +814,52 @@ const runAction = async (row, kind) => {
                         </div>
                     </div>
 
-                    <div class="max-h-[55vh] overflow-y-auto border border-gray-100 rounded-lg dark:border-gray-700">
-                        <table class="min-w-full text-sm">
-                            <thead class="bg-gray-50 sticky top-0 dark:bg-gray-900/60">
-                                <tr class="text-left text-[11px] font-bold text-gray-500 uppercase tracking-wider dark:text-gray-400">
-                                    <th class="px-4 py-2.5">Ticket</th>
-                                    <th class="px-3 py-2.5">Store</th>
-                                    <th class="px-3 py-2.5">Issue</th>
-                                    <th class="px-3 py-2.5">Item</th>
-                                    <th class="px-3 py-2.5">Concern</th>
-                                    <th class="px-3 py-2.5">Assignee</th>
-                                    <th class="px-3 py-2.5">Status</th>
-                                    <th class="px-4 py-2.5 whitespace-nowrap">Created</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
-                                <tr v-for="ticket in drillTickets" :key="ticket.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/40">
-                                    <td class="px-4 py-2.5 whitespace-nowrap">
-                                        <Link :href="ticket.url" class="font-black text-blue-600 hover:underline dark:text-blue-400">{{ ticket.key }}</Link>
-                                    </td>
-                                    <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap dark:text-gray-300">{{ ticket.store || '—' }}</td>
-                                    <td class="px-3 py-2.5 text-gray-600 max-w-xs truncate dark:text-gray-400" :title="ticket.title">{{ ticket.title }}</td>
-                                    <td class="px-3 py-2.5 text-gray-600 dark:text-gray-400">{{ ticket.item }}</td>
-                                    <td class="px-3 py-2.5 text-gray-500 dark:text-gray-500">{{ ticket.concern_type || '—' }}</td>
-                                    <td class="px-3 py-2.5 text-gray-600 whitespace-nowrap dark:text-gray-400">{{ ticket.assignee }}</td>
-                                    <td class="px-3 py-2.5">
-                                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase whitespace-nowrap" :class="statusClass(ticket.status)">
-                                            {{ statusLabel(ticket.status) }}
-                                        </span>
-                                    </td>
-                                    <td class="px-4 py-2.5 text-gray-500 whitespace-nowrap dark:text-gray-400">{{ ticket.created_at }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <!-- Top 10 Stores for this sub-category; a row opens that store's tickets -->
+                    <div v-if="drillTopStores.length">
+                        <div class="flex items-baseline gap-2 mb-2">
+                            <h3 class="text-[11px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-400">Top 10 Stores</h3>
+                            <p class="text-[11px] text-gray-400 dark:text-gray-500">click a store to view its tickets</p>
+                        </div>
+                        <div class="border border-gray-100 rounded-lg divide-y divide-gray-100 dark:border-gray-700 dark:divide-gray-700">
+                            <div v-for="(store, index) in drillTopStores" :key="store.id">
+                                <button
+                                    type="button"
+                                    @click="toggleDrillStore(store.id)"
+                                    :aria-expanded="expandedDrillStores.has(store.id)"
+                                    class="w-full text-left px-4 py-2.5 hover:bg-blue-50/60 transition-colors dark:hover:bg-gray-700/40"
+                                >
+                                    <div class="flex items-center gap-3">
+                                        <span class="w-5 text-[11px] font-black text-gray-400 tabular-nums dark:text-gray-500">{{ index + 1 }}</span>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm font-bold text-gray-800 truncate dark:text-gray-100">
+                                                <span v-if="store.code" class="text-gray-400 dark:text-gray-500">[{{ store.code }}]</span> {{ store.name }}
+                                                <span v-if="activeView === 'summary' && store.brand" class="text-[11px] font-medium text-gray-400 dark:text-gray-500"> · {{ store.brand }}</span>
+                                            </p>
+                                            <div class="mt-1 h-1.5 w-full rounded-full bg-gray-100 overflow-hidden dark:bg-gray-700">
+                                                <div class="h-full rounded-full bg-blue-500" :style="{ width: barPct(drillTopStores, store.count) + '%' }"></div>
+                                            </div>
+                                        </div>
+                                        <span class="text-sm font-black text-gray-900 tabular-nums dark:text-gray-100">{{ store.count }}</span>
+                                        <ChevronDownIcon class="w-4 h-4 text-gray-400 transition-transform" :class="{ 'rotate-180': expandedDrillStores.has(store.id) }" />
+                                    </div>
+                                </button>
+                                <div v-if="expandedDrillStores.has(store.id)" class="overflow-x-auto border-t border-gray-100 dark:border-gray-700">
+                                    <BrandHealthTicketTable :tickets="store.tickets" :show-store="false" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex items-baseline gap-2 mb-2">
+                            <h3 class="text-[11px] font-black text-gray-500 uppercase tracking-wider dark:text-gray-400">All Tickets</h3>
+                            <p v-if="drillCount > drillTickets.length" class="text-[11px] text-gray-400 dark:text-gray-500">
+                                showing the latest {{ drillTickets.length }} of {{ drillCount }} — Export to Excel has them all
+                            </p>
+                        </div>
+                        <div class="max-h-[55vh] overflow-y-auto border border-gray-100 rounded-lg dark:border-gray-700">
+                            <BrandHealthTicketTable :tickets="drillTickets" />
+                        </div>
                     </div>
                 </div>
 
