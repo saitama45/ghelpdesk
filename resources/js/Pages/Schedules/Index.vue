@@ -360,6 +360,9 @@
                                         <div class="mt-1 inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-600">
                                             {{ requestTypeLabel(request) }}
                                         </div>
+                                        <div v-if="request.attendance_context" class="mt-1 ml-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-800">
+                                            {{ request.attendance_context.reason === 'rest_day' ? 'DTR · Rest day' : 'DTR · Location' }}
+                                        </div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="text-sm font-bold text-gray-900 dark:text-gray-100">{{ request.requester_name || '-' }}</div>
@@ -371,6 +374,9 @@
                                         </div>
                                         <div class="text-[10px] font-medium text-gray-400 mt-1 dark:text-gray-400">
                                             {{ summarizeRequestWindow(request.requested_payload) }}
+                                        </div>
+                                        <div v-if="request.attendance_context" class="text-[10px] font-bold text-amber-700 mt-1 max-w-md truncate dark:text-amber-300">
+                                            {{ request.attendance_context.summary }}
                                         </div>
                                         <div v-if="request.requester_remarks" class="text-[10px] text-gray-500 mt-1 max-w-md truncate dark:text-gray-300">
                                             {{ request.requester_remarks }}
@@ -884,6 +890,12 @@
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+
+                        <div v-if="selectedScheduleRequest.attendance_context" class="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
+                            <div class="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-300">Raised From DTR</div>
+                            <div class="mt-1 text-sm font-bold text-gray-700 dark:text-gray-100">{{ selectedScheduleRequest.attendance_context.summary }}</div>
+                            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">The clock-in is already recorded. Approving updates that day's schedule to match it.</div>
                         </div>
 
                         <div v-if="selectedScheduleRequest.requester_remarks" class="rounded-xl border border-blue-100 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">

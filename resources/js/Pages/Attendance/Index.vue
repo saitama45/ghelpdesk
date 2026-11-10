@@ -16,6 +16,7 @@ import { useConfirm } from '@/Composables/useConfirm';
 import { usePermission } from '@/Composables/usePermission';
 import { useTimezone } from '@/Composables/useTimezone';
 import TimezoneBanner from '@/Components/TimezoneBanner.vue';
+import AttendanceAdjustmentModal from '@/Components/Attendance/AttendanceAdjustmentModal.vue';
 import { APP_TIMEZONE, formatIn, timezoneLabel } from '@/lib/timezone';
 import {
     getCurrentLocation,
@@ -32,7 +33,12 @@ const props = defineProps({
     assignedStores: Array,
     totalAssignedCount: Number,
     todaySchedule: Object,
+    // Flagged Time In of this session (rest day / outside assigned store) and its request.
+    pendingAdjustment: { type: Object, default: null },
+    adjustmentStores: { type: Array, default: () => [] },
 });
+
+const ATTENDANCE_STATE_PROPS = ['lastLog', 'isSegmentComplete', 'todaySchedule', 'pendingAdjustment', 'adjustmentStores'];
 
 const PRECISE_LOCATION_ACCURACY_METERS = 100;
 const PRECISE_LOCATION_TIMEOUT_MS = 15000;
@@ -103,7 +109,9 @@ const makeClientRequestId = () => {
 };
 
 const activeScheduleStore = computed(() => props.todaySchedule?.store || null);
-const requiresGeofencing = computed(() => Boolean(props.todaySchedule && props.todaySchedule.status !== 'WFH'));
+const isRestDay = computed(() => props.todaySchedule?.status === 'Restday');
+// WFH and rest days have no work location to geofence against.
+const requiresGeofencing = computed(() => Boolean(props.todaySchedule && !['WFH', 'Restday'].includes(props.todaySchedule.status)));
 const nextAction = computed(() => {
     if (!props.todaySchedule) return null;
 
@@ -329,7 +337,30 @@ const locationSubmissionReady = computed(() => {
     if (browserGeofenceRequiresFreshFix.value && !isLocationFresh.value) return false;
     if (!isBrowserAccuracyUsable.value) return false;
     if (requiresGeofencing.value && isNativeApp.value && !isPreciseEnough.value) return false;
-    return isWithinStoreVicinity.value;
+    // Outside the assigned store's radius is allowed: the Time In is recorded as a
+    // location mismatch and the person is asked to request a location adjustment.
+    return true;
+});
+
+const isLocationMismatch = computed(() => {
+    return !isTimeOutFlow.value &&
+        requiresGeofencing.value &&
+        hasLocationFix.value &&
+        activeScheduleStoreHasCoordinates.value &&
+        !isWithinStoreVicinity.value;
+});
+
+// Non-blocking heads-up shown next to an enabled Time In button.
+const adjustmentNotice = computed(() => {
+    if (isTimeOutFlow.value) return '';
+    if (isRestDay.value) {
+        return 'Today is your rest day. You can still Time In; you will be asked to request a schedule adjustment from your leader.';
+    }
+    if (isLocationMismatch.value) {
+        return `You are outside ${activeScheduleStore.value?.name ?? 'your assigned store'} (${locationDistanceLabel.value}). You can still Time In; you will be asked to request a location adjustment from your leader.`;
+    }
+
+    return '';
 });
 
 const locationReadinessLabel = computed(() => {
@@ -403,9 +434,6 @@ const statusMessage = computed(() => {
     }
     if (requiresGeofencing.value && isNativeApp.value && !isPreciseEnough.value) {
         return 'Waiting for a precise native GPS fix within 100m accuracy. Enable precise/full accuracy location if your device is only giving an approximate pin.';
-    }
-    if (!isTimeOutFlow.value && requiresGeofencing.value && !isWithinStoreVicinity.value) {
-        return `You are outside the active schedule store vicinity for ${activeScheduleStore.value?.name ?? 'the scheduled store'} (${locationDistanceLabel.value}).`;
     }
 
     return `Ready to ${nextAction.value}`;
@@ -529,7 +557,7 @@ const updateSelectedLocationSample = () => {
         locationMode.value = isLocationFresh.value ? 'ready' : 'approximate';
         locationHint.value = isLocationFresh.value
             ? (isBrowserAccuracyUsable.value
-                ? (isWithinStoreVicinity.value ? null : 'Location is fresh now. Move within the assigned store radius to unlock attendance.')
+                ? (isWithinStoreVicinity.value ? null : 'Location is fresh, but outside the assigned store radius. Time In will be flagged for a location adjustment.')
                 : `Browser location is fresh but accuracy is too broad. Refresh GPS until accuracy is within ${browserAccuracyLimitMeters.value}m.`)
             : 'Browser geolocation returned an older last-known fix. Keep the page open or refresh GPS until the location updates from your current position.';
         if (isLocationFresh.value) {
@@ -543,7 +571,7 @@ const updateSelectedLocationSample = () => {
         locationMode.value = 'ready';
         locationHint.value = isWithinStoreVicinity.value
             ? null
-            : 'GPS is precise now. Move within the assigned store radius to unlock attendance.';
+            : 'GPS is precise, but outside the assigned store radius. Time In will be flagged for a location adjustment.';
         locationAttemptProgress.value = 100;
         clearLocationAttemptTimers();
         return;
@@ -956,10 +984,17 @@ const submit = async () => {
     const locationName = props.todaySchedule?.status === 'WFH'
         ? 'Work From Home'
         : (props.todaySchedule?.store?.name ?? 'your assigned store');
+    let message = `You are about to record ${action} at ${locationName}. Continue?`;
+
+    if (!isTimeOutFlow.value && isRestDay.value) {
+        message = `Today is your rest day. Your ${action} will be recorded and you will be asked to request a schedule adjustment from your leader. Continue?`;
+    } else if (isLocationMismatch.value) {
+        message = `You are outside ${locationName} (${locationDistanceLabel.value}). Your ${action} will be recorded and you will be asked to request a location adjustment from your leader. Continue?`;
+    }
 
     const ok = await confirm({
         title: `Confirm ${action}`,
-        message: `You are about to record ${action} at ${locationName}. Continue?`,
+        message,
         confirmLabel: action,
         cancelLabel: 'Cancel',
         variant: 'primary',
@@ -1008,7 +1043,7 @@ const submit = async () => {
         },
         onError: () => {
             void router.reload({
-                only: ['lastLog', 'isSegmentComplete', 'todaySchedule'],
+                only: ATTENDANCE_STATE_PROPS,
                 preserveScroll: true,
                 preserveState: true,
             });
@@ -1022,13 +1057,66 @@ const submit = async () => {
 
 const refreshAttendanceState = () => {
     router.reload({
-        only: ['lastLog', 'isSegmentComplete', 'todaySchedule'],
+        only: ATTENDANCE_STATE_PROPS,
         preserveScroll: true,
         preserveState: true,
     });
 };
 
+// --- Rest-day / location-mismatch adjustment request -------------------------------
+const adjustmentRequestStatus = computed(() => props.pendingAdjustment?.request?.status ?? null);
+const canRequestAdjustment = computed(() => Boolean(
+    props.pendingAdjustment &&
+    [null, 'rejected', 'cancelled'].includes(adjustmentRequestStatus.value) &&
+    props.adjustmentStores.length
+));
+const showAdjustmentModal = ref(false);
+const adjustmentModalStep = ref('prompt');
+
+const openAdjustmentModal = (step = 'form') => {
+    if (!canRequestAdjustment.value) return;
+
+    adjustmentModalStep.value = step;
+    showAdjustmentModal.value = true;
+};
+
+// The "approval needed" prompt opens by itself for a flagged clock-in that has no request yet,
+// until the person dismisses it on this device ("Not Now"); the banner button stays either way.
+// Not a session flash: a poll landing between the POST and the redirected GET would eat it.
+const DISMISSED_PROMPTS_KEY = 'dtr.adjustmentPromptsDismissed';
+const dismissedPromptIds = () => {
+    try {
+        return JSON.parse(window.localStorage.getItem(DISMISSED_PROMPTS_KEY) || '[]');
+    } catch {
+        return [];
+    }
+};
+const rememberPromptDismissed = (logId) => {
+    if (!logId) return;
+    try {
+        const ids = [...new Set([...dismissedPromptIds(), logId])].slice(-20);
+        window.localStorage.setItem(DISMISSED_PROMPTS_KEY, JSON.stringify(ids));
+    } catch {
+        // Storage blocked: the prompt may simply show again next visit.
+    }
+};
+const maybePromptAdjustment = () => {
+    const logId = props.pendingAdjustment?.log_id;
+    if (!logId || !canRequestAdjustment.value || showAdjustmentModal.value) return;
+    if (dismissedPromptIds().includes(logId)) return;
+
+    openAdjustmentModal('prompt');
+};
+const closeAdjustmentModal = () => {
+    showAdjustmentModal.value = false;
+    rememberPromptDismissed(props.pendingAdjustment?.log_id);
+};
+
+// Not immediate: Modal.vue only opens its <dialog> when `show` changes after it has mounted.
+watch([() => props.pendingAdjustment?.log_id, canRequestAdjustment], () => maybePromptAdjustment());
+
 onMounted(async () => {
+    maybePromptAdjustment();
     refreshAttendanceState();
     await startCamera();
 
@@ -1085,7 +1173,7 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
             </div>
 
             <div v-else class="p-6 space-y-6">
-                <div v-if="todaySchedule" class="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                <div v-if="todaySchedule" class="flex flex-wrap items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
                     <div class="flex-shrink-0 w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center">
                         <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z" />
@@ -1096,16 +1184,48 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
                         <p class="text-sm font-bold text-blue-900">
                             <span
                                 class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-black mr-2"
-                                :class="todaySchedule.status === 'On-site' ? 'bg-green-100 text-green-700' : todaySchedule.status === 'WFH' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'"
+                                :class="isRestDay ? 'bg-gray-200 text-gray-700' : todaySchedule.status === 'On-site' ? 'bg-green-100 text-green-700' : todaySchedule.status === 'WFH' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'"
                             >
-                                {{ todaySchedule.status }}
+                                {{ isRestDay ? 'Rest-day' : todaySchedule.status }}
                             </span>
-                            {{ todaySchedule.store?.name ?? 'WFH' }}
-                            ·
-                            {{ formatScheduleClock(todaySchedule.start_time) }}
-                            -
-                            {{ formatScheduleClock(todaySchedule.end_time) }}
+                            <template v-if="isRestDay">No scheduled hours</template>
+                            <template v-else>
+                                {{ todaySchedule.store?.name ?? 'WFH' }}
+                                ·
+                                {{ formatScheduleClock(todaySchedule.start_time) }}
+                                -
+                                {{ formatScheduleClock(todaySchedule.end_time) }}
+                            </template>
                         </p>
+                    </div>
+                    <div v-if="pendingAdjustment" class="ml-auto flex flex-wrap items-center justify-end gap-2">
+                        <span
+                            v-if="adjustmentRequestStatus === 'pending'"
+                            class="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800"
+                        >
+                            Adjustment pending leader approval
+                        </span>
+                        <span
+                            v-else-if="adjustmentRequestStatus === 'approved'"
+                            class="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-black text-green-700"
+                        >
+                            Adjustment approved
+                        </span>
+                        <span
+                            v-else-if="adjustmentRequestStatus === 'rejected'"
+                            class="inline-flex items-center rounded-full bg-red-100 px-3 py-1 text-xs font-black text-red-700"
+                            :title="pendingAdjustment.request?.approver_remarks || ''"
+                        >
+                            Adjustment rejected
+                        </span>
+                        <button
+                            v-if="canRequestAdjustment"
+                            type="button"
+                            class="rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-bold text-blue-900 shadow-sm transition-colors hover:bg-blue-100 dark:border-blue-700 dark:bg-gray-800 dark:text-blue-100 dark:hover:bg-gray-700"
+                            @click="openAdjustmentModal('form')"
+                        >
+                            Request Schedule/Location Change
+                        </button>
                     </div>
                 </div>
 
@@ -1168,14 +1288,28 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
                                 <span v-if="todaySchedule?.status === 'WFH'" class="text-[10px] font-bold text-purple-600 flex items-center gap-1 bg-purple-50 px-2 py-1 rounded">
                                     <GlobeAsiaAustraliaIcon class="w-3 h-3" /> WFH MODE
                                 </span>
+                                <span v-else-if="isRestDay" class="text-[10px] font-bold text-gray-700 flex items-center gap-1 bg-gray-100 px-2 py-1 rounded">
+                                    REST DAY
+                                </span>
                                 <span v-else-if="isWithinStoreVicinity" class="text-[10px] font-bold text-blue-600 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded">
                                     <CheckCircleIcon class="w-3 h-3" /> IN RANGE
+                                </span>
+                                <span v-else-if="isLocationMismatch" class="text-[10px] font-bold text-amber-700 flex items-center gap-1 bg-amber-50 px-2 py-1 rounded">
+                                    <ExclamationCircleIcon class="w-3 h-3" /> OUTSIDE ASSIGNED AREA
                                 </span>
                             </div>
                         </div>
 
                         <div class="relative aspect-video bg-gray-100 rounded-lg border-2 overflow-hidden dark:bg-gray-800" :class="isWithinStoreVicinity ? 'border-blue-500' : 'border-gray-200'">
                             <div ref="mapElement" class="w-full h-full"></div>
+
+                            <!-- The map stays centred on the person, so this sits beside their pin. -->
+                            <span
+                                v-if="pendingAdjustment?.detected_store && latitude"
+                                class="pointer-events-none absolute left-[calc(50%+18px)] top-[calc(50%-44px)] max-w-[45%] truncate rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-bold text-white shadow-md"
+                            >
+                                Clock-in detected: {{ pendingAdjustment.detected_store.name }}
+                            </span>
 
                             <div v-if="!latitude || locationError" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-50/90 p-4 text-center">
                                 <template v-if="!latitude && !locationError">
@@ -1219,6 +1353,10 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
                                 <div v-if="!canSave" class="flex items-center gap-2 text-orange-600 bg-orange-50 px-3 py-2 rounded-lg border border-orange-100 text-[10px] sm:text-xs font-bold text-center w-full justify-center">
                                     <ExclamationCircleIcon class="w-4 h-4 flex-shrink-0" />
                                     {{ statusMessage }}
+                                </div>
+                                <div v-else-if="adjustmentNotice" class="flex items-center gap-2 text-amber-800 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200 text-[10px] sm:text-xs font-bold text-center w-full justify-center">
+                                    <ExclamationCircleIcon class="w-4 h-4 flex-shrink-0" />
+                                    {{ adjustmentNotice }}
                                 </div>
 
                                 <PrimaryButton
@@ -1296,6 +1434,14 @@ watch([latitude, longitude, mapElement, activeScheduleStore], () => {
             </div>
         </div>
         <canvas ref="canvas" style="display:none;"></canvas>
+
+        <AttendanceAdjustmentModal
+            :show="showAdjustmentModal"
+            :adjustment="pendingAdjustment"
+            :stores="adjustmentStores"
+            :initial-step="adjustmentModalStep"
+            @close="closeAdjustmentModal"
+        />
     </AppLayout>
 </template>
 

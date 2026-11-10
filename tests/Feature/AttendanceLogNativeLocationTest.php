@@ -110,8 +110,10 @@ class AttendanceLogNativeLocationTest extends TestCase
         $this->assertDatabaseCount('attendance_logs', 0);
     }
 
-    public function test_geofenced_log_is_rejected_when_outside_store_radius(): void
+    public function test_geofenced_log_outside_store_radius_is_recorded_as_location_mismatch(): void
     {
+        // Outside the geofence no longer blocks Time In: it is recorded, flagged, and the DTR
+        // prompts for a location adjustment (see AttendanceScheduleAdjustmentTest).
         [$user, $store] = $this->createGeofencedAttendanceContext();
 
         $response = $this->actingAs($user)
@@ -124,10 +126,8 @@ class AttendanceLogNativeLocationTest extends TestCase
                 'location_provider' => 'capacitor',
             ]));
 
-        $response->assertRedirect('/dtr');
-        $response->assertSessionHas('error');
-        $this->assertStringContainsString('outside the active schedule store vicinity', session('error'));
-        $this->assertDatabaseCount('attendance_logs', 0);
+        $response->assertRedirect(route('attendance.index'));
+        $this->assertSame(AttendanceLog::ADJUSTMENT_LOCATION_MISMATCH, AttendanceLog::sole()->adjustment_reason);
     }
 
     public function test_valid_native_geofenced_log_is_accepted_and_stores_location_metadata(): void

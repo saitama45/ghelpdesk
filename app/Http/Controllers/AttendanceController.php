@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AttendanceLog;
 use App\Models\Schedule;
+use App\Models\ScheduleChangeRequest;
 use App\Models\ScheduleStore;
 use App\Models\Store;
 use App\Models\User;
@@ -25,6 +26,9 @@ class AttendanceController extends Controller implements HasMiddleware
     private const BROWSER_LOCATION_FRESHNESS_SECONDS = 60;
 
     private const MIN_BROWSER_ACCURACY_LIMIT_METERS = 100;
+
+    /** Schedule statuses that mean the person is working (same list as Ticket Duty). */
+    private const WORKING_STATUSES = Schedule::TICKET_DUTY_STATUSES;
 
     public static function middleware(): array
     {
@@ -74,17 +78,35 @@ class AttendanceController extends Controller implements HasMiddleware
             $isSegmentComplete = $segmentTypes->contains('time_in') && $segmentTypes->contains('time_out');
         }
 
+        $isRestDay = $todaySchedule?->status === 'Restday';
+        $pendingAdjustment = $todaySchedule
+            ? $this->pendingAdjustmentPayload($user->id, $todaySchedule, $activeStoreEntry, $now)
+            : null;
+        $canRequestAdjustment = $pendingAdjustment
+            && in_array($pendingAdjustment['request']['status'] ?? null, [null, 'rejected', 'cancelled'], true);
+
         return Inertia::render('Attendance/Index', [
             'lastLog' => $lastLog,
             'isSegmentComplete' => $isSegmentComplete,
             'assignedStores' => $assignedStores,
             'totalAssignedCount' => $totalAssignedCount,
+            // Flagged Time In of the current session (rest day / location mismatch) and its request.
+            // The DTR opens the "approval needed" prompt from this while no request exists.
+            'pendingAdjustment' => $pendingAdjustment,
+            // Location choices for the adjustment request; only sent while one can be filed.
+            // Plain arrays: serializing Store models appends cluster_name (a clusters query per store).
+            'adjustmentStores' => $canRequestAdjustment
+                ? Store::query()->where('is_active', true)->orderBy('name')->get(['id', 'code', 'name'])
+                    ->map(fn (Store $store) => ['id' => (int) $store->id, 'code' => $store->code, 'name' => $store->name])
+                    ->values()
+                : [],
             'todaySchedule' => $todaySchedule ? [
                 'id' => $todaySchedule->id,
                 'status' => $todaySchedule->status,
                 'start_time' => ($activeStoreEntry ? $activeStoreEntry->start_time : $todaySchedule->start_time)->toIso8601String(),
                 'end_time' => ($activeStoreEntry ? $activeStoreEntry->end_time : $todaySchedule->end_time)->toIso8601String(),
-                'store' => ($activeStoreEntry && $activeStoreEntry->store)
+                // A rest day has no work location to geofence, even if an old entry carries one.
+                'store' => (! $isRestDay && $activeStoreEntry && $activeStoreEntry->store)
                     ? [
                         'id' => $activeStoreEntry->store->id,
                         'code' => $activeStoreEntry->store->code,
@@ -493,8 +515,18 @@ class AttendanceController extends Controller implements HasMiddleware
             );
         }
 
-        // GEOFENCING VALIDATION (Time In only; Time Out stores location for audit)
-        if ($type === 'time_in' && $schedule->status !== 'WFH') {
+        // A Time In that breaks the schedule is recorded, not rejected: it is flagged and the
+        // person is asked to request a schedule/location adjustment from their leader.
+        $adjustmentReason = null;
+        $detectedStore = null;
+
+        if ($type === 'time_in' && $schedule->status === 'Restday') {
+            // Nothing to geofence against on a rest day; keep where they actually were.
+            $adjustmentReason = AttendanceLog::ADJUSTMENT_REST_DAY;
+            $detectedStore = $this->detectStoreAt($request->latitude, $request->longitude);
+        } elseif ($type === 'time_in' && $schedule->status !== 'WFH') {
+            // GEOFENCING VALIDATION (Time In only; Time Out stores location for audit).
+            // The fix must still be fresh and accurate, so the detected location is trustworthy.
             $userLat = $request->latitude;
             $userLng = $request->longitude;
             $store = $activeStoreEntry?->store;
@@ -540,9 +572,9 @@ class AttendanceController extends Controller implements HasMiddleware
             $distance = $this->calculateDistance($userLat, $userLng, $store->latitude, $store->longitude);
 
             if ($distance > $radius) {
-                return $this->attendanceBackError("You are outside the active schedule store vicinity for {$store->name}. (".round($distance)."m away, allowed {$radius}m)", $user->id, $expectedType, $type, $schedule->id);
+                $adjustmentReason = AttendanceLog::ADJUSTMENT_LOCATION_MISMATCH;
+                $detectedStore = $this->detectStoreAt($userLat, $userLng);
             }
-
         }
 
         // Handle Base64 Photo
@@ -584,6 +616,8 @@ class AttendanceController extends Controller implements HasMiddleware
                 'log_time' => now('Asia/Manila'),
                 'device_info' => $request->input('device_info', $request->header('User-Agent')),
                 'ip_address' => $request->input('public_ip', $request->ip()),
+                'adjustment_reason' => $adjustmentReason,
+                'detected_store_id' => $detectedStore?->id,
             ]);
         } catch (QueryException $e) {
             if (! $clientRequestId || ! $this->isDuplicateKeyException($e)) {
@@ -619,9 +653,92 @@ class AttendanceController extends Controller implements HasMiddleware
 
     private function attendanceLogRedirect(AttendanceLog $log)
     {
+        $message = 'Successfully '.($log->type === 'time_in' ? 'Timed In' : 'Timed Out');
+
+        // A flagged Time In stays on the DTR, which opens the "approval needed" prompt.
+        if ($log->type === 'time_in' && in_array($log->adjustment_reason, AttendanceLog::ADJUSTMENT_REASONS, true)) {
+            return redirect()
+                ->route('attendance.index')
+                ->with('success', $message);
+        }
+
         return redirect()
             ->route('attendance.logs')
-            ->with('success', 'Successfully '.($log->type === 'time_in' ? 'Timed In' : 'Timed Out'));
+            ->with('success', $message);
+    }
+
+    /**
+     * The flagged Time In of the session shown on the DTR, with what the adjustment request
+     * form should start from. Null when the session's Time In followed the schedule.
+     */
+    private function pendingAdjustmentPayload(int $userId, Schedule $schedule, ?ScheduleStore $activeStoreEntry, $now): ?array
+    {
+        $segmentLogs = $this->buildSegmentLogsQuery($userId, $schedule, $activeStoreEntry, $now)
+            ->with(['detectedStore:id,code,name', 'scheduleStore.store:id,code,name'])
+            ->orderBy('log_time')
+            ->get(['id', 'type', 'log_time', 'schedule_store_id', 'adjustment_reason', 'detected_store_id']);
+
+        $log = $segmentLogs
+            ->where('type', 'time_in')
+            ->filter(fn (AttendanceLog $row) => in_array($row->adjustment_reason, AttendanceLog::ADJUSTMENT_REASONS, true))
+            ->last();
+
+        if (! $log) {
+            return null;
+        }
+
+        $latestRequest = ScheduleChangeRequest::query()
+            ->where('attendance_log_id', $log->id)
+            ->latest('id')
+            ->first(['id', 'status', 'approver_remarks']);
+
+        $isRestDay = $log->adjustment_reason === AttendanceLog::ADJUSTMENT_REST_DAY;
+        $entry = $log->scheduleStore ?? $activeStoreEntry;
+        $assignedStore = $isRestDay ? null : $entry?->store;
+        $timeOut = $segmentLogs
+            ->where('type', 'time_out')
+            ->filter(fn (AttendanceLog $row) => $row->log_time->gte($log->log_time))
+            ->last();
+
+        if ($isRestDay) {
+            // Suggest a regular day starting the hour they clocked in (9h incl. lunch),
+            // stretched to cover a Time Out that is already in.
+            $start = $log->log_time->copy()->timezone('Asia/Manila')->startOfHour();
+            $end = $start->copy()->addHours(9);
+
+            if ($timeOut && $timeOut->log_time->gt($end)) {
+                $end = $timeOut->log_time->copy()->timezone('Asia/Manila')->ceilMinutes(30);
+            }
+
+            $defaultStatus = 'On-site';
+        } else {
+            $start = ($entry?->start_time ?? $schedule->start_time)->copy()->timezone('Asia/Manila');
+            $end = ($entry?->end_time ?? $schedule->end_time)->copy()->timezone('Asia/Manila');
+            $defaultStatus = $schedule->status;
+        }
+
+        $storePayload = fn (?Store $store) => $store
+            ? ['id' => (int) $store->id, 'code' => $store->code, 'name' => $store->name]
+            : null;
+
+        return [
+            'log_id' => strtolower((string) $log->id),
+            'reason' => $log->adjustment_reason,
+            'log_time' => $log->log_time->toIso8601String(),
+            'assigned_store' => $storePayload($assignedStore),
+            'detected_store' => $storePayload($log->detectedStore),
+            'request' => $latestRequest ? [
+                'id' => (int) $latestRequest->id,
+                'status' => $latestRequest->status,
+                'approver_remarks' => $latestRequest->approver_remarks,
+            ] : null,
+            'defaults' => [
+                'status' => in_array($defaultStatus, self::WORKING_STATUSES, true) ? $defaultStatus : 'On-site',
+                'store_id' => $log->detected_store_id ? (int) $log->detected_store_id : null,
+                'start_time' => $start->toIso8601String(),
+                'end_time' => $end->toIso8601String(),
+            ],
+        ];
     }
 
     private function attendanceBackError(string $message, int $userId, ?string $expectedType, ?string $resolvedType, ?int $scheduleId)
@@ -868,10 +985,16 @@ class AttendanceController extends Controller implements HasMiddleware
         return $activeStoreEntry ?: null;
     }
 
+    /**
+     * Which schedule a DTR log belongs to right now, in priority order:
+     * 1. a working schedule (On-site/Off-site/WFH) whose entry window is open;
+     * 2. the schedule of a still-open session (Time In without Time Out), so it can be closed;
+     * 3. a Restday schedule covering now — Time In is allowed and flagged for a schedule adjustment.
+     */
     private function resolveScheduleForAttendance(int $userId, $now): array
     {
         $schedule = Schedule::where('user_id', $userId)
-            ->whereIn('status', ['On-site', 'Off-site', 'WFH'])
+            ->whereIn('status', self::WORKING_STATUSES)
             ->where('start_time', '<=', $now->copy()->addMinutes(480))
             ->where('end_time', '>=', $now)
             ->with(['scheduleStores.store'])
@@ -886,6 +1009,32 @@ class AttendanceController extends Controller implements HasMiddleware
             return [$schedule, $this->resolveActiveScheduleStore($schedule, $now)];
         }
 
+        return $this->resolveOpenSessionSchedule($userId, $now)
+            ?? $this->resolveRestDaySchedule($userId, $now);
+    }
+
+    private function resolveRestDaySchedule(int $userId, $now): array
+    {
+        $covers = fn ($row) => $row->start_time->lte($now) && $row->end_time->gte($now);
+
+        $restDay = Schedule::where('user_id', $userId)
+            ->where('status', 'Restday')
+            ->where('start_time', '<=', $now)
+            ->where('end_time', '>=', $now)
+            ->with(['scheduleStores.store'])
+            ->orderByDesc('start_time')
+            ->get()
+            ->first(fn (Schedule $s) => $s->scheduleStores->isEmpty() || $s->scheduleStores->contains($covers));
+
+        if (! $restDay) {
+            return [null, null];
+        }
+
+        return [$restDay, $restDay->scheduleStores->first($covers)];
+    }
+
+    private function resolveOpenSessionSchedule(int $userId, $now): ?array
+    {
         // Allow Time Out for an already-open attendance session even when
         // the strict active window has passed. Looks back 24h so a Time In
         // from the previous day (e.g., a near-midnight schedule) is still
@@ -901,19 +1050,20 @@ class AttendanceController extends Controller implements HasMiddleware
             ->first();
 
         if (! $lastOpenLog || ! $lastOpenLog->schedule) {
-            return [null, null];
+            return null;
         }
 
         $schedule = $lastOpenLog->schedule;
 
-        if (! in_array($schedule->status, ['On-site', 'Off-site', 'WFH'], true)) {
-            return [null, null];
+        // Restday too: a rest-day Time In must still be closable with a Time Out.
+        if (! in_array($schedule->status, [...self::WORKING_STATUSES, 'Restday'], true)) {
+            return null;
         }
 
         $activeStoreEntry = $lastOpenLog->scheduleStore;
         $effectiveEnd = $activeStoreEntry ? $activeStoreEntry->end_time : $schedule->end_time;
         if ($now->gt($effectiveEnd->copy()->addMinutes($lateGraceMinutes))) {
-            return [null, null];
+            return null;
         }
 
         $segmentLogs = $this->buildSegmentLogsQuery($userId, $schedule, $activeStoreEntry, $now)->pluck('type');
@@ -921,7 +1071,27 @@ class AttendanceController extends Controller implements HasMiddleware
             return [$schedule->loadMissing(['scheduleStores.store']), $activeStoreEntry];
         }
 
-        return [null, null];
+        return null;
+    }
+
+    /**
+     * The active store whose geofence contains the point (closest one if several overlap),
+     * or null when the person is not at any known store.
+     */
+    private function detectStoreAt($latitude, $longitude): ?Store
+    {
+        return Store::query()
+            ->where('is_active', true)
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->get(['id', 'code', 'name', 'latitude', 'longitude', 'radius_meters'])
+            ->map(fn (Store $store) => [
+                'store' => $store,
+                'distance' => $this->calculateDistance($latitude, $longitude, $store->latitude, $store->longitude),
+            ])
+            ->filter(fn (array $candidate) => $candidate['distance'] <= ($candidate['store']->radius_meters ?: 100))
+            ->sortBy('distance')
+            ->first()['store'] ?? null;
     }
 
     private function isWithinScheduleStoreWindow(ScheduleStore $scheduleStore, $now): bool

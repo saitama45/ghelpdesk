@@ -57,6 +57,12 @@
             <td style="font-weight: bold;">Schedule User</td>
             <td>{{ $schedule?->user?->name ?? 'Unknown' }}</td>
         </tr>
+        @if ($dtrSummary = $changeRequest->attendanceLog?->adjustmentSummary())
+            <tr>
+                <td style="font-weight: bold;">DTR Clock-in</td>
+                <td>{{ $dtrSummary }}</td>
+            </tr>
+        @endif
         @if ($isActualTimeRequest)
             <tr>
                 <td style="font-weight: bold;">Schedule Date</td>

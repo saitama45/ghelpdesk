@@ -91,6 +91,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/dtr', [\App\Http\Controllers\AttendanceController::class, 'index'])->name('attendance.index');
     Route::get('/attendance/logs', [\App\Http\Controllers\AttendanceController::class, 'logs'])->name('attendance.logs');
     Route::post('/attendance/log', [\App\Http\Controllers\AttendanceController::class, 'log'])->name('attendance.log');
+    // Rest-day / location-mismatch clock-in → schedule change request to the "Reports To" leader.
+    Route::post('/attendance/logs/{attendanceLog}/adjustment-request', [\App\Http\Controllers\ScheduleController::class, 'storeAttendanceAdjustmentRequest'])
+        ->name('attendance.adjustment-request');
     Route::get('npc-statuses/{npcStatus}/attachments/{type}', [NpcStatusController::class, 'downloadAttachment'])
         ->whereIn('type', ['seal', 'registration'])
         ->name('npc-statuses.attachments.download');

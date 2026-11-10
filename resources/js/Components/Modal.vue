@@ -17,6 +17,11 @@ const props = defineProps({
         type: Boolean,
         default: true,
     },
+    // Vertically centre the panel (short prompts); tall content still scrolls normally.
+    centered: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const emit = defineEmits(['close']);
@@ -101,6 +106,7 @@ const maxWidthClass = computed(() => {
     >
         <div
             class="fixed inset-0 z-50 overflow-y-auto px-4 py-6 sm:px-0"
+            :class="{ 'flex flex-col': centered }"
             scroll-region
             @click.self="close"
         >
@@ -132,8 +138,8 @@ const maxWidthClass = computed(() => {
             >
                 <div
                     v-show="show"
-                    class="mb-6 transform overflow-hidden rounded-lg bg-white shadow-xl transition-all sm:mx-auto sm:w-full relative z-10 dark:bg-gray-800"
-                    :class="maxWidthClass"
+                    class="transform overflow-hidden rounded-lg bg-white shadow-xl transition-all sm:mx-auto sm:w-full relative z-10 dark:bg-gray-800"
+                    :class="[maxWidthClass, centered ? 'my-auto w-full' : 'mb-6']"
                 >
                     <slot v-if="showSlot" />
                 </div>

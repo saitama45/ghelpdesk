@@ -8,6 +8,7 @@ use App\Models\ScheduleChangeRequest;
 use App\Models\ScheduleStore;
 use App\Models\AttendanceLog;
 use App\Models\DepartmentNode;
+use App\Models\Scopes\ActiveEntityScope;
 use App\Models\User;
 use App\Models\Store;
 use App\Models\Ticket;
@@ -79,6 +80,7 @@ class ScheduleController extends Controller implements HasMiddleware
             new Middleware('can:schedules.approve', only: ['approveChangeRequest', 'rejectChangeRequest']),
             new Middleware('can:schedules.delete', only: ['destroy', 'duplicates', 'destroyDuplicates']),
             new Middleware('can:schedules.ticket_duty', only: ['updateTicketDuty']),
+            new Middleware('can:attendance.create', only: ['storeAttendanceAdjustmentRequest']),
         ];
     }
 
@@ -548,6 +550,163 @@ class ScheduleController extends Controller implements HasMiddleware
         $this->notifyScheduleChangeApprovers($changeRequest);
 
         return redirect()->back()->with('success', 'Schedule change request submitted for approval.');
+    }
+
+    /**
+     * DTR: the person clocked in on a rest day, or outside their assigned store, and asks their
+     * leader to make that day's schedule match. Approvers come from resolveScheduleChangeApproverIds
+     * ("Reports To" first). It is an ordinary schedule_change scoped to the clock-in date, so
+     * approval runs applyScheduleUpdate: entry ids are kept and the log stays attached to its entry.
+     */
+    public function storeAttendanceAdjustmentRequest(Request $request, AttendanceLog $attendanceLog)
+    {
+        $user = $request->user();
+
+        abort_unless((int) $attendanceLog->user_id === (int) $user->id, 403, 'You can only request adjustments for your own attendance.');
+        abort_if($attendanceLog->voided_at !== null, 404);
+        abort_unless(
+            $attendanceLog->type === 'time_in'
+                && in_array($attendanceLog->adjustment_reason, AttendanceLog::ADJUSTMENT_REASONS, true),
+            422,
+            'This clock-in followed your schedule; there is nothing to adjust.'
+        );
+
+        // The person's own schedule, whichever entity they have switched to (id lookup, not a listing).
+        $schedule = $attendanceLog->schedule()->withoutGlobalScope(ActiveEntityScope::class)->first();
+        abort_unless($schedule && (int) $schedule->user_id === (int) $user->id, 404);
+
+        $validated = $request->validate([
+            'status' => 'required|string|in:' . implode(',', Schedule::TICKET_DUTY_STATUSES),
+            'store_id' => 'required|integer|exists:stores,id',
+            'start_time' => 'required|date',
+            'end_time' => 'required|date',
+            'requester_remarks' => 'required|string|max:1000',
+        ], [
+            'store_id.required' => 'Choose the location you are actually working at.',
+        ], [
+            'status' => 'work type',
+            'requester_remarks' => 'reason',
+        ]);
+
+        if (ScheduleChangeRequest::where('attendance_log_id', $attendanceLog->id)->where('status', 'approved')->exists()) {
+            return redirect()->back()->withErrors(['request' => 'This clock-in has already been adjusted and approved.']);
+        }
+
+        $scopeDate = $attendanceLog->log_time->copy()->timezone('Asia/Manila')->toDateString();
+        $start = Carbon::parse($validated['start_time'], 'Asia/Manila');
+        $end = Carbon::parse($validated['end_time'], 'Asia/Manila');
+
+        if ($start->copy()->timezone('Asia/Manila')->toDateString() !== $scopeDate) {
+            throw ValidationException::withMessages([
+                'start_time' => 'The adjusted hours must start on ' . Carbon::parse($scopeDate)->format('M d, Y') . ', the day you clocked in.',
+            ]);
+        }
+
+        if ($end->lte($start) || $start->diffInMinutes($end) > 24 * 60) {
+            throw ValidationException::withMessages([
+                'end_time' => 'End time must be after the start time and within 24 hours of it.',
+            ]);
+        }
+
+        // Change only the entry the clock-in belongs to; the day's other entries ride along unchanged.
+        $dayEntries = $this->scopedScheduleStoreRows($schedule, $scopeDate);
+        $targetEntryId = (int) ($attendanceLog->schedule_store_id ?: $dayEntries->first()?->id);
+        $adjustedEntry = fn (?ScheduleStore $row) => [
+            'id' => $row?->id,
+            'store_id' => (int) $validated['store_id'],
+            'ticket_id' => $row?->ticket_id,
+            'start_time' => $start->toIso8601String(),
+            'end_time' => $end->toIso8601String(),
+            'grace_period_minutes' => $row?->grace_period_minutes ?? 30,
+            'remarks' => $row?->remarks,
+        ];
+
+        $stores = $dayEntries->map(fn (ScheduleStore $row) => (int) $row->id === $targetEntryId
+            ? $adjustedEntry($row)
+            : [
+                'id' => $row->id,
+                'store_id' => $row->store_id,
+                'ticket_id' => $row->ticket_id,
+                'start_time' => $row->start_time->toIso8601String(),
+                'end_time' => $row->end_time->toIso8601String(),
+                'grace_period_minutes' => $row->grace_period_minutes ?? 30,
+                'remarks' => $row->remarks,
+            ])->values();
+
+        if (! $dayEntries->contains(fn (ScheduleStore $row) => (int) $row->id === $targetEntryId)) {
+            $stores->push($adjustedEntry(null));
+        }
+
+        $payload = $this->validateScheduleUpdatePayload([
+            ...$this->schedulePayload($schedule->loadMissing('scheduleStores')),
+            'status' => $validated['status'],
+            'stores' => $stores->all(),
+            'scope_date' => $scopeDate,
+        ]);
+
+        // Catch now what approval would reject, so the leader never gets an unapprovable request.
+        $expandedEntries = $this->expandStoreEntries($payload['stores'], $this->scheduleTimezoneFor((int) $schedule->user_id));
+
+        if ($outsideLog = $this->firstAttendanceLogOutsideEntries($schedule, $expandedEntries, $scopeDate)) {
+            throw ValidationException::withMessages([
+                'start_time' => 'The adjusted hours must include your '
+                    . str_replace('_', ' ', $outsideLog->type) . ' at '
+                    . $outsideLog->log_time->copy()->timezone('Asia/Manila')->format('h:i A') . '.',
+            ]);
+        }
+
+        if ($conflictDate = $this->conflictingScheduleDate((int) $schedule->user_id, $expandedEntries, $schedule->id)) {
+            throw ValidationException::withMessages([
+                'end_time' => $this->scheduleDateTakenMessage($conflictDate),
+            ]);
+        }
+
+        $approverIds = $this->resolveScheduleChangeApproverIds($user);
+
+        if (empty($approverIds)) {
+            Log::warning('DTR adjustment request blocked: no eligible approver resolved.', [
+                'requester_id' => $user->id,
+                'schedule_id' => $schedule->id,
+                'attendance_log_id' => $attendanceLog->id,
+                'hint' => 'Ensure the requester\'s "Reports To" leader (or a manager/admin above them) is active and has the "schedules.approve" permission.',
+            ]);
+
+            return redirect()->back()->withErrors([
+                'approver' => 'No leader with schedule approval rights was found for you. Please ask your administrator to set your "Reports To" leader.',
+            ]);
+        }
+
+        $changeRequest = ScheduleChangeRequest::updateOrCreate(
+            [
+                'schedule_id' => $schedule->id,
+                'requester_id' => $user->id,
+                'request_type' => self::REQUEST_TYPE_SCHEDULE_CHANGE,
+                'status' => 'pending',
+            ],
+            [
+                'request_type' => self::REQUEST_TYPE_SCHEDULE_CHANGE,
+                'attendance_log_id' => $attendanceLog->id,
+                'assigned_approver_ids' => $approverIds,
+                'original_payload' => $this->schedulePayload($schedule->fresh(['scheduleStores'])),
+                'requested_payload' => $payload,
+                'requester_remarks' => $validated['requester_remarks'],
+                'approved_by' => null,
+                'approved_at' => null,
+                'rejected_by' => null,
+                'rejected_at' => null,
+                'approver_remarks' => null,
+            ]
+        );
+
+        $changeRequest->load(['schedule.user', 'schedule.scheduleStores.store', 'schedule.scheduleStores.ticket', 'requester', 'attendanceLog.detectedStore']);
+        $this->notifyScheduleChangeApprovers(
+            $changeRequest,
+            $attendanceLog->adjustment_reason === AttendanceLog::ADJUSTMENT_REST_DAY
+                ? "{$user->name} clocked in on a rest day and requested a schedule adjustment."
+                : "{$user->name} clocked in outside their assigned location and requested a location adjustment."
+        );
+
+        return redirect()->back()->with('success', 'Adjustment request sent to your leader for approval.');
     }
 
     public function updateActualTimes(Request $request, Schedule $schedule)
@@ -3018,7 +3177,7 @@ class ScheduleController extends Controller implements HasMiddleware
         abort_unless($assignedApproverIds->contains((int) auth()->id()), 403, 'You are not assigned to approve this schedule change request.');
     }
 
-    private function notifyScheduleChangeApprovers(ScheduleChangeRequest $changeRequest): void
+    private function notifyScheduleChangeApprovers(ScheduleChangeRequest $changeRequest, ?string $message = null): void
     {
         $approverIds = collect($changeRequest->assigned_approver_ids ?? [])
             ->map(fn ($id) => (int) $id)
@@ -3033,7 +3192,7 @@ class ScheduleController extends Controller implements HasMiddleware
                 auth()->id(),
                 'pending',
                 'Schedule request needs approval',
-                trim(($changeRequest->requester?->name ?? 'A user') . ' requested a schedule change awaiting your approval.'),
+                $message ?? trim(($changeRequest->requester?->name ?? 'A user') . ' requested a schedule change awaiting your approval.'),
                 route('schedules.index', [], false) . '?tab=pending-requests',
                 'schedule_change_request:' . $changeRequest->id,
                 'warning'
@@ -3106,6 +3265,8 @@ class ScheduleController extends Controller implements HasMiddleware
             'requester:id,name,email',
             'approver:id,name',
             'rejecter:id,name',
+            'attendanceLog:id,log_time,adjustment_reason,detected_store_id',
+            'attendanceLog.detectedStore:id,name',
         ])->latest();
 
         if ($user->can('schedules.approve')) {
@@ -3154,6 +3315,13 @@ class ScheduleController extends Controller implements HasMiddleware
                 'original_payload' => $this->scheduleRequestPayloadWithLabels($changeRequest->original_payload, $storeLabels, $ticketLabels),
                 'requested_payload' => $this->scheduleRequestPayloadWithLabels($changeRequest->requested_payload, $storeLabels, $ticketLabels),
                 'requester_remarks' => $changeRequest->requester_remarks,
+                // Raised from a DTR clock-in on a rest day / outside the assigned location.
+                'attendance_context' => $changeRequest->attendanceLog?->adjustmentSummary()
+                    ? [
+                        'reason' => $changeRequest->attendanceLog->adjustment_reason,
+                        'summary' => $changeRequest->attendanceLog->adjustmentSummary(),
+                    ]
+                    : null,
                 'approver_remarks' => $changeRequest->approver_remarks,
                 'approved_by_name' => $changeRequest->approver?->name,
                 'approved_at' => $changeRequest->approved_at?->toIso8601String(),
