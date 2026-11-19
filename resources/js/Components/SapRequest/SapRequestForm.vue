@@ -54,10 +54,18 @@ const FORM_MAP = {
     'New BOM': markRaw(NewBOMForm),
 }
 
+// Resolve TGI by code — its display name is "The Table Group Inc.", so a name match never fires.
+const tgiCompany = computed(() =>
+    props.companies.find(c => String(c.code ?? '').trim().toUpperCase() === 'TGI')
+)
+// On the create form, the entity is fixed to TGI and the picker is hidden.
+const lockCompanyToTgi = computed(() => !props.sapRequest && !!tgiCompany.value)
+
 const form = useForm({
     requester_name: props.sapRequest?.requester_name ?? '',
     requester_email: props.sapRequest?.requester_email ?? '',
-    company_id: props.sapRequest?.company_id ?? '',
+    // TGI is the default too, so form.reset() after a submit keeps it.
+    company_id: props.sapRequest?.company_id ?? tgiCompany.value?.id ?? '',
     request_type_id: props.sapRequest?.request_type_id ?? props.initialRequestTypeId ?? '',
     form_data: props.sapRequest?.form_data ?? {},
     items: props.sapRequest?.items?.map(i => i.item_data) ?? [],
@@ -85,12 +93,8 @@ const selectedRequestType = computed(() =>
 const selectedCompany = computed(() =>
     props.companies.find(c => c.id == form.company_id)
 )
-// Resolve TGI by name (robust across environments where the id may differ).
-const tgiCompany = computed(() =>
-    props.companies.find(c => String(c.name ?? '').trim().toUpperCase() === 'TGI')
-)
-// On the create form, the entity is fixed to TGI and not editable.
-const lockCompanyToTgi = computed(() => !props.sapRequest && !!tgiCompany.value)
+// Section numbers shift when "Your Information" (public) or the entity picker is absent.
+const detailsStep = computed(() => 1 + (props.isPublic ? 1 : 0) + (lockCompanyToTgi.value ? 0 : 1))
 const activeFormComponent = computed(() => {
     if (!selectedRequestType.value) return null
     return FORM_MAP[selectedRequestType.value.name] ?? null
@@ -244,8 +248,9 @@ const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
                 </div>
             </div>
 
-            <!-- Request Classification (Entity Only now) -->
-            <div class="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 p-8 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
+            <!-- Entity: new requests are always TGI (set on mount, enforced server-side), so the
+                 picker only appears when editing an existing request -->
+            <div v-if="!lockCompanyToTgi" class="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 p-8 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                 <h3 class="text-base font-black text-gray-800 mb-6 flex items-center gap-2 dark:text-gray-200">
                     <span class="w-6 h-6 rounded-lg bg-teal-600 text-white flex items-center justify-center text-xs font-black">{{ isPublic ? '2' : '1' }}</span>
                     Entity Selection
@@ -253,40 +258,35 @@ const formReady = computed(() => useSchema.value || !!activeFormComponent.value)
                 <div>
                     <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Entity / Company <span class="text-rose-500">*</span></label>
                     <select v-model="form.company_id"
-                        :disabled="lockCompanyToTgi"
-                        :class="[
-                            form.errors.company_id ? 'border-rose-400' : 'border-slate-200',
-                            lockCompanyToTgi ? 'bg-slate-100 text-slate-500 cursor-not-allowed dark:bg-gray-700' : 'bg-white dark:bg-gray-800'
-                        ]"
-                        class="w-full border-2 rounded-xl px-4 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all">
+                        :class="form.errors.company_id ? 'border-rose-400' : 'border-slate-200'"
+                        class="w-full bg-white border-2 rounded-xl pl-4 pr-8 py-3 text-sm font-medium focus:border-teal-500 focus:ring-0 transition-all dark:bg-gray-800">
                         <option value="">Select entity...</option>
                         <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
                     </select>
-                    <p v-if="lockCompanyToTgi" class="mt-1 text-[11px] text-slate-400 font-medium">Entity is fixed to TGI for new requests.</p>
                     <p v-if="form.errors.company_id" class="mt-1 text-xs text-rose-500 font-bold">{{ form.errors.company_id }}</p>
                 </div>
+            </div>
 
-                <!-- Approval info badge -->
-                <div v-if="selectedRequestType" class="mt-5 flex items-center gap-3 px-5 py-3 rounded-2xl"
-                    :class="selectedRequestType.approval_levels == 0 ? 'bg-emerald-50 border border-emerald-100' : 'bg-blue-50 border border-blue-100'">
-                    <svg class="w-4 h-4 flex-shrink-0" :class="selectedRequestType.approval_levels == 0 ? 'text-emerald-600' : 'text-blue-600'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                    </svg>
-                    <span class="text-xs font-bold" :class="selectedRequestType.approval_levels == 0 ? 'text-emerald-700' : 'text-blue-700'">
-                        <template v-if="selectedRequestType.approval_levels == 0">
-                            No approval required — this request will go directly to the SAP Data Officer for encoding.
-                        </template>
-                        <template v-else>
-                            Requires {{ selectedRequestType.approval_levels }} approval {{ selectedRequestType.approval_levels == 1 ? 'step' : 'steps' }} before encoding. SLA: 1–3 days.
-                        </template>
-                    </span>
-                </div>
+            <!-- Approval info badge -->
+            <div v-if="selectedRequestType" class="flex items-center gap-3 px-5 py-3 rounded-2xl"
+                :class="selectedRequestType.approval_levels == 0 ? 'bg-emerald-50 border border-emerald-100' : 'bg-blue-50 border border-blue-100'">
+                <svg class="w-4 h-4 flex-shrink-0" :class="selectedRequestType.approval_levels == 0 ? 'text-emerald-600' : 'text-blue-600'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span class="text-xs font-bold" :class="selectedRequestType.approval_levels == 0 ? 'text-emerald-700' : 'text-blue-700'">
+                    <template v-if="selectedRequestType.approval_levels == 0">
+                        No approval required — this request will go directly to the SAP Data Officer for encoding.
+                    </template>
+                    <template v-else>
+                        Requires {{ selectedRequestType.approval_levels }} approval {{ selectedRequestType.approval_levels == 1 ? 'step' : 'steps' }} before encoding. SLA: 1–3 days.
+                    </template>
+                </span>
             </div>
 
             <!-- Dynamic Form Section -->
             <div v-if="formReady" class="bg-white rounded-[2rem] shadow-xl shadow-gray-100/50 p-8 border border-gray-100 dark:bg-gray-800 dark:border-gray-700">
                 <h3 class="text-base font-black text-gray-800 mb-6 flex items-center gap-2 dark:text-gray-200">
-                    <span class="w-6 h-6 rounded-lg bg-teal-600 text-white flex items-center justify-center text-xs font-black">{{ isPublic ? '3' : '2' }}</span>
+                    <span class="w-6 h-6 rounded-lg bg-teal-600 text-white flex items-center justify-center text-xs font-black">{{ detailsStep }}</span>
                     {{ selectedRequestType?.name }} Details
                 </h3>
 

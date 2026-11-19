@@ -21,7 +21,7 @@ class PublicSapRequestController extends Controller
     public function create()
     {
         return Inertia::render('Public/SAPRequests/Create', [
-            'companies'    => Company::where('is_active', true)->get(['id', 'name']),
+            'companies'    => Company::where('is_active', true)->get(['id', 'name', 'code']),
             'requestTypes' => RequestType::where('is_active', true)
                 ->whereJsonContains('request_for', 'SAP')
                 ->get(['id', 'name', 'approval_levels', 'form_schema']),
@@ -30,6 +30,11 @@ class PublicSapRequestController extends Controller
 
     public function store(Request $request)
     {
+        // New requests are always filed under TGI; the form no longer asks for an entity.
+        if ($tgiId = Company::tgiId()) {
+            $request->merge(['company_id' => $tgiId]);
+        }
+
         $validated = $request->validate([
             'requester_name'  => 'required|string|max:255',
             'requester_email' => 'required|email|max:255',

@@ -162,7 +162,7 @@ class SapRequestController extends Controller implements HasMiddleware
     public function create()
     {
         return Inertia::render('SapRequests/Create', [
-            'companies'    => Company::where('is_active', true)->get(['id', 'name']),
+            'companies'    => Company::where('is_active', true)->get(['id', 'name', 'code']),
             'requestTypes' => RequestType::where('is_active', true)
                 ->whereJsonContains('request_for', 'SAP')
                 ->get(['id', 'name', 'approval_levels', 'form_schema']),
@@ -172,6 +172,11 @@ class SapRequestController extends Controller implements HasMiddleware
 
     public function store(Request $request)
     {
+        // New requests are always filed under TGI; the form no longer asks for an entity.
+        if ($tgiId = Company::tgiId()) {
+            $request->merge(['company_id' => $tgiId]);
+        }
+
         $validated = $request->validate([
             'company_id'      => 'required|exists:companies,id',
             'request_type_id' => 'required|exists:request_types,id',
@@ -210,7 +215,7 @@ class SapRequestController extends Controller implements HasMiddleware
 
         return Inertia::render('SapRequests/Create', [
             'sapRequest'   => $sapRequest,
-            'companies'    => Company::where('is_active', true)->get(['id', 'name']),
+            'companies'    => Company::where('is_active', true)->get(['id', 'name', 'code']),
             'requestTypes' => RequestType::where('is_active', true)
                 ->whereJsonContains('request_for', 'SAP')
                 ->get(['id', 'name', 'approval_levels', 'form_schema']),

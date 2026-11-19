@@ -55,6 +55,17 @@ class Company extends Model
             ->withTimestamps();
     }
 
+    /**
+     * The Table Group Inc. — new SAP requests are always filed under it. Matched by
+     * code, because its display name is "The Table Group Inc.", not "TGI".
+     */
+    public static function tgiId(): ?int
+    {
+        $id = static::where('code', 'TGI')->where('is_active', true)->value('id');
+
+        return $id === null ? null : (int) $id;
+    }
+
     /** Entity companies to which this brand company is assigned. */
     /**
      * Companies whose items and references this company may use: itself plus every

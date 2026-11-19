@@ -125,6 +125,31 @@ class SapRequestSchemaRequiredTest extends TestCase
         $this->assertStringContainsString('Item Name: Arabica Beans 1kg', $ticket->description);
     }
 
+    public function test_new_requests_are_filed_under_tgi_whatever_entity_is_posted(): void
+    {
+        $other = Company::create(['name' => 'Gourmet Solutions Inc.', 'code' => 'GSI', 'is_active' => true]);
+        $answers = ['entity' => ['tgi'], 'subject_to_withholding_tax' => 'no', 'vendor_type' => 'supplier'];
+        $requestType = $this->fieldsType();
+
+        // Internal form: another entity's id is overridden, and an omitted id is filled in.
+        foreach ([['company_id' => $other->id], ['company_id' => null]] as $override) {
+            $this->actingAs($this->requester)
+                ->post(route('sap-requests.store'), array_merge($this->payload($requestType, $answers), $override))
+                ->assertSessionHasNoErrors();
+        }
+
+        // Public form, same rule.
+        auth()->logout();
+        $this->post(route('public.sap-requests.store'), array_merge($this->payload($requestType, $answers), [
+            'requester_name' => 'Juan Dela Cruz',
+            'requester_email' => 'juan@example.com',
+            'company_id' => $other->id,
+        ]))->assertSessionHasNoErrors();
+
+        $this->assertSame(3, SapRequest::count());
+        $this->assertSame([$this->company->id], SapRequest::pluck('company_id')->map(fn ($id) => (int) $id)->unique()->values()->all());
+    }
+
     private function payload(RequestType $requestType, array $formData, array $items = []): array
     {
         return [
