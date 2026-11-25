@@ -110,6 +110,7 @@ class RegisterController extends Controller
                 'profile_photo' => $user->profile_photo,
             ],
             'roles' => $user->getRoleNames(),
+            'otp_required' => AuthController::otpRequiredFor($user),
         ], 201);
     }
 

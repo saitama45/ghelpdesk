@@ -57,6 +57,24 @@ class RegisterControllerTest extends TestCase
         $this->assertSame([], $response->json('roles'));
     }
 
+    public function test_a_new_member_must_verify_a_sign_in_code(): void
+    {
+        config(['services.app_review.email' => 'reviewer@example.com']);
+
+        $this->postJson('/api/register', $this->validPayload)
+            ->assertStatus(201)
+            ->assertJsonPath('otp_required', true);
+    }
+
+    public function test_a_listed_review_account_skips_the_sign_in_code_after_signing_up(): void
+    {
+        config(['services.app_review.email' => 'keeper@example.com, Jane@Example.com']);
+
+        $this->postJson('/api/register', $this->validPayload)
+            ->assertStatus(201)
+            ->assertJsonPath('otp_required', false);
+    }
+
     public function test_rejects_a_duplicate_email(): void
     {
         User::factory()->create(['email' => 'jane@example.com']);

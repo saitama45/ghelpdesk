@@ -170,22 +170,30 @@ which also searches both columns.
 
 ### Letting a store reviewer sign in
 
-**`APP_REVIEW_EMAIL` + `APP_REVIEW_OTP`** (`services.app_review.*`) name the demo accounts that
-receive the fixed code instead of a mailed one at `POST /api/otp/send`. A reviewer signs in on
-a device with no access to the demo mailbox, so without this the review ends at the
-verification screen. Everything else about the step is unchanged — the code is still stored
-hashed, still scoped to `OtpCode::PURPOSE_LOGIN`, still expires in 5 minutes, still counts
-attempts — and leaving either value unset turns the allowlist off.
+**`APP_REVIEW_EMAIL`** (`services.app_review.email`) names the demo accounts that sign in to
+the mobile app with their password alone. `POST /api/login` and `POST /api/register` answer
+`otp_required: false` for them (`Api\AuthController::otpRequiredFor`), and the app (1.0.6+)
+skips its emailed-code screen. Everyone else gets `otp_required: true`. Google Play rejected
+the app on 2026-11-25 ("Multi-factor authentication blocks access") while the review account
+still met a code screen, fixed code or not. Google wants a review login that bypasses the
+code, not one that needs it. The code step is enforced by the app, not by Sanctum, so the
+flag removes no server-side check: these accounts were already only as safe as their
+password. Never list a real member or staff address.
+
+**`APP_REVIEW_OTP`** is the older mechanism, kept for app builds before 1.0.6, which ignore
+the flag: `POST /api/otp/send` stores that fixed code for a listed account instead of mailing
+a random one. It is still hashed, scoped to `OtpCode::PURPOSE_LOGIN`, expires in 5 minutes
+and counts attempts. Leave it unset and those older builds mail a real code.
 
 `APP_REVIEW_EMAIL` takes a **comma-separated list** (2026-09-28). Read it only through
 `App\Support\AppReviewAccounts` (trimmed, case-insensitive, exact entries — never a substring
-match), which both `Api\OtpController` and `Api\RegisterController` use. The review notes name
+match), which `Api\AuthController`, `Api\OtpController` and `Api\RegisterController` use. The review notes name
 two accounts: one pre-loaded with stamps that must not be deleted (a reviewer cannot earn
 stamps, only counter staff can), and one for the 5.1.1(v) deletion test. That keeps a
 reviewer's deletion from wiping the demo data the next review depends on.
 
-Covered by `tests/Feature/MobileAccountDeletionTest.php` and
-`tests/Feature/Api/RegisterControllerTest.php`. The login-free public pages the
+Covered by `tests/Feature/Api/AuthControllerTest.php`, `tests/Feature/MobileAccountDeletionTest.php`
+and `tests/Feature/Api/RegisterControllerTest.php`. The login-free public pages the
 stores require are `/privacy-policy` and `/account-deletion` (`routes/web.php`).
 
 ## Mail configuration — important

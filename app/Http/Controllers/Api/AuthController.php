@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\AppReviewAccounts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -47,7 +48,27 @@ class AuthController extends Controller
                 'profile_photo' => $user->profile_photo,
             ],
             'roles' => $user->getRoleNames(),
+            'otp_required' => self::otpRequiredFor($user),
         ]);
+    }
+
+    /**
+     * Whether the mobile app must run its emailed-code step after this sign-in.
+     *
+     * False only for the store-review demo accounts (`AppReviewAccounts`).
+     * Google Play rejects an app whose review login stops at a code screen,
+     * even when the review notes supply a fixed code (rejected 2026-11-25):
+     * its reviewers must get in with the email and password alone. The app
+     * skips the code step when this is false. Builds from before the flag
+     * ignore it and still receive the fixed `APP_REVIEW_OTP` from
+     * `Api\OtpController`.
+     *
+     * `Api\RegisterController` sends it too, so a review account that signs up
+     * again after the deletion test skips the step as well.
+     */
+    public static function otpRequiredFor(User $user): bool
+    {
+        return ! AppReviewAccounts::includes($user->email);
     }
 
     /**

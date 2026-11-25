@@ -69,14 +69,15 @@ return [
 
     // App Store / Play Store review accounts. A reviewer signs in with demo
     // credentials on a device whose mailbox they cannot read, so the post-login
-    // email OTP would lock them out of the app entirely. Naming the demo
-    // account here makes `Api\OtpController` issue the FIXED code below instead
-    // of mailing a random one — the verification step still runs exactly as it
-    // does for a member, it just has a code the reviewer was given in App Store
-    // Connect. `email` may list several accounts separated by commas — the
-    // review notes give one to keep and one to delete (`AppReviewAccounts`).
-    // Leave either value unset in production-for-members deployments and the
-    // allowlist is off.
+    // email OTP would lock them out of the app entirely. An account named in
+    // `email` gets `otp_required: false` from /api/login and /api/register, and
+    // the app skips the code screen: Google Play rejected a fixed code
+    // (2026-11-25) because the reviewer still had to get past a code screen.
+    // `otp` is the FIXED code `Api\OtpController` gives those accounts on app
+    // builds older than the flag. Those builds still show the code screen.
+    // `email` may list several accounts separated by commas: the review notes
+    // give one to keep and one to delete (`AppReviewAccounts`). Leave `email`
+    // unset and the allowlist is off.
     'app_review' => [
         'email' => env('APP_REVIEW_EMAIL'),
         'otp' => env('APP_REVIEW_OTP'),
